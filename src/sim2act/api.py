@@ -317,11 +317,18 @@ def create_app(store=None, settings=None):
     def list_runs(pid: str, metadata_only: bool = False, user=user_dependency):
         with db.tx() as c:
             db.own_project(c, user, pid)
+            from . import local_record_apps as records
+            def preview_label(rid):
+                if records.is_job_tx(c, rid):
+                    i, _, _ = records.scope_job(db, c, user, rid)
+                    if "preview_scope" in i:
+                        return {"execution_namespace": i["preview_scope"]["namespace"], "preview_scope_fingerprint": i["preview_scope"]["fingerprint"]}
+                return {}
             if metadata_only:
                 rows = c.execute(select(runs.c.id, runs.c.status, runs.c.created_at)
                     .where(runs.c.project_id == pid, runs.c.principal_id == user)
                     .order_by(runs.c.created_at.desc(), runs.c.id.desc())).mappings().all()
-                return [{**dict(r), "goal_summary": "打开任务后核查当前授权内容", "mode": "UNKNOWN"} for r in rows]
+                return [{**dict(r), "goal_summary": "打开任务后核查当前授权内容", "mode": "UNKNOWN", **preview_label(r["id"])} for r in rows]
             items = []
             for r in c.execute(
                 select(runs.c.id, runs.c.status, runs.c.created_at, runs.c.goal,
@@ -338,7 +345,7 @@ def create_app(store=None, settings=None):
                 if (r["request_key"] or "").startswith("protocol:"):
                     mode = None
                 items.append({
-                    "id": r["id"], "status": r["status"], "created_at": r["created_at"],
+                    "id": r["id"], "status": r["status"], "created_at": r["created_at"], **preview_label(r["id"]),
                     "goal_summary": goal[:160] + ("…" if len(goal) > 160 else ""),
                     "mode": mode.upper() if isinstance(mode, str) and mode in {"mock", "live"} else "UNKNOWN",
                 })

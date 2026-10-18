@@ -110,6 +110,10 @@ class InstanceInput(Key):
     expected_release_fingerprint: str = Field(pattern=HASH)
 
 
+class PrivateInstanceInput(InstanceInput):
+    consent: Literal["CREATE_PRIVATE_WRITE_PREVIEW_NO_BUSINESS_PROMOTION"]
+
+
 class CommandBase(Key):
     expected_revision: int = Field(strict=True, ge=1)
     expected_data_version: int = Field(strict=True, ge=0)
@@ -186,9 +190,10 @@ def is_release(c, rid):
 
 
 def is_instance(c, iid):
+    from .record_preview_storage import INSTANCE as PRIVATE_INSTANCE
     rid = c.execute(select(instances.c.release_id).where(instances.c.id == iid)).scalar()
     return bool((rid is not None and is_release(c, rid)) or c.execute(select(journal.c.app_id).where(
-        journal.c.kind.in_([INSTANCE, INSTANCE + "_seal"]),
+        journal.c.kind.in_([INSTANCE, INSTANCE + "_seal", PRIVATE_INSTANCE, PRIVATE_INSTANCE + "_seal"]),
         journal.c.snapshot["response"]["id"].as_string() == iid)).first())
 
 
@@ -446,26 +451,40 @@ def instance_header(store, c, user, iid):
         and row["source_app_id"] == release["app_id"] and row["project_id"] == release["project_id"]
         and type(row["revision"]) is int and row["revision"] == 1
         and type(row["data_version"]) is int and 0 <= row["data_version"] <= MAX_EVENTS)
-    anchors = c.execute(select(journal.c.app_id, journal.c.request_key).where(
-        journal.c.principal_id == user, journal.c.kind.in_([INSTANCE, INSTANCE + "_seal"]),
+    from . import record_preview_storage as private
+    anchors = c.execute(select(journal.c.app_id, journal.c.request_key,journal.c.kind).where(
+        journal.c.principal_id == user, journal.c.kind.in_([INSTANCE, INSTANCE + "_seal",private.INSTANCE,private.INSTANCE + "_seal"]),
         journal.c.snapshot["response"]["id"].as_string() == iid)).all()
-    require(len(anchors) == 2 and len(set(anchors)) == 1 and anchors[0][0] == row["release_id"],
+    require(len(anchors) == 2 and len({(r[0],r[1]) for r in anchors}) == 1 and anchors[0][0] == row["release_id"],
         "Original instance creation receipt missing or rebound")
-    created = pair(c, user, row["release_id"], INSTANCE, anchors[0][1])
+    kind=private.INSTANCE if any(r[2] == private.INSTANCE for r in anchors) else INSTANCE
+    require({r[2] for r in anchors} == {kind,kind + "_seal"})
+    created = pair(c, user, row["release_id"], kind, anchors[0][1])
     require(created is not None and created["response"] == dict(id=iid))
-    request = InstanceInput.model_validate(created["request"]).model_dump()
+    request = created["request"]
+    if kind == private.INSTANCE:
+        request = PrivateInstanceInput.model_validate(request).model_dump()
+    else:
+        request = InstanceInput.model_validate(request).model_dump()
     require(request["expected_release_fingerprint"] == release["fingerprint"]
         and request["request_key"] == anchors[0][1])
-    return dict(row), release
+    result=dict(row)
+    if kind == private.INSTANCE:
+        result["preview_scope"]=private.scope(result,release,request)
+    return result, release
 
 
-def create_instance(store, user, rid, body, limits):
+def create_instance(store, user, rid, body, limits, *, private=False):
     with store.tx() as c:
         release = read_release(store, c, user, rid, limits)
         value = release["snapshot"]["definition"]
         store.authorize(c, user, value["runtime_id"], value["project_id"], value["project_id"], "artifact.save_text")
         require(body["expected_release_fingerprint"] == release["fingerprint"])
-        old = pair(c, user, rid, INSTANCE, body["request_key"])
+        from . import record_preview_storage as private_store
+        kind=private_store.INSTANCE if private else INSTANCE
+        if private:
+            body = PrivateInstanceInput.model_validate(body).model_dump()
+        old = pair(c, user, rid, kind, body["request_key"])
         if old:
             require(fingerprint(old["request"]) == fingerprint(body))
             row, _ = instance_header(store, c, user, old["response"]["id"])
@@ -473,9 +492,14 @@ def create_instance(store, user, rid, body, limits):
             row = dict(id=new_id("iinstance"), project_id=value["project_id"], principal_id=user,
                 source_app_id=value["id"], runtime_id=value["runtime_id"], release_id=rid, revision=1, data_version=0)
             c.execute(insert(instances).values(**row, history=[]))
-            remember(c, user, rid, INSTANCE, body["request_key"], body, dict(id=row["id"]))
+            if private:
+                require(len(c.execute(select(journal.c.app_id).where(journal.c.principal_id == user,
+                    journal.c.kind == kind, journal.c.app_id == rid)).all()) < 32,
+                    "Private preview instance capacity reached")
+            remember(c, user, rid, kind, body["request_key"], body, dict(id=row["id"]))
+            row,_=instance_header(store,c,user,row["id"])
         return dict(namespace=VERSION, request_key=body["request_key"], request_fingerprint=fingerprint(body),
-            instance=row, formal_publication_enabled=False)
+            instance=row, **private_store.exposure(row), formal_publication_enabled=False)
 
 
 def scope_job(store, c, user, rid, iid=None):
@@ -489,6 +513,8 @@ def scope_job(store, c, user, rid, iid=None):
     i, release = instance_header(store, c, user, row["iid"])
     expected = dict(namespace=VERSION, run_id=rid, app_run_id=row["app_run_id"], instance_id=i["id"],
         principal_id=user, project_id=i["project_id"], runtime_id=i["runtime_id"], release_id=row["release_id"], app_id=i["source_app_id"])
+    if "preview_scope" in i:
+        expected["preview_scope_fingerprint"] = i["preview_scope"]["fingerprint"]
     saved = pair(c, user, rid, RUN_SCOPE, "accepted")
     require(saved is not None and fingerprint(saved["request"]) == fingerprint(expected)
         and fingerprint(saved["response"]) == fingerprint(expected)
@@ -512,7 +538,11 @@ def authorize_data(store, c, user, i, *, write=True):
     ids.discard(None)
     require(len(ids) <= MAX_EVENTS)
     for resource in sorted(ids):
-        store.authorize(c, user, i["runtime_id"], i["project_id"], resource, "resource.read")
+        if "preview_scope" in i:
+            from .record_preview_storage import artifact
+            artifact(store,c,user,i,resource)
+        else:
+            store.authorize(c, user, i["runtime_id"], i["project_id"], resource, "resource.read")
 
 
 def job_scope_gate(store, c, rid):
@@ -564,7 +594,9 @@ def accepted_binding(store, c, user, rid, limits):
     release = read_release(store, c, user, header["id"], limits)
     b = c.execute(select(bindings).where(bindings.c.run_id == rid)).mappings().one()
     s = b["snapshot"]
+    require(s.get("preview_scope_fingerprint") == i.get("preview_scope",{}).get("fingerprint"))
     job = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user)).mappings().one()
+    require(all(job["context"].get(k) == v for k, v in execution_scope(i).items()))
     a = c.execute(select(app_runs).where(app_runs.c.id == aid)).mappings().one()
     require(s["namespace"] == VERSION and fingerprint(s) == b["fingerprint"] == job["fingerprint"]
         and s["run_id"] == rid and s["app_run_id"] == aid and s["instance_id"] == i["id"]
@@ -591,10 +623,15 @@ def accepted_binding(store, c, user, rid, limits):
     return i, release, dict(job), dict(a), s, preview["response"]
 
 
+def execution_scope(i):
+    from .record_preview_storage import exposure
+    return exposure(i)
+
+
 def run_result(i, a, event, output, version):
     return dict(namespace=VERSION, instance_id=i["id"], app_run_id=a["id"], release_id=a["release_id"],
         result_version=version, record_id=event["record_id"], record_revision=event["record_revision"],
-        event_fingerprint=fingerprint(event), artifact=output)
+        event_fingerprint=fingerprint(event), artifact=output, **execution_scope(i))
 
 
 def projection(store, c, user, i, limits):
@@ -615,7 +652,8 @@ def projection(store, c, user, i, limits):
         require(len(ops) == 1 and ops[0]["tool_ref"] == "artifact.save_text" and ops[0]["call_id"] == "record_event"
             and ops[0]["status"] == "VERIFIED")
         op = ops[0]
-        status, receipt = reconcile_readback(store, c, job, op)
+        from . import record_preview_storage as private
+        status, receipt = reconcile_readback(store, c, job, op,preview_context=private.target(i,job,op["id"]))
         output = row["data"]["result"]
         require(status == "VERIFIED" and fingerprint(receipt) == fingerprint(op["receipt"])
             and fingerprint(output) == fingerprint(receipt["data"]) == fingerprint(a["output"])
@@ -623,8 +661,11 @@ def projection(store, c, user, i, limits):
             and a["status"] == job["status"] == "SUCCEEDED" and a["error"] is None and job["error"] is None
             and not job["cancel_intent"] and job["context"]["tools"] == 1
             and snapshot["expected_data_version"] == version - 1 and snapshot["expected_revision"] == i["revision"])
-        resource = c.execute(select(resources).where(resources.c.id == output["resource_id"],
-            resources.c.project_id == i["project_id"])).mappings().one()
+        if "preview_scope" in i:
+            resource=private.artifact(store,c,user,i,output["resource_id"])
+        else:
+            resource = c.execute(select(resources).where(resources.c.id == output["resource_id"],
+                resources.c.project_id == i["project_id"])).mappings().one()
         event = strict_json(resource["content"], 32768)
         require(resource["format"] == "json" and resource["content"] == canonical(event)
             and resource["hash"] == hashlib.sha256(resource["content"].encode()).hexdigest() == output["hash"]
@@ -760,17 +801,21 @@ def confirm(store, user, iid, key, body, limits):
             expected_release_fingerprint=release["fingerprint"], expected_revision=i["revision"],
             expected_data_version=i["data_version"], preview_key=key, preview_fingerprint=fingerprint(frozen),
             request=body, request_fingerprint=fingerprint(body), input=frozen["input"])
+        if "preview_scope" in i:
+            snapshot["preview_scope_fingerprint"] = i["preview_scope"]["fingerprint"]
         contract = run_contract(i, release["snapshot"]["definition"], jid, limits)
         c.execute(insert(run_contracts).values(run_id=jid, snapshot=contract, fingerprint=fingerprint(contract)))
         c.execute(insert(runs).values(id=jid, project_id=i["project_id"], principal_id=user, runtime_id=i["runtime_id"],
             goal=release["snapshot"]["definition"]["purpose"], resource_refs=[], status="QUEUED", request_key="internal:" + aid,
             fingerprint=fingerprint(snapshot), created_at=time.time(), lease_until=0, fence=0, version=1, cancel_intent=False,
-            context=dict(kind="INTERNAL_APPRUN", local_records=VERSION, messages=[], requests=0, tools=0, repairs=0, reserved_tokens=0)))
+            context=dict(kind="INTERNAL_APPRUN", local_records=VERSION, **execution_scope(i), messages=[], requests=0, tools=0, repairs=0, reserved_tokens=0)))
         c.execute(insert(app_runs).values(id=aid, instance_id=iid, release_id=release["id"], principal_id=user,
             request_key=key, fingerprint=fingerprint(body), input=frozen["input"], status="QUEUED", output=None, error=None, result_version=None))
         c.execute(insert(bindings).values(run_id=jid, app_run_id=aid, snapshot=snapshot, fingerprint=fingerprint(snapshot)))
         metadata = dict(namespace=VERSION, run_id=jid, app_run_id=aid, instance_id=iid, principal_id=user,
             project_id=i["project_id"], runtime_id=i["runtime_id"], release_id=release["id"], app_id=i["source_app_id"])
+        if "preview_scope" in i:
+            metadata["preview_scope_fingerprint"] = i["preview_scope"]["fingerprint"]
         remember(c, user, jid, RUN_SCOPE, "accepted", metadata, metadata)
         remember(c, user, iid, ACCEPTED, key, body, dict(run_id=jid, app_run_id=aid))
         store.event(c, jid, "ACCEPTED", dict(namespace=VERSION, instance_id=iid, app_run_id=aid,
@@ -808,9 +853,11 @@ def process_job(worker, run):
         c.execute(insert(operations).values(id=oid, run_id=job["id"], call_id="record_event", fingerprint=fingerprint(intent),
             tool_ref="artifact.save_text", status="PREPARED"))
         c.execute(insert(operation_intents).values(operation_id=oid, request=intent))
-        # Same transaction as the business event and CAS; never tools.dispatch's separate transaction.
+        from . import record_preview_storage as private
+        preview_context = private.target(i, job, oid)
+        # Same transaction as the event and CAS; never dispatch's separate transaction.
         output = write_text_artifact(worker.store, c, job["principal_id"], i["runtime_id"], i["project_id"],
-            args["text"], artifact_format="json")
+            args["text"], artifact_format="json", preview_context=preview_context)
         c.execute(insert(local_effects).values(operation_id=oid, resource_id=output["resource_id"], content_hash=output["hash"]))
         receipt = dict(operation_id=oid, status="VERIFIED", data=output, artifact_refs=[output["resource_id"]],
             receipt_ref=oid, check_results=[dict(check="receipt.readback.v1", status="PASS")], usage_ref=None, error=None)
@@ -822,9 +869,12 @@ def process_job(worker, run):
         require(c.execute(update(instances).where(instances.c.id == i["id"], instances.c.revision == i["revision"],
             instances.c.data_version == i["data_version"], instances.c.release_id == release["id"]).values(data_version=version)).rowcount == 1)
         # Current authority, real readback and live fence before terminal commit.
-        worker.store.authorize(c, job["principal_id"], i["runtime_id"], i["project_id"], output["resource_id"], "resource.read")
+        if preview_context is not None:
+            private.artifact(worker.store, c, job["principal_id"], i, output["resource_id"])
+        else:
+            worker.store.authorize(c, job["principal_id"], i["runtime_id"], i["project_id"], output["resource_id"], "resource.read")
         op = c.execute(select(operations).where(operations.c.id == oid)).mappings().one()
-        status, readback = reconcile_readback(worker.store, c, job, op)
+        status, readback = reconcile_readback(worker.store, c, job, op, preview_context=preview_context)
         require(status == "VERIFIED" and fingerprint(readback) == fingerprint(receipt))
         guarded = worker.store.guard(c, job["id"], run["fence"])
         require(guarded["status"] == "RUNNING" and not guarded["cancel_intent"] and not worker.stop.is_set()
@@ -870,7 +920,7 @@ def inspect_instance(store, user, iid, limits):
             _, _, job, a, _, _ = accepted_binding(store, c, user, row["run_id"], limits)
             result_runs.append(dict(id=job["id"], app_run_id=a["id"], status=job["status"], version=job["version"], result_version=a["result_version"]))
         return dict(namespace=VERSION, **i, release_fingerprint=release["fingerprint"], records=records, history=history,
-            runs=result_runs, formal_publication_enabled=False)
+            runs=result_runs, **{k:v for k,v in execution_scope(i).items() if k != "preview_scope"}, formal_publication_enabled=False)
 
 
 def inspect_job(store, user, iid, rid, limits):
@@ -886,7 +936,7 @@ def _inspect_job(store, c, user, iid, rid, limits):
     op = c.execute(select(operations.c.receipt).where(operations.c.run_id == rid)).scalar_one_or_none()
     return dict(namespace=VERSION, instance_id=iid, id=rid, app_run_id=a["id"], release_id=release["id"],
         status=job["status"], version=job["version"], result_version=a["result_version"], output=a["output"],
-        event=value["event"] if value else None, receipt=op, error=job["error"], formal_publication_enabled=False)
+        event=value["event"] if value else None, receipt=op, error=job["error"], **execution_scope(i), formal_publication_enabled=False)
 
 
 def inspect_project_run(store, user, rid, limits):
@@ -897,6 +947,20 @@ def inspect_project_run(store, user, rid, limits):
         require(result["id"] == rid and result["instance_id"] == i["id"]
             and result["release_id"] == release["id"] and result["app_run_id"] == aid)
         return dict(result, principal_id=user, project_id=i["project_id"], app_id=i["source_app_id"])
+
+
+def private_control_metadata(store, user, iid, rid):
+    """Owned, anchored stop metadata; never projects result or private content."""
+    with store.tx() as c:
+        i, _, _ = scope_job(store, c, user, rid, iid)
+        if "preview_scope" not in i:
+            raise DomainError("PERMISSION_DENIED")
+        row = c.execute(select(runs.c.status, runs.c.version).where(runs.c.id == rid)).mappings().one()
+        return dict(namespace=VERSION, id=rid, instance_id=iid, principal_id=user,
+            project_id=i["project_id"], app_id=i["source_app_id"], runtime_id=i["runtime_id"],
+            release_id=i["release_id"], status=row["status"], version=row["version"],
+            content_access=False, execution_namespace=i["preview_scope"]["namespace"],
+            preview_scope_fingerprint=i["preview_scope"]["fingerprint"], formal_publication_enabled=False)
 
 
 def control(store, user, iid, rid, body, limits):
@@ -954,8 +1018,10 @@ def mount(app, store, limits, identity):
             rels = [release_metadata(read_release(store, c, user, rid, limits)) for rid in rs]
             ii = c.execute(select(instances.c.id).where(instances.c.principal_id == user,
                 instances.c.source_app_id == aid)).scalars().all()
+            headers = [instance_header(store, c, user, iid)[0] for iid in ii]
             return dict(namespace=VERSION, app_id=aid, definition_fingerprint=fingerprint(value), releases=rels,
-                instances=[instance_header(store, c, user, iid)[0] for iid in ii], formal_publication_enabled=False)
+                instances=[i for i in headers if "preview_scope" not in i],
+                preview_instances=[i for i in headers if "preview_scope" in i], formal_publication_enabled=False)
 
     @app.post("/api/apps/{aid}/record-release-approvals", status_code=201)
     def post_release(aid: str, body: ReleaseInput, user=user_dependency):
@@ -1006,6 +1072,13 @@ def mount(app, store, limits, identity):
     def get_job(iid: str, rid: str, user=user_dependency):
         return inspect_job(store, user, iid, rid, limits)
 
+    @app.get("/api/internal/record-instances/{iid}/runs/{rid}/private-control-status")
+    def get_private_control(iid: str, rid: str, user=user_dependency):
+        return private_control_metadata(store, user, iid, rid)
+
     @app.post("/api/internal/record-instances/{iid}/runs/{rid}/commands")
     def post_control(iid: str, rid: str, body: Control, user=user_dependency):
         return control(store, user, iid, rid, body.model_dump(), limits)
+
+    from . import record_preview_storage
+    record_preview_storage.mount(app, store, limits, identity)

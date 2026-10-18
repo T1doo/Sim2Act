@@ -96,7 +96,7 @@ def final_flow_readback(env, page, worker_log, before_identities):
         native_browser="NOT_RUN", real_semantic_acceptance="NOT_RUN")
 
 
-@pytest.mark.parametrize("scenario", ["flow-recovery", "navigation", "revocation", "project-history", "controls", "collection-export"])
+@pytest.mark.parametrize("scenario", ["flow-recovery", "navigation", "revocation", "project-history", "controls", "collection-export", "private-preview"])
 def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, tmp_path, scenario):
     root = Path.cwd().resolve()
     raw_http, ipc, worker_log = [], [], []
@@ -195,9 +195,16 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
                     grants.c.tool_ref == "resource.read", grants.c.revoked.is_(False))).mappings().all()
                 assert len(matching) == 1
                 revocation_grant = dict(matching[0])
+        if scenario == "private-preview":
+            data = ready(env)
+            execute(env, data, create_body(current(env, data), "business-anchor-a", title="Synthetic business anchor A"))
+            second=ok(env[2].post(f"/api/internal/record-releases/{data['release']['id']}/instances",json=dict(expected_release_fingerprint=data["release"]["fingerprint"],request_key="private-navigation-other-business")),201)["instance"]
+            info.update(app=data["app"]["id"], instance=data["instance"]["id"],
+                iid=data["instance"]["id"], release=data["release"]["id"],second_instance=second["id"])
+        private_checkpoint = None
         before_identity = snapshot(env[0], {"grants", "principals"})
         before_page = snapshot(env[0])
-        if scenario in {"controls", "collection-export"}:
+        if scenario in {"controls", "collection-export", "private-preview"}:
             write_json(tmp_path / "database-before-page.json", before_page)
         write_json(tmp_path / "info.json", info)
         with (tmp_path / "node.stderr").open("w", encoding="utf-8") as errors:
@@ -213,7 +220,7 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
                 if request.get("done"):
                     break
                 if request.get("command") == "worker":
-                    assert scenario == "flow-recovery", "Read-only page scenarios cannot invoke Worker"
+                    assert scenario in {"flow-recovery", "private-preview"}, "Read-only page scenarios cannot invoke Worker"
                     cold = Store(env[1].database_url, test_only=True)
                     stores.append(cold)
                     before = states(cold)
@@ -227,6 +234,46 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
                     worker_log.append(dict(run_id=rid, status=after[rid]["status"],
                         implementation="NORMAL_WORKER_ONCE", cold_store=True, model="NoModel"))
                     answer = dict(status=200, text=json.dumps(worker_log[-1]))
+                elif request.get("command") == "checkpoint_private":
+                    assert scenario == "private-preview" and private_checkpoint is None
+                    from test_private_record_preview import assert_private_delta
+                    private_checkpoint = snapshot(env[0])
+                    iid = request["instance"]
+                    scope = ok(env[2].get("/api/internal/record-instances/" + iid))["preview_scope"]
+                    oracle = assert_private_delta(before_page, private_checkpoint, iid, scope["fingerprint"])
+                    assert len(request["runs"]) == len(worker_log) == 2
+                    write_json(tmp_path / "database-private-checkpoint.json", private_checkpoint)
+                    write_json(tmp_path / "private-oracle.json", oracle)
+                    info["private_instance"] = iid
+                    answer = dict(status=200, text=json.dumps(oracle))
+                elif request.get("command") == "checkpoint_business":
+                    assert scenario == "private-preview" and private_checkpoint is not None
+                    after_business = snapshot(env[0])
+                    assert len(after_business["resources"]) == len(private_checkpoint["resources"]) + 1
+                    assert len(after_business["grants"]) == len(private_checkpoint["grants"]) + 2
+                    assert request["instance"] == data["instance"]["id"]
+                    assert len(worker_log) == 3
+                    assert ok(env[2].get("/api/internal/record-instances/"+info["private_instance"]))["data_version"] == 2
+                    write_json(tmp_path / "database-after-business.json", after_business)
+                    answer = dict(status=200, text=json.dumps(dict(explicit_business_write=True, private_version=2)))
+                elif request.get("command") == "revoke_private_write":
+                    assert scenario == "private-preview" and request["instance"] == info["private_instance"]
+                    with env[0].tx() as c:
+                        original = c.execute(select(grants).where(grants.c.principal_id == env[3],
+                            grants.c.project_id == env[5], grants.c.resource_id == env[5],
+                            grants.c.tool_ref == "artifact.save_text", grants.c.revoked.is_(False))).mappings().one()
+                        changed = c.execute(update(grants).where(grants.c.id == original["id"],
+                            grants.c.revision == original["revision"]).values(revoked=True,revision=original["revision"]+1)).rowcount
+                        assert changed == 1
+                    write_json(tmp_path / "private-write-revocation.json", dict(before=dict(original),
+                        fixture_only=True, instance=request["instance"], run=request["run"]))
+                    answer = dict(status=200,text=json.dumps(dict(revoked=True)))
+                elif request.get("command") == "checkpoint_cancelled":
+                    assert scenario == "private-preview"
+                    row = states(env[0])[request["run"]]
+                    assert row["status"] == "CANCELLED" and row["fence"] == 0 and len(worker_log) == 3
+                    write_json(tmp_path / "database-after-cancel.json", snapshot(env[0]))
+                    answer = dict(status=200,text=json.dumps(dict(status="CANCELLED",worker_claims=0)))
                 elif request.get("command") == "revoke_seed_artifact_read":
                     # Fixture-only authority mutation. The page cannot select a Grant,
                     # principal, project or arbitrary resource through this bridge.
@@ -289,6 +336,20 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
             write_json(tmp_path / "actual-page-delivery.json", delivered)
             proof.update(page_worker_calls=3, fixture_worker_calls=0, actual_no_model_runs=3,
                 page_creation_release_instance_covered=True)
+        elif scenario == "private-preview":
+            import base64
+            assert page["classification"] == "ACTUAL_HTTP_JSDOM_PRIVATE_RECORD_PREVIEW"
+            assert len(worker_log) == 3 and all(row["status"] == "SUCCEEDED" for row in worker_log)
+            assert private_checkpoint is not None and len(page["run_ids"]) == 2
+            assert len(page["downloads"]) == 1
+            value = json.loads(base64.b64decode(page["downloads"][0]["base64"]))
+            assert value["snapshot_kind"] == "PRIVATE_PREVIEW_COLLECTION"
+            assert value["execution_namespace"] == "local-record-private-preview.v1"
+            assert value["instance_id"] == info["private_instance"] and value["data_version"] == 2
+            assert [r["run_id"] for r in value["history"]] == page["run_ids"]
+            assert value["records"][0]["state"] == "DONE" and value["records"][0]["record_revision"] == 2
+            proof.update(page_worker_calls=3, fixture_worker_calls=1, actual_no_model_runs=4,
+                private_runs=page["run_ids"], private_instance=info["private_instance"], private_export=value)
         elif scenario == "controls":
             assert page["classification"] == "ACTUAL_HTTP_JSDOM_LOCAL_RECORD_SAME_RUN_CONTROLS"
             assert worker_log == []

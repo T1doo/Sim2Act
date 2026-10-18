@@ -4,6 +4,9 @@ let localRecordsView=null,localRecordsEpoch=0;
 const localRecordsIntents=new Map();
 const localRecordsControlIntents=new Map();
 const localRecordsVersion="local-record-app.v1";
+const localRecordsPrivate="local-record-private-preview.v1";
+const localRecordsInstances=v=>[...(v.delivery?.instances||[]),...(v.delivery?.preview_instances||[])];
+const localRecordsLabelScope=i=>i?.preview_scope?"PREVIEW 私有试写 · ":"业务实例 · ";
 const localRecordsSame=(a,b)=>goalRunCanonical(a)===goalRunCanonical(b);
 function clearLocalRecordsView(){
  localRecordsEpoch++;localRecordsView=null;
@@ -14,7 +17,7 @@ function localRecordsFence(v,{edit=true,read=true,selection=true}={}){
  const epoch=v.epoch,edited=v.edit,serial=v.read,selected=v.selection;
  return ()=>localRecordsCurrent(v)&&epoch===v.epoch&&(!edit||edited===v.edit)&&(!read||serial===v.read)&&(!selection||selected===v.selection);
 }
-function localRecordsScope(v,stage,anchor=""){return JSON.stringify([v.identity,v.project,v.app?.id||"",v.instance?.id||"",stage,anchor]);}
+function localRecordsScope(v,stage,anchor=""){return JSON.stringify([v.identity,v.project,v.app?.id||"",stage==="CREATE_PRIVATE"?"":v.instance?.id||"",stage,anchor]);}
 function localRecordsNode(tag,id,text){const node=document.createElement(tag);if(id)node.id=id;if(text!==undefined)node.textContent=text;return node;}
 function localRecordsLabel(text,input){const label=document.createElement("label");label.append(document.createTextNode(text),input);return label;}
 function localRecordsButton(label,id,action){const button=localRecordsNode("button",id,label);button.type="button";button.onclick=safe(action);return button;}
@@ -40,8 +43,9 @@ function localRecordsBuild(app,generation,selectionCurrent=()=>true){
  v.releaseAck=localRecordsInput("local-records-release-ack",{type:"checkbox"});v.commitRelease=localRecordsButton("确认保存此内部 Release","local-records-release-commit",()=>localRecordsCommitRelease(v));
  lifecycle.append(v.prepareRelease);v.releaseProof=localRecordsProof(lifecycle,"local-records-release-proof","精确版本快照与指纹");lifecycle.append(localRecordsLabel("已阅读精确快照，明确保存此内部 Release。",v.releaseAck),v.commitRelease,localRecordsNode("h3",null,"3. 明确创建或选择实例"));
  v.releaseSelect=localRecordsSelect("local-records-release-select",[["请明确选择已保存 Release",""]]);v.instanceAck=localRecordsInput("local-records-instance-ack",{type:"checkbox"});v.createInstance=localRecordsButton("明确创建所选 Release 的实例","local-records-instance-create",()=>localRecordsCreateInstance(v));
+ v.privateAck=localRecordsInput("local-records-private-ack",{type:"checkbox"});v.createPrivate=localRecordsButton("创建所选 Release 的私有试写空间","local-records-private-create",()=>localRecordsCreateInstance(v,true));
  v.instanceSelect=localRecordsSelect("local-records-instance-select",[["请明确选择实例",""]]);v.deliveryRefresh=localRecordsButton("读取版本与实例目录（只读）","local-records-delivery-read",()=>localRecordsReadDelivery(v));
- lifecycle.append(localRecordsLabel("已保存版本 ",v.releaseSelect),localRecordsLabel("明确创建独立记录集合实例；不会自动写入业务记录。",v.instanceAck),v.createInstance,localRecordsLabel("独立实例 ",v.instanceSelect),v.deliveryRefresh);panel.append(lifecycle);
+ lifecycle.append(localRecordsLabel("已保存版本 ",v.releaseSelect),localRecordsLabel("明确创建独立记录集合实例；不会自动写入业务记录。",v.instanceAck),v.createInstance,localRecordsNode("p",null,"私有试写会真实保存到独立预览空间，不进入业务材料目录、不新增授权；不自动晋升为业务结果。"),localRecordsLabel("明确创建私有试写空间；后续每次试写仍须分别预览和确认。",v.privateAck),v.createPrivate,localRecordsLabel("明确选择业务或私有试写空间 ",v.instanceSelect),v.deliveryRefresh);panel.append(lifecycle);
  const operations=localRecordsNode("section","local-records-operations");operations.hidden=true;v.operations=operations;operations.append(localRecordsNode("h3",null,"4. 填写并预览本次变更"));
  v.instanceInfo=localRecordsNode("p","local-records-instance-info");operations.append(v.instanceInfo);
  v.command=localRecordsSelect("local-records-command",[["创建记录","CREATE"],["修改记录状态","SET_STATE"]]);operations.append(localRecordsLabel("本次操作 ",v.command));
@@ -52,14 +56,15 @@ function localRecordsBuild(app,generation,selectionCurrent=()=>true){
  const result=localRecordsNode("section","local-records-result");result.hidden=!app;result.append(localRecordsNode("h3",null,"5. 手动读取同一 Run 和当前记录"));v.refresh=localRecordsButton("刷新当前实例、Run 与记录（只读）","local-records-refresh",()=>localRecordsRefresh(v));v.runSelect=localRecordsSelect("local-records-run-select",[["请明确选择已接受 Run",""]]);v.runRead=localRecordsButton("读取所选同一 Run（只读）","local-records-run-read",()=>localRecordsReadRun(v));v.runStatus=localRecordsNode("p","local-records-run-status");v.runStatus.setAttribute("role","status");result.append(v.refresh,localRecordsLabel("运行历史 ",v.runSelect),v.runRead,v.runStatus);v.runProof=localRecordsProof(result,"local-records-run-proof","原 Run、合同与真实工具回执");
  v.control=null;v.controlCommands={};const control=localRecordsNode("section","local-records-controls");control.append(localRecordsNode("p",null,"仅控制已明确读取的同一 Run。暂停或取消在安全边界生效，不撤销此前已保存的记录。"));
  for(const [command,label]of [["pause","暂停这次写入"],["resume","继续这次写入"],["cancel","取消这次写入"]]){const button=localRecordsButton(label,`local-records-${command}`,()=>localRecordsControl(v,command));v.controlCommands[command]=button;control.append(button);}
+ v.metadataRead=localRecordsButton("仅核对私有试写 Run 停止状态（无正文）","local-records-private-control-read",()=>localRecordsReadPrivateControl(v));control.append(v.metadataRead);
  v.controlStatus=localRecordsNode("p","local-records-control-status");v.controlStatus.setAttribute("role","status");control.append(v.controlStatus);result.append(control);v.records=localRecordsNode("div","local-records-current");
  v.exportCollection=localRecordsButton("下载当前集合 JSON 快照","local-records-export",()=>localRecordsExportCollection(v));v.exportStatus=localRecordsNode("p","local-records-export-status");v.exportStatus.setAttribute("role","status");
  result.append(localRecordsNode("h3",null,"当前记录集合"),localRecordsNode("p",null,"下载前重新核对当前权限与已保存集合；JSON 保留记录 ID、修订和事件来源，仅代表该集合版本的观察快照。"),v.exportCollection,v.exportStatus,v.records);v.history=localRecordsNode("div","local-records-history");result.append(localRecordsNode("h3",null,"所选记录的不可变历史"),v.history);panel.append(result);
- const recovery=localRecordsNode("section","local-records-recovery");recovery.append(localRecordsNode("h3",null,"原请求恢复"),localRecordsNode("p",null,"未知结果不重发写入。保留或输入原请求 key，选择原阶段后仅 GET 核对；冷页需先重新打开同一应用、版本或实例。"));v.recoveryStage=localRecordsSelect("local-records-recovery-stage",[["保存应用","CREATE_APP"],["准备内部版本","PREPARE_RELEASE"],["保存内部版本","COMMIT_RELEASE"],["创建实例","CREATE_INSTANCE"],["本次变更预览","PREVIEW"],["提交写入 Run","RUN"]]);v.recoveryKey=localRecordsInput("local-records-recovery-key",{maxLength:100});v.recover=localRecordsButton("仅 GET 读取原 key 回执","local-records-recover",()=>localRecordsRecover(v));recovery.append(localRecordsLabel("原阶段 ",v.recoveryStage),localRecordsLabel("原 key ",v.recoveryKey),v.recover);v.recoveryProof=localRecordsProof(recovery,"local-records-recovery-proof","原请求与恢复回执");panel.append(recovery);
- for(const input of [v.name,v.goal,v.createAck,v.releaseAck,v.instanceAck,v.runAck,v.recoveryKey])for(const event of ["input","change"])input.addEventListener(event,()=>{if(localRecordsCurrent(v))localRecordsButtons(v);});
+ const recovery=localRecordsNode("section","local-records-recovery");recovery.append(localRecordsNode("h3",null,"原请求恢复"),localRecordsNode("p",null,"未知结果不重发写入。保留或输入原请求 key，选择原阶段后仅 GET 核对；冷页需先重新打开同一应用、版本或实例。"));v.recoveryStage=localRecordsSelect("local-records-recovery-stage",[["保存应用","CREATE_APP"],["准备内部版本","PREPARE_RELEASE"],["保存内部版本","COMMIT_RELEASE"],["创建实例","CREATE_INSTANCE"],["创建私有试写空间","CREATE_PRIVATE"],["本次变更预览","PREVIEW"],["提交写入 Run","RUN"]]);v.recoveryKey=localRecordsInput("local-records-recovery-key",{maxLength:100});v.recover=localRecordsButton("仅 GET 读取原 key 回执","local-records-recover",()=>localRecordsRecover(v));recovery.append(localRecordsLabel("原阶段 ",v.recoveryStage),localRecordsLabel("原 key ",v.recoveryKey),v.recover);v.recoveryProof=localRecordsProof(recovery,"local-records-recovery-proof","原请求与恢复回执");panel.append(recovery);
+ for(const input of [v.name,v.goal,v.createAck,v.releaseAck,v.instanceAck,v.privateAck,v.runAck,v.recoveryKey])for(const event of ["input","change"])input.addEventListener(event,()=>{if(localRecordsCurrent(v))localRecordsButtons(v);});
  for(const input of [v.name,v.goal,v.recoveryKey,v.recoveryStage])for(const event of ["input","change"])input.addEventListener(event,()=>{if(localRecordsCurrent(v)){v.edit++;localRecordsButtons(v);}});
  for(const input of [v.command,v.title,v.details,v.recordSelect,v.state,v.reason])for(const event of ["input","change"])input.addEventListener(event,()=>{v.createFields.hidden=v.command.value!=="CREATE";v.stateFields.hidden=v.command.value!=="SET_STATE";localRecordsEdited(v);});
- v.releaseSelect.onchange=()=>{v.selection++;v.releaseAck.checked=v.instanceAck.checked=false;localRecordsButtons(v);};
+ v.releaseSelect.onchange=()=>{v.selection++;v.releaseAck.checked=v.instanceAck.checked=v.privateAck.checked=false;localRecordsButtons(v);};
  v.instanceSelect.onchange=safe(()=>localRecordsSelectInstance(v,v.instanceSelect.value));
  v.runSelect.onchange=()=>{v.read++;localRecordsClearControl(v);v.run=null;v.runStatus.textContent="已改变 Run 选择，请明确读取该 Run。";v.runProof.textContent="";localRecordsButtons(v);};
  return v;
@@ -80,13 +85,14 @@ function localRecordsButtons(v){
  v.prepareRelease.disabled=busy||blocked||!v.app||!v.ready||!!v.approval;
  v.commitRelease.disabled=busy||blocked||!v.approval||!!v.approval.release||!v.releaseAck.checked||v.approval.approval.expires_at*1000<=Date.now();
  v.createInstance.disabled=busy||blocked||!v.releaseSelect.value||!v.instanceAck.checked;
+ v.createPrivate.disabled=busy||blocked||!v.releaseSelect.value||!v.privateAck.checked;
  v.previewButton.disabled=busy||blocked||!v.instance||(v.acceptedRun&&!localRecordsTerminal(v.acceptedRun.status))||(v.command.value==="CREATE"?!v.title.value.trim():!v.recordSelect.value||!v.reason.value.trim());
  v.confirm.disabled=busy||blocked||!v.preview||!v.previewCurrent?.()||!v.instance||v.preview.preview.data_version!==v.instance.data_version||v.preview.preview.instance_revision!==v.instance.revision||v.preview.preview.release_fingerprint!==v.instance.release_fingerprint||!!v.preview.run||!v.runAck.checked||v.preview.preview.expires_at*1000<=Date.now();
  v.deliveryRefresh.disabled=busy||!v.app;v.refresh.disabled=busy||!v.selectedIid;v.runRead.disabled=busy||!v.selectedIid||!v.runSelect.value;
- v.exportCollection.disabled=busy||!v.instance;
+ v.exportCollection.disabled=busy||!v.instance;v.metadataRead.disabled=busy||!v.metadataTarget;
  v.recover.disabled=busy||!v.recoveryKey.value.trim();
  localRecordsControlButtons(v);
- for(const input of [v.name,v.goal,v.createAck,v.releaseAck,v.instanceAck,v.command,v.title,v.details,v.recordSelect,v.state,v.reason,v.runAck])input.disabled=busy||blocked;
+ for(const input of [v.name,v.goal,v.createAck,v.releaseAck,v.instanceAck,v.privateAck,v.command,v.title,v.details,v.recordSelect,v.state,v.reason,v.runAck])input.disabled=busy||blocked;
 }
 function localRecordsRemember(v,intent){v.recoveryStage.value=intent.stage;v.recoveryKey.value=intent.key;v.recoveryProof.textContent=JSON.stringify({stage:intent.stage,request_key:intent.key,request_fingerprint:intent.requestFingerprint,state:intent.state},null,2);}
 async function localRecordsValidateApp(v,app,intent,current){
@@ -104,9 +110,17 @@ async function localRecordsValidateApproval(v,reply,intent,current){
  if(reply.release&&(typeof reply.release.id!=="string"||!localRecordsHashShape(reply.release.fingerprint)||reply.release.source_app_id!==intent.scope.app||reply.release.project_id!==intent.scope.project))localRecordsError();
  return current();
 }
-function localRecordsValidateInstanceReceipt(v,reply,intent){
- localRecordsEnvelope(reply,intent.scope);const i=reply.instance;
- if(reply.request_key!==intent.key||reply.request_fingerprint!==intent.originFingerprint||!i||typeof i.id!=="string"||i.source_app_id!==intent.scope.app||i.project_id!==intent.scope.project||i.release_id!==intent.anchor||!localRecordsInteger(i.revision)||i.revision<1||!localRecordsInteger(i.data_version))localRecordsError();return true;
+async function localRecordsValidatePrivate(i,release,current){
+ const p=i.preview_scope;if(!p){if(i.execution_namespace!==undefined)localRecordsError();return current();}
+ const {fingerprint,...value}=p;
+ if(Object.keys(p).sort().join()!==["namespace","instance_id","principal_id","project_id","app_id","runtime_id","release_id","release_fingerprint","creation_request_fingerprint","fingerprint"].sort().join()||p.namespace!==localRecordsPrivate||p.instance_id!==i.id||p.principal_id!==i.principal_id||p.project_id!==i.project_id||p.app_id!==i.source_app_id||p.runtime_id!==i.runtime_id||p.release_id!==i.release_id||p.release_fingerprint!==release.fingerprint||!localRecordsHashShape(p.creation_request_fingerprint))localRecordsError();
+ const hash=await localRecordsHash(value);if(!current())return false;if(hash!==fingerprint)localRecordsError();return true;
+}
+async function localRecordsValidateInstanceReceipt(v,reply,intent,current){
+ localRecordsEnvelope(reply,intent.scope);const i=reply.instance,privateCreation=intent.stage==="CREATE_PRIVATE";
+ if(reply.request_key!==intent.key||reply.request_fingerprint!==intent.originFingerprint||!i||typeof i.id!=="string"||i.principal_id!==intent.scope.principal||i.runtime_id!==v.app.runtime_id||i.source_app_id!==intent.scope.app||i.project_id!==intent.scope.project||i.release_id!==intent.anchor||!localRecordsInteger(i.revision)||i.revision<1||!localRecordsInteger(i.data_version)||!!i.preview_scope!==privateCreation)localRecordsError();
+ if(privateCreation&&(reply.execution_namespace!==localRecordsPrivate||i.preview_scope.creation_request_fingerprint!==intent.originFingerprint))localRecordsError();
+ return await localRecordsValidatePrivate(i,{fingerprint:intent.originalInput.expected_release_fingerprint},current);
 }
 async function localRecordsValidatePreview(v,reply,intent,current){
  localRecordsEnvelope(reply,intent.scope);const p=reply.preview,e=p?.event;
@@ -124,7 +138,7 @@ async function localRecordsValidatePreview(v,reply,intent,current){
 }
 async function localRecordsPost(v,stage,url,body,recoveryUrl,check,{key=body.request_key,anchor="",originalInput=body,originalRecord=null,originFingerprint=null}={}){
  if(!localRecordsCurrent(v)||v.busy||localRecordsPending(v).length)return null;
- const intent={stage,key,anchor,scope:localRecordsOwn(v),body:structuredClone(body),originalInput:structuredClone(originalInput),originalRecord:originalRecord?structuredClone(originalRecord):null,recoveryUrl,check,state:"SENDING",originFingerprint};
+ const intent={stage,key,anchor,scope:stage==="CREATE_PRIVATE"?{...localRecordsOwn(v),instance:null,release:anchor}:localRecordsOwn(v),body:structuredClone(body),originalInput:structuredClone(originalInput),originalRecord:originalRecord?structuredClone(originalRecord):null,recoveryUrl,check,state:"SENDING",originFingerprint};
  const storage=localRecordsScope(v,stage,anchor),current=localRecordsFence(v);
  localRecordsIntents.set(storage,intent);localRecordsRemember(v,intent);localRecordsBusy(v,true);let attempted=false;
  try{
@@ -154,14 +168,15 @@ async function localRecordsReadDelivery(v){
  v.read++;const current=localRecordsFence(v,{edit:false});localRecordsBusy(v,true);
  try{
   const reply=await api(`/api/apps/${v.app.id}/record-delivery`);if(!current())return;localRecordsEnvelope(reply,localRecordsOwn(v));
-  if(reply.app_id!==v.app.id||reply.definition_fingerprint!==v.app.fingerprint||!Array.isArray(reply.releases)||!Array.isArray(reply.instances)||new Set(reply.releases.map(r=>r.id)).size!==reply.releases.length||new Set(reply.instances.map(i=>i.id)).size!==reply.instances.length)localRecordsError();
+  if(reply.app_id!==v.app.id||reply.definition_fingerprint!==v.app.fingerprint||!Array.isArray(reply.releases)||!Array.isArray(reply.instances)||!Array.isArray(reply.preview_instances)||new Set(reply.releases.map(r=>r.id)).size!==reply.releases.length||new Set([...reply.instances,...reply.preview_instances].map(i=>i.id)).size!==reply.instances.length+reply.preview_instances.length)localRecordsError();
   for(const r of reply.releases)if(typeof r.id!=="string"||!localRecordsHashShape(r.fingerprint)||r.project_id!==v.project||r.source_app_id!==v.app.id)localRecordsError();
-  for(const i of reply.instances)if(typeof i.id!=="string"||i.project_id!==v.project||i.source_app_id!==v.app.id||!reply.releases.some(r=>r.id===i.release_id)||!localRecordsInteger(i.revision)||i.revision<1||!localRecordsInteger(i.data_version))localRecordsError();
+  for(const i of [...reply.instances,...reply.preview_instances]){if(typeof i.id!=="string"||i.project_id!==v.project||i.source_app_id!==v.app.id||!reply.releases.some(r=>r.id===i.release_id)||!localRecordsInteger(i.revision)||i.revision<1||!localRecordsInteger(i.data_version)||i.principal_id!==v.app.principal_id||i.runtime_id!==v.app.runtime_id||!!i.preview_scope!==reply.preview_instances.includes(i))localRecordsError();if(!await localRecordsValidatePrivate(i,reply.releases.find(r=>r.id===i.release_id),current)||!current())return;}
   v.delivery=reply;const release=v.releaseSelect.value,instance=v.instanceSelect.value;
   v.releaseSelect.replaceChildren(new Option("请明确选择已保存 Release",""),...reply.releases.map(r=>new Option(`${r.id} · ${r.fingerprint}`,r.id)));
-  v.instanceSelect.replaceChildren(new Option("请明确选择实例",""),...reply.instances.map(i=>new Option(`${i.id} · 修订 ${i.revision} · 数据版本 ${i.data_version}`,i.id)));
-  if(reply.releases.some(r=>r.id===release))v.releaseSelect.value=release;if(reply.instances.some(i=>i.id===instance))v.instanceSelect.value=instance;
-  v.releaseAck.checked=v.instanceAck.checked=false;localRecordsStatus(v,"已读取本应用内部版本和实例；请选择或单独确认下一步。");
+  const groups=[...[["业务实例",reply.instances],["PREVIEW 私有试写",reply.preview_instances]].map(([label,rows])=>{const group=document.createElement("optgroup");group.label=label;group.append(...rows.map(i=>new Option(`${localRecordsLabelScope(i)}${i.id} · 修订 ${i.revision} · 数据版本 ${i.data_version}`,i.id)));return group;})];
+  v.instanceSelect.replaceChildren(new Option("请明确选择空间",""),...groups);
+  if(reply.releases.some(r=>r.id===release))v.releaseSelect.value=release;if(localRecordsInstances(v).some(i=>i.id===instance))v.instanceSelect.value=instance;
+  v.releaseAck.checked=v.instanceAck.checked=v.privateAck.checked=false;localRecordsStatus(v,"已读取本应用内部版本和实例；请选择或单独确认下一步。");
  }catch(error){if(current()){localRecordsClearPrivate(v);localRecordsStatus(v,`目录读取未通过：${error.detail||error.message}`);}}finally{localRecordsBusy(v,false);}
 }
 async function localRecordsPrepareRelease(v){
@@ -174,11 +189,12 @@ async function localRecordsCommitRelease(v){
  const saved=await localRecordsPost(v,"COMMIT_RELEASE",`/api/apps/${v.app.id}/record-release-requests/${encodeURIComponent(a.request_key)}/commit`,body,origin.recoveryUrl,localRecordsValidateApproval,{key:a.request_key,originFingerprint:a.request_fingerprint,anchor:a.approval.id});
  if(!current()||!saved)return;if(!saved.reply.release)localRecordsError();v.approval=saved.reply;v.releaseAck.checked=false;v.releaseProof.textContent=JSON.stringify(saved.reply,null,2);localRecordsStatus(v,"内部 Release 已保存；请读取目录并明确选择 Release，再单独创建实例。");localRecordsButtons(v);
 }
-async function localRecordsCreateInstance(v){
- if(!localRecordsCurrent(v)||v.createInstance.disabled)return;const release=v.delivery?.releases.find(r=>r.id===v.releaseSelect.value);if(!release)return;
+async function localRecordsCreateInstance(v,privateCreation=false){
+ if(!localRecordsCurrent(v)||(privateCreation?v.createPrivate:v.createInstance).disabled)return;const release=v.delivery?.releases.find(r=>r.id===v.releaseSelect.value);if(!release)return;
  const current=localRecordsFence(v),body={expected_release_fingerprint:release.fingerprint,request_key:crypto.randomUUID()};
- const saved=await localRecordsPost(v,"CREATE_INSTANCE",`/api/internal/record-releases/${release.id}/instances`,body,`/api/internal/record-releases/${release.id}/instance-requests/${encodeURIComponent(body.request_key)}`,localRecordsValidateInstanceReceipt,{anchor:release.id});
- if(!current()||!saved)return;v.instanceAck.checked=false;v.recoveryProof.textContent=JSON.stringify(saved.reply,null,2);localRecordsStatus(v,`独立实例 ${saved.reply.instance.id} 已保存；请读取目录，再明确选择该实例。尚未写入业务记录。`);localRecordsButtons(v);
+ if(privateCreation)body.consent="CREATE_PRIVATE_WRITE_PREVIEW_NO_BUSINESS_PROMOTION";
+ const saved=await localRecordsPost(v,privateCreation?"CREATE_PRIVATE":"CREATE_INSTANCE",`/api/internal/record-releases/${release.id}/${privateCreation?"private-previews":"instances"}`,body,`/api/internal/record-releases/${release.id}/${privateCreation?"private-preview-requests":"instance-requests"}/${encodeURIComponent(body.request_key)}`,localRecordsValidateInstanceReceipt,{anchor:release.id});
+ if(!current()||!saved)return;v.instanceAck.checked=v.privateAck.checked=false;v.recoveryProof.textContent=JSON.stringify(saved.reply,null,2);localRecordsStatus(v,`${privateCreation?"PREVIEW 私有试写空间":"业务实例"} ${saved.reply.instance.id} 已保存；请读取目录，再明确选择该实例。尚未写入业务记录。`);localRecordsButtons(v);
 }
 const localRecordsTerminal=status=>["SUCCEEDED","PARTIAL","FAILED","CANCELLED"].includes(status);
 async function localRecordsExportCollection(v){
@@ -188,13 +204,13 @@ async function localRecordsExportCollection(v){
  try{
   const reply=await api(`/api/internal/record-instances/${iid}`);if(!current())return;
   if(!await localRecordsValidateProjection(v,reply,iid,current)||!current())return;
-  const snapshot={namespace:"local-record-collection-snapshot.v1",snapshot_kind:"OBSERVED_COMMITTED_COLLECTION",principal_id:reply.principal_id,project_id:reply.project_id,app_id:reply.source_app_id,instance_id:reply.id,release_id:reply.release_id,release_fingerprint:reply.release_fingerprint,instance_revision:reply.revision,data_version:reply.data_version,
+  const snapshot={namespace:"local-record-collection-snapshot.v1",snapshot_kind:reply.preview_scope?"PRIVATE_PREVIEW_COLLECTION":"OBSERVED_COMMITTED_COLLECTION",...(reply.preview_scope?{execution_namespace:localRecordsPrivate,preview_scope:reply.preview_scope}:{}),principal_id:reply.principal_id,project_id:reply.project_id,app_id:reply.source_app_id,instance_id:reply.id,release_id:reply.release_id,release_fingerprint:reply.release_fingerprint,instance_revision:reply.revision,data_version:reply.data_version,
    records:[...reply.records].sort((a,b)=>a.record_id.localeCompare(b.record_id)).map(r=>({record_id:r.record_id,record_revision:r.record_revision,title:r.title,details:r.details,state:r.state,last_event_fingerprint:r.last_event_fingerprint})),
    history:reply.history.map(r=>({version:r.version,run_id:r.run_id,app_run_id:r.app_run_id,event_fingerprint:r.event_fingerprint,artifact:{resource_id:r.artifact.resource_id,hash:r.artifact.hash},event:r.event}))};
   if(!current())return;
   const url=URL.createObjectURL(new Blob([JSON.stringify(snapshot,null,2)+"\n"],{type:"application/json;charset=utf-8"}));
   try{if(!current())return;const link=document.createElement("a");link.href=url;link.download=`local-records-${iid}-v${reply.data_version}.json`;v.panel.append(link);try{link.click();}finally{link.remove();}}finally{URL.revokeObjectURL(url);}
-  if(current())v.exportStatus.textContent=`已下载集合 v${reply.data_version} 的观察快照：${reply.records.length} 条记录、${reply.history.length} 条已保存事件。未提交写入不包含在文件内。`;
+  if(current())v.exportStatus.textContent=`${localRecordsLabelScope(reply)}已下载集合 v${reply.data_version} 的观察快照：${reply.records.length} 条记录、${reply.history.length} 条已保存事件。未提交写入不包含在文件内。`;
  }catch(error){if(current()){localRecordsClearPrivate(v);localRecordsStatus(v,"集合读取未通过，已清除当前正文；请重新核验实例。");v.exportStatus.textContent=`集合下载未通过：${error.detail||error.message}。没有生成下载文件；请重新读取实例。`;}}
  finally{localRecordsBusy(v,false);}
 }
@@ -203,9 +219,9 @@ function localRecordsControlKey(v,rid){return JSON.stringify([v.identity,v.proje
 function localRecordsClearControl(v){v.control=null;if(v.controlStatus)v.controlStatus.textContent="";}
 function localRecordsControlButtons(v){
  if(!v.controlCommands)return;
- const r=v.control,current=r&&v.instance&&r.id===v.runSelect.value,pending=current&&localRecordsControlIntents.get(localRecordsControlKey(v,r.id)),blocked=v.busy||!current||!!pending;
- v.controlCommands.pause.disabled=blocked||!["QUEUED","RUNNING"].includes(r?.status);
- v.controlCommands.resume.disabled=blocked||r?.status!=="PAUSED";
+ const r=v.control,current=r&&(v.instance||(r.metadataOnly&&v.metadataTarget?.run_id===r.id))&&r.id===v.runSelect.value,pending=current&&localRecordsControlIntents.get(localRecordsControlKey(v,r.id)),blocked=v.busy||!current||!!pending;
+ v.controlCommands.pause.disabled=blocked||r?.metadataOnly||!["QUEUED","RUNNING"].includes(r?.status);
+ v.controlCommands.resume.disabled=blocked||r?.metadataOnly||r?.status!=="PAUSED";
  v.controlCommands.cancel.disabled=blocked||localRecordsTerminal(r?.status)||r?.status==="CANCEL_REQUESTED";
 }
 function localRecordsReadControl(v,run){
@@ -213,8 +229,17 @@ function localRecordsReadControl(v,run){
  const key=localRecordsControlKey(v,run.id),pending=localRecordsControlIntents.get(key);
  if(pending&&run.version<pending.version)localRecordsError();
  if(pending&&pending.state!=="SENDING"&&(run.version>pending.version||pending.state==="REJECTED"))localRecordsControlIntents.delete(key);
- v.control={id:run.id,status:run.status,version:run.version};
+ v.control={id:run.id,status:run.status,version:run.version,metadataOnly:run.metadataOnly===true};
  v.controlStatus.textContent=localRecordsControlIntents.has(key)?`原控制结果尚未确认；同一 Run ${run.id} 当前读取为 ${run.status} / 版本 ${run.version}。控制保持锁定，仅可手动读取，不会重发。`:`已读取同一 Run ${run.id} · ${run.status} · 版本 ${run.version}。请明确选择控制操作。`;
+}
+async function localRecordsReadPrivateControl(v){
+ if(!localRecordsCurrent(v)||v.busy||!v.metadataTarget)return;const target=v.metadataTarget,currentScope=localRecordsFence(v,{edit:false}),current=()=>currentScope()&&v.metadataTarget===target&&v.selectedIid===target.instance_id;localRecordsBusy(v,true);localRecordsClearControl(v);
+ try{
+  const reply=await api(`/api/internal/record-instances/${target.instance_id}/runs/${target.run_id}/private-control-status`);if(!current())return;
+  if(Object.keys(reply||{}).sort().join()!==["namespace","id","instance_id","principal_id","project_id","app_id","runtime_id","release_id","status","version","content_access","execution_namespace","preview_scope_fingerprint","formal_publication_enabled"].sort().join()||reply.namespace!==localRecordsVersion||reply.execution_namespace!==localRecordsPrivate||reply.id!==target.run_id||reply.content_access!==false||reply.formal_publication_enabled!==false||Object.entries(target).some(([k,value])=>reply[k==="run_id"?"id":k]!==value))localRecordsError();
+  v.runSelect.value=reply.id;localRecordsReadControl(v,{...reply,metadataOnly:true});v.runStatus.textContent=`PREVIEW 私有试写 · 同一 Run ${reply.id} · ${reply.status} · 仅已核停止元数据；未读取正文，只可明确取消。`;
+ }catch(error){if(current()){localRecordsClearControl(v);v.controlStatus.textContent=`停止状态未确认：${error.detail||error.message}。没有读取正文或发送控制。`;}}
+ finally{localRecordsBusy(v,false);}
 }
 async function localRecordsControl(v,command){
  if(!localRecordsCurrent(v)||v.controlCommands[command]?.disabled||!v.control||v.busy)return;
@@ -230,7 +255,7 @@ async function localRecordsControl(v,command){
   localRecordsControlIntents.delete(key);if(!current())return;
   v.control={id:r.id,status:reply.status,version:reply.version};
   if(v.acceptedRun?.run_id===r.id)v.acceptedRun={...v.acceptedRun,status:reply.status,version:reply.version};
-  v.runStatus.textContent=`控制回执：同一 Run ${r.id} · ${reply.status} · 版本 ${reply.version}。结果正文须另行手动读取。`;
+  v.runStatus.textContent=`${v.instance?.preview_scope||v.metadataTarget?"PREVIEW 私有试写 · ":"业务实例 · "}控制回执：同一 Run ${r.id} · ${reply.status} · 版本 ${reply.version}。结果正文须另行手动读取。`;
   v.controlStatus.textContent=reply.status.endsWith("_REQUESTED")?"停止意图已记录，仍须读取后台最终状态；不会撤销此前已保存的记录。":"控制回执已确认；未重发业务写入，也未撤销此前已保存的记录。";
  }catch(error){
   if(localRecordsControlIntents.get(key)!==intent)return;
@@ -238,15 +263,19 @@ async function localRecordsControl(v,command){
   if(current()){v.runStatus.textContent="控制请求没有获知可核验的成功回执，不能判断最新状态。";v.controlStatus.textContent=`${intent.state==="REJECTED"?"控制被拒绝":"控制结果未确认"}：${error.detail||error.message}。请仅点击“读取所选同一 Run”核对；不会自动重发控制或写入。`;}
  }finally{localRecordsBusy(v,false);}
 }
-function localRecordsClearInstance(v){localRecordsClearControl(v);if(v.exportStatus)v.exportStatus.textContent="";v.instance=null;v.run=null;v.preview=null;v.previewCurrent=null;v.acceptedRun=null;v.historyRecord=null;v.operations.hidden=true;v.records.replaceChildren();v.history.replaceChildren();v.runProof.textContent="";v.runStatus.textContent="";v.runSelect.replaceChildren(new Option("请明确选择已接受 Run",""));v.previewText.replaceChildren();v.previewProof.textContent="";v.runAck.checked=false;v.recoveryProof.textContent="";v.recoveryKey.value="";}
+function localRecordsClearInstance(v){v.metadataTarget=null;localRecordsClearControl(v);if(v.exportStatus)v.exportStatus.textContent="";v.instance=null;v.run=null;v.preview=null;v.previewCurrent=null;v.acceptedRun=null;v.historyRecord=null;v.operations.hidden=true;v.records.replaceChildren();v.history.replaceChildren();v.runProof.textContent="";v.runStatus.textContent="";v.runSelect.replaceChildren(new Option("请明确选择已接受 Run",""));v.previewText.replaceChildren();v.previewProof.textContent="";v.runAck.checked=false;v.recoveryProof.textContent="";v.recoveryKey.value="";}
 function localRecordsClearPrivate(v){
- const key=v.recoveryKey.value;v.read++;v.edit++;localRecordsClearInstance(v);v.recoveryKey.value=key;
+ const key=v.recoveryKey.value,i=v.instance,rid=v.runSelect.value,known=i?.preview_scope&&i.id===v.selectedIid&&(i.runs.some(r=>r.id===rid)||v.acceptedRun?.run_id===rid);
+ const target=known?{run_id:rid,instance_id:i.id,principal_id:i.principal_id,project_id:i.project_id,app_id:i.source_app_id,runtime_id:i.runtime_id,release_id:i.release_id,preview_scope_fingerprint:i.preview_scope.fingerprint}:v.metadataTarget;
+ v.read++;v.edit++;localRecordsClearInstance(v);v.recoveryKey.value=key;
+ if(target&&target.instance_id===v.selectedIid){v.metadataTarget=target;v.runSelect.append(new Option(`PREVIEW ${target.run_id} · 仅停止元数据待核对`,target.run_id));v.runSelect.value=target.run_id;}
  v.title.value=v.details.value=v.reason.value="";v.recordSelect.replaceChildren(new Option("请重新核验当前记录",""));
 }
 async function localRecordsValidateProjection(v,reply,iid,current){
  localRecordsEnvelope(reply,{...localRecordsOwn(v),instance:iid});
  if(reply.id!==iid||reply.principal_id!==v.app.principal_id||reply.project_id!==v.project||reply.source_app_id!==v.app.id||reply.runtime_id!==v.app.runtime_id||!localRecordsHashShape(reply.release_fingerprint)||!localRecordsInteger(reply.revision)||reply.revision<1||!localRecordsInteger(reply.data_version)||!Array.isArray(reply.records)||reply.records.length>32||!Array.isArray(reply.history)||reply.history.length!==reply.data_version||reply.history.length>64||!Array.isArray(reply.runs))localRecordsError();
  const release=v.delivery?.releases.find(r=>r.id===reply.release_id);if(!release||release.fingerprint!==reply.release_fingerprint)localRecordsError();
+ const catalog=localRecordsInstances(v).find(i=>i.id===iid);if(!catalog||!localRecordsSame(catalog.preview_scope??null,reply.preview_scope??null)||(reply.preview_scope&&reply.execution_namespace!==localRecordsPrivate))localRecordsError();if(!await localRecordsValidatePrivate(reply,release,current)||!current())return false;
  const keys=["namespace","app_id","instance_id","release_id","principal_id","kind","collection_version","record_id","record_revision","previous_event_fingerprint","previous_collection_fingerprint","title","details","state","reason"].sort().join(),fold=new Map(),runIds=new Set(),appRunIds=new Set();
  for(const [index,row]of reply.history.entries()){
   const e=row.event,old=fold.get(e?.record_id);
@@ -267,11 +296,12 @@ async function localRecordsValidateProjection(v,reply,iid,current){
 function localRecordsRenderHistory(v,recordId){
  v.history.replaceChildren();if(!recordId)return;
  for(const row of v.instance.history.filter(h=>h.event.record_id===recordId)){
-  const e=row.event,card=localRecordsNode("article");card.append(localRecordsNode("h4",null,`${e.kind} · 记录修订 ${e.record_revision} · 集合版本 ${row.version}`),localRecordsNode("p",null,`记录 ${e.record_id} · ${e.state} · Run ${row.run_id}`),localRecordsNode("p",null,`标题：${e.title}`),localRecordsNode("pre",null,e.details),localRecordsNode("p",null,`变更依据：${e.reason||"创建记录，无状态变更依据"}`),localRecordsNode("p",null,`事件 SHA-256 ${row.event_fingerprint} · JSON 制品 ${row.artifact.resource_id} · ${row.artifact.hash}`));v.history.append(card);
+  const e=row.event,card=localRecordsNode("article");card.append(localRecordsNode("h4",null,`${localRecordsLabelScope(v.instance)}${e.kind} · 记录修订 ${e.record_revision} · 集合版本 ${row.version}`),localRecordsNode("p",null,`记录 ${e.record_id} · ${e.state} · Run ${row.run_id}`),localRecordsNode("p",null,`标题：${e.title}`),localRecordsNode("pre",null,e.details),localRecordsNode("p",null,`变更依据：${e.reason||"创建记录，无状态变更依据"}`),localRecordsNode("p",null,`事件 SHA-256 ${row.event_fingerprint} · JSON 制品 ${row.artifact.resource_id} · ${row.artifact.hash}`));v.history.append(card);
  }
 }
 function localRecordsRenderProjection(v){
- const i=v.instance;v.operations.hidden=false;v.instanceInfo.textContent=`实例 ${i.id} · Release ${i.release_id} · 修订 ${i.revision} · 当前集合版本 ${i.data_version}`;
+ const i=v.instance;v.operations.hidden=false;v.instanceInfo.textContent=`${localRecordsLabelScope(i)}${i.id} · Release ${i.release_id} · 修订 ${i.revision} · 当前集合版本 ${i.data_version}`;
+ v.confirm.textContent=i.preview_scope?"单独确认并提交本次 PREVIEW 试写 Run":"单独确认并提交本次业务写入 Run";
  const chosen=v.recordSelect.value;v.recordSelect.replaceChildren(new Option("请选择当前 OPEN 记录",""),...i.records.filter(r=>r.state==="OPEN").map(r=>new Option(`${r.title} · ${r.record_id} · 修订 ${r.record_revision}`,r.record_id)));if(i.records.some(r=>r.record_id===chosen&&r.state==="OPEN"))v.recordSelect.value=chosen;
  v.records.replaceChildren(localRecordsNode("p",null,`已核验集合版本 ${i.data_version} · ${i.records.length} 条记录`));
  if(!i.records.length)v.records.append(localRecordsNode("p",null,"当前集合为空；请明确预览并确认创建第一条记录。"));
@@ -283,12 +313,13 @@ function localRecordsRenderProjection(v){
  const selected=v.runSelect.value;v.runSelect.replaceChildren(new Option("请明确选择已接受 Run",""),...i.runs.map(r=>new Option(`${r.id} · ${r.status} · 结果 ${r.result_version??"尚无"}`,r.id)));if(i.runs.some(r=>r.id===selected))v.runSelect.value=selected;
 }
 async function localRecordsSelectInstance(v,iid){
- if(!localRecordsCurrent(v))return;v.selection++;v.read++;v.edit++;localRecordsClearInstance(v);v.selectedIid=iid||null;v.title.value=v.details.value=v.reason.value="";v.command.value="CREATE";v.createFields.hidden=false;v.stateFields.hidden=true;v.selectedRelease=v.delivery?.instances.find(i=>i.id===iid)?.release_id||null;localRecordsButtons(v);
+ if(!localRecordsCurrent(v))return;v.selection++;v.read++;v.edit++;localRecordsClearInstance(v);v.privateAck.checked=false;v.selectedIid=iid||null;v.title.value=v.details.value=v.reason.value="";v.command.value="CREATE";v.createFields.hidden=false;v.stateFields.hidden=true;v.selectedRelease=localRecordsInstances(v).find(i=>i.id===iid)?.release_id||null;localRecordsButtons(v);
  if(!iid)return;if(!v.selectedRelease)localRecordsError();const pending=localRecordsPending(v)[0];if(pending)localRecordsRemember(v,pending);await localRecordsRefresh(v,true);
 }
 async function localRecordsRunValue(v,run,rid,current){
  localRecordsEnvelope(run,localRecordsOwn(v));
  if(run.id!==rid||run.instance_id!==v.selectedIid||run.release_id!==v.instance.release_id||typeof run.app_run_id!=="string"||typeof run.status!=="string"||!localRecordsInteger(run.version))localRecordsError();
+ if(!localRecordsSame(run.preview_scope??null,v.instance.preview_scope??null)||(run.preview_scope&&run.execution_namespace!==localRecordsPrivate))localRecordsError();
  const known=v.instance.runs.find(r=>r.id===rid);if(!known||known.app_run_id!==run.app_run_id)localRecordsError();
  if(run.status==="SUCCEEDED"){
   const event=v.instance.history.find(h=>h.run_id===rid);
@@ -297,7 +328,7 @@ async function localRecordsRunValue(v,run,rid,current){
  }else if(run.output!==null||run.event!==null||run.result_version!==null)localRecordsError();
  return current();
 }
-function localRecordsRenderRun(v,run){v.run=run;v.runStatus.textContent=`同一 Run ${run.id} · ${run.status} · ${run.result_version!==null?"已保存集合版本 "+run.result_version:"尚无已核验业务事件"}${run.error?" · "+(run.error.code||"运行错误"):""}`;if(run.status==="SUCCEEDED")v.runStatus.textContent+=` · 记录 ${run.event.record_id} 修订 ${run.event.record_revision} → ${run.event.state} · 实际工具输出 JSON 制品 ${run.output.resource_id}，SHA-256 ${run.output.hash}`;v.runProof.textContent=JSON.stringify(run,null,2);localRecordsReadControl(v,run);if(v.acceptedRun?.run_id===run.id)v.acceptedRun={...v.acceptedRun,status:run.status,version:run.version};}
+function localRecordsRenderRun(v,run){v.run=run;v.runStatus.textContent=`${localRecordsLabelScope(v.instance)}同一 Run ${run.id} · ${run.status} · ${run.result_version!==null?"已保存集合版本 "+run.result_version:"尚无已核验业务事件"}${run.error?" · "+(run.error.code||"运行错误"):""}`;if(run.status==="SUCCEEDED")v.runStatus.textContent+=` · 记录 ${run.event.record_id} 修订 ${run.event.record_revision} → ${run.event.state} · 实际工具输出 JSON 制品 ${run.output.resource_id}，SHA-256 ${run.output.hash}`;v.runProof.textContent=JSON.stringify(run,null,2);localRecordsReadControl(v,run);if(v.acceptedRun?.run_id===run.id)v.acceptedRun={...v.acceptedRun,status:run.status,version:run.version};}
 async function localRecordsRefresh(v,allowBusy=false){
  if(!localRecordsCurrent(v)||!v.selectedIid||(v.busy&&!allowBusy))return;v.read++;const current=localRecordsFence(v,{edit:false}),iid=v.selectedIid,selected=v.runSelect.value;localRecordsBusy(v,true);v.runStatus.textContent="正在重新鉴权并读取同一实例；读取失败不表示后台任务失败。";
  try{
@@ -324,14 +355,14 @@ async function localRecordsConfirm(v){
  if(!localRecordsCurrent(v)||v.confirm.disabled)return;const p=v.preview,intent=v.previewIntent,current=localRecordsFence(v),body={expected_preview_fingerprint:p.preview_fingerprint,consent:"WRITE_THIS_EXACT_LOCAL_RECORD_EVENT"};
  const saved=await localRecordsPost(v,"RUN",`/api/internal/record-instances/${v.instance.id}/previews/${encodeURIComponent(p.request_key)}/commit`,body,intent.recoveryUrl,localRecordsValidatePreview,{key:p.request_key,originFingerprint:p.request_fingerprint,originalInput:intent.originalInput,originalRecord:intent.originalRecord});
  if(!current()||!saved)return;if(!saved.reply.run)localRecordsError();v.preview=saved.reply;v.runAck.checked=false;v.acceptedRun=saved.reply.run;v.run=null;v.runProof.textContent="";const run=saved.reply.run;
- if(![...v.runSelect.options].some(o=>o.value===run.run_id))v.runSelect.append(new Option(`${run.run_id} · ${run.status} · 只读刷新核对结果`,run.run_id));v.runSelect.value=run.run_id;v.runStatus.textContent=`已接受同一 Run ${run.run_id} · ${run.status}；尚未读取实际结果。请手动刷新，不会自动轮询或再次提交。`;localRecordsStatus(v,"本次写入 Run 已接受；后台状态与最终记录须手动读取。新点击不会重发已接受请求。");localRecordsButtons(v);
+ if(![...v.runSelect.options].some(o=>o.value===run.run_id))v.runSelect.append(new Option(`${run.run_id} · ${run.status} · 只读刷新核对结果`,run.run_id));v.runSelect.value=run.run_id;v.runStatus.textContent=`${localRecordsLabelScope(v.instance)}已接受同一 Run ${run.run_id} · ${run.status}；尚未读取实际结果。请手动刷新，不会自动轮询或再次提交。`;localRecordsStatus(v,"本次写入 Run 已接受；后台状态与最终记录须手动读取。新点击不会重发已接受请求。");localRecordsButtons(v);
 }
 function localRecordsOriginalRecord(v,input){
  if(input.command!=="SET_STATE")return null;const rows=v.instance?.history.filter(h=>h.version<=input.expected_data_version&&h.event.record_id===input.record_id)||[];const last=rows.at(-1);if(!last)return null;const e=last.event;return {record_id:e.record_id,record_revision:e.record_revision,title:e.title,details:e.details,state:e.state,last_event_fingerprint:last.event_fingerprint};
 }
 function localRecordsAcceptedRun(v,reply){
  const run=reply.run;if(!run)localRecordsError();v.preview=reply;v.runAck.checked=false;v.acceptedRun=run;v.run=null;v.runProof.textContent="";
- if(![...v.runSelect.options].some(o=>o.value===run.run_id))v.runSelect.append(new Option(`${run.run_id} · ${run.status} · 只读刷新核对结果`,run.run_id));v.runSelect.value=run.run_id;v.runStatus.textContent=`已接受同一 Run ${run.run_id} · ${run.status}；尚未读取实际结果。请手动刷新，不会自动轮询或再次提交。`;localRecordsStatus(v,"本次写入 Run 已接受；后台状态与最终记录须手动读取。新点击不会重发已接受请求。");localRecordsButtons(v);
+ if(![...v.runSelect.options].some(o=>o.value===run.run_id))v.runSelect.append(new Option(`${run.run_id} · ${run.status} · 只读刷新核对结果`,run.run_id));v.runSelect.value=run.run_id;v.runStatus.textContent=`${localRecordsLabelScope(v.instance)}已接受同一 Run ${run.run_id} · ${run.status}；尚未读取实际结果。请手动刷新，不会自动轮询或再次提交。`;localRecordsStatus(v,"本次写入 Run 已接受；后台状态与最终记录须手动读取。新点击不会重发已接受请求。");localRecordsButtons(v);
 }
 async function localRecordsRecover(v){
  if(!localRecordsCurrent(v)||v.busy)return;const stage=v.recoveryStage.value,key=v.recoveryKey.value.trim();if(!key)return;
@@ -340,7 +371,7 @@ async function localRecordsRecover(v){
  if(!path){
   if(stage==="CREATE_APP")path=`/api/projects/${v.project}/record-app-requests/${encodeURIComponent(key)}`;
   else if(["PREPARE_RELEASE","COMMIT_RELEASE"].includes(stage)&&v.app){path=`/api/apps/${v.app.id}/record-release-requests/${encodeURIComponent(key)}`;body={expected_definition_fingerprint:v.app.fingerprint,request_key:key,consent:"FREEZE_RECORD_FORM_AND_WRITE_BOUNDARY"};}
-  else if(stage==="CREATE_INSTANCE"&&v.app){const release=v.delivery?.releases.find(r=>r.id===v.releaseSelect.value);if(!release)throw Error("请先明确选择原请求所属 Release");anchor=release.id;path=`/api/internal/record-releases/${release.id}/instance-requests/${encodeURIComponent(key)}`;body={expected_release_fingerprint:release.fingerprint,request_key:key};}
+  else if(["CREATE_INSTANCE","CREATE_PRIVATE"].includes(stage)&&v.app){const release=v.delivery?.releases.find(r=>r.id===v.releaseSelect.value);if(!release)throw Error("请先明确选择原请求所属 Release");anchor=release.id;path=`/api/internal/record-releases/${release.id}/${stage==="CREATE_PRIVATE"?"private-preview-requests":"instance-requests"}/${encodeURIComponent(key)}`;body={expected_release_fingerprint:release.fingerprint,request_key:key};if(stage==="CREATE_PRIVATE")body.consent="CREATE_PRIVATE_WRITE_PREVIEW_NO_BUSINESS_PROMOTION";}
   else if(["PREVIEW","RUN"].includes(stage)&&v.selectedIid)path=`/api/internal/record-instances/${v.selectedIid}/record-requests/${encodeURIComponent(key)}`;
   else throw Error("请先重新打开原应用并明确选择原 Release 或实例");
  }
@@ -361,14 +392,14 @@ async function localRecordsRecover(v){
   let valid=true;
   if(stage==="CREATE_APP")valid=await localRecordsValidateApp(v,reply,intent,current);
   else if(["PREPARE_RELEASE","COMMIT_RELEASE"].includes(stage))valid=await localRecordsValidateApproval(v,reply,intent,current);
-  else if(stage==="CREATE_INSTANCE")valid=localRecordsValidateInstanceReceipt(v,reply,intent);
+  else if(["CREATE_INSTANCE","CREATE_PRIVATE"].includes(stage))valid=await localRecordsValidateInstanceReceipt(v,reply,intent,current);
   else valid=await localRecordsValidatePreview(v,reply,intent,current);
   if(!valid||!current())return;
   if((stage==="COMMIT_RELEASE"&&!reply.release)||(stage==="RUN"&&!reply.run)){intent.state="UNKNOWN";localRecordsIntents.set(localRecordsScope(v,stage,intent.anchor),intent);localRecordsRemember(v,intent);localRecordsStatus(v,"原提交尚无接受回执，继续仅 GET 原 key；不会自动重发或换 key。");return;}
   intent.reply=reply;intent.state="ACCEPTED";localRecordsIntents.set(localRecordsScope(v,stage,intent.anchor),intent);localRecordsRemember(v,intent);v.recoveryProof.textContent=JSON.stringify(reply,null,2);
   if(stage==="CREATE_APP"){v.savedApp=reply;localRecordsStatus(v,"已只读恢复原 key 对应应用；请另行打开，不会自动准备版本或运行。");}
   else if(["PREPARE_RELEASE","COMMIT_RELEASE"].includes(stage)){v.approval=reply;v.approvalIntent=intent;v.releaseAck.checked=false;v.releaseProof.textContent=JSON.stringify(reply,null,2);localRecordsStatus(v,reply.release?"原内部版本已保存；请读取目录，明确选择后单独创建实例。":"已恢复原版本预览，请阅读并另行确认保存。");}
-  else if(stage==="CREATE_INSTANCE"){v.instanceAck.checked=false;localRecordsStatus(v,`已只读恢复实例 ${reply.instance.id}；请读取目录，再明确选择实例。`);}
+  else if(["CREATE_INSTANCE","CREATE_PRIVATE"].includes(stage)){v.instanceAck.checked=v.privateAck.checked=false;localRecordsStatus(v,`已只读恢复实例 ${reply.instance.id}；请读取目录，再明确选择实例。`);}
   else{
    const input=reply.preview.input;v.command.value=input.command;v.title.value=input.title||"";v.details.value=input.details||"";if(input.command==="SET_STATE")v.recordSelect.value=input.record_id;v.reason.value=input.reason||"";v.createFields.hidden=input.command!=="CREATE";v.stateFields.hidden=input.command!=="SET_STATE";
    localRecordsAcceptPreview(v,reply,intent);if(reply.run)localRecordsAcceptedRun(v,reply);
@@ -379,11 +410,11 @@ async function localRecordsRecover(v){
 function renderLocalRecordTaskResult(receipt,current){
  if(!current())return;
  if(receipt.project_id!==$("project-select").value||receipt.id!==activeRun||receipt.formal_publication_enabled!==false||![receipt.id,receipt.instance_id,receipt.app_id,receipt.app_run_id,receipt.release_id,receipt.principal_id].every(id=>typeof id==="string"&&id))localRecordsError();
- const result=$("result");result.replaceChildren(row(`本地记录任务 ${receipt.id} · ${receipt.status} · 集合结果版本 ${receipt.result_version??"尚无"}`));
+ const result=$("result");result.replaceChildren(row(`${localRecordsLabelScope(receipt)}本地记录任务 ${receipt.id} · ${receipt.status} · 集合结果版本 ${receipt.result_version??"尚无"}`));
  if(receipt.status==="SUCCEEDED"){
   const e=receipt.event;
   if(!e||e.app_id!==receipt.app_id||e.instance_id!==receipt.instance_id||e.principal_id!==receipt.principal_id||e.release_id!==receipt.release_id||e.collection_version!==receipt.result_version||receipt.receipt?.status!=="VERIFIED")localRecordsError();
-  result.append(row(`本次记录「${e.title}」 · ${e.state} · 记录修订 ${e.record_revision}；已保存本次事件，目标语义未验收。`));
+  result.append(row(`${localRecordsLabelScope(receipt)}本次记录「${e.title}」 · ${e.state} · 记录修订 ${e.record_revision}；已保存本次事件，目标语义未验收。`));
  }else result.append(row("本次尚无已保存业务事件；历史成功不代表本次完成。"));
  const button=document.createElement("button");button.id="local-record-task-open-result";button.type="button";button.textContent="在本地记录应用中打开此Run与事件历史";
  button.disabled=!!internalTaskNavigation?.current();button.onclick=safe(()=>openLocalRecordTaskResult(receipt,button,current));result.append(button);

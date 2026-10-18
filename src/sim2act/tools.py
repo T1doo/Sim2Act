@@ -358,7 +358,7 @@ def aggregate_csv_content(content, rid, column):
     return data
 
 
-def reconcile_readback(store, c, run, operation):
+def reconcile_readback(store, c, run, operation, *, preview_context=None):
     """Trusted local evidence only; unknown adapters never claim absence or dispatch again."""
     intent = c.execute(
         select(operation_intents.c.request).where(
@@ -380,6 +380,9 @@ def reconcile_readback(store, c, run, operation):
     store.authorize(c, run["principal_id"], run["runtime_id"], run["project_id"], rid, name)
     artifacts = []
     if name == "artifact.save_text":
+        if preview_context is not None:
+            from .record_preview_storage import readback
+            return readback(store,c,run,operation,preview_context)
         effect = (
             c.execute(select(local_effects).where(local_effects.c.operation_id == operation["id"]))
             .mappings()
@@ -434,7 +437,7 @@ def reconcile_readback(store, c, run, operation):
     return "VERIFIED", receipt
 
 
-def write_text_artifact(store, c, principal, runtime, project_id, content, *, artifact_format="md"):
+def write_text_artifact(store, c, principal, runtime, project_id, content, *, artifact_format="md", preview_context=None):
     """Existing registered project artifact effect; caller owns transaction/idempotency.
 
     No new tool or write grant. Derived artifact read grants match normal dispatch.
@@ -445,6 +448,11 @@ def write_text_artifact(store, c, principal, runtime, project_id, content, *, ar
     if artifact_format == "json":
         strict_json(content, 32768)
     store.authorize(c, principal, runtime, project_id, project_id, "artifact.save_text")
+    if preview_context is not None:
+        if artifact_format != "json":
+            raise DomainError("INVALID_INPUT", "Private record preview requires canonical JSON")
+        from .record_preview_storage import write
+        return write(store,c,principal,runtime,project_id,content,preview_context)
     output_id = new_id("res")
     content_hash = hashlib.sha256(content.encode()).hexdigest()
     c.execute(insert(resources).values(
