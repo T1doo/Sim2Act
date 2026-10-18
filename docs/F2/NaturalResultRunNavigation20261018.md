@@ -17,3 +17,5 @@
 冷页经统一目录重开同一实例，分别下载v1/v2的JSON及Markdown共4个真实Blob，逐字比对各次新 `spec-artifact` GET、原Run/版本/source、独立SHA和canonical内容；下载与历史导航全库只读、零POST。每boot服务27资产核SHA，保留真实请求/响应bytes、阶段、全表状态、模型wire/Worker claim、完整执行输入前后映射和失败finally原件。再运行一个受影响的原自然目录/控制器合成导航回归；其API为synthetic，不能计成实际HTTP或Worker证据。
 
 源码/测试完整冻结后执行，实际结果另附，不预写PASS。Windows/native、PG、真实模型/语义/场景、远端CI、部署未因此验收；永久取消旧安装digest窗口、旧exit139因果Unknown与原满盘独审缺证保持。关闭回执准确性疑点仅收窄文档：完整来源指纹在CLOSE事务写入前后重核，后续terminal GET核当前访问门和历史封存，不承诺逐次fullsource重验或一切闭后版本漂移均锁定；该漂移时序未实测，不追加关闭测试。
+
+首轮冻结 `c068e165f7ac6bc38a5d474f26e7a99f8e0bac4c` 的两个节点均失败，原件保留。实际用例在v2提交前因fixture先PREPARE后保存THIRD而新增4条既有材料权限、使原人工合同grant_version失效，页面正确返回STALE；完成8项页面检查、5次Mock、页面Worker0，未完成v2或下载。只将THIRD/Goal正常保存提前到PREPARE之前，不改变业务时钟或断言。旧synthetic探针在32项后因缺精确Release响应及instance.release_fingerprint，触发现行版本门而清实例；只补匹配的合成metadata，原36项断言保持。首轮687输入/133生产前后0漂移；修正后重新冻结两测试，生产一行不变。

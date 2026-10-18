@@ -279,6 +279,7 @@ def test_same_pb_instance_navigates_matching_owner_run_and_downloads_both_versio
                 assert v1_artifact["result_version"] == 1
                 assert json.loads(v1_artifact["resource"]["content"])["source_content"] == COLD
                 owner_path = f"/api/internal/instances/{instance['id']}/runs/{v1_run}/spec-owner-review"
+                third_resource, third_goal = material(client, project, THIRD, "P-B v2 explicit THIRD Goal")
                 record, owner_request = owner_prepare(data, owner_path, key="navigation-fixture-v1-prepare")
                 owner_state = ok(client.get(owner_path))
                 assert owner_state["sequence"] == 1 and owner_state["latest"]["kind"] == "PREPARE"
@@ -286,8 +287,7 @@ def test_same_pb_instance_navigates_matching_owner_run_and_downloads_both_versio
                 observer.save("v1-owner-fixture-prepare.json", dict(request=owner_request, record=record,
                     contract_fingerprint=fingerprint(record["payload"]["contract"]), state=owner_state,
                     classification="EXPLICIT_SYNTHETIC_FIXTURE_PREPARE_NO_DECIDE_NOT_HUMAN_SIGNOFF"))
-                observer.save("v1-baseline-before-third-input.json", snapshot(store))
-                third_resource, third_goal = material(client, project, THIRD, "P-B v2 explicit THIRD Goal")
+                observer.save("v1-baseline-after-inputs-and-prepare.json", snapshot(store))
                 initial = snapshot(store)
                 readonly = initial
                 observer.save("v2-before-page.json", initial)
