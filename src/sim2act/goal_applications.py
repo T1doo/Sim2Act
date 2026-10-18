@@ -114,6 +114,9 @@ def policy(provider, user, pid, body, activation=None, app_limits=None):
 
 def source_scope_gate(store, c, rid):
     """Only identifier projections before authorization; never fetch protected bodies."""
+    from .local_record_apps import job_scope_gate as record_scope_gate
+    if record_scope_gate(store, c, rid):
+        return False
     metadata = c.execute(select(runs.c.principal_id, runs.c.project_id,
         runs.c.runtime_id).where(runs.c.id == rid)).mappings().first()
     if metadata is not None:

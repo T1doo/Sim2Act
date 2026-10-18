@@ -32,6 +32,12 @@ async function refreshApplicationUse(apps){
  for(const summary of apps){
    if(summary.csv_instance_candidate===false)clearSavedDagUse(summary.id);
   // Family metadata only routes discovery; opening always reauthorizes the selection.
+  if(summary.use_family==="LOCAL_RECORDS"){
+   const item=row(`${summary.name} · 本地记录与状态 · 固定类型表单 · 创建记录、明确变更状态及不可变历史。每次先预览，再单独确认写入；0 模型请求，内部应用未发布。打开只读目录，需明确选择版本与实例。`,async()=>{
+    if(selectable())await showApp(summary.id,project,null,selectable,a=>{if(a.input_guidance?.mode!=="LOCAL_RECORDS"||!localRecordsApp(a))throw Error("VERSION_CONFLICT");});
+   },"使用此本地记录应用");
+   item.dataset.useFamily="LOCAL_RECORDS";item.dataset.appId=summary.id;rows.push(item);continue;
+  }
    if(summary.use_family==="CLOSED_TEXT_WORKFLOW"){
     const item=row(`${summary.name} · 四步文本流程 · 固定 TXT/MD（≤1536字节、32行）· 两检索词各≤80码点 + 报告开关 · 0 模型请求 · 未选报告为 PARTIAL，不新增成果。内部应用未发布，语义 UNKNOWN，新结果人工 PENDING；成功 Run 可读完整报告并逐项人工验收。打开后明确选择已有实例与运行。`,async()=>{
      if(selectable())await openSavedInternalUse(summary.id,null,"CLOSED_TEXT_WORKFLOW",selectable);

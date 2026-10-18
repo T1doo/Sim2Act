@@ -285,6 +285,8 @@ def commit_release_tx(store, c, user, approval_id, exact_fp, limits, *, project_
         select(internal_approvals.c.project_id).where(internal_approvals.c.id == approval_id)
     ).scalar()
     store.lock_project(c, user, location)
+    from .local_record_apps import reject_legacy as reject_record_legacy
+    reject_record_legacy(c, approval_id=approval_id)
     from . import csv_goal_revisions as csv_revision
     csv_revision.release_gate(store,c,user,approval_id=approval_id)
     from . import csv_full_report_instances as full_report
@@ -369,6 +371,8 @@ def validate_source_bytes(store, c, user, draft):
 
 def owned_release_pointer(store, c, user, rid):
     """Authorize identifiers before reading a Release body; never follow origins."""
+    from .local_record_apps import reject_legacy as reject_record_legacy
+    reject_record_legacy(c, release_id=rid)
     from .csv_full_report_instances import release_gate as report_gate
     from .text_continuations import release_gate
 
@@ -404,6 +408,8 @@ def owned_instance_pointer(store, c, user, iid, project=None):
     if i is None or (project is not None and i["project_id"] != project):
         raise DomainError("PERMISSION_DENIED")
     store.own_project(c, user, i["project_id"])
+    from .local_record_apps import reject_legacy as reject_record_legacy
+    reject_record_legacy(c, iid=iid)
     from .text_continuations import release_gate
 
     release_gate(store, c, user, i["release_id"])

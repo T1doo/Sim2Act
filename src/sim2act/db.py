@@ -1401,6 +1401,8 @@ class Store:
         from .goal_applications import source_scope_gate
 
         with self.tx() as c:
+            from .local_record_apps import reject_legacy as reject_record_legacy
+            reject_record_legacy(c, rid=run_id)
             source_scope_gate(self, c, run_id)
         from .csv_dag import inspect_job as inspect_csv_dag
         from .csv_dag import is_job as is_csv_dag
@@ -1575,6 +1577,9 @@ class Store:
 
     def command(self, principal, run_id, command, version):
         self.require_run_owner(principal, run_id)
+        with self.tx() as c:
+            from .local_record_apps import reject_legacy as reject_record_legacy
+            reject_record_legacy(c, rid=run_id)
         from .csv_dag import command_job as command_csv_dag
         from .csv_dag import is_job as is_csv_dag
 
@@ -1719,6 +1724,10 @@ class Store:
         acknowledge_unknown_cost,
         response=None,
     ):
+        self.require_run_owner(principal, run_id)
+        with self.tx() as c:
+            from .local_record_apps import reject_legacy as reject_record_legacy
+            reject_record_legacy(c, rid=run_id)
         from .model import parse_response, require_returned_model, returned_model_identity
         from .protocol_jobs import is_protocol_job, verified_pending
 
@@ -1921,6 +1930,9 @@ class Store:
         self, principal, run_id, operation_id, version, expected_fingerprint, evidence
     ):
         self.require_run_owner(principal, run_id)
+        with self.tx() as c:
+            from .local_record_apps import reject_legacy as reject_record_legacy
+            reject_record_legacy(c, rid=run_id)
         from .csv_dag import is_job as is_csv_dag
         from .csv_dag import owner_lock, row
         from .protocol_jobs import is_protocol_job, verified_pending

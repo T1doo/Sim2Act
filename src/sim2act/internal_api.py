@@ -114,6 +114,8 @@ def mount(app, store, limits, identity):
                 .where(internal_run_bindings.c.run_id == rid, internal_app_runs.c.principal_id == user)).mappings().first()
             if not association or association["instance_id"] != iid or association["accepted_iid"] != iid:
                 raise DomainError("PERMISSION_DENIED")
+            from .local_record_apps import reject_legacy as reject_record_legacy
+            reject_record_legacy(c, rid=rid)
             if not historical:
                 from .pb_natural_uses import control_scope
 
@@ -158,6 +160,8 @@ def mount(app, store, limits, identity):
     @app.get("/api/internal/approvals/{aid}")
     def inspect_approval(aid: str, user=user_dependency):
         with store.tx() as c:
+            from .local_record_apps import reject_legacy as reject_record_legacy
+            reject_record_legacy(c, approval_id=aid)
             from . import csv_full_report_instances as full_report
             if full_report.release_gate(store, c, user, approval_id=aid) is not None:
                 return envelope(**dict(full_report.validate_approval(store, c, user, aid)))
@@ -199,6 +203,9 @@ def mount(app, store, limits, identity):
 
     @app.post("/api/internal/approvals/{aid}/commit")
     def commit(aid: str, body: ApprovalInput, user=user_dependency):
+        with store.tx() as c:
+            from .local_record_apps import reject_legacy as reject_record_legacy
+            reject_record_legacy(c, approval_id=aid)
         return envelope(**lifecycle.commit_release(store, user, aid, body.fingerprint, limits))
 
     @app.get("/api/internal/apps/{aid}/releases")

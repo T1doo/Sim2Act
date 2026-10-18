@@ -127,6 +127,8 @@ def enqueue(
             select(internal_instances.c.project_id).where(internal_instances.c.id == iid)
         ).scalar()
         store.lock_project(c, user, pid)
+        from .local_record_apps import reject_legacy as reject_record_legacy
+        reject_record_legacy(c, iid=iid)
         from .spec_run_terminals import fenced
         if fenced(c, user, iid, key):
             raise DomainError("VERSION_CONFLICT", "Original spec request key permanently closed")
@@ -463,6 +465,8 @@ def enqueue(
 
 
 def load_binding(store, c, user, job, limits, *, authorize=True, archival_software=None, return_release=False, _logic_out=None, _origin_out=None):
+    from .local_record_apps import reject_legacy as reject_record_legacy
+    reject_record_legacy(c, rid=job["id"])
     if return_release and not authorize:
         raise DomainError("PERMISSION_DENIED", "Verified release requires authorization")
     from . import natural_spec_corrections as correction
@@ -603,6 +607,8 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
 
 def inspect_job(store, user, rid):
     with store.tx() as c:
+        from .local_record_apps import reject_legacy as reject_record_legacy
+        reject_record_legacy(c, rid=rid)
         from .text_continuations import job_gate
 
         job_gate(store, c, user, rid)
@@ -668,6 +674,8 @@ def command_job(store, user, rid, command, version):
     with store.tx() as c:
         pid = c.execute(select(runs.c.project_id).where(runs.c.id == rid)).scalar()
         store.lock_project(c, user, pid)
+        from .local_record_apps import reject_legacy as reject_record_legacy
+        reject_record_legacy(c, rid=rid)
         from .pb_natural_uses import control_scope
 
         metadata = control_scope(store, c, user, rid, lock=True)
@@ -772,6 +780,9 @@ def state_write(store, c, job, aid, state, error=None, result=None):
 
 def reject_queued_scope(store, c, rid, error):
     """Reject before claim without reading revoked Run or AppRun payloads."""
+    from . import local_record_apps as record_apps
+    if record_apps.is_job_tx(c, rid):
+        return record_apps.reject_queued_scope(store, c, rid, error)
     header = c.execute(select(
         runs.c.id, runs.c.principal_id, runs.c.project_id, runs.c.runtime_id,
         runs.c.status, runs.c.version, runs.c.fence, runs.c.fingerprint,
@@ -1204,6 +1215,9 @@ def commit_result(worker, run, plan, output):
 
 
 def fail_job(worker, run, error):
+    from . import local_record_apps as record_apps
+    if record_apps.is_job(worker.store, run["id"]):
+        return record_apps.fail_job(worker, run, error)
     from .natural_specs import VERSION as natural_version
     if run["context"].get("spec_family") == natural_version:
         from .natural_spec_runtime import fail_owned
@@ -1270,6 +1284,9 @@ def fail_job(worker, run, error):
 
 
 def process_job(worker, run):
+    from . import local_record_apps as record_apps
+    if record_apps.is_job(worker.store, run["id"]):
+        return record_apps.process_job(worker, run)
     from . import natural_specs, pa_spec_apps
     # The frozen family is a routing hint. The first advance still checks the
     # current owner, full source scope, binding and receipts before any effect.

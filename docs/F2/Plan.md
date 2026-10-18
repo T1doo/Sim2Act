@@ -1,5 +1,7 @@
 # F2 并行工程 Plan：权威当前状态
 
+2026-10-18 F2-T06 有限实施：[本地记录收集与版本化状态更新](LocalRecordState20261018.md)从基线5322接续普通开发分支，补齐明确业务表单、独立实例、稳定记录 ID、OPEN→DONE 与不可变事件历史。复用原保存工具和权限交集，派生成果读取 Grant 保留，业务变更及操作回执同事务。合成 A/B/DONE、目录与完整页面、版本/权限/导航隔离的冻结范围和失败历史另附证据；不关闭完整 F2-T06、P-A/P-B、语义、Windows/PG 或正式发布门。
+
 2026-10-07 subsequent NL UI/confirmation: exact117bb5db2d2161e6a6f346eecd289cd6f1fc11bc connects saved goal→strict planned-runs→validated exact plan→explicit confirmation→actual durable receipts/history. New valid plans stop WAITING_APPROVAL0Operations; defaultdisabled or selected-but-LIVE0 is honestly blocked. Targeted250unique249PASS1explicitPGroleSKIP68.34s, five actualHTTP/fullDOM paths42/8/8/7/8 checks and9loadedJS hashes, independentbackend14actual LIMITEDPASS and corrected UI staticPASS. Protected Chromium aborted due installed SUID configuration; JSDOM is not native/visual evidence. No newLIVE/full/PG/native/CI or R0/P-A/P-B acceptance. [Stage log](NaturalGoalUILog.md) and [proposed two-hour real-model acceptance](NaturalGoalLiveAcceptanceProposal.md), not authorized/executed.
 
 

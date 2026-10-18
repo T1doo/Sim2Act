@@ -845,6 +845,8 @@ def create_app(store=None, settings=None):
                 from .csv_full_report import summaries as report_workflow_summaries
 
                 items.extend(report_workflow_summaries(c, user))
+                from .local_record_apps import summaries as record_summaries
+                items.extend(record_summaries(c, user))
                 return {"items": items, "state": "PREVIEW_ONLY", "publishable": False, "discovery_only": True}
             rows = (
                 c.execute(
@@ -870,6 +872,8 @@ def create_app(store=None, settings=None):
 
         with db.tx() as c:
             items.extend(report_workflow_summaries(c, user))
+            from .local_record_apps import summaries as record_summaries
+            items.extend(record_summaries(c, user))
         return {"items": items, "state": "PREVIEW_ONLY", "publishable": False}
 
     @app.post("/api/projects/{pid}/apps/csv-preview", status_code=201)
@@ -880,8 +884,13 @@ def create_app(store=None, settings=None):
 
     @app.get("/api/apps/{aid}")
     def get_app_draft(aid: str, user=user_dependency):
+        from . import local_record_apps as record_apps
         from .csv_full_report import inspect as inspect_report_workflow
         from .db import csv_report_workflows
+
+        with db.tx() as c:
+            if record_apps.has_app(c, aid):
+                return record_apps.public_app(record_apps.checked_app(db, c, user, aid, platform_limits))
 
         with db.tx() as c:
             workflow = c.execute(select(csv_report_workflows.c.id).where(csv_report_workflows.c.id == aid)).first()
@@ -987,6 +996,8 @@ def create_app(store=None, settings=None):
     from .text_workflows import mount as mount_text_workflows
 
     mount_text_workflows(app, db, platform_limits, identity)
+    from .local_record_apps import mount as mount_local_record_apps
+    mount_local_record_apps(app, db, platform_limits, identity)
     from .text_workflow_owner import mount as mount_text_workflow_owner
     mount_text_workflow_owner(app, db, platform_limits, identity)
     from .pa_spec_apps import mount as mount_spec_apps
@@ -1096,6 +1107,10 @@ def create_app(store=None, settings=None):
     @app.get("/text-logic.js")
     def text_logic_js():
         return FileResponse(web / "text-logic.js", media_type="text/javascript")
+
+    @app.get("/local-records.js")
+    def local_records_script():
+        return FileResponse(web / "local-records.js", media_type="text/javascript")
 
     @app.get("/project-revalidation.js")
     def project_revalidation_js():
