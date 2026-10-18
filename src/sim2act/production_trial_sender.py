@@ -20,6 +20,7 @@ from . import production_trial_policy as policy
 from .config import Settings
 from .contracts import strict_json
 from .db import Store, runs
+from .db import delivery_graph_requests as rows
 from .errors import DomainError
 from .goal_applications import response_archive
 from .goal_planner import configured_provider
@@ -33,6 +34,7 @@ from .model import (
 from .worker import Worker
 
 CAPTURE = "uninstalled-production-trial-capture.v1"
+_SERVER_SOURCE = object()
 
 
 class Capture(policy.evidence.EvidenceData):
@@ -257,13 +259,29 @@ def _derive(payload, complete, received):
 
 
 def _receive(
-    store, user, contract, key, item, wire, source, expected_revision, payload, complete, received
+    store,
+    user,
+    contract,
+    key,
+    item,
+    wire,
+    source,
+    expected_revision,
+    payload,
+    complete,
+    received,
+    *,
+    _server_source=False,
 ):
     _require(type(store) is Store and store.test_only and store.sqlite)
     capture = _derive(payload, complete, received)
     with store.tx() as c:
         original, _, _, slot, revision, _ = _loaded(store, c, user, contract, key, item, wire)
         _require(slot.attempted, "OUTCOME_UNKNOWN")
+        if _server_source:
+            from .production_trial_source import load_offline
+
+            source = load_offline(store, c, user, original, key, item.account_id).source
         prior = _captured(c, user, item)
         if prior is not None:
             _require(prior == capture and slot.settlement == capture.outcome, "VERSION_CONFLICT")
@@ -307,7 +325,48 @@ def _receive(
         return _receipt(saved, item, capture, adapter_entered=True)
 
 
+def _source_history(store, user, contract, key, item, wire):
+    """An original owned key never needs a source read or new send authority."""
+    with store.tx() as c:
+        original, scope, request, quota_request, entity = journal._context(
+            store, c, user, contract, key, item.account_id
+        )
+        anchors = c.execute(
+            select(rows.c.kind).where(
+                rows.c.principal_id == user,
+                rows.c.app_id == scope.project_id,
+                rows.c.kind.in_([journal.KIND, journal.KIND + "_seal"]),
+                rows.c.request_key == scope.trial_key,
+            )
+        ).all()
+        if not anchors:
+            return None
+        journal._history_anchor(c, user, scope, request)
+        _, cursor, quota_revision = journal._quota(c, quota_request, entity, create=False)
+        _, state, _ = journal._ledger(c, scope, request, cursor, quota_revision)
+        policy._bound(store, c, user, original, key, state, cursor, item, wire)
+        slot = next((s for s in state.slots if s.identity.attempt_id == item.attempt_id), None)
+        if slot is None:
+            return None
+        _require(slot.identity == item, "VERSION_CONFLICT")
+    return _history(store, user, original, key, item, wire)
+
+
+def dispatch_from_source_offline(worker, contract, key, identity, wire, *, expected_revision):
+    """Fixed server fixture loader; no source object, selector or callback input."""
+    return _dispatch(
+        worker, contract, key, identity, wire, _SERVER_SOURCE, expected_revision=expected_revision
+    )
+
+
 def dispatch_offline(worker, contract, key, identity, wire, source, *, expected_revision):
+    """Original synthetic data path, still uninstalled and not a source verifier."""
+    return _dispatch(
+        worker, contract, key, identity, wire, source, expected_revision=expected_revision
+    )
+
+
+def _dispatch(worker, contract, key, identity, wire, source, *, expected_revision):
     """One explicit synthetic exchange; every original key retry is history only."""
     _binding(worker)
     store, settings, transport, worker_id = (
@@ -333,7 +392,8 @@ def dispatch_offline(worker, contract, key, identity, wire, source, *, expected_
         in (policy.gate.TrialContract, policy.gate.TrialContractV2, policy.gate.PBTrialContract)
     )
     item = policy._typed(identity, policy.ReservationIdentity)
-    supplied = policy._typed(source, policy.SourceVerificationResult)
+    server_source = source is _SERVER_SOURCE
+    supplied = None if server_source else policy._typed(source, policy.SourceVerificationResult)
     original, _ = policy._requirements(contract.principal_id, contract, key)
     _require(
         worker.s.model == original.model
@@ -345,16 +405,31 @@ def dispatch_offline(worker, contract, key, identity, wire, source, *, expected_
     if worker_id != item.worker_id:
         # A restarted worker may inspect the original key, never inherit its send.
         return _history(store, user, original, key, item, wire)
+    if server_source:
+        prior = _source_history(store, user, original, key, item, wire)
+        if prior is not None:
+            return prior
+
+    def transition(operation, revision):
+        if server_source:
+            from .production_trial_source import load_offline
+
+            with store.tx() as c:
+                current_source = load_offline(store, c, user, original, key, item.account_id).source
+                return journal._apply_in_transaction(
+                    store, c, user, original, key, item, wire, current_source, revision, operation
+                ), current_source
+        action = journal.reserve if operation == "reserve" else journal.record_attempt
+        return action(
+            store, user, original, key, item, wire, supplied, expected_revision=revision
+        ), supplied
+
     same_binding()
-    reserved = journal.reserve(
-        store, user, original, key, item, wire, supplied, expected_revision=expected_revision
-    )
+    reserved, supplied = transition("reserve", expected_revision)
     if reserved.duplicate:
         return _history(store, user, original, key, item, wire)
     same_binding()
-    marked = journal.record_attempt(
-        store, user, original, key, item, wire, supplied, expected_revision=reserved.revision
-    )
+    marked, supplied = transition("record_attempt", reserved.revision)
     if marked.duplicate:
         return _history(store, user, original, key, item, wire)
     same_binding()
@@ -377,7 +452,12 @@ def dispatch_offline(worker, contract, key, identity, wire, source, *, expected_
             _require(
                 slot.attempted and slot.settlement is None and not state.halted, "OUTCOME_UNKNOWN"
             )
-            _, deadline = policy._fresh(store, c, user, current, key, state, item, supplied)
+            current_source = supplied
+            if server_source:
+                from .production_trial_source import load_offline
+
+                current_source = load_offline(store, c, user, current, key, item.account_id).source
+            _, deadline = policy._fresh(store, c, user, current, key, state, item, current_source)
             return dict(deadline=deadline)
 
     payload, complete, received = b"", False, False
@@ -402,4 +482,5 @@ def dispatch_offline(worker, contract, key, identity, wire, source, *, expected_
         payload,
         complete,
         received,
+        _server_source=server_source,
     )
