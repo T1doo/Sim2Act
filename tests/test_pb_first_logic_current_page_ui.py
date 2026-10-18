@@ -286,7 +286,7 @@ def test_first_pb_local_logic_change_checks_then_versions_and_uses_third_on_curr
         pg="NOT_RUN", remote_ci="NOT_RUN", real_semantic_acceptance="NOT_RUN", owner_human_acceptance="NOT_RUN",
         fixture_scope="FRESH_PARALLEL_GEN3_SOURCE2_PB_COLD2_THEN_PAGE_CHECK2_AND_THIRD2",
         product_clock_lease_deadline_budget_mutations=0)
-    with _PageObserver(tmp_path, "PB_FIRST_LOGIC_CURRENT_PAGE") as observer:
+    with _PageObserver(tmp_path, "PB_FIRST_LOGIC_CURRENT_PAGE", watchdog_seconds=1200) as observer:
         before_sources = sources(root)
         observer.save("source-before.json", before_sources)
         lock = threading.Lock()

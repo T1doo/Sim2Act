@@ -28,9 +28,10 @@ from sim2act.worker import Worker
 class _PageObserver:
     """Flush test-only evidence; the watchdog targets only this owned Popen Node."""
 
-    def __init__(self, folder, scenario):
+    def __init__(self, folder, scenario, *, watchdog_seconds=900):
         self.folder = folder
         self.scenario = scenario
+        self.watchdog_seconds = watchdog_seconds
         self.started = time.monotonic()
         self.lock = threading.Lock()
         self.serial = 0
@@ -90,13 +91,14 @@ class _PageObserver:
     def own_node(self, process):
         self.process = process
         self.event("node_started", pid=process.pid, args=process.args,
-            watchdog_seconds=900, watchdog_scope="OWNED_POPEN_NODE_ONLY")
-        self.watchdog = threading.Timer(900, self.kill_owned_node, args=("WATCHDOG_900_SECONDS",))
+            watchdog_seconds=self.watchdog_seconds, watchdog_scope="OWNED_POPEN_NODE_ONLY")
+        self.watchdog = threading.Timer(self.watchdog_seconds, self.kill_owned_node,
+            args=(f"WATCHDOG_{self.watchdog_seconds}_SECONDS",))
         self.watchdog.daemon = True
         self.watchdog.start()
 
     def kill_owned_node(self, reason):
-        if reason == "WATCHDOG_900_SECONDS":
+        if reason == f"WATCHDOG_{self.watchdog_seconds}_SECONDS":
             self.watchdog_fired = True
         process = self.process
         if process is not None and process.poll() is None:
@@ -125,8 +127,8 @@ class _PageObserver:
         return (self.folder / "driver.log").read_text(encoding="utf-8")
 
     def __enter__(self):
-        self.event("test_start", subprocess_watchdog_seconds=900,
-            parent_worker_timeout="EXTERNAL_OWNED_900_SECONDS_REQUIRED")
+        self.event("test_start", subprocess_watchdog_seconds=self.watchdog_seconds,
+            parent_worker_timeout=f"EXTERNAL_OWNED_{self.watchdog_seconds}_SECONDS_OR_LONGER_REQUIRED")
         return self
 
     def __exit__(self, error_type, error, error_tb):
