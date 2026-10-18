@@ -1,0 +1,47 @@
+READ_ONLY_EXISTING_REPO_EVIDENCE_SOURCE_NOT_EXECUTED
+archive: natural-logic-r2-20261014/natural-logic-r2-evidence-20261014.tar.gz
+member: author/test_pb_second.py
+full-member-sha256: b30b12f75b30d712fef6fc3e08d8de34cd4e23183f37cc0c36c2c8b273bff2f6
+
+1: """Actual task-derived P-B two-adjustment chain, synthetic transport only."""
+2: import hashlib,json
+3: from fastapi.testclient import TestClient
+4: from conftest import env as env
+5: from test_logic_version_uses import version
+6: from test_natural_logic_second_revision import release_checked
+7: from test_natural_spec_apps import COLD,material,transport
+8: from test_pa_spec_apps import instance
+9: from test_pb_natural_specs import drive_to_success,prepare,preview_commit
+10: from test_pb_natural_uses import THIRD
+11: from sim2act import natural_logic_patches as logic,pb_natural_uses as use
+12: from sim2act.api import create_app
+13: from sim2act.db import Store,fingerprint
+14: 
+15: 
+16: def test_task_derived_pb_two_adjustments_then_cold_new_material(env,tmp_path):
+17:     prepared=prepare(env,style='sequential',edit=False);data,_,_,_,_,path,_,_=prepared
+18:     _,commit=preview_commit(prepared);response=data[2].post(path+'/extractions',json=commit);assert response.status_code==201,response.text
+19:     app=data[2].get('/api/apps/'+response.json()['id']).json();original,source=instance(data,app['id'])
+20:     first,parent,check1=version(data,app,original,source)
+21:     route='/api/internal/instances/'+parent['id'];path=route+'/logic-patches'
+22:     response=data[2].get(path+'/context');assert response.status_code==200,response.text;base=response.json()
+23:     body=dict(request_key='pb-second',expected_revision=parent['revision'],expected_release_fingerprint=first['fingerprint'],expected_graph_fingerprint=base['graph']['graph_fingerprint'],consume_prior_feedback=True)
+24:     response=data[2].post(path+'/previews',json=body);assert response.status_code==201,response.text;preview=response.json()
+25:     assert preview['effective_candidate']['manifest']['revision']==3
+26:     assert preview['effective_candidate']['spec_recipe']==app['candidate']['spec_recipe']
+27:     response=data[2].post(path+'/checks',json=dict(request_key='pb-second',expected_preview_fingerprint=preview['preview_fingerprint'],consent=logic.CHECK_CONSENT));assert response.status_code==202,response.text;accepted=response.json();sent=[]
+28:     drive_to_success(data,accepted['run_id'],transport(sent,COLD));assert len(sent)==2
+29:     response=data[2].get(path+'/checks/pb-second');assert response.status_code==200,response.text;proof=response.json()
+30:     final,target=release_checked(data,path,'pb-second',proof)
+31:     assert final['snapshot']['draft']==original['snapshot']['draft']
+32:     resource,goal=material(data[2],data[4],THIRD,'Own P-B R2 third material')
+33:     route='/api/internal/instances/'+target['id'];body=dict(expected_revision=target['revision'],expected_release_fingerprint=final['fingerprint'],expected_app_fingerprint=app['fingerprint'],expected_recipe_fingerprint=fingerprint(preview['effective_candidate']['spec_recipe']),resource_id=resource,card_id=goal['id'],expected_goal_version=goal['version'],expected_goal_fingerprint=goal['fingerprint'],expected_source_hash=hashlib.sha256(THIRD.encode()).hexdigest(),request_key='pb-r2-new-material')
+34:     response=data[2].post(route+'/pb-use-reviews',json=body);assert response.status_code==200,response.text;review=response.json()
+35:     assert review['effective_candidate']['manifest']['revision']==3
+36:     response=data[2].post(route+'/pb-use-runs',json=dict(review=body,expected_review_fingerprint=review['review_fingerprint'],consent=use.CONSENT));assert response.status_code==202,response.text;queued=response.json();cold=Store(data[1].database_url,test_only=True)
+37:     try:
+38:         with TestClient(create_app(cold,data[1])) as client:
+39:             client.headers['Authorization']='Bearer synthetic-test-A';sent=[];current=(cold,data[1],client,*data[3:]);drive_to_success(current,queued['run_id'],transport(sent,THIRD));assert len(sent)==2 and 'prior_items' in json.loads(sent[1]['messages'][1]['content'])['current_inputs']
+40:             response=client.get('/api/internal/app-run-jobs/'+queued['run_id']+'/spec-artifact');assert response.status_code==200,response.text;assert json.loads(response.json()['resource']['content'])['source_content']==THIRD
+41:     finally:cold.engine.dispose()
+42:     (tmp_path/'pb-r2-public.json').write_text(json.dumps(dict(app_id=app['id'],original_release=original['id'],r1_release=first['id'],r2_release=final['id'],check2=accepted['run_id'],result_run=queued['run_id'],revision=3,new_material=resource,original_draft_preserved=True,semantic_status='UNKNOWN',owner_acceptance='PENDING',formal_publication_enabled=False,synthetic_only=True),indent=2)+'\n')

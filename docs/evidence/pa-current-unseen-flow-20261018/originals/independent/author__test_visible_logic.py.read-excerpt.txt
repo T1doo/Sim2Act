@@ -1,0 +1,55 @@
+READ_ONLY_EXISTING_REPO_EVIDENCE_SOURCE_NOT_EXECUTED
+archive: natural-spec-local-logic-20261013/natural-spec-local-logic-evidence-20261013.tar.gz
+member: author/test_visible_logic.py
+full-member-sha256: 0916306252d8e897df2d1757252cee5df332fe90dd630b32c6f4a2a189ddfb72
+
+1: """Actual saved P-A: visible third material confirmation, Worker, new owner."""
+2: 
+3: import hashlib
+4: import json
+5: import os
+6: import subprocess
+7: from pathlib import Path
+8: 
+9: import pytest
+10: from fastapi.testclient import TestClient
+11: from test_natural_spec_apps import transport
+12: from test_natural_logic_patches import prepared
+13: from conftest import env as env
+14: from test_pb_natural_specs import drive_to_success
+15: 
+16: 
+17: from sim2act.api import create_app
+18: from sim2act.db import Store
+19: 
+20: 
+21: @pytest.mark.parametrize("scenario", ["normal", "lost"])
+22: def test_visible_logic_check_version_and_new_execution(env, tmp_path, scenario):
+23:     data, aid, release, inst, graph, route, body, review = prepared(env)
+24:     app = data[2].get("/api/apps/"+aid).json()
+25:     info = dict(
+26:         project=data[4],
+27:         app=app["id"],
+28:         name=app["name"],
+29:         release=release["id"],
+30:         instance=inst["id"],
+31:         
+32:         
+33:         
+34:         
+35:         scenario=scenario,
+36:         output=str(tmp_path / "result.json"),
+37:     )
+38:     path = tmp_path / "info.json"
+39:     path.write_text(json.dumps(info))
+40:     stderr = tmp_path / "node.stderr"
+41:     sent = []
+42:     cold = cold_client = None
+43:     with stderr.open("w") as err:
+44:         process = subprocess.Popen(
+45:             ["node", "/workspace/natural-spec-local-logic-evidence-20261013/author/visible-logic.cjs", str(path)],
+46:             stdin=subprocess.PIPE,
+47:             stdout=subprocess.PIPE,
+48:             stderr=err,
+49:             text=True,
+50:             env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"},

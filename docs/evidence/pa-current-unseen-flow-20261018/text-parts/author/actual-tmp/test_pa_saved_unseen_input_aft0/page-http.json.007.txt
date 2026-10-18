@@ -1,0 +1,4065 @@
+     "maxItems": 16
+                      },
+                      "deadline": {
+                        "type": "object",
+                        "properties": {
+                          "amount": {
+                            "type": "integer"
+                          },
+                          "unit": {
+                            "type": "string"
+                          },
+                          "start_event": {
+                            "type": "string"
+                          },
+                          "absolute_date": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "amount",
+                          "unit",
+                          "start_event",
+                          "absolute_date"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "actor",
+                      "action",
+                      "condition",
+                      "lines",
+                      "deadline"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "prior_approval": {
+                    "type": "object",
+                    "properties": {
+                      "actor": {
+                        "type": "string"
+                      },
+                      "action": {
+                        "type": "string"
+                      },
+                      "condition": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "operator": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "integer"
+                          },
+                          "unit": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "operator",
+                          "value",
+                          "unit"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "lines": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        },
+                        "maxItems": 16
+                      },
+                      "order": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "actor",
+                      "action",
+                      "condition",
+                      "lines",
+                      "order"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "missing_proof_block": {
+                    "type": "object",
+                    "properties": {
+                      "actor": {
+                        "type": "string"
+                      },
+                      "action": {
+                        "type": "string"
+                      },
+                      "condition": {
+                        "type": "string"
+                      },
+                      "lines": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        },
+                        "maxItems": 16
+                      },
+                      "release_condition": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "actor",
+                      "action",
+                      "condition",
+                      "lines",
+                      "release_condition"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "unchanged_deadline": {
+                    "type": "object",
+                    "properties": {
+                      "actor": {
+                        "type": "string"
+                      },
+                      "action": {
+                        "type": "string"
+                      },
+                      "condition": {
+                        "type": "string"
+                      },
+                      "lines": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        },
+                        "maxItems": 16
+                      },
+                      "deadline": {
+                        "type": "object",
+                        "properties": {
+                          "amount": {
+                            "type": "integer"
+                          },
+                          "unit": {
+                            "type": "string"
+                          },
+                          "start_event": {
+                            "type": "string"
+                          },
+                          "absolute_date": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "amount",
+                          "unit",
+                          "start_event",
+                          "absolute_date"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "no_extension_or_restart": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "actor",
+                      "action",
+                      "condition",
+                      "lines",
+                      "deadline",
+                      "no_extension_or_restart"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "submit_form",
+                  "submit_proof",
+                  "prior_approval",
+                  "missing_proof_block",
+                  "unchanged_deadline"
+                ],
+                "additionalProperties": false
+              },
+              "case": {
+                "type": "object",
+                "properties": {
+                  "decision": {
+                    "type": "string"
+                  },
+                  "may_submit_now": {
+                    "type": "boolean"
+                  },
+                  "blocking_rule": {
+                    "type": "string"
+                  },
+                  "required_next_step": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "decision",
+                  "may_submit_now",
+                  "blocking_rule",
+                  "required_next_step"
+                ],
+                "additionalProperties": false
+              },
+              "absolute_deadline": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "obligations",
+              "case",
+              "absolute_deadline"
+            ],
+            "additionalProperties": false
+          },
+          "resource_hashes": [
+            "ec7cf7070be884d8e27cd2e107484dbebe3885bae0434107ef76fefecdb71808"
+          ]
+        },
+        {
+          "contract_id": "protocol.synthetic.a-cold.v1",
+          "version": 1,
+          "family": "a",
+          "phase": "cold",
+          "public_goal": "只依据本包，逐条提取义务、条件、例外与原文行号；判断案例下一步。未写明的事实标UNKNOWN，不执行动作。",
+          "public_inputs": {
+            "format": "JSON with line evidence and explicit UNKNOWN"
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "obligations": {
+                "type": "object",
+                "properties": {
+                  "submit_form": {
+                    "type": "object",
+                    "properties": {
+                      "actor": {
+                        "type": "string"
+                      },
+                      "action": {
+                        "type": "string"
+                      },
+                      "condition": {
+                        "type": "string"
+                      },
+                      "lines": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        },
+                        "maxItems": 16
+                      },
+                      "deadline": {
+                        "type": "object",
+                        "properties": {
+                          "amount": {
+                            "type": "integer"
+                          },
+                          "unit": {
+                            "type": "string"
+                          },
+                          "start_event": {
+                            "type": "string"
+                          },
+                          "absolute_date": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "amount",
+                          "unit",
+                          "start_event",
+                          "absolute_date"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "actor",
+                      "action",
+                      "condition",
+                      "lines",
+                      "deadline"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "submit_proof": {
+                    "type": "object",
+                    "properties": {
+                      "actor": {
+                        "type": "string"
+                      },
+                      "action": {
+                        "type": "string"
+                      },
+                      "condition": {
+                        "type": "string"
+                      },
+                      "lines": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        },
+                        "maxItems": 16
+                      },
+                      "deadline": {
+                        "type": "object",
+                        "properties": {
+                          "amount": {
+                            "type": "integer"
+                          },
+                          "unit": {
+                            "type": "string"
+                          },
+                          "start_event": {
+                            "type": "string"
+                          },
+                          "absolute_date": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "amount",
+                          "unit",
+                          "start_event",
+                          "absolute_date"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "actor",
+                      "action",
+                      "condition",
+                      "lines",
+                      "deadline"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "prior_approval": {
+                    "type": "object",
+                    "properties": {
+                      "actor": {
+                        "type": "string"
+                      },
+                      "action": {
+                        "type": "string"
+                      },
+                      "condition": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "operator": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "integer"
+                          },
+                          "unit": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "operator",
+                          "value",
+                          "unit"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "lines": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        },
+                        "maxItems": 16
+                      },
+                      "order": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "actor",
+                      "action",
+                      "condition",
+                      "lines",
+                      "order"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "missing_proof_block": {
+                    "type": "object",
+                    "properties": {
+                      "actor": {
+                        "type": "string"
+                      },
+                      "action": {
+                        "type": "string"
+                      },
+                      "condition": {
+                        "type": "string"
+                      },
+                      "lines": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        },
+                        "maxItems": 16
+                      },
+                      "release_condition": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "actor",
+                      "action",
+                      "condition",
+                      "lines",
+                      "release_condition"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "unchanged_deadline": {
+                    "type": "object",
+                    "properties": {
+                      "actor": {
+                        "type": "string"
+                      },
+                      "action": {
+                        "type": "string"
+                      },
+                      "condition": {
+                        "type": "string"
+                      },
+                      "lines": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        },
+                        "maxItems": 16
+                      },
+                      "deadline": {
+                        "type": "object",
+                        "properties": {
+                          "amount": {
+                            "type": "integer"
+                          },
+                          "unit": {
+                            "type": "string"
+                          },
+                          "start_event": {
+                            "type": "string"
+                          },
+                          "absolute_date": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "amount",
+                          "unit",
+                          "start_event",
+                          "absolute_date"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "no_extension_or_restart": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "actor",
+                      "action",
+                      "condition",
+                      "lines",
+                      "deadline",
+                      "no_extension_or_restart"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "submit_form",
+                  "submit_proof",
+                  "prior_approval",
+                  "missing_proof_block",
+                  "unchanged_deadline"
+                ],
+                "additionalProperties": false
+              },
+              "case": {
+                "type": "object",
+                "properties": {
+                  "decision": {
+                    "type": "string"
+                  },
+                  "may_submit_now": {
+                    "type": "boolean"
+                  },
+                  "blocking_rule": {
+                    "type": "string"
+                  },
+                  "required_next_step": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "decision",
+                  "may_submit_now",
+                  "blocking_rule",
+                  "required_next_step"
+                ],
+                "additionalProperties": false
+              },
+              "absolute_deadline": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "obligations",
+              "case",
+              "absolute_deadline"
+            ],
+            "additionalProperties": false
+          },
+          "resource_hashes": [
+            "29209e986cfb89cd0620dd8d4a67f3f0ba428fe823cd852012929808e201b1fc"
+          ]
+        },
+        {
+          "contract_id": "protocol.synthetic.b-source.v1",
+          "version": 1,
+          "family": "b",
+          "phase": "source",
+          "public_goal": "联合核查请求与规则，引用两侧相关行；区分明确冲突和信息缺失。不得自行选择优先级；不能确定允许时标UNKNOWN并停止导出、提出澄清。",
+          "public_inputs": {
+            "format": "JSON with line evidence and explicit UNKNOWN"
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "decision": {
+                      "type": "string"
+                    },
+                    "rule_relation": {
+                      "type": "string"
+                    },
+                    "evidence": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "resource": {
+                            "type": "string"
+                          },
+                          "line": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "resource",
+                          "line"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 16
+                    }
+                  },
+                  "required": [
+                    "request_id",
+                    "decision",
+                    "rule_relation",
+                    "evidence"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 16
+              }
+            },
+            "required": [
+              "items"
+            ],
+            "additionalProperties": false
+          },
+          "resource_hashes": [
+            "b1e9cb226f39a332f391f1314cb624e55f0e301356f890787e3081508b09813c",
+            "7f726bba0a9eaa01f52c99a62c3acb89fd9d1f3ab91072050e22959eaa9c292f"
+          ]
+        },
+        {
+          "contract_id": "protocol.synthetic.b-cold.v1",
+          "version": 1,
+          "family": "b",
+          "phase": "cold",
+          "public_goal": "联合核查请求与规则，引用两侧相关行；区分明确冲突和信息缺失。不得自行选择优先级；不能确定允许时标UNKNOWN并停止导出、提出澄清。",
+          "public_inputs": {
+            "format": "JSON with line evidence and explicit UNKNOWN"
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "decision": {
+                      "type": "string"
+                    },
+                    "rule_relation": {
+                      "type": "string"
+                    },
+                    "evidence": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "resource": {
+                            "type": "string"
+                          },
+                          "line": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "resource",
+                          "line"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 16
+                    }
+                  },
+                  "required": [
+                    "request_id",
+                    "decision",
+                    "rule_relation",
+                    "evidence"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 16
+              }
+            },
+            "required": [
+              "items"
+            ],
+            "additionalProperties": false
+          },
+          "resource_hashes": [
+            "3a885c40ba8c8a5e887f76293506c318ff44d3653d50b088982151972a63747f",
+            "68c3e0103399e3a7ad06ab1351403069f3b2db2700a95c054dd16b6ed38ff01f"
+          ]
+        }
+      ],
+      "owner_semantic_acceptance": "PENDING",
+      "live_enabled": false
+    },
+    "response_text": "{\"items\":[{\"contract_id\":\"protocol.synthetic.a-source.v1\",\"version\":1,\"family\":\"a\",\"phase\":\"source\",\"public_goal\":\"只依据本包，逐条提取义务、条件、例外与原文行号；判断案例下一步。未写明的事实标UNKNOWN，不执行动作。\",\"public_inputs\":{\"format\":\"JSON with line evidence and explicit UNKNOWN\"},\"output_schema\":{\"type\":\"object\",\"properties\":{\"obligations\":{\"type\":\"object\",\"properties\":{\"submit_form\":{\"type\":\"object\",\"properties\":{\"actor\":{\"type\":\"string\"},\"action\":{\"type\":\"string\"},\"condition\":{\"type\":\"string\"},\"lines\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"},\"maxItems\":16},\"deadline\":{\"type\":\"object\",\"properties\":{\"amount\":{\"type\":\"integer\"},\"unit\":{\"type\":\"string\"},\"start_event\":{\"type\":\"string\"},\"absolute_date\":{\"type\":\"string\"}},\"required\":[\"amount\",\"unit\",\"start_event\",\"absolute_date\"],\"additionalProperties\":false}},\"required\":[\"actor\",\"action\",\"condition\",\"lines\",\"deadline\"],\"additionalProperties\":false},\"submit_proof\":{\"type\":\"object\",\"properties\":{\"actor\":{\"type\":\"string\"},\"action\":{\"type\":\"string\"},\"condition\":{\"type\":\"string\"},\"lines\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"},\"maxItems\":16},\"deadline\":{\"type\":\"object\",\"properties\":{\"amount\":{\"type\":\"integer\"},\"unit\":{\"type\":\"string\"},\"start_event\":{\"type\":\"string\"},\"absolute_date\":{\"type\":\"string\"}},\"required\":[\"amount\",\"unit\",\"start_event\",\"absolute_date\"],\"additionalProperties\":false}},\"required\":[\"actor\",\"action\",\"condition\",\"lines\",\"deadline\"],\"additionalProperties\":false},\"prior_approval\":{\"type\":\"object\",\"properties\":{\"actor\":{\"type\":\"string\"},\"action\":{\"type\":\"string\"},\"condition\":{\"type\":\"object\",\"properties\":{\"field\":{\"type\":\"string\"},\"operator\":{\"type\":\"string\"},\"value\":{\"type\":\"integer\"},\"unit\":{\"type\":\"string\"}},\"required\":[\"field\",\"operator\",\"value\",\"unit\"],\"additionalProperties\":false},\"lines\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"},\"maxItems\":16},\"order\":{\"type\":\"string\"}},\"required\":[\"actor\",\"action\",\"condition\",\"lines\",\"order\"],\"additionalProperties\":false},\"missing_proof_block\":{\"type\":\"object\",\"properties\":{\"actor\":{\"type\":\"string\"},\"action\":{\"type\":\"string\"},\"condition\":{\"type\":\"string\"},\"lines\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"},\"maxItems\":16},\"release_condition\":{\"type\":\"string\"}},\"required\":[\"actor\",\"action\",\"condition\",\"lines\",\"release_condition\"],\"additionalProperties\":false},\"unchanged_deadline\":{\"type\":\"object\",\"properties\":{\"actor\":{\"type\":\"string\"},\"action\":{\"type\":\"string\"},\"condition\":{\"type\":\"string\"},\"lines\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"},\"maxItems\":16},\"deadline\":{\"type\":\"object\",\"properties\":{\"amount\":{\"type\":\"integer\"},\"unit\":{\"type\":\"string\"},\"start_event\":{\"type\":\"string\"},\"absolute_date\":{\"type\":\"string\"}},\"required\":[\"amount\",\"unit\",\"start_event\",\"absolute_date\"],\"additionalProperties\":false},\"no_extension_or_restart\":{\"type\":\"boolean\"}},\"required\":[\"actor\",\"action\",\"condition\",\"lines\",\"deadline\",\"no_extension_or_restart\"],\"additionalProperties\":false}},\"required\":[\"submit_form\",\"submit_proof\",\"prior_approval\",\"missing_proof_block\",\"unchanged_deadline\"],\"additionalProperties\":false},\"case\":{\"type\":\"object\",\"properties\":{\"decision\":{\"type\":\"string\"},\"may_submit_now\":{\"type\":\"boolean\"},\"blocking_rule\":{\"type\":\"string\"},\"required_next_step\":{\"type\":\"string\"}},\"required\":[\"decision\",\"may_submit_now\",\"blocking_rule\",\"required_next_step\"],\"additionalProperties\":false},\"absolute_deadline\":{\"type\":\"string\"}},\"required\":[\"obligations\",\"case\",\"absolute_deadline\"],\"additionalProperties\":false},\"resource_hashes\":[\"ec7cf7070be884d8e27cd2e107484dbebe3885bae0434107ef76fefecdb71808\"]},{\"contract_id\":\"protocol.synthetic.a-cold.v1\",\"version\":1,\"family\":\"a\",\"phase\":\"cold\",\"public_goal\":\"只依据本包，逐条提取义务、条件、例外与原文行号；判断案例下一步。未写明的事实标UNKNOWN，不执行动作。\",\"public_inputs\":{\"format\":\"JSON with line evidence and explicit UNKNOWN\"},\"output_schema\":{\"type\":\"object\",\"properties\":{\"obligations\":{\"type\":\"object\",\"properties\":{\"submit_form\":{\"type\":\"object\",\"properties\":{\"actor\":{\"type\":\"string\"},\"action\":{\"type\":\"string\"},\"condition\":{\"type\":\"string\"},\"lines\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"},\"maxItems\":16},\"deadline\":{\"type\":\"object\",\"properties\":{\"amount\":{\"type\":\"integer\"},\"unit\":{\"type\":\"string\"},\"start_event\":{\"type\":\"string\"},\"absolute_date\":{\"type\":\"string\"}},\"required\":[\"amount\",\"unit\",\"start_event\",\"absolute_date\"],\"additionalProperties\":false}},\"required\":[\"actor\",\"action\",\"condition\",\"lines\",\"deadline\"],\"additionalProperties\":false},\"submit_proof\":{\"type\":\"object\",\"properties\":{\"actor\":{\"type\":\"string\"},\"action\":{\"type\":\"string\"},\"condition\":{\"type\":\"string\"},\"lines\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"},\"maxItems\":16},\"deadline\":{\"type\":\"object\",\"properties\":{\"amount\":{\"type\":\"integer\"},\"unit\":{\"type\":\"string\"},\"start_event\":{\"type\":\"string\"},\"absolute_date\":{\"type\":\"string\"}},\"required\":[\"amount\",\"unit\",\"start_event\",\"absolute_date\"],\"additionalProperties\":false}},\"required\":[\"actor\",\"action\",\"condition\",\"lines\",\"deadline\"],\"additionalProperties\":false},\"prior_approval\":{\"type\":\"object\",\"properties\":{\"actor\":{\"type\":\"string\"},\"action\":{\"type\":\"string\"},\"condition\":{\"type\":\"object\",\"properties\":{\"field\":{\"type\":\"string\"},\"operator\":{\"type\":\"string\"},\"value\":{\"type\":\"integer\"},\"unit\":{\"type\":\"string\"}},\"required\":[\"field\",\"operator\",\"value\",\"unit\"],\"additionalProperties\":false},\"lines\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"},\"maxItems\":16},\"order\":{\"type\":\"string\"}},\"required\":[\"actor\",\"action\",\"condition\",\"lines\",\"order\"],\"additionalProperties\":false},\"missing_proof_block\":{\"type\":\"object\",\"properties\":{\"actor\":{\"type\":\"string\"},\"action\":{\"type\":\"string\"},\"condition\":{\"type\":\"string\"},\"lines\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"},\"maxItems\":16},\"release_condition\":{\"type\":\"string\"}},\"required\":[\"actor\",\"action\",\"condition\",\"lines\",\"release_condition\"],\"additionalProperties\":false},\"unchanged_deadline\":{\"type\":\"object\",\"properties\":{\"actor\":{\"type\":\"string\"},\"action\":{\"type\":\"string\"},\"condition\":{\"type\":\"string\"},\"lines\":{\"type\":\"array\",\"items\":{\"type\":\"integer\"},\"maxItems\":16},\"deadline\":{\"type\":\"object\",\"properties\":{\"amount\":{\"type\":\"integer\"},\"unit\":{\"type\":\"string\"},\"start_event\":{\"type\":\"string\"},\"absolute_date\":{\"type\":\"string\"}},\"required\":[\"amount\",\"unit\",\"start_event\",\"absolute_date\"],\"additionalProperties\":false},\"no_extension_or_restart\":{\"type\":\"boolean\"}},\"required\":[\"actor\",\"action\",\"condition\",\"lines\",\"deadline\",\"no_extension_or_restart\"],\"additionalProperties\":false}},\"required\":[\"submit_form\",\"submit_proof\",\"prior_approval\",\"missing_proof_block\",\"unchanged_deadline\"],\"additionalProperties\":false},\"case\":{\"type\":\"object\",\"properties\":{\"decision\":{\"type\":\"string\"},\"may_submit_now\":{\"type\":\"boolean\"},\"blocking_rule\":{\"type\":\"string\"},\"required_next_step\":{\"type\":\"string\"}},\"required\":[\"decision\",\"may_submit_now\",\"blocking_rule\",\"required_next_step\"],\"additionalProperties\":false},\"absolute_deadline\":{\"type\":\"string\"}},\"required\":[\"obligations\",\"case\",\"absolute_deadline\"],\"additionalProperties\":false},\"resource_hashes\":[\"29209e986cfb89cd0620dd8d4a67f3f0ba428fe823cd852012929808e201b1fc\"]},{\"contract_id\":\"protocol.synthetic.b-source.v1\",\"version\":1,\"family\":\"b\",\"phase\":\"source\",\"public_goal\":\"联合核查请求与规则，引用两侧相关行；区分明确冲突和信息缺失。不得自行选择优先级；不能确定允许时标UNKNOWN并停止导出、提出澄清。\",\"public_inputs\":{\"format\":\"JSON with line evidence and explicit UNKNOWN\"},\"output_schema\":{\"type\":\"object\",\"properties\":{\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"request_id\":{\"type\":\"string\"},\"decision\":{\"type\":\"string\"},\"rule_relation\":{\"type\":\"string\"},\"evidence\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"resource\":{\"type\":\"string\"},\"line\":{\"type\":\"integer\"}},\"required\":[\"resource\",\"line\"],\"additionalProperties\":false},\"maxItems\":16}},\"required\":[\"request_id\",\"decision\",\"rule_relation\",\"evidence\"],\"additionalProperties\":false},\"maxItems\":16}},\"required\":[\"items\"],\"additionalProperties\":false},\"resource_hashes\":[\"b1e9cb226f39a332f391f1314cb624e55f0e301356f890787e3081508b09813c\",\"7f726bba0a9eaa01f52c99a62c3acb89fd9d1f3ab91072050e22959eaa9c292f\"]},{\"contract_id\":\"protocol.synthetic.b-cold.v1\",\"version\":1,\"family\":\"b\",\"phase\":\"cold\",\"public_goal\":\"联合核查请求与规则，引用两侧相关行；区分明确冲突和信息缺失。不得自行选择优先级；不能确定允许时标UNKNOWN并停止导出、提出澄清。\",\"public_inputs\":{\"format\":\"JSON with line evidence and explicit UNKNOWN\"},\"output_schema\":{\"type\":\"object\",\"properties\":{\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"request_id\":{\"type\":\"string\"},\"decision\":{\"type\":\"string\"},\"rule_relation\":{\"type\":\"string\"},\"evidence\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"resource\":{\"type\":\"string\"},\"line\":{\"type\":\"integer\"}},\"required\":[\"resource\",\"line\"],\"additionalProperties\":false},\"maxItems\":16}},\"required\":[\"request_id\",\"decision\",\"rule_relation\",\"evidence\"],\"additionalProperties\":false},\"maxItems\":16}},\"required\":[\"items\"],\"additionalProperties\":false},\"resource_hashes\":[\"3a885c40ba8c8a5e887f76293506c318ff44d3653d50b088982151972a63747f\",\"68c3e0103399e3a7ad06ab1351403069f3b2db2700a95c054dd16b6ed38ff01f\"]}],\"owner_semantic_acceptance\":\"PENDING\",\"live_enabled\":false}",
+    "response_sha256": "56c7f5f745cce5d6f2b5b2eab8d1012055af82f5c3b4ad1ac5378d5cb567c24a",
+    "after_page_worker": false
+  },
+  {
+    "rpc_id": 34,
+    "method": "GET",
+    "path": "/api/projects/proj_afa717e03bdc4fee8d0f0cef35be8ad3/resources",
+    "body": null,
+    "body_text": null,
+    "body_bytes": 0,
+    "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "status": 200,
+    "response": [
+      {
+        "id": "res_6b4d29263b534d76895e047177409e13",
+        "name": "neutral.txt",
+        "format": "txt",
+        "hash": "edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018"
+      },
+      {
+        "id": "res_57bef3ab811d492fbed557909c79af44",
+        "name": "neutral.txt",
+        "format": "txt",
+        "hash": "014af6a56f7d21c5aa462f74439fc24973c5b50c48e86af64d39a5df6db52709"
+      },
+      {
+        "id": "res_bad9d836569b4ee2af061389221dd265",
+        "name": "neutral.txt",
+        "format": "txt",
+        "hash": "839c6b86571bb25eb11ba3c8b96f9f2f6ef9f2b3961041e0f68a757edd3e0abc"
+      }
+    ],
+    "response_text": "[{\"id\":\"res_6b4d29263b534d76895e047177409e13\",\"name\":\"neutral.txt\",\"format\":\"txt\",\"hash\":\"edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018\"},{\"id\":\"res_57bef3ab811d492fbed557909c79af44\",\"name\":\"neutral.txt\",\"format\":\"txt\",\"hash\":\"014af6a56f7d21c5aa462f74439fc24973c5b50c48e86af64d39a5df6db52709\"},{\"id\":\"res_bad9d836569b4ee2af061389221dd265\",\"name\":\"neutral.txt\",\"format\":\"txt\",\"hash\":\"839c6b86571bb25eb11ba3c8b96f9f2f6ef9f2b3961041e0f68a757edd3e0abc\"}]",
+    "response_sha256": "7f7075b972b4fcaca64a7021c67ecbd3af46c18d0753c57b22672901f9752d78",
+    "after_page_worker": false
+  },
+  {
+    "rpc_id": 35,
+    "method": "GET",
+    "path": "/api/projects/proj_afa717e03bdc4fee8d0f0cef35be8ad3/runs?metadata_only=true",
+    "body": null,
+    "body_text": null,
+    "body_bytes": 0,
+    "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "status": 200,
+    "response": [
+      {
+        "id": "run_d0573672e9f14a4ca7bf9f3e8adc2324",
+        "status": "SUCCEEDED",
+        "created_at": 1792308994.1673212,
+        "goal_summary": "打开任务后核查当前授权内容",
+        "mode": "UNKNOWN"
+      },
+      {
+        "id": "run_1596970c6c8243f9bc8231c02561a7dd",
+        "status": "PARTIAL",
+        "created_at": 1792308975.3434677,
+        "goal_summary": "打开任务后核查当前授权内容",
+        "mode": "UNKNOWN"
+      }
+    ],
+    "response_text": "[{\"id\":\"run_d0573672e9f14a4ca7bf9f3e8adc2324\",\"status\":\"SUCCEEDED\",\"created_at\":1792308994.1673212,\"goal_summary\":\"打开任务后核查当前授权内容\",\"mode\":\"UNKNOWN\"},{\"id\":\"run_1596970c6c8243f9bc8231c02561a7dd\",\"status\":\"PARTIAL\",\"created_at\":1792308975.3434677,\"goal_summary\":\"打开任务后核查当前授权内容\",\"mode\":\"UNKNOWN\"}]",
+    "response_sha256": "b96eed1dbfdda3ade9ce6d81ead0b38e853880dc2e3632e774c246fac1cf64a3",
+    "after_page_worker": false
+  },
+  {
+    "rpc_id": 36,
+    "method": "GET",
+    "path": "/api/projects/proj_afa717e03bdc4fee8d0f0cef35be8ad3/grants",
+    "body": null,
+    "body_text": null,
+    "body_bytes": 0,
+    "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "status": 200,
+    "response": [
+      {
+        "id": "grant_a65e09e215934548a8e07861723bbdeb",
+        "principal_id": "user_057bbc867cb242ae9e81678928908c17",
+        "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "resource_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "tool_ref": "artifact.save_text",
+        "expires_at": 1792395375.2014427,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_e82e7b738061479da30e62dd81a917c3",
+        "principal_id": "runtime_3a26a31c2ba54654a51739f1167150f1",
+        "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "resource_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "tool_ref": "artifact.save_text",
+        "expires_at": 1792395375.2029078,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_5d5a5f16d16049d099da092c248df002",
+        "principal_id": "user_057bbc867cb242ae9e81678928908c17",
+        "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "resource_id": "res_6b4d29263b534d76895e047177409e13",
+        "tool_ref": "resource.read",
+        "expires_at": 1792395375.2234693,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_8380e08d31894d2b9e993a206c60d7f6",
+        "principal_id": "user_057bbc867cb242ae9e81678928908c17",
+        "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "resource_id": "res_6b4d29263b534d76895e047177409e13",
+        "tool_ref": "data.aggregate_csv",
+        "expires_at": 1792395375.223853,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_3d1633fac09b4d78b588931ec7a4496e",
+        "principal_id": "runtime_3a26a31c2ba54654a51739f1167150f1",
+        "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "resource_id": "res_6b4d29263b534d76895e047177409e13",
+        "tool_ref": "resource.read",
+        "expires_at": 1792395375.2241344,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_18130dd6743942dd970e7a0cafd9b145",
+        "principal_id": "runtime_3a26a31c2ba54654a51739f1167150f1",
+        "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "resource_id": "res_6b4d29263b534d76895e047177409e13",
+        "tool_ref": "data.aggregate_csv",
+        "expires_at": 1792395375.2251797,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_42d59ef5d66248caad33aa3984bdc485",
+        "principal_id": "appruntime_bed25a2a892b47b6a78fbe2e89feb3ad",
+        "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "resource_id": "res_6b4d29263b534d76895e047177409e13",
+        "tool_ref": "resource.read",
+        "expires_at": 1792395385.595127,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_b643652d9a57490ca082dc0fc2902dbf",
+        "principal_id": "appruntime_bed25a2a892b47b6a78fbe2e89feb3ad",
+        "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "resource_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "tool_ref": "artifact.save_text",
+        "expires_at": 1792395385.5970936,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_3a91d4b3450f405aa2bb68c42231f85c",
+        "principal_id": "user_057bbc867cb242ae9e81678928908c17",
+        "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "resource_id": "res_c08967a575f74c20b2f2696abae28fee",
+        "tool_ref": "resource.read",
+        "expires_at": 1792395421.0106192,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_a29efaf86ff54ba8aa9e56d60b0b8b61",
+        "principal_id": "appruntime_bed25a2a892b47b6a78fbe2e89feb3ad",
+        "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "resource_id": "res_c08967a575f74c20b2f2696abae28fee",
+        "tool_ref": "resource.read",
+        "expires_at": 1792395421.011183,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_ccc80fedde624108bb03330665de0ce7",
+        "principal_id": "user_057bbc867cb242ae9e81678928908c17",
+        "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "resource_id": "res_57bef3ab811d492fbed557909c79af44",
+        "tool_ref": "resource.read",
+        "expires_at": 1792395425.7622426,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_fbd733a624254efaa98b87985c483cb1",
+        "principal_id": "user_057bbc867cb242ae9e81678928908c17",
+        "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "resource_id": "res_57bef3ab811d492fbed557909c79af44",
+        "tool_ref": "data.aggregate_csv",
+        "expires_at": 1792395425.762753,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_d56edbd5055e4e6dae54694b637cfc95",
+        "principal_id": "runtime_3a26a31c2ba54654a51739f1167150f1",
+        "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "resource_id": "res_57bef3ab811d492fbed557909c79af44",
+        "tool_ref": "resource.read",
+        "expires_at": 1792395425.7630196,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_8b125b9ea3db47849377898ea66256ae",
+        "principal_id": "runtime_3a26a31c2ba54654a51739f1167150f1",
+        "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "resource_id": "res_57bef3ab811d492fbed557909c79af44",
+        "tool_ref": "data.aggregate_csv",
+        "expires_at": 1792395425.7631693,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_88b58e8bee004839a58856b009c67720",
+        "principal_id": "user_057bbc867cb242ae9e81678928908c17",
+        "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "resource_id": "res_bad9d836569b4ee2af061389221dd265",
+        "tool_ref": "resource.read",
+        "expires_at": 1792395425.8076286,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_7db85a5ee662415891da4d773f540a44",
+        "principal_id": "user_057bbc867cb242ae9e81678928908c17",
+        "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "resource_id": "res_bad9d836569b4ee2af061389221dd265",
+        "tool_ref": "data.aggregate_csv",
+        "expires_at": 1792395425.8079932,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_e95db2f1cb9b4914ad34f3a2f10e720e",
+        "principal_id": "runtime_3a26a31c2ba54654a51739f1167150f1",
+        "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "resource_id": "res_bad9d836569b4ee2af061389221dd265",
+        "tool_ref": "resource.read",
+        "expires_at": 1792395425.8081548,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_6ed73ba747604881ab188d7cf55e5479",
+        "principal_id": "runtime_3a26a31c2ba54654a51739f1167150f1",
+        "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+        "resource_id": "res_bad9d836569b4ee2af061389221dd265",
+        "tool_ref": "data.aggregate_csv",
+        "expires_at": 1792395425.8082943,
+        "revision": 1,
+        "revoked": false
+      }
+    ],
+    "response_text": "[{\"id\":\"grant_a65e09e215934548a8e07861723bbdeb\",\"principal_id\":\"user_057bbc867cb242ae9e81678928908c17\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"resource_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"tool_ref\":\"artifact.save_text\",\"expires_at\":1792395375.2014427,\"revision\":1,\"revoked\":false},{\"id\":\"grant_e82e7b738061479da30e62dd81a917c3\",\"principal_id\":\"runtime_3a26a31c2ba54654a51739f1167150f1\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"resource_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"tool_ref\":\"artifact.save_text\",\"expires_at\":1792395375.2029078,\"revision\":1,\"revoked\":false},{\"id\":\"grant_5d5a5f16d16049d099da092c248df002\",\"principal_id\":\"user_057bbc867cb242ae9e81678928908c17\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"resource_id\":\"res_6b4d29263b534d76895e047177409e13\",\"tool_ref\":\"resource.read\",\"expires_at\":1792395375.2234693,\"revision\":1,\"revoked\":false},{\"id\":\"grant_8380e08d31894d2b9e993a206c60d7f6\",\"principal_id\":\"user_057bbc867cb242ae9e81678928908c17\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"resource_id\":\"res_6b4d29263b534d76895e047177409e13\",\"tool_ref\":\"data.aggregate_csv\",\"expires_at\":1792395375.223853,\"revision\":1,\"revoked\":false},{\"id\":\"grant_3d1633fac09b4d78b588931ec7a4496e\",\"principal_id\":\"runtime_3a26a31c2ba54654a51739f1167150f1\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"resource_id\":\"res_6b4d29263b534d76895e047177409e13\",\"tool_ref\":\"resource.read\",\"expires_at\":1792395375.2241344,\"revision\":1,\"revoked\":false},{\"id\":\"grant_18130dd6743942dd970e7a0cafd9b145\",\"principal_id\":\"runtime_3a26a31c2ba54654a51739f1167150f1\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"resource_id\":\"res_6b4d29263b534d76895e047177409e13\",\"tool_ref\":\"data.aggregate_csv\",\"expires_at\":1792395375.2251797,\"revision\":1,\"revoked\":false},{\"id\":\"grant_42d59ef5d66248caad33aa3984bdc485\",\"principal_id\":\"appruntime_bed25a2a892b47b6a78fbe2e89feb3ad\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"resource_id\":\"res_6b4d29263b534d76895e047177409e13\",\"tool_ref\":\"resource.read\",\"expires_at\":1792395385.595127,\"revision\":1,\"revoked\":false},{\"id\":\"grant_b643652d9a57490ca082dc0fc2902dbf\",\"principal_id\":\"appruntime_bed25a2a892b47b6a78fbe2e89feb3ad\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"resource_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"tool_ref\":\"artifact.save_text\",\"expires_at\":1792395385.5970936,\"revision\":1,\"revoked\":false},{\"id\":\"grant_3a91d4b3450f405aa2bb68c42231f85c\",\"principal_id\":\"user_057bbc867cb242ae9e81678928908c17\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"resource_id\":\"res_c08967a575f74c20b2f2696abae28fee\",\"tool_ref\":\"resource.read\",\"expires_at\":1792395421.0106192,\"revision\":1,\"revoked\":false},{\"id\":\"grant_a29efaf86ff54ba8aa9e56d60b0b8b61\",\"principal_id\":\"appruntime_bed25a2a892b47b6a78fbe2e89feb3ad\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"resource_id\":\"res_c08967a575f74c20b2f2696abae28fee\",\"tool_ref\":\"resource.read\",\"expires_at\":1792395421.011183,\"revision\":1,\"revoked\":false},{\"id\":\"grant_ccc80fedde624108bb03330665de0ce7\",\"principal_id\":\"user_057bbc867cb242ae9e81678928908c17\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"resource_id\":\"res_57bef3ab811d492fbed557909c79af44\",\"tool_ref\":\"resource.read\",\"expires_at\":1792395425.7622426,\"revision\":1,\"revoked\":false},{\"id\":\"grant_fbd733a624254efaa98b87985c483cb1\",\"principal_id\":\"user_057bbc867cb242ae9e81678928908c17\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"resource_id\":\"res_57bef3ab811d492fbed557909c79af44\",\"tool_ref\":\"data.aggregate_csv\",\"expires_at\":1792395425.762753,\"revision\":1,\"revoked\":false},{\"id\":\"grant_d56edbd5055e4e6dae54694b637cfc95\",\"principal_id\":\"runtime_3a26a31c2ba54654a51739f1167150f1\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"resource_id\":\"res_57bef3ab811d492fbed557909c79af44\",\"tool_ref\":\"resource.read\",\"expires_at\":1792395425.7630196,\"revision\":1,\"revoked\":false},{\"id\":\"grant_8b125b9ea3db47849377898ea66256ae\",\"principal_id\":\"runtime_3a26a31c2ba54654a51739f1167150f1\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"resource_id\":\"res_57bef3ab811d492fbed557909c79af44\",\"tool_ref\":\"data.aggregate_csv\",\"expires_at\":1792395425.7631693,\"revision\":1,\"revoked\":false},{\"id\":\"grant_88b58e8bee004839a58856b009c67720\",\"principal_id\":\"user_057bbc867cb242ae9e81678928908c17\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"resource_id\":\"res_bad9d836569b4ee2af061389221dd265\",\"tool_ref\":\"resource.read\",\"expires_at\":1792395425.8076286,\"revision\":1,\"revoked\":false},{\"id\":\"grant_7db85a5ee662415891da4d773f540a44\",\"principal_id\":\"user_057bbc867cb242ae9e81678928908c17\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"resource_id\":\"res_bad9d836569b4ee2af061389221dd265\",\"tool_ref\":\"data.aggregate_csv\",\"expires_at\":1792395425.8079932,\"revision\":1,\"revoked\":false},{\"id\":\"grant_e95db2f1cb9b4914ad34f3a2f10e720e\",\"principal_id\":\"runtime_3a26a31c2ba54654a51739f1167150f1\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"resource_id\":\"res_bad9d836569b4ee2af061389221dd265\",\"tool_ref\":\"resource.read\",\"expires_at\":1792395425.8081548,\"revision\":1,\"revoked\":false},{\"id\":\"grant_6ed73ba747604881ab188d7cf55e5479\",\"principal_id\":\"runtime_3a26a31c2ba54654a51739f1167150f1\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"resource_id\":\"res_bad9d836569b4ee2af061389221dd265\",\"tool_ref\":\"data.aggregate_csv\",\"expires_at\":1792395425.8082943,\"revision\":1,\"revoked\":false}]",
+    "response_sha256": "f331cb175d91eeb98450c02112ce1a8367337ab5a8518ee75288bbe3b285279a",
+    "after_page_worker": false
+  },
+  {
+    "rpc_id": 37,
+    "method": "GET",
+    "path": "/api/capabilities",
+    "body": null,
+    "body_text": null,
+    "body_bytes": 0,
+    "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "status": 200,
+    "response": {
+      "materials": [
+        "txt",
+        "md",
+        "csv",
+        "json"
+      ],
+      "tools": [
+        "resource.read",
+        "data.aggregate_csv",
+        "artifact.save_text"
+      ],
+      "connection": {
+        "model": "intern-s2",
+        "mode": "MOCK",
+        "status": "MOCK_ENGINEERING"
+      },
+      "natural_spec_generation": {
+        "version": "natural-spec-generation-availability.v1",
+        "availability": "OFFLINE_TEST_ONLY",
+        "provider": "intern-s2",
+        "live_request_allowance": 0
+      },
+      "code_execution": "DISABLED"
+    },
+    "response_text": "{\"materials\":[\"txt\",\"md\",\"csv\",\"json\"],\"tools\":[\"resource.read\",\"data.aggregate_csv\",\"artifact.save_text\"],\"connection\":{\"model\":\"intern-s2\",\"mode\":\"MOCK\",\"status\":\"MOCK_ENGINEERING\"},\"natural_spec_generation\":{\"version\":\"natural-spec-generation-availability.v1\",\"availability\":\"OFFLINE_TEST_ONLY\",\"provider\":\"intern-s2\",\"live_request_allowance\":0},\"code_execution\":\"DISABLED\"}",
+    "response_sha256": "49bdedc21abf9b1349ab64889c497b4bcc6bd5584e1d58817e98eca9d6e314d3",
+    "after_page_worker": false
+  },
+  {
+    "rpc_id": 38,
+    "method": "GET",
+    "path": "/api/apps/app_bede6e7a9e4cbc6cb6e477668524fa0a",
+    "body": null,
+    "body_text": null,
+    "body_bytes": 0,
+    "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "status": 200,
+    "response": {
+      "id": "app_bede6e7a9e4cbc6cb6e477668524fa0a",
+      "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+      "runtime_id": "appruntime_bed25a2a892b47b6a78fbe2e89feb3ad",
+      "name": "Model chosen checklist",
+      "candidate": {
+        "namespace": "pa-natural-spec-app.v1",
+        "manifest": {
+          "schema_version": "1.0-draft",
+          "app_id": "app_bede6e7a9e4cbc6cb6e477668524fa0a",
+          "revision": 1,
+          "origin": "goal",
+          "goal_ref": "goal_5d43817db6fe41819e572735bb611438",
+          "source_run_ref": null,
+          "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string",
+                "maxLength": 2048
+              },
+              "hash": {
+                "type": "string",
+                "maxLength": 2048
+              },
+              "checklist": {
+                "type": "object",
+                "properties": {
+                  "check_version": {
+                    "type": "string",
+                    "enum": [
+                      "natural.spec_citations.v1"
+                    ]
+                  },
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "resource_id": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "hash": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "format": {
+                        "type": "string",
+                        "enum": [
+                          "txt",
+                          "md"
+                        ]
+                      },
+                      "revision": {
+                        "type": "integer",
+                        "enum": [
+                          1
+                        ]
+                      },
+                      "coordinate_space": {
+                        "type": "string",
+                        "enum": [
+                          "unicode_scalar_index.v1"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "resource_id",
+                      "hash",
+                      "format",
+                      "revision",
+                      "coordinate_space"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "source_content": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "item_id": {
+                          "type": "string",
+                          "maxLength": 40
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "condition",
+                            "exception",
+                            "open_question",
+                            "requirement",
+                            "unclassified"
+                          ]
+                        },
+                        "summary": {
+                          "type": "string",
+                          "maxLength": 240
+                        },
+                        "citations": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "start": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 2048
+                              },
+                              "end": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2048
+                              },
+                              "quote": {
+                                "type": "string",
+                                "maxLength": 2048
+                              }
+                            },
+                            "required": [
+                              "start",
+                              "end",
+                              "quote"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 2
+                        },
+                        "targets": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 40
+                          },
+                          "maxItems": 8
+                        },
+                        "relation_status": {
+                          "type": "string",
+                          "enum": [
+                            "UNASSIGNED",
+                            "MODEL_ASSERTED",
+                            "NOT_APPLICABLE"
+                          ]
+                        },
+                        "decision_status": {
+                          "type": "string",
+                          "enum": [
+                            "OPEN",
+                            "NOT_APPLICABLE"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "item_id",
+                        "kind",
+                        "summary",
+                        "citations",
+                        "targets",
+                        "relation_status",
+                        "decision_status"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 8
+                  },
+                  "feedback": {
+                    "type": "object",
+                    "properties": {
+                      "check": {
+                        "type": "string",
+                        "enum": [
+                          "natural.spec_citations.v1"
+                        ]
+                      },
+                      "citation_status": {
+                        "type": "string",
+                        "enum": [
+                          "PASS"
+                        ]
+                      },
+                      "coverage_status": {
+                        "type": "string",
+                        "enum": [
+                          "FULL",
+                          "PARTIAL"
+                        ]
+                      },
+                      "uncovered": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "start": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 2048
+                            },
+                            "end": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 2048
+                            },
+                            "quote": {
+                              "type": "string",
+                              "maxLength": 2048
+                            }
+                          },
+                          "required": [
+                            "start",
+                            "end",
+                            "quote"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 32
+                      },
+                      "semantic_status": {
+                        "type": "string",
+                        "enum": [
+                          "UNKNOWN"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "check",
+                      "citation_status",
+                      "coverage_status",
+                      "uncovered",
+                      "semantic_status"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "human_unresolved": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 4000
+                    },
+                    "maxItems": 16
+                  },
+                  "source_retention": {
+                    "type": "string",
+                    "enum": [
+                      "EXACT"
+                    ]
+                  },
+                  "semantic_goal_acceptance": {
+                    "type": "string",
+                    "enum": [
+                      "NOT_RUN"
+                    ]
+                  },
+                  "owner_acceptance": {
+                    "type": "string",
+                    "enum": [
+                      "PENDING"
+                    ]
+                  }
+                },
+                "required": [
+                  "check_version",
+                  "source",
+                  "source_content",
+                  "items",
+                  "feedback",
+                  "human_unresolved",
+                  "source_retention",
+                  "semantic_goal_acceptance",
+                  "owner_acceptance"
+                ],
+                "additionalProperties": false
+              },
+              "citation_status": {
+                "type": "string",
+                "enum": [
+                  "PASS"
+                ]
+              },
+              "semantic_status": {
+                "type": "string",
+                "enum": [
+                  "UNKNOWN"
+                ]
+              },
+              "semantic_goal_acceptance": {
+                "type": "string",
+                "enum": [
+                  "NOT_RUN"
+                ]
+              }
+            },
+            "required": [
+              "resource_id",
+              "hash",
+              "checklist",
+              "citation_status",
+              "semantic_status",
+              "semantic_goal_acceptance"
+            ],
+            "additionalProperties": false
+          },
+          "action_bindings": [
+            {
+              "binding_id": "read_pick",
+              "action_id": "action_6f470b4ca9aca22e9b0c17c8d266df94",
+              "revision": 1
+            },
+            {
+              "binding_id": "infer_pick",
+              "action_id": "action_b623f3553e822ba1305bc756bf82a26c",
+              "revision": 1
+            },
+            {
+              "binding_id": "check_pick",
+              "action_id": "action_f928ebed7b3ef680cf57d28a699eee02",
+              "revision": 1
+            },
+            {
+              "binding_id": "save_pick",
+              "action_id": "action_a16c0364d43405ebd11c43d24a6a2aff",
+              "revision": 1
+            }
+          ],
+          "data_bindings": [
+            {
+              "binding_id": "source",
+              "resource_ref": "res_6b4d29263b534d76895e047177409e13"
+            }
+          ],
+          "runtime_identity_requirements": {
+            "mode": "user_and_app_intersection"
+          },
+          "data_schema_version": 1,
+          "workflow": [
+            {
+              "step_id": "read_pick",
+              "binding_id": "read_pick",
+              "depends_on": [],
+              "inputs": {
+                "resource_id": {
+                  "source": "data",
+                  "ref": "source",
+                  "field": "resource_id"
+                }
+              }
+            },
+            {
+              "step_id": "infer_pick",
+              "binding_id": "infer_pick",
+              "depends_on": [
+                "read_pick"
+              ],
+              "inputs": {
+                "resource_id": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "resource_id"
+                },
+                "content": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "content"
+                },
+                "hash": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "hash"
+                },
+                "format": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "format"
+                }
+              }
+            },
+            {
+              "step_id": "check_pick",
+              "binding_id": "check_pick",
+              "depends_on": [
+                "read_pick",
+                "infer_pick"
+              ],
+              "inputs": {
+                "resource_id": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "resource_id"
+                },
+                "content": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "content"
+                },
+                "hash": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "hash"
+                },
+                "format": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "format"
+                },
+                "items": {
+                  "source": "step",
+                  "ref": "infer_pick",
+                  "field": "items"
+                }
+              }
+            },
+            {
+              "step_id": "save_pick",
+              "binding_id": "save_pick",
+              "depends_on": [
+                "check_pick"
+              ],
+              "inputs": {
+                "text": {
+                  "source": "step",
+                  "ref": "check_pick",
+                  "field": "text"
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "resource_id": {
+              "source": "step",
+              "ref": "save_pick",
+              "field": "resource_id"
+            },
+            "hash": {
+              "source": "step",
+              "ref": "save_pick",
+              "field": "hash"
+            },
+            "checklist": {
+              "source": "step",
+              "ref": "check_pick",
+              "field": "checklist"
+            },
+            "citation_status": {
+              "source": "step",
+              "ref": "check_pick",
+              "field": "citation_status"
+            },
+            "semantic_status": {
+              "source": "step",
+              "ref": "check_pick",
+              "field": "semantic_status"
+            },
+            "semantic_goal_acceptance": {
+              "source": "step",
+              "ref": "check_pick",
+              "field": "semantic_goal_acceptance"
+            }
+          },
+          "views": [
+            {
+              "component_ref": "table",
+              "output_field": "checklist"
+            }
+          ],
+          "validation_suite_ref": "natural.spec_citations.v1",
+          "runtime_limits": {
+            "max_requests": 1,
+            "max_tools": 3,
+            "max_repairs": 0,
+            "max_total_tokens": 64000,
+            "max_output_tokens": 1024,
+            "run_seconds": 300
+          },
+          "permission_requirements": [
+            {
+              "tool_ref": "resource.read",
+              "resource_ref": "res_6b4d29263b534d76895e047177409e13"
+            },
+            {
+              "tool_ref": "artifact.save_text",
+              "resource_ref": "proj_afa717e03bdc4fee8d0f0cef35be8ad3"
+            }
+          ],
+          "dependency_lock": [
+            {
+              "kind": "resource",
+              "ref": "res_6b4d29263b534d76895e047177409e13",
+              "version": "1"
+            },
+            {
+              "kind": "tool",
+              "ref": "resource.read",
+              "version": "1"
+            },
+            {
+              "kind": "prompt",
+              "ref": "model.spec.all.v1",
+              "version": "1"
+            },
+            {
+              "kind": "tool",
+              "ref": "spec.verify_citations",
+              "version": "1"
+            },
+            {
+              "kind": "tool",
+              "ref": "artifact.save_text",
+              "version": "1"
+            },
+            {
+              "kind": "check",
+              "ref": "natural.spec_citations.v1",
+              "version": "1"
+            },
+            {
+              "kind": "check",
+              "ref": "receipt.readback.v1",
+              "version": "1"
+            }
+          ]
+        },
+        "actions": [
+          {
+            "schema_version": "1.0-draft",
+            "action_id": "action_6f470b4ca9aca22e9b0c17c8d266df94",
+            "revision": 1,
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "resource_id": {
+                  "type": "string",
+                  "maxLength": 2048
+                }
+              },
+              "required": [
+                "resource_id"
+              ],
+              "additionalProperties": false
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "resource_id": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "content": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "hash": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "format": {
+                  "type": "string",
+                  "enum": [
+                    "txt",
+                    "md"
+                  ]
+                }
+              },
+              "required": [
+                "resource_id",
+                "content",
+                "hash",
+                "format"
+              ],
+              "additionalProperties": false
+            },
+            "executor": {
+              "kind": "registered_tool",
+              "ref": "resource.read",
+              "version": "1"
+            },
+            "allowed_tool_refs": [],
+            "dependencies": [
+              {
+                "kind": "resource",
+                "ref": "res_6b4d29263b534d76895e047177409e13",
+                "version": "1"
+              }
+            ],
+            "permission_requirements": [
+              {
+                "tool_ref": "resource.read",
+                "resource_ref": "res_6b4d29263b534d76895e047177409e13"
+              }
+            ],
+            "effect": "read",
+            "preconditions": [],
+            "postcheck_refs": [
+              "natural.spec_citations.v1"
+            ],
+            "limits": {
+              "max_requests": 1,
+              "max_tools": 3,
+              "max_repairs": 0,
+              "max_total_tokens": 64000,
+              "max_output_tokens": 1024,
+              "run_seconds": 300
+            },
+            "idempotency": "read_only",
+            "reconcile_ref": "operation.lookup.v1",
+            "error_contract": [
+              "INVALID_INPUT",
+              "PERMISSION_DENIED",
+              "GRANT_REVOKED",
+              "VERIFICATION_FAILED",
+              "OUTCOME_UNKNOWN"
+            ]
+          },
+          {
+            "schema_version": "1.0-draft",
+            "action_id": "action_b623f3553e822ba1305bc756bf82a26c",
+            "revision": 1,
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "resource_id": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "content": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "hash": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "format": {
+                  "type": "string",
+                  "enum": [
+                    "txt",
+                    "md"
+                  ]
+                }
+              },
+              "required": [
+                "resource_id",
+                "content",
+                "hash",
+                "format"
+              ],
+              "additionalProperties": false
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "item_id": {
+                        "type": "string",
+                        "maxLength": 40
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "condition",
+                          "exception",
+                          "open_question",
+                          "requirement",
+                          "unclassified"
+                        ]
+                      },
+                      "summary": {
+                        "type": "string",
+                        "maxLength": 240
+                      },
+                      "citations": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "start": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 2048
+                            },
+                            "end": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 2048
+                            },
+                            "quote": {
+                              "type": "string",
+                              "maxLength": 2048
+                            }
+                          },
+                          "required": [
+                            "start",
+                            "end",
+                            "quote"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 2
+                      },
+                      "targets": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 40
+                        },
+                        "maxItems": 8
+                      }
+                    },
+                    "required": [
+                      "item_id",
+                      "kind",
+                      "summary",
+                      "citations",
+                      "targets"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 8
+                },
+                "feedback": {
+                  "type": "object",
+                  "properties": {
+                    "check": {
+                      "type": "string",
+                      "enum": [
+                        "natural.spec_citations.v1"
+                      ]
+                    },
+                    "citation_status": {
+                      "type": "string",
+                      "enum": [
+                        "PASS"
+                      ]
+                    },
+                    "coverage_status": {
+                      "type": "string",
+                      "enum": [
+                        "FULL",
+                        "PARTIAL"
+                      ]
+                    },
+                    "uncovered": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "start": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 2048
+                          },
+                          "end": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 2048
+                          },
+                          "quote": {
+                            "type": "string",
+                            "maxLength": 2048
+                          }
+                        },
+                        "required": [
+                          "start",
+                          "end",
+                          "quote"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 32
+                    },
+                    "semantic_status": {
+                      "type": "string",
+                      "enum": [
+                        "UNKNOWN"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "check",
+                    "citation_status",
+                    "coverage_status",
+                    "uncovered",
+                    "semantic_status"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "items",
+                "feedback"
+              ],
+              "additionalProperties": false
+            },
+            "executor": {
+              "kind": "bounded_agent",
+              "ref": "model.spec.all",
+              "version": "1"
+            },
+            "allowed_tool_refs": [],
+            "dependencies": [
+              {
+                "kind": "resource",
+                "ref": "res_6b4d29263b534d76895e047177409e13",
+                "version": "1"
+              },
+              {
+                "kind": "prompt",
+                "ref": "model.spec.all.v1",
+                "version": "1"
+              }
+            ],
+            "permission_requirements": [
+              {
+                "tool_ref": "resource.read",
+                "resource_ref": "res_6b4d29263b534d76895e047177409e13"
+              }
+            ],
+            "effect": "read",
+            "preconditions": [],
+            "postcheck_refs": [
+              "natural.spec_citations.v1"
+            ],
+            "limits": {
+              "max_requests": 1,
+              "max_tools": 3,
+              "max_repairs": 0,
+              "max_total_tokens": 64000,
+              "max_output_tokens": 1024,
+              "run_seconds": 300
+            },
+            "idempotency": "read_only",
+            "reconcile_ref": "operation.lookup.v1",
+            "error_contract": [
+              "INVALID_INPUT",
+              "PERMISSION_DENIED",
+              "GRANT_REVOKED",
+              "VERIFICATION_FAILED",
+              "OUTCOME_UNKNOWN"
+            ]
+          },
+          {
+            "schema_version": "1.0-draft",
+            "action_id": "action_f928ebed7b3ef680cf57d28a699eee02",
+            "revision": 1,
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "resource_id": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "content": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "hash": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "format": {
+                  "type": "string",
+                  "enum": [
+                    "txt",
+                    "md"
+                  ]
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "item_id": {
+                        "type": "string",
+                        "maxLength": 40
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "condition",
+                          "exception",
+                          "open_question",
+                          "requirement",
+                          "unclassified"
+                        ]
+                      },
+                      "summary": {
+                        "type": "string",
+                        "maxLength": 240
+                      },
+                      "citations": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "start": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 2048
+                            },
+                            "end": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 2048
+                            },
+                            "quote": {
+                              "type": "string",
+                              "maxLength": 2048
+                            }
+                          },
+                          "required": [
+                            "start",
+                            "end",
+                            "quote"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 2
+                      },
+                      "targets": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 40
+                        },
+                        "maxItems": 8
+                      }
+                    },
+                    "required": [
+                      "item_id",
+                      "kind",
+                      "summary",
+                      "citations",
+                      "targets"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 8
+                }
+              },
+              "required": [
+                "resource_id",
+                "content",
+                "hash",
+                "format",
+                "items"
+              ],
+              "additionalProperties": false
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "checklist": {
+                  "type": "object",
+                  "properties": {
+                    "check_version": {
+                      "type": "string",
+                      "enum": [
+                        "natural.spec_citations.v1"
+                      ]
+                    },
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "resource_id": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "hash": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "format": {
+                          "type": "string",
+                          "enum": [
+                            "txt",
+                            "md"
+                          ]
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "enum": [
+                            1
+                          ]
+                        },
+                        "coordinate_space": {
+                          "type": "string",
+                          "enum": [
+                            "unicode_scalar_index.v1"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "resource_id",
+                        "hash",
+                        "format",
+                        "revision",
+                        "coordinate_space"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "source_content": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "item_id": {
+                            "type": "string",
+                            "maxLength": 40
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "condition",
+                              "exception",
+                              "open_question",
+                              "requirement",
+                              "unclassified"
+                            ]
+                          },
+                          "summary": {
+                            "type": "string",
+                            "maxLength": 240
+                          },
+                          "citations": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "start": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 2048
+                                },
+                                "end": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 2048
+                                },
+                                "quote": {
+                                  "type": "string",
+                                  "maxLength": 2048
+                                }
+                              },
+                              "required": [
+                                "start",
+                                "end",
+                                "quote"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 2
+                          },
+                          "targets": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "maxLength": 40
+                            },
+                            "maxItems": 8
+                          },
+                          "relation_status": {
+                            "type": "string",
+                            "enum": [
+                              "UNASSIGNED",
+                              "MODEL_ASSERTED",
+                              "NOT_APPLICABLE"
+                            ]
+                          },
+                          "decision_status": {
+                            "type": "string",
+                            "enum": [
+                              "OPEN",
+                              "NOT_APPLICABLE"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "item_id",
+                          "kind",
+                          "summary",
+                          "citations",
+                          "targets",
+                          "relation_status",
+                          "decision_status"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 8
+                    },
+                    "feedback": {
+                      "type": "object",
+                      "properties": {
+                        "check": {
+                          "type": "string",
+                          "enum": [
+                            "natural.spec_citations.v1"
+                          ]
+                        },
+                        "citation_status": {
+                          "type": "string",
+                          "enum": [
+                            "PASS"
+                          ]
+                        },
+                        "coverage_status": {
+                          "type": "string",
+                          "enum": [
+                            "FULL",
+                            "PARTIAL"
+                          ]
+                        },
+                        "uncovered": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "start": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 2048
+                              },
+                              "end": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2048
+                              },
+                              "quote": {
+                                "type": "string",
+                                "maxLength": 2048
+                              }
+                            },
+                            "required": [
+                              "start",
+                              "end",
+                              "quote"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 32
+                        },
+                        "semantic_status": {
+                          "type": "string",
+                          "enum": [
+                            "UNKNOWN"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "check",
+                        "citation_status",
+                        "coverage_status",
+                        "uncovered",
+                        "semantic_status"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "human_unresolved": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      "maxItems": 16
+                    },
+                    "source_retention": {
+                      "type": "string",
+                      "enum": [
+                        "EXACT"
+                      ]
+                    },
+                    "semantic_goal_acceptance": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_RUN"
+                      ]
+                    },
+                    "owner_acceptance": {
+                      "type": "string",
+                      "enum": [
+                        "PENDING"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "check_version",
+                    "source",
+                    "source_content",
+                    "items",
+                    "feedback",
+                    "human_unresolved",
+                    "source_retention",
+                    "semantic_goal_acceptance",
+                    "owner_acceptance"
+                  ],
+                  "additionalProperties": false
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 8000
+                },
+                "citation_status": {
+                  "type": "string",
+                  "enum": [
+                    "PASS"
+                  ]
+                },
+                "semantic_status": {
+                  "type": "string",
+                  "enum": [
+                    "UNKNOWN"
+                  ]
+                },
+                "semantic_goal_acceptance": {
+                  "type": "string",
+                  "enum": [
+                    "NOT_RUN"
+                  ]
+                }
+              },
+              "required": [
+                "checklist",
+                "text",
+                "citation_status",
+                "semantic_status",
+                "semantic_goal_acceptance"
+              ],
+              "additionalProperties": false
+            },
+            "executor": {
+              "kind": "registered_tool",
+              "ref": "spec.verify_citations",
+              "version": "1"
+            },
+            "allowed_tool_refs": [],
+            "dependencies": [
+              {
+                "kind": "resource",
+                "ref": "res_6b4d29263b534d76895e047177409e13",
+                "version": "1"
+              }
+            ],
+            "permission_requirements": [
+              {
+                "tool_ref": "resource.read",
+                "resource_ref": "res_6b4d29263b534d76895e047177409e13"
+              }
+            ],
+            "effect": "read",
+            "preconditions": [],
+            "postcheck_refs": [
+              "natural.spec_citations.v1"
+            ],
+            "limits": {
+              "max_requests": 1,
+              "max_tools": 3,
+              "max_repairs": 0,
+              "max_total_tokens": 64000,
+              "max_output_tokens": 1024,
+              "run_seconds": 300
+            },
+            "idempotency": "read_only",
+            "reconcile_ref": "operation.lookup.v1",
+            "error_contract": [
+              "INVALID_INPUT",
+              "PERMISSION_DENIED",
+              "GRANT_REVOKED",
+              "VERIFICATION_FAILED",
+              "OUTCOME_UNKNOWN"
+            ]
+          },
+          {
+            "schema_version": "1.0-draft",
+            "action_id": "action_a16c0364d43405ebd11c43d24a6a2aff",
+            "revision": 1,
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "maxLength": 8000
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "additionalProperties": false
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "resource_id": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "hash": {
+                  "type": "string",
+                  "maxLength": 2048
+                }
+              },
+              "required": [
+                "resource_id",
+                "hash"
+              ],
+              "additionalProperties": false
+            },
+            "executor": {
+              "kind": "registered_tool",
+              "ref": "artifact.save_text",
+              "version": "1"
+            },
+            "allowed_tool_refs": [],
+            "dependencies": [
+              {
+                "kind": "resource",
+                "ref": "res_6b4d29263b534d76895e047177409e13",
+                "version": "1"
+              }
+            ],
+            "permission_requirements": [
+              {
+                "tool_ref": "artifact.save_text",
+                "resource_ref": "proj_afa717e03bdc4fee8d0f0cef35be8ad3"
+              }
+            ],
+            "effect": "project_write",
+            "preconditions": [],
+            "postcheck_refs": [
+              "receipt.readback.v1"
+            ],
+            "limits": {
+              "max_requests": 1,
+              "max_tools": 3,
+              "max_repairs": 0,
+              "max_total_tokens": 64000,
+              "max_output_tokens": 1024,
+              "run_seconds": 300
+            },
+            "idempotency": "transactional",
+            "reconcile_ref": "operation.lookup.v1",
+            "error_contract": [
+              "INVALID_INPUT",
+              "PERMISSION_DENIED",
+              "GRANT_REVOKED",
+              "VERIFICATION_FAILED",
+              "OUTCOME_UNKNOWN"
+            ]
+          }
+        ],
+        "spec_recipe": {
+          "version": "natural-spec-recipe.v1",
+          "steps": [
+            {
+              "step_id": "read_pick",
+              "operator": "resource.read",
+              "depends_on": [],
+              "inputs": {
+                "resource_id": {
+                  "source": "data",
+                  "ref": "source",
+                  "field": "resource_id"
+                }
+              }
+            },
+            {
+              "step_id": "infer_pick",
+              "operator": "model.spec.all",
+              "depends_on": [
+                "read_pick"
+              ],
+              "inputs": {
+                "resource_id": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "resource_id"
+                },
+                "content": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "content"
+                },
+                "hash": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "hash"
+                },
+                "format": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "format"
+                }
+              }
+            },
+            {
+              "step_id": "check_pick",
+              "operator": "spec.verify_citations",
+              "depends_on": [
+                "read_pick",
+                "infer_pick"
+              ],
+              "inputs": {
+                "resource_id": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "resource_id"
+                },
+                "content": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "content"
+                },
+                "hash": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "hash"
+                },
+                "format": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "format"
+                },
+                "items": {
+                  "source": "step",
+                  "ref": "infer_pick",
+                  "field": "items"
+                }
+              }
+            },
+            {
+              "step_id": "save_pick",
+              "operator": "artifact.save_text",
+              "depends_on": [
+                "check_pick"
+              ],
+              "inputs": {
+                "text": {
+                  "source": "step",
+                  "ref": "check_pick",
+                  "field": "text"
+                }
+              }
+            }
+          ]
+        },
+        "source_hash": "edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018",
+        "goal": {
+          "title": "Operating notes",
+          "goal": "Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist",
+          "known": [],
+          "assumptions": [],
+          "unresolved": [
+            "Human question 0",
+            "Human question 1",
+            "Human question 2",
+            "Human question 3",
+            "Human question 4",
+            "Human question 5",
+            "Human question 6",
+            "Human question 7",
+            "Human question 8",
+            "Human question 9",
+            "Human question 10",
+            "Human question 11",
+            "Human question 12",
+            "Human question 13",
+            "Human question 14",
+            "Human question 15"
+          ],
+          "constraints": [
+            "Preserve the full source and uncertain relations"
+          ],
+          "acceptance_checks": [
+            "Human review of completeness and meaning"
+          ],
+          "resource_refs": [
+            "res_6b4d29263b534d76895e047177409e13"
+          ]
+        },
+        "model_sample_check": {
+          "check": "natural.spec_citations.v1",
+          "sample_fingerprint": "bd9658539deaf3f9f34067009cd8a00df0e1a2544339a2ddbd207444ceadd90c",
+          "citation_status": "PASS",
+          "semantic_goal_acceptance": "NOT_RUN",
+          "source_retention": "EXACT"
+        },
+        "goal_application": {
+          "run_id": "run_1596970c6c8243f9bc8231c02561a7dd",
+          "candidate_fingerprint": "47ca995020b1616bdc491d55c0973e0091a3aa55a6e67dd915fe663d32cba03c"
+        }
+      },
+      "fingerprint": "dc3abfb65addbd149722fd21b487cbb93b56970ac9ab7f9a7997d2fdb3a1538d",
+      "created_at": 1792308985.5957274,
+      "state": "PREVIEW_ONLY",
+      "publishable": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "validation": {
+        "state": "PREVIEW_ONLY",
+        "execution_performed": false,
+        "publishable": false,
+        "topological_order": [
+          "read_pick",
+          "infer_pick",
+          "check_pick",
+          "save_pick"
+        ]
+      },
+      "history": [],
+      "input_guidance": {
+        "mode": "MODEL_SPEC_CHECKLIST",
+        "citation_status": "PREVIEW_ONLY",
+        "semantic_status": "UNKNOWN",
+        "semantic_goal_acceptance": "NOT_RUN"
+      }
+    },
+    "response_text": "{\"id\":\"app_bede6e7a9e4cbc6cb6e477668524fa0a\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"runtime_id\":\"appruntime_bed25a2a892b47b6a78fbe2e89feb3ad\",\"name\":\"Model chosen checklist\",\"candidate\":{\"namespace\":\"pa-natural-spec-app.v1\",\"manifest\":{\"schema_version\":\"1.0-draft\",\"app_id\":\"app_bede6e7a9e4cbc6cb6e477668524fa0a\",\"revision\":1,\"origin\":\"goal\",\"goal_ref\":\"goal_5d43817db6fe41819e572735bb611438\",\"source_run_ref\":null,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"checklist\":{\"type\":\"object\",\"properties\":{\"check_version\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"source\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]},\"revision\":{\"type\":\"integer\",\"enum\":[1]},\"coordinate_space\":{\"type\":\"string\",\"enum\":[\"unicode_scalar_index.v1\"]}},\"required\":[\"resource_id\",\"hash\",\"format\",\"revision\",\"coordinate_space\"],\"additionalProperties\":false},\"source_content\":{\"type\":\"string\",\"maxLength\":2048},\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8},\"relation_status\":{\"type\":\"string\",\"enum\":[\"UNASSIGNED\",\"MODEL_ASSERTED\",\"NOT_APPLICABLE\"]},\"decision_status\":{\"type\":\"string\",\"enum\":[\"OPEN\",\"NOT_APPLICABLE\"]}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\",\"relation_status\",\"decision_status\"],\"additionalProperties\":false},\"maxItems\":8},\"feedback\":{\"type\":\"object\",\"properties\":{\"check\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"coverage_status\":{\"type\":\"string\",\"enum\":[\"FULL\",\"PARTIAL\"]},\"uncovered\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":32},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]}},\"required\":[\"check\",\"citation_status\",\"coverage_status\",\"uncovered\",\"semantic_status\"],\"additionalProperties\":false},\"human_unresolved\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":4000},\"maxItems\":16},\"source_retention\":{\"type\":\"string\",\"enum\":[\"EXACT\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]},\"owner_acceptance\":{\"type\":\"string\",\"enum\":[\"PENDING\"]}},\"required\":[\"check_version\",\"source\",\"source_content\",\"items\",\"feedback\",\"human_unresolved\",\"source_retention\",\"semantic_goal_acceptance\",\"owner_acceptance\"],\"additionalProperties\":false},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]}},\"required\":[\"resource_id\",\"hash\",\"checklist\",\"citation_status\",\"semantic_status\",\"semantic_goal_acceptance\"],\"additionalProperties\":false},\"action_bindings\":[{\"binding_id\":\"read_pick\",\"action_id\":\"action_6f470b4ca9aca22e9b0c17c8d266df94\",\"revision\":1},{\"binding_id\":\"infer_pick\",\"action_id\":\"action_b623f3553e822ba1305bc756bf82a26c\",\"revision\":1},{\"binding_id\":\"check_pick\",\"action_id\":\"action_f928ebed7b3ef680cf57d28a699eee02\",\"revision\":1},{\"binding_id\":\"save_pick\",\"action_id\":\"action_a16c0364d43405ebd11c43d24a6a2aff\",\"revision\":1}],\"data_bindings\":[{\"binding_id\":\"source\",\"resource_ref\":\"res_6b4d29263b534d76895e047177409e13\"}],\"runtime_identity_requirements\":{\"mode\":\"user_and_app_intersection\"},\"data_schema_version\":1,\"workflow\":[{\"step_id\":\"read_pick\",\"binding_id\":\"read_pick\",\"depends_on\":[],\"inputs\":{\"resource_id\":{\"source\":\"data\",\"ref\":\"source\",\"field\":\"resource_id\"}}},{\"step_id\":\"infer_pick\",\"binding_id\":\"infer_pick\",\"depends_on\":[\"read_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"}}},{\"step_id\":\"check_pick\",\"binding_id\":\"check_pick\",\"depends_on\":[\"read_pick\",\"infer_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"},\"items\":{\"source\":\"step\",\"ref\":\"infer_pick\",\"field\":\"items\"}}},{\"step_id\":\"save_pick\",\"binding_id\":\"save_pick\",\"depends_on\":[\"check_pick\"],\"inputs\":{\"text\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"text\"}}}],\"outputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"save_pick\",\"field\":\"resource_id\"},\"hash\":{\"source\":\"step\",\"ref\":\"save_pick\",\"field\":\"hash\"},\"checklist\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"checklist\"},\"citation_status\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"citation_status\"},\"semantic_status\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"semantic_status\"},\"semantic_goal_acceptance\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"semantic_goal_acceptance\"}},\"views\":[{\"component_ref\":\"table\",\"output_field\":\"checklist\"}],\"validation_suite_ref\":\"natural.spec_citations.v1\",\"runtime_limits\":{\"max_requests\":1,\"max_tools\":3,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"permission_requirements\":[{\"tool_ref\":\"resource.read\",\"resource_ref\":\"res_6b4d29263b534d76895e047177409e13\"},{\"tool_ref\":\"artifact.save_text\",\"resource_ref\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\"}],\"dependency_lock\":[{\"kind\":\"resource\",\"ref\":\"res_6b4d29263b534d76895e047177409e13\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"resource.read\",\"version\":\"1\"},{\"kind\":\"prompt\",\"ref\":\"model.spec.all.v1\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"spec.verify_citations\",\"version\":\"1\"},{\"kind\":\"tool\",\"ref\":\"artifact.save_text\",\"version\":\"1\"},{\"kind\":\"check\",\"ref\":\"natural.spec_citations.v1\",\"version\":\"1\"},{\"kind\":\"check\",\"ref\":\"receipt.readback.v1\",\"version\":\"1\"}]},\"actions\":[{\"schema_version\":\"1.0-draft\",\"action_id\":\"action_6f470b4ca9aca22e9b0c17c8d266df94\",\"revision\":1,\"input_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"resource_id\"],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"content\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]}},\"required\":[\"resource_id\",\"content\",\"hash\",\"format\"],\"additionalProperties\":false},\"executor\":{\"kind\":\"registered_tool\",\"ref\":\"resource.read\",\"version\":\"1\"},\"allowed_tool_refs\":[],\"dependencies\":[{\"kind\":\"resource\",\"ref\":\"res_6b4d29263b534d76895e047177409e13\",\"version\":\"1\"}],\"permission_requirements\":[{\"tool_ref\":\"resource.read\",\"resource_ref\":\"res_6b4d29263b534d76895e047177409e13\"}],\"effect\":\"read\",\"preconditions\":[],\"postcheck_refs\":[\"natural.spec_citations.v1\"],\"limits\":{\"max_requests\":1,\"max_tools\":3,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"idempotency\":\"read_only\",\"reconcile_ref\":\"operation.lookup.v1\",\"error_contract\":[\"INVALID_INPUT\",\"PERMISSION_DENIED\",\"GRANT_REVOKED\",\"VERIFICATION_FAILED\",\"OUTCOME_UNKNOWN\"]},{\"schema_version\":\"1.0-draft\",\"action_id\":\"action_b623f3553e822ba1305bc756bf82a26c\",\"revision\":1,\"input_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"content\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]}},\"required\":[\"resource_id\",\"content\",\"hash\",\"format\"],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\"],\"additionalProperties\":false},\"maxItems\":8},\"feedback\":{\"type\":\"object\",\"properties\":{\"check\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"coverage_status\":{\"type\":\"string\",\"enum\":[\"FULL\",\"PARTIAL\"]},\"uncovered\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":32},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]}},\"required\":[\"check\",\"citation_status\",\"coverage_status\",\"uncovered\",\"semantic_status\"],\"additionalProperties\":false}},\"required\":[\"items\",\"feedback\"],\"additionalProperties\":false},\"executor\":{\"kind\":\"bounded_agent\",\"ref\":\"model.spec.all\",\"version\":\"1\"},\"allowed_tool_refs\":[],\"dependencies\":[{\"kind\":\"resource\",\"ref\":\"res_6b4d29263b534d76895e047177409e13\",\"version\":\"1\"},{\"kind\":\"prompt\",\"ref\":\"model.spec.all.v1\",\"version\":\"1\"}],\"permission_requirements\":[{\"tool_ref\":\"resource.read\",\"resource_ref\":\"res_6b4d29263b534d76895e047177409e13\"}],\"effect\":\"read\",\"preconditions\":[],\"postcheck_refs\":[\"natural.spec_citations.v1\"],\"limits\":{\"max_requests\":1,\"max_tools\":3,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"idempotency\":\"read_only\",\"reconcile_ref\":\"operation.lookup.v1\",\"error_contract\":[\"INVALID_INPUT\",\"PERMISSION_DENIED\",\"GRANT_REVOKED\",\"VERIFICATION_FAILED\",\"OUTCOME_UNKNOWN\"]},{\"schema_version\":\"1.0-draft\",\"action_id\":\"action_f928ebed7b3ef680cf57d28a699eee02\",\"revision\":1,\"input_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"content\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]},\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\"],\"additionalProperties\":false},\"maxItems\":8}},\"required\":[\"resource_id\",\"content\",\"hash\",\"format\",\"items\"],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"checklist\":{\"type\":\"object\",\"properties\":{\"check_version\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"source\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]},\"revision\":{\"type\":\"integer\",\"enum\":[1]},\"coordinate_space\":{\"type\":\"string\",\"enum\":[\"unicode_scalar_index.v1\"]}},\"required\":[\"resource_id\",\"hash\",\"format\",\"revision\",\"coordinate_space\"],\"additionalProperties\":false},\"source_content\":{\"type\":\"string\",\"maxLength\":2048},\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8},\"relation_status\":{\"type\":\"string\",\"enum\":[\"UNASSIGNED\",\"MODEL_ASSERTED\",\"NOT_APPLICABLE\"]},\"decision_status\":{\"type\":\"string\",\"enum\":[\"OPEN\",\"NOT_APPLICABLE\"]}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\",\"relation_status\",\"decision_status\"],\"additionalProperties\":false},\"maxItems\":8},\"feedback\":{\"type\":\"object\",\"properties\":{\"check\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"coverage_status\":{\"type\":\"string\",\"enum\":[\"FULL\",\"PARTIAL\"]},\"uncovered\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":32},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]}},\"required\":[\"check\",\"citation_status\",\"coverage_status\",\"uncovered\",\"semantic_status\"],\"additionalProperties\":false},\"human_unresolved\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":4000},\"maxItems\":16},\"source_retention\":{\"type\":\"string\",\"enum\":[\"EXACT\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]},\"owner_acceptance\":{\"type\":\"string\",\"enum\":[\"PENDING\"]}},\"required\":[\"check_version\",\"source\",\"source_content\",\"items\",\"feedback\",\"human_unresolved\",\"source_retention\",\"semantic_goal_acceptance\",\"owner_acceptance\"],\"additionalProperties\":false},\"text\":{\"type\":\"string\",\"maxLength\":8000},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]}},\"required\":[\"checklist\",\"text\",\"citation_status\",\"semantic_status\",\"semantic_goal_acceptance\"],\"additionalProperties\":false},\"executor\":{\"kind\":\"registered_tool\",\"ref\":\"spec.verify_citations\",\"version\":\"1\"},\"allowed_tool_refs\":[],\"dependencies\":[{\"kind\":\"resource\",\"ref\":\"res_6b4d29263b534d76895e047177409e13\",\"version\":\"1\"}],\"permission_requirements\":[{\"tool_ref\":\"resource.read\",\"resource_ref\":\"res_6b4d29263b534d76895e047177409e13\"}],\"effect\":\"read\",\"preconditions\":[],\"postcheck_refs\":[\"natural.spec_citations.v1\"],\"limits\":{\"max_requests\":1,\"max_tools\":3,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"idempotency\":\"read_only\",\"reconcile_ref\":\"operation.lookup.v1\",\"error_contract\":[\"INVALID_INPUT\",\"PERMISSION_DENIED\",\"GRANT_REVOKED\",\"VERIFICATION_FAILED\",\"OUTCOME_UNKNOWN\"]},{\"schema_version\":\"1.0-draft\",\"action_id\":\"action_a16c0364d43405ebd11c43d24a6a2aff\",\"revision\":1,\"input_schema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\",\"maxLength\":8000}},\"required\":[\"text\"],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"resource_id\",\"hash\"],\"additionalProperties\":false},\"executor\":{\"kind\":\"registered_tool\",\"ref\":\"artifact.save_text\",\"version\":\"1\"},\"allowed_tool_refs\":[],\"dependencies\":[{\"kind\":\"resource\",\"ref\":\"res_6b4d29263b534d76895e047177409e13\",\"version\":\"1\"}],\"permission_requirements\":[{\"tool_ref\":\"artifact.save_text\",\"resource_ref\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\"}],\"effect\":\"project_write\",\"preconditions\":[],\"postcheck_refs\":[\"receipt.readback.v1\"],\"limits\":{\"max_requests\":1,\"max_tools\":3,\"max_repairs\":0,\"max_total_tokens\":64000,\"max_output_tokens\":1024,\"run_seconds\":300},\"idempotency\":\"transactional\",\"reconcile_ref\":\"operation.lookup.v1\",\"error_contract\":[\"INVALID_INPUT\",\"PERMISSION_DENIED\",\"GRANT_REVOKED\",\"VERIFICATION_FAILED\",\"OUTCOME_UNKNOWN\"]}],\"spec_recipe\":{\"version\":\"natural-spec-recipe.v1\",\"steps\":[{\"step_id\":\"read_pick\",\"operator\":\"resource.read\",\"depends_on\":[],\"inputs\":{\"resource_id\":{\"source\":\"data\",\"ref\":\"source\",\"field\":\"resource_id\"}}},{\"step_id\":\"infer_pick\",\"operator\":\"model.spec.all\",\"depends_on\":[\"read_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"}}},{\"step_id\":\"check_pick\",\"operator\":\"spec.verify_citations\",\"depends_on\":[\"read_pick\",\"infer_pick\"],\"inputs\":{\"resource_id\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"resource_id\"},\"content\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"content\"},\"hash\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"hash\"},\"format\":{\"source\":\"step\",\"ref\":\"read_pick\",\"field\":\"format\"},\"items\":{\"source\":\"step\",\"ref\":\"infer_pick\",\"field\":\"items\"}}},{\"step_id\":\"save_pick\",\"operator\":\"artifact.save_text\",\"depends_on\":[\"check_pick\"],\"inputs\":{\"text\":{\"source\":\"step\",\"ref\":\"check_pick\",\"field\":\"text\"}}}]},\"source_hash\":\"edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018\",\"goal\":{\"title\":\"Operating notes\",\"goal\":\"Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist\",\"known\":[],\"assumptions\":[],\"unresolved\":[\"Human question 0\",\"Human question 1\",\"Human question 2\",\"Human question 3\",\"Human question 4\",\"Human question 5\",\"Human question 6\",\"Human question 7\",\"Human question 8\",\"Human question 9\",\"Human question 10\",\"Human question 11\",\"Human question 12\",\"Human question 13\",\"Human question 14\",\"Human question 15\"],\"constraints\":[\"Preserve the full source and uncertain relations\"],\"acceptance_checks\":[\"Human review of completeness and meaning\"],\"resource_refs\":[\"res_6b4d29263b534d76895e047177409e13\"]},\"model_sample_check\":{\"check\":\"natural.spec_citations.v1\",\"sample_fingerprint\":\"bd9658539deaf3f9f34067009cd8a00df0e1a2544339a2ddbd207444ceadd90c\",\"citation_status\":\"PASS\",\"semantic_goal_acceptance\":\"NOT_RUN\",\"source_retention\":\"EXACT\"},\"goal_application\":{\"run_id\":\"run_1596970c6c8243f9bc8231c02561a7dd\",\"candidate_fingerprint\":\"47ca995020b1616bdc491d55c0973e0091a3aa55a6e67dd915fe663d32cba03c\"}},\"fingerprint\":\"dc3abfb65addbd149722fd21b487cbb93b56970ac9ab7f9a7997d2fdb3a1538d\",\"created_at\":1792308985.5957274,\"state\":\"PREVIEW_ONLY\",\"publishable\":false,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false},\"validation\":{\"state\":\"PREVIEW_ONLY\",\"execution_performed\":false,\"publishable\":false,\"topological_order\":[\"read_pick\",\"infer_pick\",\"check_pick\",\"save_pick\"]},\"history\":[],\"input_guidance\":{\"mode\":\"MODEL_SPEC_CHECKLIST\",\"citation_status\":\"PREVIEW_ONLY\",\"semantic_status\":\"UNKNOWN\",\"semantic_goal_acceptance\":\"NOT_RUN\"}}",
+    "response_sha256": "0b1ef37e8366b293b63efb69572c14121745eafd06ccba96c1f9697ea70c2242",
+    "after_page_worker": false
+  },
+  {
+    "rpc_id": 39,
+    "method": "GET",
+    "path": "/api/apps/app_bede6e7a9e4cbc6cb6e477668524fa0a",
+    "body": null,
+    "body_text": null,
+    "body_bytes": 0,
+    "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "status": 200,
+    "response": {
+      "id": "app_bede6e7a9e4cbc6cb6e477668524fa0a",
+      "project_id": "proj_afa717e03bdc4fee8d0f0cef35be8ad3",
+      "runtime_id": "appruntime_bed25a2a892b47b6a78fbe2e89feb3ad",
+      "name": "Model chosen checklist",
+      "candidate": {
+        "namespace": "pa-natural-spec-app.v1",
+        "manifest": {
+          "schema_version": "1.0-draft",
+          "app_id": "app_bede6e7a9e4cbc6cb6e477668524fa0a",
+          "revision": 1,
+          "origin": "goal",
+          "goal_ref": "goal_5d43817db6fe41819e572735bb611438",
+          "source_run_ref": null,
+          "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string",
+                "maxLength": 2048
+              },
+              "hash": {
+                "type": "string",
+                "maxLength": 2048
+              },
+              "checklist": {
+                "type": "object",
+                "properties": {
+                  "check_version": {
+                    "type": "string",
+                    "enum": [
+                      "natural.spec_citations.v1"
+                    ]
+                  },
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "resource_id": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "hash": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "format": {
+                        "type": "string",
+                        "enum": [
+                          "txt",
+                          "md"
+                        ]
+                      },
+                      "revision": {
+                        "type": "integer",
+                        "enum": [
+                          1
+                        ]
+                      },
+                      "coordinate_space": {
+                        "type": "string",
+                        "enum": [
+                          "unicode_scalar_index.v1"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "resource_id",
+                      "hash",
+                      "format",
+                      "revision",
+                      "coordinate_space"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "source_content": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "item_id": {
+                          "type": "string",
+                          "maxLength": 40
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "condition",
+                            "exception",
+                            "open_question",
+                            "requirement",
+                            "unclassified"
+                          ]
+                        },
+                        "summary": {
+                          "type": "string",
+                          "maxLength": 240
+                        },
+                        "citations": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "start": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 2048
+                              },
+                              "end": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2048
+                              },
+                              "quote": {
+                                "type": "string",
+                                "maxLength": 2048
+                              }
+                            },
+                            "required": [
+                              "start",
+                              "end",
+                              "quote"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 2
+                        },
+                        "targets": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 40
+                          },
+                          "maxItems": 8
+                        },
+                        "relation_status": {
+                          "type": "string",
+                          "enum": [
+                            "UNASSIGNED",
+                            "MODEL_ASSERTED",
+                            "NOT_APPLICABLE"
+                          ]
+                        },
+                        "decision_status": {
+                          "type": "string",
+                          "enum": [
+                            "OPEN",
+                            "NOT_APPLICABLE"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "item_id",
+                        "kind",
+                        "summary",
+                        "citations",
+                        "targets",
+                        "relation_status",
+                        "decision_status"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 8
+                  },
+                  "feedback": {
+                    "type": "object",
+                    "properties": {
+                      "check": {
+                        "type": "string",
+                        "enum": [
+                          "natural.spec_citations.v1"
+                        ]
+                      },
+                      "citation_status": {
+                        "type": "string",
+                        "enum": [
+                          "PASS"
+                        ]
+                      },
+                      "coverage_status": {
+                        "type": "string",
+                        "enum": [
+                          "FULL",
+                          "PARTIAL"
+                        ]
+                      },
+                      "uncovered": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "start": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 2048
+                            },
+                            "end": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 2048
+                            },
+                            "quote": {
+                              "type": "string",
+                              "maxLength": 2048
+                            }
+                          },
+                          "required": [
+                            "start",
+                            "end",
+                            "quote"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 32
+                      },
+                      "semantic_status": {
+                        "type": "string",
+                        "enum": [
+                          "UNKNOWN"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "check",
+                      "citation_status",
+                      "coverage_status",
+                      "uncovered",
+                      "semantic_status"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "human_unresolved": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 4000
+                    },
+                    "maxItems": 16
+                  },
+                  "source_retention": {
+                    "type": "string",
+                    "enum": [
+                      "EXACT"
+                    ]
+                  },
+                  "semantic_goal_acceptance": {
+                    "type": "string",
+                    "enum": [
+                      "NOT_RUN"
+                    ]
+                  },
+                  "owner_acceptance": {
+                    "type": "string",
+                    "enum": [
+                      "PENDING"
+                    ]
+                  }
+                },
+                "required": [
+                  "check_version",
+                  "source",
+                  "source_content",
+                  "items",
+                  "feedback",
+                  "human_unresolved",
+                  "source_retention",
+                  "semantic_goal_acceptance",
+                  "owner_acceptance"
+                ],
+                "additionalProperties": false
+              },
+              "citation_status": {
+                "type": "string",
+                "enum": [
+                  "PASS"
+                ]
+              },
+              "semantic_status": {
+                "type": "string",
+                "enum": [
+                  "UNKNOWN"
+                ]
+              },
+              "semantic_goal_acceptance": {
+                "type": "string",
+                "enum": [
+                  "NOT_RUN"
+                ]
+              }
+            },
+            "required": [
+              "resource_id",
+              "hash",
+              "checklist",
+              "citation_status",
+              "semantic_status",
+              "semantic_goal_acceptance"
+            ],
+            "additionalProperties": false
+          },
+          "action_bindings": [
+            {
+              "binding_id": "read_pick",
+              "action_id": "action_6f470b4ca9aca22e9b0c17c8d266df94",
+              "revision": 1
+            },
+            {
+              "binding_id": "infer_pick",
+              "action_id": "action_b623f3553e822ba1305bc756bf82a26c",
+              "revision": 1
+            },
+            {
+              "binding_id": "check_pick",
+              "action_id": "action_f928ebed7b3ef680cf57d28a699eee02",
+              "revision": 1
+            },
+            {
+              "binding_id": "save_pick",
+              "action_id": "action_a16c0364d43405ebd11c43d24a6a2aff",
+              "revision": 1
+            }
+          ],
+          "data_bindings": [
+            {
+              "binding_id": "source",
+              "resource_ref": "res_6b4d29263b534d76895e047177409e13"
+            }
+          ],
+          "runtime_identity_requirements": {
+            "mode": "user_and_app_intersection"
+          },
+          "data_schema_version": 1,
+          "workflow": [
+            {
+              "step_id": "read_pick",
+              "binding_id": "read_pick",
+              "depends_on": [],
+              "inputs": {
+                "resource_id": {
+                  "source": "data",
+                  "ref": "source",
+                  "field": "resource_id"
+                }
+              }
+            },
+            {
+              "step_id": "infer_pick",
+              "binding_id": "infer_pick",
+              "depends_on": [
+                "read_pick"
+              ],
+              "inputs": {
+                "resource_id": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "resource_id"
+                },
+                "content": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "content"
+                },
+                "hash": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "hash"
+                },
+                "format": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "format"
+                }
+              }
+            },
+            {
+              "step_id": "check_pick",
+              "binding_id": "check_pick",
+              "depends_on": [
+                "read_pick",
+                "infer_pick"
+              ],
+              "inputs": {
+                "resource_id": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "resource_id"
+                },
+                "content": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "content"
+                },
+                "hash": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "hash"
+                },
+                "format": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "format"
+                },
+                "items": {
+                  "source": "step",
+                  "ref": "infer_pick",
+                  "field": "items"
+                }
+              }
+            },
+            {
+              "step_id": "save_pick",
+              "binding_id": "save_pick",
+              "depends_on": [
+                "check_pick"
+              ],
+              "inputs": {
+                "text": {
+                  "source": "step",
+                  "ref": "check_pick",
+                  "field": "text"
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "resource_id": {
+              "source": "step",
+              "ref": "save_pick",
+              "field": "resource_id"
+            },
+            "hash": {
+              "source": "step",
+              "ref": "save_pick",
+              "field": "hash"
+            },
+            "checklist": {
+              "source": "step",
+              "ref": "check_pick",
+              "field": "checklist"
+            },
+            "citation_status": {
+              "source": "step",
+              "ref": "check_pick",
+              "field": "citation_status"
+            },
+            "semantic_status": {
+              "source": "step",
+              "ref": "check_pick",
+              "field": "semantic_status"
+            },
+            "semantic_goal_acceptance": {
+              "source": "step",
+              "ref": "check_pick",
+              "field": "semantic_goal_acceptance"
+            }
+          },
+          "views": [
+            {
+              "component_ref": "table",
+              "output_field": "checklist"
+            }
+          ],
+          "validation_suite_ref": "natural.spec_citations.v1",
+          "runtime_limits": {
+            "max_requests": 1,
+            "max_tools": 3,
+            "max_repairs": 0,
+            "max_total_tokens": 64000,
+            "max_output_tokens": 1024,
+            "run_seconds": 300
+          },
+          "permission_requirements": [
+            {
+              "tool_ref": "resource.read",
+              "resource_ref": "res_6b4d29263b534d76895e047177409e13"
+            },
+            {
+              "tool_ref": "artifact.save_text",
+              "resource_ref": "proj_afa717e03bdc4fee8d0f0cef35be8ad3"
+            }
+          ],
+          "dependency_lock": [
+            {
+              "kind": "resource",
+              "ref": "res_6b4d29263b534d76895e047177409e13",
+              "version": "1"
+            },
+            {
+              "kind": "tool",
+              "ref": "resource.read",
+              "version": "1"
+            },
+            {
+              "kind": "prompt",
+              "ref": "model.spec.all.v1",
+              "version": "1"
+            },
+            {
+              "kind": "tool",
+              "ref": "spec.verify_citations",
+              "version": "1"
+            },
+            {
+              "kind": "tool",
+              "ref": "artifact.save_text",
+              "version": "1"
+            },
+            {
+              "kind": "check",
+              "ref": "natural.spec_citations.v1",
+              "version": "1"
+            },
+            {
+              "kind": "check",
+              "ref": "receipt.readback.v1",
+              "version": "1"
+            }
+          ]
+        },
+        "actions": [
+          {
+            "schema_version": "1.0-draft",
+            "action_id": "action_6f470b4ca9aca22e9b0c17c8d266df94",
+            "revision": 1,
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "resource_id": {
+                  "type": "string",
+                  "maxLength": 2048
+                }
+              },
+              "required": [
+                "resource_id"
+              ],
+              "additionalProperties": false
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "resource_id": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "content": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "hash": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "format": {
+                  "type": "string",
+                  "enum": [
+                    "txt",
+                    "md"
+                  ]
+                }
+              },
+              "required": [
+                "resource_id",
+                "content",
+                "hash",
+                "format"
+              ],
+              "additionalProperties": false
+            },
+            "executor": {
+              "kind": "registered_tool",
+              "ref": "resource.read",
+              "version": "1"
+            },
+            "allowed_tool_refs": [],
+            "dependencies": [
+              {
+                "kind": "resource",
+                "ref": "res_6b4d29263b534d76895e047177409e13",
+                "version": "1"
+              }
+            ],
+            "permission_requirements": [
+              {
+                "tool_ref": "resource.read",
+                "resource_ref": "res_6b4d29263b534d76895e047177409e13"
+              }
+            ],
+            "effect": "read",
+            "preconditions": [],
+            "postcheck_refs": [
+              "natural.spec_citations.v1"
+            ],
+            "limits": {
+              "max_requests": 1,
+              "max_tools": 3,
+              "max_repairs": 0,
+              "max_total_tokens": 64000,
+              "max_output_tokens": 1024,
+              "run_seconds": 300
+            },
+            "idempotency": "read_only",
+            "reconcile_ref": "operation.lookup.v1",
+            "error_contract": [
+              "INVALID_INPUT",
+              "PERMISSION_DENIED",
+              "GRANT_REVOKED",
+              "VERIFICATION_FAILED",
+              "OUTCOME_UNKNOWN"
+            ]
+          },
+          {
+            "schema_version": "1.0-draft",
+            "action_id": "action_b623f3553e822ba1305bc756bf82a26c",
+            "revision": 1,
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "resource_id": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "content": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "hash": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "format": {
+                  "type": "string",
+                  "enum": [
+                    "txt",
+                    "md"
+                  ]
+                }
+              },
+              "required": [
+                "resource_id",
+                "content",
+                "hash",
+                "format"
+              ],
+              "additionalProperties": false
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "item_id": {
+                        "type": "string",
+                        "maxLength": 40
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "condition",
+                          "exception",
+                          "open_question",
+                          "requirement",
+                          "unclassified"
+                        ]
+                      },
+                      "summary": {
+                        "type": "string",
+                        "maxLength": 240
+                      },
+                      "citations": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "start": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 2048
+                            },
+                            "end": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 2048
+                            },
+                            "quote": {
+                              "type": "string",
+                              "maxLength": 2048
+                            }
+                          },
+                          "required": [
+                            "start",
+                            "end",
+                            "quote"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 2
+                      },
+                      "targets": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 40
+                        },
+                        "maxItems": 8
+                      }
+                    },
+                    "required": [
+                      "item_id",
+                      "kind",
+                      "summary",
+                      "citations",
+                      "targets"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 8
+                },
+                "feedback": {
+                  "type": "object",
+                  "properties": {
+                    "check": {
+                      "type": "string",
+                      "enum": [
+                        "natural.spec_citations.v1"
+                      ]
+                    },
+                    "citation_status": {
+                      "type": "string",
+                      "enum": [
+                        "PASS"
+                      ]
+                    },
+                    "coverage_status": {
+                      "type": "string",
+                      "enum": [
+                        "FULL",
+                        "PARTIAL"
+                      ]
+                    },
+                    "uncovered": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "start": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 2048
+                          },
+                          "end": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 2048
+                          },
+                          "quote": {
+                            "type": "string",
+                            "maxLength": 2048
+                          }
+                        },
+                        "required": [
+                          "start",
+                          "end",
+                          "quote"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 32
+                    },
+                    "semantic_status": {
+                      "type": "string",
+                      "enum": [
+                        "UNKNOWN"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "check",
+                    "citation_status",
+                    "coverage_status",
+                    "uncovered",
+                    "semantic_status"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "items",
+                "feedback"
+              ],
+              "additionalProperties": false
+            },
+            "executor": {
+              "kind": "bounded_agent",
+              "ref": "model.spec.all",
+              "version": "1"
+            },
+            "allowed_tool_refs": [],
+            "dependencies": [
+              {
+                "kind": "resource",
+                "ref": "res_6b4d29263b534d76895e047177409e13",
+                "version": "1"
+              },
+              {
+                "kind": "prompt",
+                "ref": "model.spec.all.v1",
+                "version": "1"
+              }
+            ],
+            "permission_requirements": [
+              {
+                "tool_ref": "resource.read",
+                "resource_ref": "res_6b4d29263b534d76895e047177409e13"
+              }
+            ],
+            "effect": "read",
+            "preconditions": [],
+            "postcheck_refs": [
+              "natural.spec_citations.v1"
+            ],
+            "limits": {
+              "max_requests": 1,
+              "max_tools": 3,
+              "max_repairs": 0,
+              "max_total_tokens": 64000,
+              "max_output_tokens": 1024,
+              "run_seconds": 300
+            },
+            "idempotency": "read_only",
+            "reconcile_ref": "operation.lookup.v1",
+            "error_contract": [
+              "INVALID_INPUT",
+              "PERMISSION_DENIED",
+              "GRANT_REVOKED",
+              "VERIFICATION_FAILED",
+              "OUTCOME_UNKNOWN"
+            ]
+          },
+          {
+            "schema_version": "1.0-draft",
+            "action_id": "action_f928ebed7b3ef680cf57d28a699eee02",
+            "revision": 1,
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "resource_id": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "content": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "hash": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "format": {
+                  "type": "string",
+                  "enum": [
+                    "txt",
+                    "md"
+                  ]
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "item_id": {
+                        "type": "string",
+                        "maxLength": 40
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "condition",
+                          "exception",
+                          "open_question",
+                          "requirement",
+                          "unclassified"
+                        ]
+                      },
+                      "summary": {
+                        "type": "string",
+                        "maxLength": 240
+                      },
+                      "citations": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "start": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 2048
+                            },
+                            "end": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 2048
+                            },
+                            "quote": {
+                              "type": "string",
+                              "maxLength": 2048
+                            }
+                          },
+                          "required": [
+                            "start",
+                            "end",
+                            "quote"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 2
+                      },
+                      "targets": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 40
+                        },
+                        "maxItems": 8
+                      }
+                    },
+                    "required": [
+                      "item_id",
+                      "kind",
+                      "summary",
+                      "citations",
+                      "targets"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 8
+                }
+              },
+              "required": [
+                "resource_id",
+                "content",
+                "hash",
+                "format",
+                "items"
+              ],
+              "additionalProperties": false
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "checklist": {
+                  "type": "object",
+                  "properties": {
+                    "check_version": {
+                      "type": "string",
+                      "enum": [
+                        "natural.spec_citations.v1"
+                      ]
+                    },
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "resource_id": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "hash": {
+                          "type": "string",
+                          "maxLength": 2048
+                        },
+                        "format": {
+                          "type": "string",
+                          "enum": [
+                            "txt",
+                            "md"
+                          ]
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "enum": [
+                            1
+                          ]
+                        },
+                        "coordinate_space": {
+                          "type": "string",
+                          "enum": [
+                            "unicode_scalar_index.v1"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "resource_id",
+                        "hash",
+                        "format",
+                        "revision",
+                        "coordinate_space"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "source_content": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "item_id": {
+                            "type": "string",
+                            "maxLength": 40
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "condition",
+                              "exception",
+                              "open_question",
+                              "requirement",
+                              "unclassified"
+                            ]
+                          },
+                          "summary": {
+                            "type": "string",
+                            "maxLength": 240
+                          },
+                          "citations": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "start": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 2048
+                                },
+                                "end": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 2048
+                                },
+                                "quote": {
+                                  "type": "string",
+                                  "maxLength": 2048
+                                }
+                              },
+                              "required": [
+                                "start",
+                                "end",
+                                "quote"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "maxItems": 2
+                          },
+                          "targets": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "maxLength": 40
+                            },
+                            "maxItems": 8
+                          },
+                          "relation_status": {
+                            "type": "string",
+                            "enum": [
+                              "UNASSIGNED",
+                              "MODEL_ASSERTED",
+                              "NOT_APPLICABLE"
+                            ]
+                          },
+                          "decision_status": {
+                            "type": "string",
+                            "enum": [
+                              "OPEN",
+                              "NOT_APPLICABLE"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "item_id",
+                          "kind",
+                          "summary",
+                          "citations",
+                          "targets",
+                          "relation_status",
+                          "decision_status"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 8
+                    },
+                    "feedback": {
+                      "type": "object",
+                      "properties": {
+                        "check": {
+                          "type": "string",
+                          "enum": [
+                            "natural.spec_citations.v1"
+                          ]
+                        },
+                        "citation_status": {
+                          "type": "string",
+                          "enum": [
+                            "PASS"
+                          ]
+                        },
+                        "coverage_status": {
+                          "type": "string",
+                          "enum": [
+                            "FULL",
+                            "PARTIAL"
+                          ]
+                        },
+                        "uncovered": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "start": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 2048
+                              },
+                              "end": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2048
+                              },
+                              "quote": {
+                                "type": "string",
+                                "maxLength": 2048
+                              }
+                            },
+                            "required": [
+                              "start",
+                              "end",
+                              "quote"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 32
+                        },
+                        "semantic_status": {
+                          "type": "string",
+                          "enum": [
+                            "UNKNOWN"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "check",
+                        "citation_status",
+                        "coverage_status",
+                        "uncovered",
+                        "semantic_status"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "human_unresolved": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      "maxItems": 16
+                    },
+                    "source_retention": {
+                      "type": "string",
+                      "enum": [
+                        "EXACT"
+                      ]
+                    },
+                    "semantic_goal_acceptance": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_RUN"
+                      ]
+                    },
+                    "owner_acceptance": {
+                      "type": "string",
+                      "enum": [
+                        "PENDING"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "check_version",
+                    "source",
+                    "source_content",
+                    "items",
+                    "feedback",
+                    "human_unresolved",
+                    "source_retention",
+                    "semantic_goal_acceptance",
+                    "owner_acceptance"
+                  ],
+                  "additionalProperties": false
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 8000
+                },
+                "citation_status": {
+                  "type": "string",
+                  "enum": [
+                    "PASS"
+                  ]
+                },
+                "semantic_status": {
+                  "type": "string",
+                  "enum": [
+                    "UNKNOWN"
+                  ]
+                },
+                "semantic_goal_acceptance": {
+                  "type": "string",
+                  "enum": [
+                    "NOT_RUN"
+                  ]
+                }
+              },
+              "required": [
+                "checklist",
+                "text",
+                "citation_status",
+                "semantic_status",
+                "semantic_goal_acceptance"
+              ],
+              "additionalProperties": false
+            },
+            "executor": {
+              "kind": "registered_tool",
+              "ref": "spec.verify_citations",
+              "version": "1"
+            },
+            "allowed_tool_refs": [],
+            "dependencies": [
+              {
+                "kind": "resource",
+                "ref": "res_6b4d29263b534d76895e047177409e13",
+                "version": "1"
+              }
+            ],
+            "permission_requirements": [
+              {
+                "tool_ref": "resource.read",
+                "resource_ref": "res_6b4d29263b534d76895e047177409e13"
+              }
+            ],
+            "effect": "read",
+            "preconditions": [],
+            "postcheck_refs": [
+              "natural.spec_citations.v1"
+            ],
+            "limits": {
+              "max_requests": 1,
+              "max_tools": 3,
+              "max_repairs": 0,
+              "max_total_tokens": 64000,
+              "max_output_tokens": 1024,
+              "run_seconds": 300
+            },
+            "idempotency": "read_only",
+            "reconcile_ref": "operation.lookup.v1",
+            "error_contract": [
+              "INVALID_INPUT",
+              "PERMISSION_DENIED",
+              "GRANT_REVOKED",
+              "VERIFICATION_FAILED",
+              "OUTCOME_UNKNOWN"
+            ]
+          },
+          {
+            "schema_version": "1.0-draft",
+            "action_id": "action_a16c0364d43405ebd11c43d24a6a2aff",
+            "revision": 1,
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "maxLength": 8000
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "additionalProperties": false
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "resource_id": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "hash": {
+                  "type": "string",
+                  "maxLength": 2048
+                }
+              },
+              "required": [
+                "resource_id",
+                "hash"
+              ],
+              "additionalProperties": false
+            },
+            "executor": {
+              "kind": "registered_tool",
+              "ref": "artifact.save_text",
+              "version": "1"
+            },
+            "allowed_tool_refs": [],
+            "dependencies": [
+              {
+                "kind": "resource",
+                "ref": "res_6b4d29263b534d76895e047177409e13",
+                "version": "1"
+              }
+            ],
+            "permission_requirements": [
+              {
+                "tool_ref": "artifact.save_text",
+                "resource_ref": "proj_afa717e03bdc4fee8d0f0cef35be8ad3"
+              }
+            ],
+            "effect": "project_write",
+            "preconditions": [],
+            "postcheck_refs": [
+              "receipt.readback.v1"
+            ],
+            "limits": {
+              "max_requests": 1,
+              "max_tools": 3,
+              "max_repairs": 0,
+              "max_total_tokens": 64000,
+              "max_output_tokens": 1024,
+              "run_seconds": 300
+            },
+            "idempotency": "transactional",
+            "reconcile_ref": "operation.lookup.v1",
+            "error_contract": [
+              "INVALID_INPUT",
+              "PERMISSION_DENIED",
+              "GRANT_REVOKED",
+              "VERIFICATION_FAILED",
+              "OUTCOME_UNKNOWN"
+            ]
+          }
+        ],
+        "spec_recipe": {
+          "version": "natural-spec-recipe.v1",
+          "steps": [
+            {
+              "step_id": "read_pick",
+              "operator": "resource.read",
+              "depends_on": [],
+              "inputs": {
+                "resource_id": {
+                  "source": "data",
+                  "ref": "source",
+                  "field": "resource_id"
+                }
+              }
+            },
+            {
+              "step_id": "infer_pick",
+              "operator": "model.spec.all",
+              "depends_on": [
+                "read_pick"
+              ],
+              "inputs": {
+                "resource_id": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "resource_id"
+                },
+                "content": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "content"
+                },
+                "hash": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "hash"
+                },
+                "format": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "format"
+                }
+              }
+            },
+            {
+              "step_id": "check_pick",
+              "operator": "spec.verify_citations",
+              "depends_on": [
+                "read_pick",
+                "infer_pick"
+              ],
+              "inputs": {
+                "resource_id": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "resource_id"
+                },
+                "content": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "content"
+                },
+                "hash": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "hash"
+                },
+                "format": {
+                  "source": "step",
+                  "ref": "read_pick",
+                  "field": "format"
+                },
+                "items": {
+                  "source": "step",
+                  "ref": "infer_pick",
+                  "field": "items"
+                }
+              }
+            },
+            {
+              "step_id": "save_pick",
+              "operator": "artifact.save_text",
+              "depends_on": [
+                "check_pick"
+              ],
+              "inputs": {
+                "text": {
+                  "source": "step",
+                  "ref": "check_pick",
+                  "field": "text"
+                }
+              }
+            }
+          ]
+        },
+        "source_hash": "edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018",
+        "goal": {
+          "title": "Operating notes",
+          "goal": "Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist",
+          "known": [],
+          "assumptions": [],
+          "unresolved": [
+            "Human question 0",
+            "Human question 1",
+            "Human question 2",
+            "Human question 3",
+            "Human question 4",
+            "Human question 5",
+            "Human question 6",
+            "Human question 7",
+            "Human question 8",
+            "Human question 9",
+            "Human question 10",
+            "Human question 11",
+            "Human question 12",
+            "Human question 13",
+            "Human question 14",
+            "Human question 15"
+          ],
+          "constraints": [
+            "Preserve the full source and uncertain relations"
+          ],
+          "acceptance_checks": [
+            "Human review of completeness and meaning"
+          ],
+          "resource_refs": [
+            "res_6b4d29263b534d76895e047177409e13"
+          ]
+        },
+        "model_sample_check": {
+          "check": "natural.spec_citations.v1",
+          "sample_fingerprint": "bd9658539deaf3f9f34067009cd8a00df0e1a2544339a2ddbd207444ceadd90c",
+          "citation_status": "PASS",
+          "semantic_goal_acceptance": "NOT_RUN",
+          "source_retention": "EXACT"
+        },
+        "goal_application": {
+          "run_id": "run_1596970c6c8243f9bc8231c02561a7dd",
+          "candidate_fingerprint": "47ca995020b1616bdc491d55c0973e0091a3aa55a6e67dd915fe663d32cba03c"
+        }
+      },
+      "fingerprint": "dc3abfb65addbd149722fd21b487cbb93b56970ac9ab7f9a7997d2fdb3a1538d",
+      "created_at": 1792308985.5957274,
+      "state": "PREVIEW_ONLY",
+      "publishable": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "validation": {
+        "state": "PREVIEW_ONLY",
+        "execution_performed": false,
+        "publishable": false,
+        "topological_order": [
+          "read_pick",
+          "infer_pick",
+          "check_pick",
+          "save_pick"
+        ]
+      },
+      "history": [],
+      "input_guidance": {
+        "mode": "MODEL_SPEC_CHECKLIST",
+        "citation_status": "PREVIEW_ONLY",
+        "semantic_status": "UNKNOWN",
+        "semantic_goal_acceptance": "NOT_RUN"
+      }
+    },
+    "response_text": "{\"id\":\"app_bede6e7a9e4cbc6cb6e477668524fa0a\",\"project_id\":\"proj_afa717e03bdc4fee8d0f0cef35be8ad3\",\"runtime_id\":\"appruntime_bed25a2a892b47b6a78fbe2e89feb3ad\",\"name\":\"Model chosen checklist\",\"candidate\":{\"namespace\":\"pa-natural-spec-app.v1\",\"manifest\":{\"schema_version\":\"1.0-draft\",\"app_id\":\"app_bede6e7a9e4cbc6cb6e477668524fa0a\",\"revision\":1,\"origin\":\"goal\",\"goal_ref\":\"goal_5d43817db6fe41819e572735bb611438\",\"source_run_ref\":null,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false},\"output_schema\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"checklist\":{\"type\":\"object\",\"properties\":{\"check_version\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"source\":{\"type\":\"object\",\"properties\":{\"resource_id\":{\"type\":\"string\",\"maxLength\":2048},\"hash\":{\"type\":\"string\",\"maxLength\":2048},\"format\":{\"type\":\"string\",\"enum\":[\"txt\",\"md\"]},\"revision\":{\"type\":\"integer\",\"enum\":[1]},\"coordinate_space\":{\"type\":\"string\",\"enum\":[\"unicode_scalar_index.v1\"]}},\"required\":[\"resource_id\",\"hash\",\"format\",\"revision\",\"coordinate_space\"],\"additionalProperties\":false},\"source_content\":{\"type\":\"string\",\"maxLength\":2048},\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"item_id\":{\"type\":\"string\",\"maxLength\":40},\"kind\":{\"type\":\"string\",\"enum\":[\"condition\",\"exception\",\"open_question\",\"requirement\",\"unclassified\"]},\"summary\":{\"type\":\"string\",\"maxLength\":240},\"citations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":2},\"targets\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":40},\"maxItems\":8},\"relation_status\":{\"type\":\"string\",\"enum\":[\"UNASSIGNED\",\"MODEL_ASSERTED\",\"NOT_APPLICABLE\"]},\"decision_status\":{\"type\":\"string\",\"enum\":[\"OPEN\",\"NOT_APPLICABLE\"]}},\"required\":[\"item_id\",\"kind\",\"summary\",\"citations\",\"targets\",\"relation_status\",\"decision_status\"],\"additionalProperties\":false},\"maxItems\":8},\"feedback\":{\"type\":\"object\",\"properties\":{\"check\":{\"type\":\"string\",\"enum\":[\"natural.spec_citations.v1\"]},\"citation_status\":{\"type\":\"string\",\"enum\":[\"PASS\"]},\"coverage_status\":{\"type\":\"string\",\"enum\":[\"FULL\",\"PARTIAL\"]},\"uncovered\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"start\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":2048},\"end\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048},\"quote\":{\"type\":\"string\",\"maxLength\":2048}},\"required\":[\"start\",\"end\",\"quote\"],\"additionalProperties\":false},\"maxItems\":32},\"semantic_status\":{\"type\":\"string\",\"enum\":[\"UNKNOWN\"]}},\"required\":[\"check\",\"citation_status\",\"coverage_status\",\"uncovered\",\"semantic_status\"],\"additionalProperties\":false},\"human_unresolved\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":4000},\"maxItems\":16},\"source_retention\":{\"type\":\"string\",\"enum\":[\"EXACT\"]},\"semantic_goal_acceptance\":{\"type\":\"string\",\"enum\":[\"NOT_RUN\"]},\"owner_acceptance\":{\"

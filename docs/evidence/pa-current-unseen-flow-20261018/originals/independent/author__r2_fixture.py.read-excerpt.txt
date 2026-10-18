@@ -1,0 +1,30 @@
+READ_ONLY_EXISTING_REPO_EVIDENCE_SOURCE_NOT_EXECUTED
+archive: natural-logic-r2-20261014/natural-logic-r2-evidence-20261014.tar.gz
+member: author/r2_fixture.py
+full-member-sha256: d4abe56df58f3e605fb857b771d8ff20d1ca1d34efef28300fd12bcc100d9c86
+
+1: import hashlib,json,shutil
+2: from contextlib import contextmanager
+3: from pathlib import Path
+4: from fastapi.testclient import TestClient
+5: from sim2act.api import create_app
+6: from sim2act.config import Settings
+7: from sim2act.db import Store
+8: ROOT=Path('/workspace/natural-logic-r2-evidence-20261014/author')
+9: @contextmanager
+10: def opened(tmp_path):
+11:     choices=[]
+12:     for p in (ROOT/'r2-fourth-tmp').glob('*/r2-proof.json'):
+13:         if p.parent.is_symlink():continue
+14:         proof=json.loads(p.read_text())
+15:         if proof['style']=='parallel':choices.append((p,proof))
+16:     assert len(choices)==1,choices
+17:     path,proof=choices[0];seed=path.parent/'fixture.db';old=hashlib.sha256(seed.read_bytes()).hexdigest()
+18:     dst=tmp_path/'copy.db';shutil.copyfile(seed,dst)
+19:     settings=Settings('sqlite:///'+str(dst),tmp_path,mode='mock',goal_planner_provider='intern-s2')
+20:     store=Store(settings.database_url,test_only=True);client=TestClient(create_app(store,settings));client.headers['Authorization']='Bearer synthetic-test-A'
+21:     ctx=proof['preview1']['context'];goal=client.get('/api/goal-cards/'+ctx['goal']['card_id']);assert goal.status_code==200
+22:     data=(store,settings,client,ctx['principal_id'],ctx['project_id'],ctx['source']['resource_id'],goal.json())
+23:     try:yield data,proof
+24:     finally:
+25:         client.close();store.engine.dispose();assert hashlib.sha256(seed.read_bytes()).hexdigest()==old

@@ -1,0 +1,45 @@
+READ_ONLY_EXISTING_REPO_EVIDENCE_SOURCE_NOT_EXECUTED
+archive: natural-logic-r2-20261014/natural-logic-r2-evidence-20261014.tar.gz
+member: author/test_visible_r2.py
+full-member-sha256: e3f9386f196c9a9e9872e6cce0952b36431283f9a2f66b80a6ff29e9d1274db7
+
+1: import hashlib,json,os,subprocess
+2: from pathlib import Path
+3: import pytest
+4: from fastapi.testclient import TestClient
+5: from r2_fixture import ROOT,opened
+6: from test_natural_spec_apps import SOURCE,material,transport
+7: from test_pb_natural_specs import drive_to_success
+8: from sim2act.api import create_app
+9: from sim2act.db import Store
+10: FOURTH='The harbor buoy records tide each hour while solar power is available. During maintenance it holds the latest value. The harbor winter policy has yet to be agreed.'
+11: @pytest.mark.parametrize('scenario',['normal','lost'])
+12: def test_visible_second_adjustment_and_cold_new_material(tmp_path,scenario):
+13:     with opened(tmp_path) as (data,proof):
+14:         app=data[2].get('/api/apps/'+proof['original']['snapshot']['draft']['id']).json()
+15:         rid,goal=material(data[2],data[4],FOURTH,'Synthetic fourth R2 material')
+16:         info=dict(project=data[4],app=app['id'],name=app['name'],release=proof['release1']['id'],instance=proof['source']['id'],material=rid,goal=goal['id'],scenario=scenario,output=str(tmp_path/'result.json'))
+17:         path=tmp_path/'info.json';path.write_text(json.dumps(info));stderr=tmp_path/'node.stderr';sent=[];clients=[];stores=[];current=data
+18:         with stderr.open('w') as err:
+19:             process=subprocess.Popen(['node',str(ROOT/'visible-r2.cjs'),str(path)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=err,text=True,env={**os.environ,'NODE_PATH':'/workspace/node-tools/node_modules'})
+20:             try:
+21:                 for line in process.stdout:
+22:                     request=json.loads(line)
+23:                     if request.get('done'):break
+24:                     if request.get('command')=='worker':
+25:                         cold=Store(data[1].database_url,test_only=True);stores.append(cold);client=TestClient(create_app(cold,data[1]));clients.append(client);client.headers['Authorization']='Bearer synthetic-test-A';current=(cold,data[1],client,*data[3:])
+26:                         drive_to_success(current,request['rid'],transport(sent,FOURTH if request.get('material')=='new' else SOURCE))
+27:                         answer=dict(id=request['id'],status=200,text='{}')
+28:                     else:
+29:                         response=current[2].request(request['method'],request['path'],json=request.get('body'),headers=request.get('headers'));answer=dict(id=request['id'],status=response.status_code,text=response.text,content_type=response.headers.get('content-type'))
+30:                     process.stdin.write(json.dumps(answer)+'\n');process.stdin.flush()
+31:                 process.stdin.close();code=process.wait(timeout=20);assert code==0,stderr.read_text()
+32:                 result=json.loads((tmp_path/'result.json').read_text());assert result['status']=='PASS',result.get('error')
+33:                 assert len(sent)==4
+34:                 for asset in result['static_resource_loads']:
+35:                     name='index.html' if asset['path']=='/' else asset['path'][1:];assert asset['sha256']==hashlib.sha256((Path('/workspace/Sim2Act-pa-provider/src/sim2act/web')/name).read_bytes()).hexdigest()
+36:                 (tmp_path/'wire.json').write_text(json.dumps(sent,indent=2)+'\n')
+37:             finally:
+38:                 if process.poll() is None:process.kill();process.wait(timeout=5)
+39:                 for c in clients:c.close()
+40:                 for s in stores:s.engine.dispose()
