@@ -533,8 +533,8 @@ def test_source_authority_tenant_and_exact_identity_gate_close(pb_extraction_clo
             revoked_baseline = snapshot(case.store)
             with PrivateReadBarrier(case.store, {case.info["source_run"]},
                     {case.info["source_resource"], case.info["source_artifact"]}) as barrier:
-                error(case.close(), 403, "PERMISSION_DENIED")
-                error(case.read(), 403, "PERMISSION_DENIED")
+                error(case.close(), 403, "GRANT_REVOKED")
+                error(case.read(), 403, "GRANT_REVOKED")
                 assert not barrier.blocked
                 observer.save("revoked-private-read-barrier.json", dict(revocation=revoked,
                     blocked=barrier.blocked, statements=barrier.statements))

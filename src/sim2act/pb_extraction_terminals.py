@@ -223,7 +223,9 @@ def read(store, c, user, pid, rid, key):
 
 @controlled
 def close(store, user, pid, rid, key, body, limits):
-    with store.tx() as c:
+    # An already-running extraction must finish before absence can be decided.
+    # Bound SQLite's lock wait; this does not alter business leases or PG policy.
+    with store.tx(wait_seconds=30) as c:
         store.lock_project(c, user, pid)
         _source(store, c, user, pid, rid, key, body, limits)
         previous = read(store, c, user, pid, rid, key)

@@ -23,3 +23,5 @@
 两个独立pytest进程各用正常生成3次Mock及来源Worker1次Mock的fresh种子，正常关闭SQLite后逐字复制到各case，不改lease/clock/deadline，不复用旧seed。预期共8个Mock请求、2次来源Worker；以原件实际计数为准。页面/后端case中不调用Worker或真实模型。执行前完整源码/测试冻结，最后独立源码与原件只读复核；原错误和中断不得覆盖或改签。
 
 本轮不重复旧恢复故障矩阵、不做P-B后续版本/下载、不重试永久取消的旧安装digest并发窗口。Windows/native、PG、真实模型/语义/场景、远端CI与部署均未执行；旧exit139因果/产品关联Unknown及旧满盘独审未落盘缺证保留。实际结果和精确提交将在[本阶段原件](../evidence/pb-extraction-close-20261018/README.md)另附，不预写通过。
+
+首轮冻结 `f0652b42c8c90c3363c8a2dd70b29d45f04b259b` 的后端5PASS/2FAIL/176.66秒，两条实际页面2PASS/236.50秒。POST先行的真实重叠中，关闭连接的SQLite默认5秒锁等待先到期，未完成BEGIN；原提取正常受理，未伪造关闭。另一个失败是测试把真实403 GRANT_REVOKED硬写为PERMISSION_DENIED。原日志、JUnit、HTTP及重叠原件保留。仅新关闭端点复用 `store.tx(wait_seconds=30)` 等待既有受理事务，finally恢复连接原PRAGMA；不改Store、原extract、业务lease/clock/deadline或PG策略。撤权断言精确改为真实错误码。修后重新冻结并复跑同9个聚焦节点；不把首轮7个PASS/2个FAIL改签为全绿。当前PrivateReadBarrier仅实际屏障resource/run等正文；完整账本正文必须在目标gate后读取由源码顺序独审证明，未声称动态journal-cell屏障。
