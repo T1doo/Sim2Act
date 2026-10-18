@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="285.575" timestamp="2026-10-18T18:21:27.563190+00:00" hostname="888ae8c15de7"><testcase classname="tests.test_natural_spec_corrections_ui" name="test_visible_rejection_correction_and_independent_owner[pa-normal]" time="285.215"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: same selected correction Run opens review after Worker completion&#10;      at check (/workspace/Sim2Act/tests/natural_spec_corrections_ui.cjs:8:26)&#10;      at /workspace/Sim2Act/tests/natural_spec_corrections_ui.cjs:42:2&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7f330ea54620&gt;, Settings(database_url='sqlite:////workspace/correction-run-http-worker-2...44993bad3947dfb2f45b7d76da8c8f', 'user_953afb1b41304588ab23785244086f00', 'proj_d8e8a90133cc445fbbfb5caad8dcafa3', ...)
+tmp_path = PosixPath('/workspace/correction-run-http-worker-20261018/pytest-temp/test_visible_rejection_correct0')
+family = 'pa', scenario = 'normal'
+
+    @pytest.mark.parametrize("family,scenario", [("pa", "normal"), ("pb", "run-lost")])
+    def test_visible_rejection_correction_and_independent_owner(env, tmp_path, family, scenario):
+        data, inst, rid, _, goal, content, _, _, _ = rejected(env, family)
+        before = snapshot(data[0])
+        app = data[2].get("/api/apps/" + inst["source_app_id"]).json()
+        info = dict(
+            project=data[4],
+            name=app["name"],
+            run=rid,
+            goal_text=goal["content"]["goal"],
+            scenario=scenario,
+            output=str(tmp_path / "result.json"),
+        )
+        path = tmp_path / "info.json"
+        path.write_text(json.dumps(info))
+        stderr = tmp_path / "node.stderr"
+        worked = []
+        worker_proofs = []
+        http_log = tmp_path / "http.ndjson"
+        with stderr.open("w") as err:
+            process = subprocess.Popen(
+                ["node", "tests/natural_spec_corrections_ui.cjs", str(path)],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=err,
+                text=True,
+                env={**os.environ, "NODE_PATH": "/workspace/node-tools/node_modules"},
+            )
+            try:
+                for line in process.stdout:
+                    request = json.loads(line)
+                    if request.get("done"):
+                        break
+                    if request.get("command") == "worker":
+                        sent = []
+                        claims = drive_to_success(data, request["rid"], transport(sent, content))
+                        worked.append(request["rid"])
+                        worker_proofs.append(dict(run_id=request["rid"], claims=claims, wire=sent))
+                        (tmp_path / "worker-proof.json").write_text(json.dumps(worker_proofs, indent=2))
+                        answer = dict(id=request["id"], status=200, text="{}")
+                    else:
+                        response = data[2].request(
+                            request["method"],
+                            request["path"],
+                            json=request.get("body"),
+                            headers=request.get("headers"),
+                        )
+                        answer = dict(
+                            id=request["id"],
+                            status=response.status_code,
+                            text=response.text,
+                            content_type=response.headers.get("content-type"),
+                        )
+                        if not request["path"].endswith((".js", ".css")) and request["path"] != "/":
+                            with http_log.open("a") as log:
+                                log.write(json.dumps(dict(request=request, response=answer)) + "\n")
+                    process.stdin.write(json.dumps(answer) + "\n")
+                    process.stdin.flush()
+                process.stdin.close()
+                code = process.wait(timeout=20)
+&gt;               assert code == 0, stderr.read_text()
+E               AssertionError: AssertionError [ERR_ASSERTION]: same selected correction Run opens review after Worker completion
+E                     at check (/workspace/Sim2Act/tests/natural_spec_corrections_ui.cjs:8:26)
+E                     at /workspace/Sim2Act/tests/natural_spec_corrections_ui.cjs:42:2
+E                     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 
+E               assert 1 == 0
+
+tests/test_natural_spec_corrections_ui.py:74: AssertionError</failure></testcase></testsuite></testsuites>

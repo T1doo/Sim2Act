@@ -1,0 +1,13 @@
+# Actual correction entry: fresh FAIL + same successful Run continuation PASS
+
+Product source: `89c3663089bd94385ff461c30be4c82d97fb68b2`, unchanged during both runs. No remote operations or real model calls.
+
+- `fresh-fail/`: exact 17 non-DB closed originals (814,681 bytes), manifest SHA `b3da3ecf53cd41f4e37b14a40d6d194202b85398607a8b9697f64d01b952d28c`. One fresh pytest **FAIL** retained (285.58s / outer289.175s), 8 visible checks through exact QUEUED entry; real child Worker single claim SUCCEEDED, Mock1. Raw IPC HTTP, wire/claims, JUnit and failure remain. The executed CJS was reconstructed from local89c+recorded first test patch and verified byte-for-byte against the actual pre-execution SHA; this is labelled reconstruction, not an original runtime source copy.
+- `same-run-continuation/`: exact 14 non-DB closed originals (2,625,031 bytes), manifest SHA `b856f7f99a4ed2e9856b50fba4e31eba4f05f774b31ef2b01859ada59915ca34`. Existing accepted child, same original DB/instance, cold page original-key GET → entry → independent owner decision. PASS117.269s /31checks/52gestures/55frontend requests; Worker0/model0/correctionPOST0. The inherited raw page NEW_WORKER label was erroneous; its correction and exact execution scope are explicit in `classification-correction.json` and `execution.json`.
+- Continuation author snapshots prove only two owner records and two seals appended, all prior rows preserved and typed unchanged. Original parent HTTP11-field comparison passed; recursive correction409 left DB unchanged. First pytest's post-code0 history assertions did not execute and are not counted.
+
+Both are actual served page/JSDOM and TestClient HTTP, not native browser or real semantics. The continuation is not a rerun/pass conversion of the fresh pytest. No old fault matrix was rerun. Local DB snapshots are excluded from the copied non-DB manifests and remain on this instance with documented SHA; full before/after JSON projections are included for the continuation.
+
+After continuation, the test readiness predicate was tightened further and the classification constant made conditional; syntax/static checks only, no third chain. Existing raw bytes are unchanged.
+
+[Finite independent review](review/final-independent-review.md): exact 31 non-DB author originals verified, first fresh FAIL retained and same successful Run continuation PASS. Historical control proofs are distinguished from current qualification; the discovered revoked-source stopping-entry gap remains outside this closed slice. Review manifest SHA `282740a546c4db7afde3e44ee133f4634edb16ef0e11287b02ac43c25c221d52`,17files/103806B. No future commit/push endorsement.
