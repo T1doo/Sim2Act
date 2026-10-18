@@ -356,6 +356,11 @@ async function renderNaturalReceiptCandidate(r,id,current){
 // Only original keys and transient page state; never model/Run submission.
 const trialEntries = new Map();
 let trialGeneration = 0, trialCards = [];
+let trialBudgetGeneration = 0, trialBudgetRead = null, trialBudgetSelection = null;
+function clearTrialBudget() {
+  trialBudgetGeneration++;trialBudgetRead=null;trialBudgetSelection=null;
+  $("trial-budget-output").replaceChildren();$("trial-budget-status").textContent="";
+}
 const trialContext = () => ({identity: token, connection: identityConnectionGeneration, project: $("project-select").value, generation: trialGeneration});
 const trialCurrent = c => c.identity === token && c.connection === identityConnectionGeneration && c.project === $("project-select").value && c.generation === trialGeneration;
 const trialIndex = c => JSON.stringify([c.identity, c.project]);
@@ -386,6 +391,7 @@ function trialHistoryChanged() {
   renderTrialConsent();
 }
 function clearTrialConsent() {
+  clearTrialBudget();
   trialGeneration++; trialCards = [];
   for (const entry of trialEntries.values()) { entry.operation = (entry.operation || 0) + 1; entry.receipt = null; if (["known", "sending", "unapproved", "closed"].includes(entry.state)) entry.state = "unknown"; }
   $("trial-ack").checked = false; $("trial-withdraw-ack").checked = false; $("trial-end-ack").checked = false;
@@ -404,6 +410,8 @@ function trialValid(r, key) {
 }
 function renderTrialConsent() {
   const entry = trialEntry(), r = entry?.receipt, busy = entry?.state === "sending", unknown = ["unknown", "unapproved"].includes(entry?.state);
+  if(trialBudgetSelection && (trialBudgetSelection.entry!==entry || trialBudgetSelection.receipt!==r || trialBudgetSelection.operation!==entry?.operation))clearTrialBudget();
+  $("trial-budget-read").disabled=busy || unknown || !trialBudgetApproval(r) || !!trialBudgetRead?.current();
   const expired = r?.expired || r?.review_expired || (r?.contract && Date.now() >= trialReviewDeadline(r.contract) * 1000);
   $("trial-source").disabled = $("trial-cold").disabled = Boolean(entry);
   $("trial-prepare").disabled = !token || !$("project-select").value || Boolean(entry) || trialCards.length < 2;
@@ -416,6 +424,7 @@ function renderTrialConsent() {
   if (entry) $("trial-status").textContent = entry.message;
 }
 function showTrialScope(r) {
+  clearTrialBudget();
   const c = r.contract;
   if (!c) { $("trial-scope").textContent = `仅恢复同意元数据。批准：${r.approved}；撤回：${r.revoked}；过期：${r.expired}。材料不可读取时不展示旧私有范围；仍可明确撤回。LIVE 关闭。`; return; }
   const fields = {title: "名称", goal: "目标", known: "已知", assumptions: "假设", unresolved: "未决项", constraints: "硬条件", acceptance_checks: "验收检查", resource_refs: "绑定材料"};
@@ -423,6 +432,110 @@ function showTrialScope(r) {
   const cap = c.caps;
   const deadlines = c.namespace === "natural-live-trial.v2" ? `V2 审阅截止 ${new Date(c.review_expires_at * 1000).toISOString()}；执行截止 ${new Date(c.execution_expires_at * 1000).toISOString()}。均从准备时冻结，恢复、批准、重放不续期。总时窗60分钟含5分钟审阅；每个后继阶段须在前序 Run 受理后15分钟内明确批准（含前序最多300秒、排队及人工交接）。每 Run 的300秒含额度等待、模型延迟和工具工作；人工迟到或剩余时间不足即拒绝。不是七槽完成保证。` : "V1 原单一期限保持，不迁移或续期。";
   $("trial-scope").textContent = `P-A 精确准备与同意范围\n${deadlines}\n项目 ${c.project_id}\n身份 ${c.principal_id}\n运行身份 ${c.runtime_id}\n模型 ${c.model}\n端点 ${c.endpoint}\n流式 ${c.stream}\n额度主体 ${c.quota_subject}（尚未配置、未验证免费资格）\n期限 ${new Date(c.expires_at * 1000).toISOString()}（不会因恢复延长）\n生成 ${cap.generate_requests} / Source ${cap.source_requests} / Cold ${cap.cold_requests}，共 ${cap.max_requests} 槽\n每请求输出 ≤${cap.max_output_tokens} tokens；总输出 ≤${cap.total_output_tokens}\n每请求 wire ≤${cap.max_wire_bytes} bytes；响应 ASCII ≤${cap.max_response_ascii_bytes} bytes\n每 Run 预留 ≤${cap.per_run_reserved}；总预留 ≤${cap.total_reserved}\n每 Run ≤${cap.run_seconds} 秒；lease ${cap.lease_seconds} 秒；每分钟 ${cap.requests_per_minute} 请求；付费上限 ${cap.paid_cap}\n阶段键 ${Object.entries(c.stage_keys).map(([k,v]) => `${k}: ${v}`).join("；")}\n批准：${r.approved}；撤回：${r.revoked}；过期：${r.expired}\n\n${materials}\n\n此入口新增 Run / 槽 / 外发均为 0。LIVE 与正式发布保持关闭；不是实际运行或完整 P-A/P-B 验收。`;
+}
+function trialBudgetApproval(receipt) {
+  const approval=receipt?.approval,accepted=approval?.approval,key=accepted?.request?.request_key;
+  return receipt?.contract && receipt.approved===true && approval?.live_allowed===false
+    && approval.fee_status==="NOT_VERIFIED" && approval.contract_fingerprint===receipt.review_token
+    && accepted?.contract_fingerprint===receipt.review_token && /^[A-Za-z0-9_-]{1,100}$/.test(key||"") ? key : null;
+}
+async function validateTrialBudget(value,receipt,key) {
+  const contract=receipt.contract,scope=value?.scope,p=value?.budget_projection,money=p?.money;
+  const digest=await paHash(contract);
+  const expected={trial_key:contract.trial_key,approval_key:key,contract_fingerprint:digest,
+    project_id:contract.project_id,principal_id:contract.principal_id,runtime_id:contract.runtime_id,
+    quota_subject:contract.quota_subject,expires_at:contract.expires_at};
+  const integer=n=>Number.isSafeInteger(n)&&n>=0;
+  if(digest!==receipt.review_token || !scope || goalRunCanonical(scope)!==goalRunCanonical(expected)
+    || value.dispatch_authorized!==false || value.live_admission!=="NOT_VERIFIED"
+    || p?.dispatch_authorized!==false || p.contract_kind!=="EXACT_SEVEN_SLOT_SYNTHETIC_TRIAL"
+    || money?.paid_cap!==0 || money.actual_paid!==null || money.currency!==null || money.status!=="UNKNOWN"
+    || money.fee_verification!=="NOT_LIVE_VERIFIED" || money.live_allowed!==false
+    || !["ACCOUNTED","HALTED","RECONCILING"].includes(value.status)
+    || !["KNOWN","UNKNOWN"].includes(value.usage_status) || typeof value.ledger?.halted!=="boolean"
+    || !Array.isArray(value.ledger.slots) || value.ledger.slots.length!==value.reserved_requests
+    || ![value.reserved_requests,value.reserved_envelope,value.known_total_tokens,p.unresolved_usage_requests,p.known_unaccepted_tokens].every(integer)
+    || p.held_requests!==value.reserved_requests || p.held_token_envelope!==value.reserved_envelope
+    || p.request_limit!==contract.caps.max_requests || p.token_envelope_limit!==contract.caps.total_reserved
+    || p.output_token_limit!==contract.caps.total_output_tokens
+    || p.unreserved_request_capacity!==p.request_limit-p.held_requests || !integer(p.unreserved_request_capacity)
+    || p.unreserved_token_capacity!==p.token_envelope_limit-p.held_token_envelope || !integer(p.unreserved_token_capacity)
+    || p.unresolved_usage_requests>p.held_requests || (value.usage_status==="UNKNOWN")!==(p.unresolved_usage_requests>0)
+    || (value.usage_status==="UNKNOWN" ? value.total_tokens!==null : !integer(value.total_tokens)||value.total_tokens!==value.known_total_tokens))throw Error("预算回执与原试验范围或未知用量边界不符");
+  let held=0,envelope=0,known=0,components=0,knownUnaccepted=0;
+  const stages=[["generate",contract.caps.generate_requests],["source",contract.caps.source_requests],["cold",contract.caps.cold_requests]];
+  const slots=value.ledger.slots;
+  if(!p.stages || Object.keys(p.stages).sort().join()!=="cold,generate,source" || !value.ledger.stage_runs)throw Error("预算阶段不符");
+  for(const slot of slots){
+    const reservation=slot.reservation,settlement=slot.settlement;
+    if(!reservation || !stages.some(([name])=>name===reservation.stage) || !/^run_[a-f0-9]{32}$/.test(reservation.run_id)
+      || !Number.isSafeInteger(reservation.wire_bytes) || reservation.wire_bytes<1 || reservation.wire_bytes>contract.caps.max_wire_bytes
+      || typeof slot.accepted!=="boolean" || settlement!==null && (!settlement
+        || ![settlement.prompt_tokens,settlement.completion_tokens,settlement.total_tokens].every(n=>n===null||integer(n))))throw Error("原预留或用量字段不符");
+    const complete=settlement!==null && [settlement.prompt_tokens,settlement.completion_tokens,settlement.total_tokens].every(integer)
+      && settlement.total_tokens===settlement.prompt_tokens+settlement.completion_tokens;
+    if(slot.accepted&&!complete)throw Error("未知用量不得标为已接受");
+    if(complete){known++;if(!slot.accepted)knownUnaccepted+=settlement.total_tokens;}
+    if(settlement!==null)components+=settlement.total_tokens??0;
+  }
+  for(const [name,limit] of stages){
+    const stage=p.stages[name],own=slots.filter(slot=>slot.reservation.stage===name),run=own[0]?.reservation.run_id??null;
+    const reserved=own.reduce((total,slot)=>total+slot.reservation.wire_bytes+contract.caps.max_output_tokens,0);
+    if(stage.request_limit!==limit || !integer(stage.held_requests) || stage.unreserved_request_capacity!==limit-stage.held_requests
+      || !integer(stage.unreserved_request_capacity) || stage.token_envelope_limit!==contract.caps.per_run_reserved
+      || !integer(stage.held_token_envelope) || stage.unreserved_token_capacity!==stage.token_envelope_limit-stage.held_token_envelope
+      || !integer(stage.unreserved_token_capacity) || stage.held_requests!==own.length || stage.held_token_envelope!==reserved
+      || stage.run_id!==run || own.some(slot=>slot.reservation.run_id!==run)
+      || (own.length?value.ledger.stage_runs[name]!==run:name in value.ledger.stage_runs))throw Error("预算阶段计数或原 Run 不符");
+    held+=stage.held_requests;envelope+=stage.held_token_envelope;
+  }
+  if(Object.keys(value.ledger.stage_runs).length!==stages.filter(([name])=>p.stages[name].held_requests>0).length
+    || held!==p.held_requests || envelope!==p.held_token_envelope || p.unresolved_usage_requests!==slots.length-known
+    || value.known_total_tokens!==components || p.known_unaccepted_tokens!==knownUnaccepted
+    || value.total_tokens!==(known===slots.length?components:null)
+    || value.status!==(known!==slots.length?"RECONCILING":value.ledger.halted?"HALTED":"ACCOUNTED"))throw Error("跨 Run 预算合计或未知用量不符");
+  return value;
+}
+function renderTrialBudget(value) {
+  const p=value.budget_projection,output=$("trial-budget-output");
+  output.replaceChildren(row(`已保留 ${p.held_requests} / ${p.request_limit} 槽 · 保守预留 ${p.held_token_envelope} / ${p.token_envelope_limit}`),
+    row(`账本状态 ${value.status} · 已停止 ${value.ledger.halted} · 未决用量 ${p.unresolved_usage_requests}`),
+    row(`完整 total_tokens：${value.total_tokens===null?"未知":value.total_tokens} · 已返回 total_tokens 分量：${value.known_total_tokens} · 已知未接受 tokens：${p.known_unaccepted_tokens}`),
+    row("实际费用：UNKNOWN（币种未知）· 付费上限 0；免费权益与强制不可收费未核实，LIVE 继续拒绝。"),
+    row("成功、失败和未知槽均保留，不退款或因换 Run 重置。以下未预留容量仅为数学余量，不是发送许可；保守预留不是实际 tokenizer 用量或货币。"));
+  const table=document.createElement("table"),head=document.createElement("thead"),titles=document.createElement("tr"),body=document.createElement("tbody");
+  for(const text of ["阶段","原 Run","已保留槽","未预留槽容量（非许可）","保守预留","未预留 token 容量"]){const cell=document.createElement("th");cell.scope="col";cell.textContent=text;titles.append(cell);}
+  head.append(titles);
+  for(const [name,label] of [["generate","生成"],["source","Source"],["cold","Cold"]]){
+    const stage=p.stages[name],tr=document.createElement("tr");tr.dataset.trialBudgetStage=name;
+    for(const text of [label,stage.run_id??"无已保留 Run",`${stage.held_requests} / ${stage.request_limit}`,stage.unreserved_request_capacity,`${stage.held_token_envelope} / ${stage.token_envelope_limit}`,stage.unreserved_token_capacity]){
+      const cell=document.createElement("td");cell.textContent=text;tr.append(cell);
+    }
+    body.append(tr);
+  }
+  table.append(head,body);output.append(table);
+}
+async function readTrialBudget() {
+  const ctx=trialContext(),entry=trialEntry(),receipt=entry?.receipt,key=trialBudgetApproval(receipt);
+  if(!trialCurrent(ctx) || entry?.state!=="known" || !key || trialBudgetRead?.current())return;
+  clearTrialBudget();
+  const serial=trialBudgetGeneration,operation=entry.operation,workspace=workspaceSelectionGeneration;
+  const current=()=>trialCurrent(ctx)&&serial===trialBudgetGeneration&&workspace===workspaceSelectionGeneration
+    && trialEntry()===entry&&entry.receipt===receipt&&entry.operation===operation&&entry.state==="known";
+  const read={current};trialBudgetRead=read;trialBudgetSelection={entry,receipt,operation};
+  $("trial-budget-status").textContent="正在重新鉴权并读取原试验的跨 Run 预算…";renderTrialConsent();
+  try {
+    const value=await api(`${entry.base}/approvals/${encodeURIComponent(key)}/budget`);
+    if(!current())return;
+    await validateTrialBudget(value,receipt,key);
+    if(!current())return;
+    renderTrialBudget(value);$("trial-budget-status").textContent="已核对原试验账目。仅只读回执，不恢复、批准或发送模型请求。";
+  } catch(error){
+    if(!current())return;
+    entry.message="预算读取未通过；旧私有范围已清除，请先只读取原准备键重新核查。LIVE 关闭。";
+    clearTrialConsent();
+    $("trial-budget-status").textContent=`查账未通过：${error.detail||error.message}。不能据此认定零用量、费用 0 或允许发送；未显示旧账目。`;
+  } finally {if(trialBudgetRead===read){trialBudgetRead=null;if(current())renderTrialConsent();}}
 }
 async function refreshTrialCards() {
   clearTrialConsent();
@@ -531,6 +644,7 @@ async function endTrialPreparation() {
 $("trial-end").onclick = safe(endTrialPreparation);
 $("trial-end-ack").onchange = renderTrialConsent;
 $("trial-refresh").onclick = safe(refreshTrialCards);
+$("trial-budget-read").onclick = safe(readTrialBudget);
 $("trial-prepare").onclick = safe(prepareTrial);
 $("trial-recover").onclick = safe(recoverTrial);
 $("trial-consent").onclick = safe(() => mutateTrial());
