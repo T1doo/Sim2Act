@@ -40,3 +40,5 @@
 - [有界合同/执行说明](../../F2/PBNaturalExtractionClose20261018.md)、[原始bundle](raw-evidence.tar.gz)
 
 原件4742文件/173281698bytes；bundle 19922127bytes，SHA256 `3d24c848a10c55b6deb650ec30a3f41caacebbcb6d96c3816adf3fb6311ba902`。原始bytes、tar成员和大UTF8分段逐字复算。源码正常push回执在author原件；文档最终push/HEAD与remote/clean/0未推送证明另落外部最终交付目录，避免本提交引用自身SHA形成循环。
+
+首次文档提交33935279的最终Git blob核对发现53个合成`.db`被仓库ignore规则漏收；日志已齐，原bundle内全部原件始终完整。仅按此已核验证据目录清单显式补收53数据库，正常追加文档提交；源码及执行资格不变。[首次核对实际stderr](publication-checks/first-verification-stderr.txt)和[精确漏收路径](publication-checks/git-ignored-publication-gap.json)保留，最终逐文件Git blob重新核对，不把首次失败改签。
