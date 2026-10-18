@@ -1,0 +1,27 @@
+# 从安装包开始的空白合成工程
+
+这是一条本地练习入口：仅使用非敏感合成 CSV、固定求和工具和公开测试身份；项目、材料、Goal、应用和结果由你自己创建，并保存在明确指定的目录。自然模型生成、LIVE 和正式发布关闭。它不需要模型凭据或 PostgreSQL，普通生产启动仍要求原 PostgreSQL 权限边界。
+
+先在 Python 3.12 虚拟环境中安装本开发版本的 wheel，或在源码目录执行 `python -m pip install .`。安装会准备锁定依赖；需要可用的软件包源。本轮验证的是 Linux 上的 wheel 安装，并显式复用已有锁定依赖目录，未验证干净机器依赖下载或 Windows 安装。
+
+安装后可离开源码目录运行（路径含空格需引号；目录必须尚不存在，父目录必须存在）：
+
+```text
+sim2act synthetic-workspace --new --data-dir "你的绝对路径/合成工程"
+```
+
+终端输出 `SYNTHETIC_WORKSPACE_READY` 后，打开其中的 `url`，在页面输入公开测试登录 `public-synthetic-blank-workspace` 并连接。默认端口由系统分配；需要固定端口时显式加 `--port 端口号`，只监听 `127.0.0.1`。
+
+1. 创建项目。在材料区保存 CSV，例如 `item,amount` 两行分别为 `A,10`、`B,20`。
+2. 在目标区新建完整 Goal 卡，填写目标、已知、假设、未决项、硬条件及验收检查，选择该 CSV 并保存。
+3. 在目标卡下选择已有 CSV 和 `MOCK固定能力`，显式保存候选；在候选预览选择 `amount` 运行，应显示合计 `30`。
+4. 准备内部版本，核对并勾选确认后保存；选择创建内部实例，显式提交持久 AppRun。原 Worker 后台执行；通过“刷新”读取同一 Run 的 `SUCCEEDED` 及结果版本。工具求和正确不代表自然目标已验收。
+5. 在终端按 Ctrl+C，等待 `SYNTHETIC_WORKSPACE_STOPPED` 且 `clean:true`。数据目录保留。后续用以下命令打开原工程，在应用目录选择原应用和历史 Run：
+
+```text
+sim2act synthetic-workspace --data-dir "同一个绝对路径/合成工程"
+```
+
+重开不初始化、不迁移、不清空；未知目录、符号链接、结构不匹配或身份变化会停止。此入口暂拒绝含 `?` 的目录名。不要编辑 marker 或数据库，不要把已有普通数据目录交给 `--new`。退出时尚未完成的任务仍服从原租约和恢复规则，关闭页面不会取消任务。
+
+此工程的测试身份和 token 是公开常量，不用于私密材料。任意自然语言模型任务会被原 Worker 标记为 `UNSUPPORTED_CAPABILITY`，服务继续可用。[实现依据、实际证据和限制](BlankSyntheticWorkspace20261018.md)；Win11、真实模型与语义、PostgreSQL、远端 CI 和正式产品验收未在本片执行。

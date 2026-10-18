@@ -2,6 +2,8 @@
 
 目标环境是 Windows 11 x64 原生、Python 3.12 x64、PowerShell 7 和本机 PostgreSQL。本说明与新增预检在 Linux 验证；**真实 Win11 普通用户安装/启动未测**，不能据此签收 AT-01、AT-27 或 F1。MOCK 不需要模型账号，当前工程能力与正式产品验收边界见 [README](../README.md)。
 
+只想先用非敏感 CSV 练习时，可选择[安装包空白合成工程入口](F2/BlankSyntheticWorkspaceQuickstart.md)：独立公开测试身份，不读取环境凭据或生产 DSN，保留本机工程供下次打开；不替代下列普通 PostgreSQL 安装步骤。
+
 本切片基线为 `e828c066ec63689fe5de5d66f650eda33c0086e8`。安装切片源 `e700db211378e67ca99529f4a5270f0ea6162769` 已正常整合至当前开发工作副本；拉取分支使用 `dev/f1-foundation`。本说明不要求管理员权限来运行 API/worker；数据库建库、建角色和授权由本机数据库管理员另外准备。
 
 ## 1. 准备软件与拉取代码

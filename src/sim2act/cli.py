@@ -9,10 +9,27 @@ from .db import Store
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["migrate", "init-user", "schemas", "probe"])
+    parser.add_argument("command", choices=["migrate", "init-user", "schemas", "probe", "synthetic-workspace"])
     parser.add_argument("--name", default="Local user")
     parser.add_argument("--output")
+    parser.add_argument("--data-dir")
+    parser.add_argument("--new", action="store_true")
+    parser.add_argument("--port", type=int, default=0)
     args = parser.parse_args()
+    if args.command != "synthetic-workspace" and (args.data_dir or args.new or args.port != 0):
+        parser.error("--data-dir, --new and --port belong to synthetic-workspace only")
+    if args.command == "synthetic-workspace":
+        from .synthetic_workspace import WorkspaceError, serve
+
+        if not args.data_dir:
+            parser.error("synthetic-workspace requires an explicit --data-dir")
+        try:
+            serve(args.data_dir, new=args.new, port=args.port)
+        except WorkspaceError as error:
+            parser.exit(1, "Synthetic workspace stopped; existing data preserved: " + str(error) + "\n")
+        except Exception:
+            parser.exit(1, "Synthetic workspace failed; data preserved; check local prerequisites.\n")
+        return
     if args.command == "probe":
         from pathlib import Path
 

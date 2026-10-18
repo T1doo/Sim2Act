@@ -6,6 +6,8 @@
 
 [本机安装与只读预检](docs/Installation.md)：MOCK 工程体验；真实 Win11 普通用户首次启动仍未测。
 
+[从安装包开始的空白合成工程](docs/F2/BlankSyntheticWorkspaceQuickstart.md)：显式新目录、自己创建 CSV/Goal/应用、原 Worker 运行与保留数据后冷重开；仅公开测试身份和固定工具，真实模型与发布关闭。
+
 [CSV 列绑定局部修改](docs/F2/ColumnBindingPatchQuickstart.md)：同一求和节点 amount → quantity 新草案、精确版本确认、实际只读检查和无关对象保持证明。离线工程候选未验收，旧应用不覆盖，正式发布关闭。
 
 [固定 CSV 三步 DAG](docs/F2/FixedCsvDagQuickstart.md)：在同一应用保存预览 → 求和 → 固定文字报告计划，复用既有 Worker 与持久步骤回执，支持精确确认和冷恢复。离线工程候选未验收。
@@ -26,7 +28,7 @@
 ## 运行边界
 
 - 目标：Windows 11 x64 原生、Python 3.12 x64、PowerShell 7、PostgreSQL。Windows 精确 OS/依赖组合及脚本实测 **BLOCKED**。
-- 已测：云端 Linux、Python 3.12.14、临时 PostgreSQL 17.9；SQLite 仅用于工程夹具，应用启动拒绝 SQLite。
+- 已测：云端 Linux、Python 3.12.14、临时 PostgreSQL 17.9；SQLite 仅用于显式合成工程和测试夹具，普通应用启动拒绝 SQLite。
 - 云端Windows Server2025工程已测：Python3.12.10 x64、临时PG17.11、六PowerShell接口及111项回归通过；[CI结果与限制](docs/F1/WindowsCI.md)。目标Win11原生验收仍待实测。
 - 审计发现的owner环境继承已[本地修复](docs/evidence/F1-env-isolation-20261005/README.md)，Linux PG114项通过；修复后的Windows CI未运行，旧111项不能作为该修复的验证。
 - 前端是随 Python 包分发的静态 HTML/CSS/JS，无 Node 构建依赖；默认本机 API 提供资源，不启动每应用服务器。
