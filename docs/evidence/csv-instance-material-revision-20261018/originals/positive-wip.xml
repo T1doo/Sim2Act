@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="162.371" timestamp="2026-10-18T02:40:28.971519+00:00" hostname="31571a76ef61"><testcase classname="tests.test_csv_material_revisions" name="test_authorized_B_same_instance_check_cas_result_pending_and_immutable_A" time="160.618"><failure message="pydantic_core._pydantic_core.ValidationError: 3 validation errors for Preview&#10;expected_data_version&#10;  Extra inputs are not permitted [type=extra_forbidden, input_value=1, input_type=int]&#10;    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden&#10;resource_id&#10;  Extra inputs are not permitted [type=extra_forbidden, input_value='res_4bf4a820e99e461faf6c6c5860816898', input_type=str]&#10;    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden&#10;source_hash&#10;  Extra inputs are not permitted [type=extra_forbidden, input_value='2dd38aecc285deea28464d6c...0186c9cd16183392990c5b4', input_type=str]&#10;    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden">env = (&lt;sim2act.db.Store object at 0x7fa8b5db9d00&gt;, Settings(database_url='sqlite:////workspace/csv-instance-material-revisi...a0aad284ec4a1c9aacb2a5295eb3ef', 'user_13f949f6ee6d4bbbb38c321444e18f45', 'proj_2289d629c99842e6bd81ac30f8749b15', ...)
+tmp_path = PosixPath('/workspace/csv-instance-material-revision-evidence-20261018/positive-wip/test_authorized_B_same_instanc0')
+
+    def test_authorized_B_same_instance_check_cas_result_pending_and_immutable_A(env, tmp_path):
+        seed = prepared(env)
+        data, aid, base, current, path, material_path, body, v2, old_value, goal = seed
+        before = snapshot(data[0])
+        value = proposal(seed)
+        assert value["namespace"] == material.VERSION
+        assert value["input"] == value["baseline_input"] == {"column": "quantity"}
+        assert value["material"] == {"resource_id": body["resource_id"], "hash": B_HASH, "format": "csv", "revision": 1}
+        assert value["context"]["source"]["resource_id"] == data[6]
+        assert value["context"]["goal"]["snapshot"]["content"]["resource_refs"] == [data[6]]
+        assert value["effective_candidate"]["goal"] == goal
+        assert value["effective_candidate"]["manifest"]["data_bindings"][0]["resource_ref"] == body["resource_id"]
+        assert value["effective_candidate"]["source_hash"] == B_HASH
+        assert value["spec_revision"] == 3
+        assert value["effective_fingerprint"] != old_value["effective_fingerprint"]
+        assert data[2].post(material_path + "/previews", json=body).json() == value
+        accepted = start(data, path, value)
+        assert accepted["check_instance_id"] != current["id"]
+        unchanged = data[2].get(f"/api/internal/instances/{current['id']}").json()
+        assert (unchanged["revision"], unchanged["data_version"], unchanged["release_id"]) == (2, 1, v2["id"])
+        drive(data, accepted["run_id"])
+        check_run = jobs.inspect_job(data[0], data[3], accepted["run_id"])
+        assert check_run["result"]["sum"] == "18" and check_run["result"]["count"] == 2
+        version = approve(data, path, value)
+        assert version["snapshot"]["draft"] == base["snapshot"]["draft"]
+&gt;       adopted = adopt(data, current, path, value, version)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_csv_material_revisions.py:178: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_csv_column_revisions.py:18: in adopt
+    r=data[2].post(path+"/adoption-approvals",json=body)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+tests/test_csv_goal_revisions.py:38: in request
+    response = original(method,url,**kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:463: in request
+    return super().request(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:360: in handle_request
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+../sim2act-venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/api.py:184: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+../sim2act-venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:697: in app
+    await route.handle(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/routing.py:282: in handle
+    await self.app(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../sim2act-venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:670: in app
+    raw_response = await run_endpoint_function(
+../sim2act-venv/lib/python3.12/site-packages/fastapi/routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/starlette/concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+../sim2act-venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/csv_goal_revisions.py:651: in adopt
+    result = lifecycle.prepare_switch(store,user,iid,body.target_release_id,body.expected_revision,limits,
+src/sim2act/lifecycle.py:973: in prepare_switch
+    dependency_fp = switch_preflight(store, c, user, iid, target_id)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/lifecycle.py:552: in switch_preflight
+    _,sealed = csv_revision.pair(c,user,ref["instance_id"],csv_revision.PREVIEW,ref["preview_key"],csv_revision.Preview)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7fa8af563cb0&gt;
+user = 'user_9ba0aad284ec4a1c9aacb2a5295eb3ef'
+lid = 'iinstance_74c0de7009bb4155ad18d7b2f351b9ec'
+kind = 'csv-goal-revision.v1.preview', key = 'replace-material-B'
+model = &lt;class 'sim2act.csv_goal_revisions.Preview'&gt;
+
+    def pair(c, user, lid, kind, key, model):
+        rows = [graph.lookup(c, user, lid, k, key) for k in (kind, kind + "_seal")]
+        require(all(rows), "Independent text logic seals missing")
+        left, right = [graph.checked(r) for r in rows]
+        require(set(left) == {"request", "response"} and fingerprint(left) == fingerprint(right))
+&gt;       body = model.model_validate(left["request"])
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 3 validation errors for Preview
+E       expected_data_version
+E         Extra inputs are not permitted [type=extra_forbidden, input_value=1, input_type=int]
+E           For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden
+E       resource_id
+E         Extra inputs are not permitted [type=extra_forbidden, input_value='res_4bf4a820e99e461faf6c6c5860816898', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden
+E       source_hash
+E         Extra inputs are not permitted [type=extra_forbidden, input_value='2dd38aecc285deea28464d6c...0186c9cd16183392990c5b4', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden
+
+src/sim2act/text_logic_reuse.py:148: ValidationError</failure></testcase></testsuite></testsuites>

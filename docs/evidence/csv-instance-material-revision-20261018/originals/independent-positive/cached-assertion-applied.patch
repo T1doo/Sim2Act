@@ -1,0 +1,20 @@
+diff --git a/tests/test_csv_material_revisions.py b/tests/test_csv_material_revisions.py
+index e3e9307..d50422a 100644
+--- a/tests/test_csv_material_revisions.py
++++ b/tests/test_csv_material_revisions.py
+@@ -183,7 +183,14 @@ def test_authorized_B_same_instance_check_cas_result_pending_and_immutable_A(env
+     response = data[2].post(f"/api/internal/instances/{current['id']}/runs", json=request)
+     assert response.status_code == 202, response.text
+     fresh = response.json()
+-    assert data[2].post(f"/api/internal/instances/{current['id']}/runs", json=request).json() == fresh
++    assert fresh["cached"] is False
++    replay = data[2].post(f"/api/internal/instances/{current['id']}/runs", json=request)
++    assert replay.status_code == 202, replay.text
++    replay = replay.json()
++    assert replay["cached"] is True
++    assert {key: val for key, val in replay.items() if key != "cached"} == {
++        key: val for key, val in fresh.items() if key != "cached"
++    }
+     drive(data, fresh["run_id"])
+     result = jobs.inspect_job(data[0], data[3], fresh["run_id"])
+     assert result["status"] == "SUCCEEDED" and result["result_version"] == 2

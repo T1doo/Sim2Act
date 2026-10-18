@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="3" time="801.847" timestamp="2026-10-18T02:47:18.208074+00:00" hostname="31571a76ef61"><testcase classname="tests.test_csv_material_revisions" name="test_authorized_B_same_instance_check_cas_result_pending_and_immutable_A" time="287.074"><failure message="AssertionError: assert {'app_run_id'...NG_ONLY', ...} == {'app_run_id'...NG_ONLY', ...}&#10;  &#10;  Omitting 6 identical items, use -vv to show&#10;  Differing items:&#10;  {'cached': True} != {'cached': False}&#10;  Use -v to get more diff">env = (&lt;sim2act.db.Store object at 0x7fb9b0154f80&gt;, Settings(database_url='sqlite:////workspace/csv-instance-material-revisi...c60f037ad94fefa569bb912588b39f', 'user_9c954954fcd94190aa1431c060d3da9a', 'proj_1b6a04b8aa134a099fc18acd4d5218b9', ...)
+tmp_path = PosixPath('/workspace/csv-instance-material-revision-evidence-20261018/author-805afe60/test_authorized_B_same_instanc0')
+
+    def test_authorized_B_same_instance_check_cas_result_pending_and_immutable_A(env, tmp_path):
+        seed = prepared(env)
+        data, aid, base, current, path, material_path, body, v2, old_value, goal = seed
+        before = snapshot(data[0])
+        value = proposal(seed)
+        assert value["namespace"] == material.VERSION
+        assert value["input"] == value["baseline_input"] == {"column": "quantity"}
+        assert value["material"] == {"resource_id": body["resource_id"], "hash": B_HASH, "format": "csv", "revision": 1}
+        assert value["context"]["source"]["resource_id"] == data[6]
+        assert value["context"]["goal"]["snapshot"]["content"]["resource_refs"] == [data[6]]
+        assert value["effective_candidate"]["goal"] == goal
+        assert value["effective_candidate"]["manifest"]["data_bindings"][0]["resource_ref"] == body["resource_id"]
+        assert value["effective_candidate"]["source_hash"] == B_HASH
+        assert value["spec_revision"] == 3
+        assert value["effective_fingerprint"] != old_value["effective_fingerprint"]
+        assert data[2].post(material_path + "/previews", json=body).json() == value
+        accepted = start(data, path, value)
+        assert accepted["check_instance_id"] != current["id"]
+        unchanged = data[2].get(f"/api/internal/instances/{current['id']}").json()
+        assert (unchanged["revision"], unchanged["data_version"], unchanged["release_id"]) == (2, 1, v2["id"])
+        drive(data, accepted["run_id"])
+        check_run = jobs.inspect_job(data[0], data[3], accepted["run_id"])
+        assert check_run["result"]["sum"] == "18" and check_run["result"]["count"] == 2
+        version = approve(data, path, value)
+        assert version["snapshot"]["draft"] == base["snapshot"]["draft"]
+        adopted = adopt(data, current, path, value, version)
+        assert (adopted["id"], adopted["runtime_id"], adopted["source_app_id"]) == (current["id"], current["runtime_id"], aid)
+        assert adopted["revision"] == 3 and adopted["data_version"] == 1
+        request = dict(expected_revision=3, expected_release_fingerprint=version["fingerprint"],
+            input={"column": "quantity"}, request_key="B-first-business-result", csv_review="FREEZE_SUM_ONLY_WITHOUT_MD")
+        response = data[2].post(f"/api/internal/instances/{current['id']}/runs", json=request)
+        assert response.status_code == 202, response.text
+        fresh = response.json()
+&gt;       assert data[2].post(f"/api/internal/instances/{current['id']}/runs", json=request).json() == fresh
+E       AssertionError: assert {'app_run_id'...NG_ONLY', ...} == {'app_run_id'...NG_ONLY', ...}
+E         
+E         Omitting 6 identical items, use -vv to show
+E         Differing items:
+E         {'cached': True} != {'cached': False}
+E         Use -v to get more diff
+
+tests/test_csv_material_revisions.py:186: AssertionError</failure></testcase><testcase classname="tests.test_csv_material_revision_pages" name="test_visible_material_replacement_actual_http_and_fenced_recovery[flow-recovery]" time="359.434"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:&#10;  + actual - expected&#10;  &#10;    {&#10;  +   consumed: false,&#10;  +   data_preserved: true,&#10;  +   expires_at: 1792292510.8744965,&#10;      fingerprint: 'df50bf8fcddd88d47a764f8e46c825fb3f195a4daf4bfc7c81ac20827247218a',&#10;  +   from_schema_version: 1,&#10;  -   formal_publication_enabled: false,&#10;      id: 'iapproval_9b5c0526d50d4209b80ee1afa7255533',&#10;  +   kind: 'switch',&#10;  +   new_grants: false,&#10;  +   payload: {&#10;  +     approval_id: 'iapproval_9b5c0526d50d4209b80ee1afa7255533',&#10;  +     data_fingerprint: '9e316ce6334b38d53a91c74dc0b0c1f9e04432500a20175240d64d9f06b2ea49',&#10;  +     data_version: 1,&#10;  +     expires_at: 1792292510.8744965,&#10;  +     from_release_id: 'irelease_78bd74d935504de9a352eb21c1200999',&#10;  +     grant_version: '80b9a6bbfb673fb82cf963c2dc812799c1c9b1c04e158412729ac51c4f4b5a78',&#10;  +     instance_id: 'iinstance_40925902ffbd450d82c1ece2c6e7f1f2',&#10;  +     kind: 'switch',&#10;  +     logic_dependency_fingerprint: '40964677808c8ca5fa8b7080b37f554787e9a4862662f6cf52602766ed668b6d',&#10;  +     principal_id: 'user_511546c0824f4cb9bf76744f736ddf0c',&#10;  +     project_id: 'proj_b9877b1059c64afc8aa29fe1b89ece0d',&#10;  +     revision: 2,&#10;  +     target_fingerprint: 'eab7be292b6fa7c32532e0930946e2cf2e20f7de75ffbc8b404737e388dc52af',&#10;  +     target_release_id: 'irelease_166e823f1a7f46fa8f6532a48043af2c'&#10;  +   },&#10;  +   principal_id: 'user_511546c0824f4cb9bf76744f736ddf0c',&#10;  +   project_id: 'proj_b9877b1059c64afc8aa29fe1b89ece0d',&#10;  +   retained_records: 1,&#10;  +   target_schema_version: 1&#10;  -   namespace: 'INTERNAL_ENGINEERING_ONLY'&#10;    }&#10;  &#10;      at confirmationReturn (/workspace/Sim2Act/tests/csv_material_revision.cjs:65:9)&#10;      at async /workspace/Sim2Act/tests/csv_material_revision.cjs:118:42&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7fb9ae420170&gt;, Settings(database_url='sqlite:////workspace/csv-instance-material-revisi...1546c0824f4cb9bf76744f736ddf0c', 'user_534b4b46ae8b4a14a96bba3026a147fa', 'proj_b9877b1059c64afc8aa29fe1b89ece0d', ...)
+tmp_path = PosixPath('/workspace/csv-instance-material-revision-evidence-20261018/author-805afe60/test_visible_material_replacem0')
+case = 'flow-recovery'
+
+    @pytest.mark.parametrize("case",["flow-recovery","navigation"])
+    def test_visible_material_replacement_actual_http_and_fenced_recovery(env,tmp_path,case):
+        data,aid,base,current,path,old_value,v2,goal,rid=material_fixture(env)
+        other=data[2].post('/api/projects',json={"name":"Other owned project"}).json()["id"]
+        instance2=create(data,base)
+        data[0].project(data[4],"Other account project")
+        # New authorized fixture resources alter the real graph authority fingerprint.
+        # Refresh via the existing explicit derive before the immutable baseline.
+        refreshed=data[2].post(f"/api/projects/{data[5]}/apps/{aid}/delivery-graph/derive",json=dict(
+            request_key="material-ui-current-baseline",expected_candidate_fingerprint=base["snapshot"]["draft"]["fingerprint"]))
+        assert refreshed.status_code==201,refreshed.text
+        before=immutable_rows(data)
+        with data[0].tx() as c:
+            counts={t.name:c.execute(select(func.count()).select_from(t)).scalar() for t in (grants,principals)}
+        info=dict(case=case,project=data[5],other=other,app=aid,instance=current["id"],
+            instance2=instance2["id"],release=v2["id"],sourceA=data[6],material=rid,
+            hashA=hashlib.sha256(b"amount,quantity\n10,2\n20,3\n").hexdigest(),
+            hashB=hashlib.sha256(b"amount,quantity\n1.20,7\n2.35,11\n").hexdigest(),
+            dataVersion=current["data_version"],output=str(tmp_path/'page-result.json'))
+        (tmp_path/'info.json').write_text(json.dumps(info,ensure_ascii=False,indent=2))
+        process=watchdog=None
+        try:
+            with (tmp_path/'node.stderr').open('w') as errors:
+                process=subprocess.Popen(['node',str(Path(__file__).with_name('csv_material_revision.cjs')),str(tmp_path/'info.json')],
+                    stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=errors,text=True,
+                    env={**os.environ,'NODE_PATH':str(Path.cwd()/'scripts/engineering-ci/node_modules')})
+                watchdog=threading.Timer(600,process.kill)
+                watchdog.start()
+                for line in process.stdout:
+                    request=json.loads(line)
+                    if request.get('done'):
+                        break
+                    if request.get('command')=='worker':
+                        drive(data,request['run'])
+                        answer=dict(status=200,text='{}')
+                    elif request.get('command')=='proof':
+                        reopened=Store(data[1].database_url,test_only=True)
+                        try:
+                            new=jobs.inspect_job(reopened,data[3],request['run'])
+                            old=jobs.inspect_job(reopened,data[3],data[2].csv_previous_run['run_id'])
+                        finally:
+                            reopened.engine.dispose()
+                        assert new['id']==request['run'] and new['id']!=old['id']
+                        assert new['result']['sum']=='18' and new['result']['count']==2
+                        assert new['result_version']==current['data_version']+1 and new['instance_id']==current['id']
+                        assert new['release_id'] not in (base['id'],v2['id'])
+                        assert new['known_effects'][0]['run_id']==new['app_run_id']
+                        assert old['result']['sum']=='30' and old['release_id']==base['id']
+                        with data[0].tx() as c:
+                            frozen=c.execute(select(run_contracts.c.snapshot).where(run_contracts.c.run_id==request['run'])).scalar_one()
+                            actual=c.execute(select(internal_instances).where(internal_instances.c.id==current['id'])).mappings().one()
+                        assert actual['revision']==current['revision']+1 and actual['data_version']==current['data_version']+1
+                        assert frozen['runtime_id']==current['runtime_id'] and frozen['goal']['goal']==goal['goal']
+                        assert frozen['goal']['resource_refs']==[rid]
+                        assert frozen['resources'][0]['resource_id']==rid and frozen['resources'][0]['content_hash']==info['hashB']
+                        assert_preserved(data,before)
+                        (tmp_path/'actual-browser-delivery.json').write_text(json.dumps(dict(
+                            new=new,old=old,contract=frozen,instance=dict(actual),original_proposal=old_value,
+                            parent=v2,unchanged_counts=counts),ensure_ascii=False,indent=2))
+                        answer=dict(status=200,text='{}')
+                    else:
+                        response=data[2].request(request['method'],request['path'],json=request.get('body'),headers=request.get('headers'))
+                        answer=dict(status=response.status_code,text=response.text,content_type=response.headers.get('content-type'))
+                    process.stdin.write(json.dumps(dict(id=request['id'],**answer))+'\n')
+                    process.stdin.flush()
+                process.stdin.close()
+                code=process.wait(timeout=15)
+&gt;           assert code==0,(tmp_path/'node.stderr').read_text()
+E           AssertionError: AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+E             + actual - expected
+E             
+E               {
+E             +   consumed: false,
+E             +   data_preserved: true,
+E             +   expires_at: 1792292510.8744965,
+E                 fingerprint: 'df50bf8fcddd88d47a764f8e46c825fb3f195a4daf4bfc7c81ac20827247218a',
+E             +   from_schema_version: 1,
+E             -   formal_publication_enabled: false,
+E                 id: 'iapproval_9b5c0526d50d4209b80ee1afa7255533',
+E             +   kind: 'switch',
+E             +   new_grants: false,
+E             +   payload: {
+E             +     approval_id: 'iapproval_9b5c0526d50d4209b80ee1afa7255533',
+E             +     data_fingerprint: '9e316ce6334b38d53a91c74dc0b0c1f9e04432500a20175240d64d9f06b2ea49',
+E             +     data_version: 1,
+E             +     expires_at: 1792292510.8744965,
+E             +     from_release_id: 'irelease_78bd74d935504de9a352eb21c1200999',
+E             +     grant_version: '80b9a6bbfb673fb82cf963c2dc812799c1c9b1c04e158412729ac51c4f4b5a78',
+E             +     instance_id: 'iinstance_40925902ffbd450d82c1ece2c6e7f1f2',
+E             +     kind: 'switch',
+E             +     logic_dependency_fingerprint: '40964677808c8ca5fa8b7080b37f554787e9a4862662f6cf52602766ed668b6d',
+E             +     principal_id: 'user_511546c0824f4cb9bf76744f736ddf0c',
+E             +     project_id: 'proj_b9877b1059c64afc8aa29fe1b89ece0d',
+E             +     revision: 2,
+E             +     target_fingerprint: 'eab7be292b6fa7c32532e0930946e2cf2e20f7de75ffbc8b404737e388dc52af',
+E             +     target_release_id: 'irelease_166e823f1a7f46fa8f6532a48043af2c'
+E             +   },
+E             +   principal_id: 'user_511546c0824f4cb9bf76744f736ddf0c',
+E             +   project_id: 'proj_b9877b1059c64afc8aa29fe1b89ece0d',
+E             +   retained_records: 1,
+E             +   target_schema_version: 1
+E             -   namespace: 'INTERNAL_ENGINEERING_ONLY'
+E               }
+E             
+E                 at confirmationReturn (/workspace/Sim2Act/tests/csv_material_revision.cjs:65:9)
+E                 at async /workspace/Sim2Act/tests/csv_material_revision.cjs:118:42
+E             
+E           assert 1 == 0
+
+tests/test_csv_material_revision_pages.py:116: AssertionError</failure></testcase><testcase classname="tests.test_csv_material_revision_pages" name="test_visible_material_replacement_actual_http_and_fenced_recovery[navigation]" time="154.758" /></testsuite></testsuites>

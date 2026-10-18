@@ -1,0 +1,20 @@
+--- a/tests/csv_material_revision.cjs
++++ b/tests/csv_material_revision.cjs
+@@ -56,7 +56,16 @@
+ }
+ async function confirmationReturn(stage,ack,submit){
+  const preview=posts('/csv-material-revisions/previews').at(-1).response;
+- const frozen=stage==='preview'?preview:posts('/csv-goal-revisions/'+(stage==='release'?'version-approvals':'adoption-approvals')).at(-1).response;
++ const beforeReview=JSON.parse($('csv-goal-revision-proof').textContent);
++ const frozen=stage==='adoption'?beforeReview.adoption_approval:stage==='preview'?preview:posts('/csv-goal-revisions/version-approvals').at(-1).response;
++ if(stage==='adoption'){
++  const receipt=posts('/csv-goal-revisions/adoption-approvals').at(-1),payload=frozen?.payload,target=beforeReview.release;
++  const original=requests.filter(x=>x.method==='GET'&&x.path===`/api/internal/instances/${info.instance}/csv-goal-revisions/adoption-approvals/${preview.request_key}`&&x.status===200).at(-1);
++  assert.equal(receipt.status,201);assert.equal(receipt.response.namespace,'INTERNAL_ENGINEERING_ONLY');
++  assert.equal(frozen.id,receipt.response.id);assert.equal(frozen.fingerprint,receipt.response.fingerprint);
++  assert.deepEqual(frozen,original?.response);
++  check(preview.context.instance_revision===2&&info.dataVersion===1&&frozen.kind==='switch'&&frozen.principal_id===preview.context.principal_id&&frozen.project_id===info.project&&frozen.consumed===false&&frozen.data_preserved===true&&frozen.new_grants===false&&frozen.retained_records===info.dataVersion&&payload?.instance_id===info.instance&&payload.from_release_id===info.release&&payload.revision===preview.context.instance_revision&&payload.data_version===info.dataVersion&&payload.target_release_id===target?.id&&payload.target_fingerprint===target.fingerprint&&target.snapshot.csv_goal_revision_source.reference.instance_id===info.instance&&target.snapshot.csv_goal_revision_source.reference.preview_key===preview.request_key&&target.snapshot.csv_goal_revision_source.reference.preview_fingerprint===preview.preview_fingerprint,'adoption review freezes complete original GET approval, exact old instance/revision/data and checked target Release');
++ }
+  await action(ack);check(!$(submit).disabled,stage+' explicit visible consent enables next action');
+  const begin=requests.length,before=$('csv-goal-revision');await nav('resources');await nav('apps');
+  await wait(()=>visible($('csv-goal-revision'))&&$('csv-goal-revision')!==before&&!$(ack).disabled,stage+' material proof restored');

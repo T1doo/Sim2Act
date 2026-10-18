@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="7" time="769.890" timestamp="2026-10-18T02:48:53.768995+00:00" hostname="31571a76ef61"><testcase classname="tests.test_csv_material_revisions" name="test_material_preview_rejects_wrong_hash_data_version_and_ungranted_B_without_writes" time="60.673" /><testcase classname="tests.test_csv_material_revisions" name="test_revoked_A_B_cold_preview_checks_and_metadata_cancel_precede_private_bodies[A]" time="84.752" /><testcase classname="tests.test_csv_material_revisions" name="test_revoked_A_B_cold_preview_checks_and_metadata_cancel_precede_private_bodies[B]" time="70.688" /><testcase classname="tests.test_csv_material_revisions" name="test_material_hash_drift_after_check_prevents_release_without_writes[A]" time="128.790" /><testcase classname="tests.test_csv_material_revisions" name="test_material_hash_drift_after_check_prevents_release_without_writes[B]" time="135.563" /><testcase classname="tests.test_csv_material_revisions" name="test_same_instance_material_adoption_rejects_actual_intervening_data_version" time="223.345"><failure message="sim2act.errors.DomainError: Graph, authority or manual locks changed">env = (&lt;sim2act.db.Store object at 0x7f45d11281d0&gt;, Settings(database_url='sqlite:////workspace/material-contract-independen...1b1ad8af99422884fcdd8d0722573d', 'user_2cc66355631c46a2a15565742d187752', 'proj_a72e3d16232f4ffaa6492eeedd25c49d', ...)
+tmp_path = PosixPath('/workspace/material-contract-independent-805afe60/pytest/test_same_instance_material_ad0')
+
+    def test_same_instance_material_adoption_rejects_actual_intervening_data_version(env, tmp_path):
+        seed = prepared(env)
+        data, _, _, current, path, _, body, v2, *_ = seed
+        value = proposal(seed)
+        accepted = start(data, path, value)
+        drive(data, accepted["run_id"])
+        version = approve(data, path, value)
+        response = data[2].post(path + "/adoption-approvals", json=dict(
+            request_key=body["request_key"], expected_revision=current["revision"],
+            target_release_id=version["id"], expected_target_fingerprint=version["fingerprint"]))
+        assert response.status_code == 201, response.text
+        approval = data[2].get(path + "/adoption-approvals/" + body["request_key"])
+        assert approval.status_code == 200, approval.text
+        approval = approval.json()
+&gt;       intervening = jobs.enqueue(data[0], data[3], current["id"], 2, v2["fingerprint"],
+            {"column": "quantity"}, "actual-A-after-B-approval", limits(data), csv_review="FREEZE_SUM_ONLY_WITHOUT_MD")
+
+tests/test_csv_material_revisions.py:367: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/app_jobs.py:273: in enqueue
+    draft,_,_,_ = csv_revision.bound(store,c,user,release,limits,
+src/sim2act/csv_goal_revisions.py:352: in bound
+    eligibility(store,c,user,value,limits)
+src/sim2act/csv_goal_revisions.py:362: in eligibility
+    require(saved == value["baseline_graph"],"Graph, authority or manual locks changed")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = False, message = 'Graph, authority or manual locks changed'
+
+    def require(value,message="Exact frozen CSV Goal revision changed"):
+        if not value:
+&gt;           raise DomainError("VERSION_CONFLICT",message)
+E           sim2act.errors.DomainError: Graph, authority or manual locks changed
+
+src/sim2act/csv_goal_revisions.py:51: DomainError</failure></testcase><testcase classname="" name="test_material_canonical_json_rejects_resigned_numeric_aliases_and_restores_original" time="63.353" /></testsuite></testsuites>

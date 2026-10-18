@@ -1,0 +1,193 @@
+# 可直接读取的原始文本
+
+144份UTF-8原件保留原字节；以下链接均为本次实际保存件。二进制原件和完整SHA见[原始清单](raw-manifest.json)。较大文本可按列出的offset顺序拼接字节切片，拼回SHA与原件相同。
+
+- [actual-graph-impact-readback.json](originals/actual-graph-impact-readback.json) · 934 bytes · SHA256 `e5b4292243fe1846d3a0fa73a790f024b1bf3a323dbd05a0e656c4374416a921`
+- [adoption-observer-only.patch](originals/adoption-observer-only.patch) · 2512 bytes · SHA256 `cd4c13cb3e430cdc9d917127d3bde1cd06f883a13aecff86128a8b1dec8fd0f7`
+- [ancestry.json](originals/ancestry.json) · 507 bytes · SHA256 `75a647add3b44786dfe888252b2f745e39f6950fb43e6b60fb4d184e65d94c4b`
+- [author-805afe60/test_authorized_B_same_instanc0/actual-http.json](originals/author-805afe60/test_authorized_B_same_instanc0/actual-http.json) · 467672 bytes · SHA256 `1d556bb0fc6b0621dcda3fa4fecb017b245b2e28b549c753245980aecd75f5f9`
+- [author-805afe60/test_visible_material_replacem0/actual-http.json](originals/author-805afe60/test_visible_material_replacem0/actual-http.json) · 1451530 bytes · SHA256 `6c2a7ed26b41f1dc22c09140cbbaed223ec16e322770213048c0e48448554c13`
+  - [0–262135 bytes](text-parts/author-805afe60/test_visible_material_replacem0/actual-http.json.part000.txt) · `30da987897514af507004d94f066210868aa470cc4178a8d33b29192884d656d`
+  - [262135–524276 bytes](text-parts/author-805afe60/test_visible_material_replacem0/actual-http.json.part001.txt) · `0108c7bf67dc5a91fbb5e71ae1c15ff87ed84dcd3f44d2884ff2aad538bb682e`
+  - [524276–786404 bytes](text-parts/author-805afe60/test_visible_material_replacem0/actual-http.json.part002.txt) · `31b3169eb935d519ad26b0bc0e36efa8693e845bad86e57d17f78af94bb830e2`
+  - [786404–1048540 bytes](text-parts/author-805afe60/test_visible_material_replacem0/actual-http.json.part003.txt) · `d2edc19463634b2a4eba8f483dc1e06f0586e91bafcdbd3285c81fb22e9a2e56`
+  - [1048540–1310683 bytes](text-parts/author-805afe60/test_visible_material_replacem0/actual-http.json.part004.txt) · `50af5bc7583436f6871da1e63682a968a89a8ce85dd4b2b36e9aee330e50c13c`
+  - [1310683–1451530 bytes](text-parts/author-805afe60/test_visible_material_replacem0/actual-http.json.part005.txt) · `eea5a1549cb1096169958c467738bdb66ad24e01203220ae671dbef5f4263617`
+- [author-805afe60/test_visible_material_replacem0/info.json](originals/author-805afe60/test_visible_material_replacem0/info.json) · 788 bytes · SHA256 `9cb57198c1f3cb9b890267e211af48b353c21e319fb11e1f7e03096a98e0ab6a`
+- [author-805afe60/test_visible_material_replacem0/node.stderr](originals/author-805afe60/test_visible_material_replacem0/node.stderr) · 1695 bytes · SHA256 `ee3e0bced37cf00c19f52354de2ef9e34d9a6ba3d651829c00deafd817cd72db`
+- [author-805afe60/test_visible_material_replacem0/page-result.json](originals/author-805afe60/test_visible_material_replacem0/page-result.json) · 1347969 bytes · SHA256 `d071ac8a07754862788ad5ce6e00f28e4f7bb83b269e6438172e701e7811f94b`
+  - [0–262128 bytes](text-parts/author-805afe60/test_visible_material_replacem0/page-result.json.part000.txt) · `fcefe409948f0d9ca4e36854290668bc538fb87c0758ce7e31653c7ff079b3b9`
+  - [262128–524189 bytes](text-parts/author-805afe60/test_visible_material_replacem0/page-result.json.part001.txt) · `50cde012559b7d5b42ff88f70303a2ece4017d9dc7d27ba0a01a4bdbea5b443e`
+  - [524189–786326 bytes](text-parts/author-805afe60/test_visible_material_replacem0/page-result.json.part002.txt) · `7b71d031b2e2504b0b452853cd4dacda61270e553225176e7df795ce3e34356f`
+  - [786326–1048450 bytes](text-parts/author-805afe60/test_visible_material_replacem0/page-result.json.part003.txt) · `3ba153458328ffe01c9d585de6ad3e17c72b582824fb2f13c2630594ab4b4911`
+  - [1048450–1310588 bytes](text-parts/author-805afe60/test_visible_material_replacem0/page-result.json.part004.txt) · `d77b9f424e0579cec23253c145d80aa227bef70cd52d4bc78d815199079db781`
+  - [1310588–1347969 bytes](text-parts/author-805afe60/test_visible_material_replacem0/page-result.json.part005.txt) · `f549be52ed8ad0bae278211aeb284242e907e3c676262650dc2770f590a592ff`
+- [author-805afe60/test_visible_material_replacem1/actual-http.json](originals/author-805afe60/test_visible_material_replacem1/actual-http.json) · 989561 bytes · SHA256 `41c408f38d9a19d04222bee73670db7f2cf2455c21db2eb82b059e9057d3765b`
+  - [0–262129 bytes](text-parts/author-805afe60/test_visible_material_replacem1/actual-http.json.part000.txt) · `e2c1ff932051c320186cde17a8e2436f3febf7fa6eb3d0aa1da1b91fe7bca30e`
+  - [262129–524265 bytes](text-parts/author-805afe60/test_visible_material_replacem1/actual-http.json.part001.txt) · `4327f84bd856df374493cfb5ea52477beaa9cc3dd07cf4b474949cdff46c31a2`
+  - [524265–786377 bytes](text-parts/author-805afe60/test_visible_material_replacem1/actual-http.json.part002.txt) · `ce213ec19f5da2c45532e934d6cbe6d598f7bf38b25b85b0d12e08e654c8a00d`
+  - [786377–989561 bytes](text-parts/author-805afe60/test_visible_material_replacem1/actual-http.json.part003.txt) · `27980d117c45394dddeb59d5553f01b69532db87b59174597d6578cd9f804b8e`
+- [author-805afe60/test_visible_material_replacem1/info.json](originals/author-805afe60/test_visible_material_replacem1/info.json) · 785 bytes · SHA256 `dfb747929530cdd08433f452d467f7e0001b1b24c6387a0cff1afdb038bccf18`
+- [author-805afe60/test_visible_material_replacem1/node.stderr](originals/author-805afe60/test_visible_material_replacem1/node.stderr) · 0 bytes · SHA256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
+- [author-805afe60/test_visible_material_replacem1/page-result.json](originals/author-805afe60/test_visible_material_replacem1/page-result.json) · 860245 bytes · SHA256 `18cce793a1ff77f3149712f2204e85829d6c33649dcb1c519201bd6721de7683`
+  - [0–262106 bytes](text-parts/author-805afe60/test_visible_material_replacem1/page-result.json.part000.txt) · `39b0edf3ea6118885446357f5230733b1bd996280bec4a378ab953a052fd067e`
+  - [262106–524215 bytes](text-parts/author-805afe60/test_visible_material_replacem1/page-result.json.part001.txt) · `641e03fbdc8588230dbb1f4e8628ec68ac9a203ff47120af1729deddcef01b9c`
+  - [524215–786311 bytes](text-parts/author-805afe60/test_visible_material_replacem1/page-result.json.part002.txt) · `fe93a8582da37937d80d98f88fe4016ec10de867e882d8204ba77452ee49675e`
+  - [786311–860245 bytes](text-parts/author-805afe60/test_visible_material_replacem1/page-result.json.part003.txt) · `b9e51efad34b1b8e2bf840e6487191ae917f891af07e56433c615832c987c751`
+- [author-805afe60-classification.json](originals/author-805afe60-classification.json) · 2881 bytes · SHA256 `ec067c30cde14d60912e9d2fed770be6b81071c95143e39d802d040b6f160b86`
+- [author-805afe60.log](originals/author-805afe60.log) · 12370 bytes · SHA256 `8474eec42e139b751a841ca0eeb16fee0a5a3b381eb6e47115c812ad0d25ce1e`
+- [author-805afe60.xml](originals/author-805afe60.xml) · 14199 bytes · SHA256 `79a696597c8d521c7d46289edd7d46488d8fef6496e313e3b61357c1900afcc7`
+- [author-command.json](originals/author-command.json) · 651 bytes · SHA256 `7b95459d00c00ba5d6591dd7c202d0a6d7c6abc7f5a6a473d710880adff9aac6`
+- [baseline-and-wip-readonly/a05-readable-audit.json](originals/baseline-and-wip-readonly/a05-readable-audit.json) · 2038 bytes · SHA256 `18a4ae11dd6a8a7e21c000396e6b88aa5c924a8d630f5d7a5f54bd15c5e9d96d`
+- [baseline-and-wip-readonly/wip-design-review.md](originals/baseline-and-wip-readonly/wip-design-review.md) · 2584 bytes · SHA256 `e57faed4ac7b86de580627dea55eb8a1a9bae5fcda0cba992f0a94302142b3c9`
+- [cached-replay-observer-analysis.json](originals/cached-replay-observer-analysis.json) · 2014 bytes · SHA256 `40c1f6977b342c65d52f5ebb943389db8a5f0669bc176efe6ea739c58226c9f0`
+- [code-freeze-805afe60.json](originals/code-freeze-805afe60.json) · 132951 bytes · SHA256 `8cdcda22488134826a12d3a178707c00bad5eadfd9cc4a979d485ffdc428ed5b`
+- [expanded-inputs-during-805afe60.json](originals/expanded-inputs-during-805afe60.json) · 188174 bytes · SHA256 `7b96198809b58bd05a66757ca519b847b16fdf57718d06ef85a326a686be0d2d`
+- [independent-contract/actual-post-test-database-counts.json](originals/independent-contract/actual-post-test-database-counts.json) · 3107 bytes · SHA256 `b48c5e6d95b7e3db5b8e3e60dc11fd0f6ae97a07bfb79bdfd9ae3a09ab1ac474`
+- [independent-contract/collection-error/command.json](originals/independent-contract/collection-error/command.json) · 1057 bytes · SHA256 `2b89798561cf22b7269f318fbbe9fe99b3c74d4f986b7d1ce9ecbbe097e81915`
+- [independent-contract/collection-error/exit.json](originals/independent-contract/collection-error/exit.json) · 48 bytes · SHA256 `33d660132f03d7e07109144a93a9acce2e139e1c29bc6a5edec1f07de4a656d0`
+- [independent-contract/collection-error/input-before.json](originals/independent-contract/collection-error/input-before.json) · 150309 bytes · SHA256 `fd331b81c1949f5c614679cbda5d01252d88a2506098bb1cd9a50c9ba46fb5dd`
+- [independent-contract/collection-error/junit.xml](originals/independent-contract/collection-error/junit.xml) · 8177 bytes · SHA256 `55e0d0c5b8b502e5c900575fe1b395ea19870e2a5d148431dbca59f23aaf388b`
+- [independent-contract/collection-error/pytest.log](originals/independent-contract/collection-error/pytest.log) · 8461 bytes · SHA256 `83e3cb91f689de82b73a996f85e428503a88104317f2e11496c7af9253fa6b03`
+- [independent-contract/command.json](originals/independent-contract/command.json) · 1109 bytes · SHA256 `87849ccfda89b85892beca39282b81d237b3d0fe27694d8e212587784e140339`
+- [independent-contract/corrected-cas/command.json](originals/independent-contract/corrected-cas/command.json) · 1227 bytes · SHA256 `a88df63cd532a9a7128ce86daaf577d6e8f72141f1a8dc9633ab33660474abb7`
+- [independent-contract/corrected-cas/exit.json](originals/independent-contract/corrected-cas/exit.json) · 49 bytes · SHA256 `b40c1b7990132c62a0998f26b8ee2d5f88e3f100801948c8c1bb99aefe7a00ae`
+- [independent-contract/corrected-cas/junit.xml](originals/independent-contract/corrected-cas/junit.xml) · 402 bytes · SHA256 `83178678a7cd0f4f3fbace2f4929e3f5920f25bfa789766b3b3e2371bd78dbdd`
+- [independent-contract/corrected-cas/pytest/test_material_stale_cas_after_0/actual-http.json](originals/independent-contract/corrected-cas/pytest/test_material_stale_cas_after_0/actual-http.json) · 389483 bytes · SHA256 `d379f197758ce734280af0c4afac6cb4ef7f98379261eb6258f04e44ebe8f1ca`
+- [independent-contract/corrected-cas/pytest/test_material_stale_cas_after_0/actual-independent-material-stale-cas.json](originals/independent-contract/corrected-cas/pytest/test_material_stale_cas_after_0/actual-independent-material-stale-cas.json) · 132826 bytes · SHA256 `c560b4deb73c2f351b527e0f82fb148cc66be3e0888e67624c61269218c1fa17`
+- [independent-contract/corrected-cas/pytest.log](originals/independent-contract/corrected-cas/pytest.log) · 609 bytes · SHA256 `98ada0cb5e0b8c34703ece47be129c082cc5c82ea97792e5b47edd67a680c5b9`
+- [independent-contract/corrected-function-source-hashes.json](originals/independent-contract/corrected-function-source-hashes.json) · 680 bytes · SHA256 `9f1729457c55e61f7ad649e01cfa1b22f18576b675016f174e49e847e0024577`
+- [independent-contract/environment.json](originals/independent-contract/environment.json) · 510 bytes · SHA256 `17e30fa1af7095a229e548a3af260e5ef6171d7ce58e1429abecb329055495f4`
+- [independent-contract/evidence-manifest.json](originals/independent-contract/evidence-manifest.json) · 8765 bytes · SHA256 `4e937bd08b5377aa16e67c916b40c0b43d6faea78e5210b9d646b3d2c1c77113`
+- [independent-contract/exit.json](originals/independent-contract/exit.json) · 49 bytes · SHA256 `ceb95860341913277382fb228b6754ecee5e779cae67020bda6dc4693ac41030`
+- [independent-contract/final-proof.json](originals/independent-contract/final-proof.json) · 976 bytes · SHA256 `3f37a03957ee33f6f232f2d28540f4597c4f4d091bd464a05f849d4d7099918d`
+- [independent-contract/independent-review.md](originals/independent-contract/independent-review.md) · 6189 bytes · SHA256 `db46ce918eea9d52c96950248e688dc968ab07c9491c02c2781dcfb1f6b2bae7`
+- [independent-contract/input-after-primary.json](originals/independent-contract/input-after-primary.json) · 136046 bytes · SHA256 `f85fd52554688037f5c04c95e6a8485cbc4659569814f6767d04dea21345e37b`
+- [independent-contract/input-after.json](originals/independent-contract/input-after.json) · 135931 bytes · SHA256 `398f1f25d5400031d29ead17fca0fbb00160438c09cf1a5d5d5212bd1875f786`
+- [independent-contract/input-before.json](originals/independent-contract/input-before.json) · 151287 bytes · SHA256 `cbfb32a31ecd4f2d6c3ae69d1307e36b1cd77ecf5bc6b265ede5a219e86b731f`
+- [independent-contract/junit.xml](originals/independent-contract/junit.xml) · 3757 bytes · SHA256 `5e042e3d48fa12fb4b8935ebe84233262e59e02e8f94238fb4e3fa565fa4b89a`
+- [independent-contract/primary-result.json](originals/independent-contract/primary-result.json) · 1699 bytes · SHA256 `d29207233655a0a9b6664c900b8492dacb3a73146ccc49514209eec9e2dc2896`
+- [independent-contract/pytest/test_material_canonical_json_r0/actual-http.json](originals/independent-contract/pytest/test_material_canonical_json_r0/actual-http.json) · 522357 bytes · SHA256 `7d207108914b47aea499d4c7f439514d221eb0fba74cf5258e5dbc478093470e`
+- [independent-contract/pytest/test_material_canonical_json_r0/actual-independent-canonical-json.json](originals/independent-contract/pytest/test_material_canonical_json_r0/actual-independent-canonical-json.json) · 2226587 bytes · SHA256 `5a887fb7b44a245c574620a48ff64604e5d22a3bd9d0e067a3e1ab4a526feb41`
+  - [0–262100 bytes](text-parts/independent-contract/pytest/test_material_canonical_json_r0/actual-independent-canonical-json.json.part000.txt) · `f78e61cfd09fed396f214d227ef01114f9566b4fa0bab8ca677332340e3bb63b`
+  - [262100–524137 bytes](text-parts/independent-contract/pytest/test_material_canonical_json_r0/actual-independent-canonical-json.json.part001.txt) · `3317b490f1c2bcd8de0cec4f036241f38960477433cb982fc98550a94da5c49a`
+  - [524137–785837 bytes](text-parts/independent-contract/pytest/test_material_canonical_json_r0/actual-independent-canonical-json.json.part002.txt) · `43b9097fa64417449bcd54598378913071499a92fbd93101ec11d0010a772377`
+  - [785837–1047902 bytes](text-parts/independent-contract/pytest/test_material_canonical_json_r0/actual-independent-canonical-json.json.part003.txt) · `1f918152f76ac34fe8029bb57aff6d8970bf541c748a64669b87f41be255e83a`
+  - [1047902–1310001 bytes](text-parts/independent-contract/pytest/test_material_canonical_json_r0/actual-independent-canonical-json.json.part004.txt) · `3befb15295c778947a7f3e6e66117a2a3fdde8fa1360ff8f0d5dcdd2b4585cbb`
+  - [1310001–1571428 bytes](text-parts/independent-contract/pytest/test_material_canonical_json_r0/actual-independent-canonical-json.json.part005.txt) · `d355b66a191b395328e2f5fabdb8ca7ccd6747efff5db45d8686605315bf10d7`
+  - [1571428–1833316 bytes](text-parts/independent-contract/pytest/test_material_canonical_json_r0/actual-independent-canonical-json.json.part006.txt) · `409b054a11fda56e6070c532d89ff28cfc84b51f27cb57d524b5ad23480a38c1`
+  - [1833316–2095456 bytes](text-parts/independent-contract/pytest/test_material_canonical_json_r0/actual-independent-canonical-json.json.part007.txt) · `76e186da7f290878a22ce0de5824e659fe6485eea27957fe83cac0c223c72c83`
+  - [2095456–2226587 bytes](text-parts/independent-contract/pytest/test_material_canonical_json_r0/actual-independent-canonical-json.json.part008.txt) · `faeddba1c4474ae8afa7292e486c367a44466903b86cf2b476e2267e233f66ee`
+- [independent-contract/pytest/test_material_hash_drift_after0/actual-http.json](originals/independent-contract/pytest/test_material_hash_drift_after0/actual-http.json) · 298547 bytes · SHA256 `853b56adbdcd72e3e5afba16fd2649790e1097db3c0687adffc794ace6090cfc`
+- [independent-contract/pytest/test_material_hash_drift_after0/actual-material-hash-drift.json](originals/independent-contract/pytest/test_material_hash_drift_after0/actual-material-hash-drift.json) · 2346 bytes · SHA256 `b753208211830fbd855c12ec2cc499d83c509b283ed0ff746c1bf0750c254f16`
+- [independent-contract/pytest/test_material_hash_drift_after1/actual-http.json](originals/independent-contract/pytest/test_material_hash_drift_after1/actual-http.json) · 298580 bytes · SHA256 `ebd9def941fdc8a40fec7356c5f6ea65e925a4aeec7430f7f76c70b3587776f5`
+- [independent-contract/pytest/test_material_hash_drift_after1/actual-material-hash-drift.json](originals/independent-contract/pytest/test_material_hash_drift_after1/actual-material-hash-drift.json) · 2385 bytes · SHA256 `dd96a10f6f5a86b4e0aa8ffecb8fef3de508ce67bf73195b245b5e57823c4e25`
+- [independent-contract/pytest/test_material_preview_rejects_0/actual-http.json](originals/independent-contract/pytest/test_material_preview_rejects_0/actual-http.json) · 184247 bytes · SHA256 `02f2b1e1955be191fe86af38335c75baecf2b27e22a8e0b9a22fdd6aeff634d3`
+- [independent-contract/pytest/test_material_preview_rejects_0/actual-material-early-rejections.json](originals/independent-contract/pytest/test_material_preview_rejects_0/actual-material-early-rejections.json) · 22090 bytes · SHA256 `c0a53076e7e470a39388b155a673fb9c6339baec3abc3e275c72d87df5b996fe`
+- [independent-contract/pytest/test_revoked_A_B_cold_preview_0/actual-http.json](originals/independent-contract/pytest/test_revoked_A_B_cold_preview_0/actual-http.json) · 303913 bytes · SHA256 `119e8c71d2241e03ee2b6520ab975c1fb6ab9ad2498ab9d2a36fab0ce648143f`
+- [independent-contract/pytest/test_revoked_A_B_cold_preview_0/actual-material-revoked-cold.json](originals/independent-contract/pytest/test_revoked_A_B_cold_preview_0/actual-material-revoked-cold.json) · 15685 bytes · SHA256 `34408782410276be930f83549244c2d9fae6cc63578a1082e44d169652fd9775`
+- [independent-contract/pytest/test_revoked_A_B_cold_preview_1/actual-http.json](originals/independent-contract/pytest/test_revoked_A_B_cold_preview_1/actual-http.json) · 303916 bytes · SHA256 `8c68fc68cb7e5a9178bb26163c4052153bfa6e7d5a39518a7ffe9cecc1c92521`
+- [independent-contract/pytest/test_revoked_A_B_cold_preview_1/actual-material-revoked-cold.json](originals/independent-contract/pytest/test_revoked_A_B_cold_preview_1/actual-material-revoked-cold.json) · 53396 bytes · SHA256 `302dd7277a5050aad803b2b255dd72dbc3570504124e126a7e24e953e4276d62`
+- [independent-contract/pytest/test_same_instance_material_ad0/actual-http.json](originals/independent-contract/pytest/test_same_instance_material_ad0/actual-http.json) · 337838 bytes · SHA256 `3d46e75ee865f19a334719aed58632b3c97ba007db9d7c839b4f78b9ec33bb36`
+- [independent-contract/pytest.log](originals/independent-contract/pytest.log) · 3309 bytes · SHA256 `8b245417405545d64779e29af62f5324b2d9102463769e680cada0c0a74ee1e5`
+- [independent-contract/root-function-bridge-worktree.json](originals/independent-contract/root-function-bridge-worktree.json) · 602 bytes · SHA256 `abad5e2c5beb74db23515d4b30e93a0f4ce3f783389bd9e2acc7e377f8c2450c`
+- [independent-contract/root-function-bridge.json](originals/independent-contract/root-function-bridge.json) · 1659 bytes · SHA256 `a3637495212ae8d6dbed060bbbc8c6e4d03b523337297e7d4e50003c6b4cb948`
+- [independent-contract/runtime-result.json](originals/independent-contract/runtime-result.json) · 733 bytes · SHA256 `137d78b5a66c49167d605e4319efeb5ad69fa4ecb4309fabbe91b3ce3487bea4`
+- [independent-contract/stale-cas-failure-diagnostic.json](originals/independent-contract/stale-cas-failure-diagnostic.json) · 710 bytes · SHA256 `4029d9f517295e9edf2d59f1d45ba5e0357a01386f589645f791153d7d03293c`
+- [independent-contract/stale-cas-fixture-only.patch](originals/independent-contract/stale-cas-fixture-only.patch) · 3665 bytes · SHA256 `fad9b2a949fecbddf7b266359a38bcfe0afc9e0dac32a07aeecdddf1cc968c12`
+- [independent-contract/static-review.json](originals/independent-contract/static-review.json) · 1110 bytes · SHA256 `10e3c3b44873cdb08417f248808a4a2cc28c9747d78d388397d90f62429933c4`
+- [independent-contract/test_material_cas_fixture_corrected.py](originals/independent-contract/test_material_cas_fixture_corrected.py) · 5462 bytes · SHA256 `5d6d036128b2562cdc57d4fdb205194d1c4557c49964a0cb49dff1f90f84e6fa`
+- [independent-contract/test_material_contract_independent.py](originals/independent-contract/test_material_contract_independent.py) · 5671 bytes · SHA256 `4eb58361a586e18e2152324b0684a9ff75088ce67647c6051585241acccee947`
+- [independent-old-column/original-missing-fixture-fail/command.json](originals/independent-old-column/original-missing-fixture-fail/command.json) · 1000 bytes · SHA256 `2642347ad3ccaaa4486ac5feed643de3e5264a1c6b2cd2d3e7357e4fa58d6a48`
+- [independent-old-column/original-missing-fixture-fail/input-after.json](originals/independent-old-column/original-missing-fixture-fail/input-after.json) · 132920 bytes · SHA256 `d2d43beb82656a370703bd85881182f51d9cd253911c76171d5c13a8faffc31a`
+- [independent-old-column/original-missing-fixture-fail/input-before.json](originals/independent-old-column/original-missing-fixture-fail/input-before.json) · 132932 bytes · SHA256 `e56fe6543583a10357aae1cd14283daf9b415831dba174ab69e7ed5b48a697e7`
+- [independent-old-column/original-missing-fixture-fail/junit-old-column-same.xml](originals/independent-old-column/original-missing-fixture-fail/junit-old-column-same.xml) · 5950 bytes · SHA256 `5068b6d490c3b766fa8078cb53eaeea07df61511664e23b45173a4f5212dd7f5`
+- [independent-old-column/original-missing-fixture-fail/pytest/test_current_effective_parent_0/actual-http.json](originals/independent-old-column/original-missing-fixture-fail/pytest/test_current_effective_parent_0/actual-http.json) · 12659 bytes · SHA256 `9d2acb9f419bc1458d2b683f2e30b860c933369858e5db40d04fd4f93deb456b`
+- [independent-old-column/original-missing-fixture-fail/result.json](originals/independent-old-column/original-missing-fixture-fail/result.json) · 1161 bytes · SHA256 `badd7e1964406256efeea820bd8d43ad37ea99f27a48bce59ea3ba0145e016de`
+- [independent-old-column/original-missing-fixture-fail/stderr.txt](originals/independent-old-column/original-missing-fixture-fail/stderr.txt) · 0 bytes · SHA256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
+- [independent-old-column/original-missing-fixture-fail/stdout.txt](originals/independent-old-column/original-missing-fixture-fail/stdout.txt) · 6146 bytes · SHA256 `d0aca9055e44ef5743b841847ed0fa923108845a9d4eb68022cd553bce6d0448`
+- [independent-old-column/qualified/attempt-provenance.json](originals/independent-old-column/qualified/attempt-provenance.json) · 437 bytes · SHA256 `55f71408e5340c6a30a71044b150afd4118ba20e16981dacb749b1de0bd7b193`
+- [independent-old-column/qualified/command.json](originals/independent-old-column/qualified/command.json) · 1040 bytes · SHA256 `33321b9e142c1f1f0e5d37331b5cf4cc7f2212f92dfc877b27264963b264f4e2`
+- [independent-old-column/qualified/evidence-sha256.json](originals/independent-old-column/qualified/evidence-sha256.json) · 1819 bytes · SHA256 `f18935e48e10c1518ef22ab31e06604499fc026600c7b74815b2129e615e26ff`
+- [independent-old-column/qualified/input-after.json](originals/independent-old-column/qualified/input-after.json) · 140901 bytes · SHA256 `f4abe15175c229fc167b53adb74a1d07fb103682b788b0d36492dee89be31027`
+- [independent-old-column/qualified/input-before.json](originals/independent-old-column/qualified/input-before.json) · 140913 bytes · SHA256 `1e41d8412b1386077e29302396a0a85835f5d6af0be4eb261a1bcb163e373105`
+- [independent-old-column/qualified/js-api-author-review.md](originals/independent-old-column/qualified/js-api-author-review.md) · 3311 bytes · SHA256 `f1bbd8e602fbbb5d694f209433a2740709b500e74ab8ba5d4a4d9508a121293d`
+- [independent-old-column/qualified/junit-old-column-same.xml](originals/independent-old-column/qualified/junit-old-column-same.xml) · 406 bytes · SHA256 `edf32b025316e3538d3022d41aaa26842df6f69e7e7bb96277b927989a66371a`
+- [independent-old-column/qualified/pytest/test_current_effective_parent_0/actual-http.json](originals/independent-old-column/qualified/pytest/test_current_effective_parent_0/actual-http.json) · 382855 bytes · SHA256 `d27a9017115bd32bae670677912acd6a4372da7ce0ac7b3f7d56cda282513bbd`
+- [independent-old-column/qualified/pytest/test_current_effective_parent_0/actual-successive-delivery.json](originals/independent-old-column/qualified/pytest/test_current_effective_parent_0/actual-successive-delivery.json) · 198663 bytes · SHA256 `f9a16d7b2cdf367a9ad3dbb218b760e1aa95a4a32941c483ac1b4315164c9e03`
+- [independent-old-column/qualified/qualified-summary.json](originals/independent-old-column/qualified/qualified-summary.json) · 1418 bytes · SHA256 `79bbada152d2862058253ce457b26643af23f1b7f0d60b38c657dd905012696f`
+- [independent-old-column/qualified/result.json](originals/independent-old-column/qualified/result.json) · 1197 bytes · SHA256 `8180a771f38fea3a4c892f25c080a0370a47547adcd539b3fe7e417e481a0b86`
+- [independent-old-column/qualified/stderr.txt](originals/independent-old-column/qualified/stderr.txt) · 0 bytes · SHA256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
+- [independent-old-column/qualified/stdout.txt](originals/independent-old-column/qualified/stdout.txt) · 622 bytes · SHA256 `07dc010794afe5c416a776908147c5e71a98951b02e99820d220342d7a9ff84d`
+- [independent-positive/README.md](originals/independent-positive/README.md) · 2485 bytes · SHA256 `b3c5420605352209bfaaf0c72cab89793cb62877d4f45b10bed3501adebf33ca`
+- [independent-positive/actual-independent-database-proof.json](originals/independent-positive/actual-independent-database-proof.json) · 21886 bytes · SHA256 `78391f1518731369bb292f9ad37e56190521dfa03c9ef5b46c92b1e0400cae85`
+- [independent-positive/artifact-checksums.json](originals/independent-positive/artifact-checksums.json) · 3323 bytes · SHA256 `a96b6b66b9104a1aeef0f74d11f8507ab87ffac9444a7d4db186e8d477f556bf`
+- [independent-positive/cached-assertion-applied.patch](originals/independent-positive/cached-assertion-applied.patch) · 1160 bytes · SHA256 `75726b0df63e30849961ab5b1209fecb5222086c8c916c36f9086bc07b4149cf`
+- [independent-positive/cached-assertion-original.patch](originals/independent-positive/cached-assertion-original.patch) · 1276 bytes · SHA256 `074910058bf72455c7a90af22683ce565bcbab1ae870a9020e738f04faa25721`
+- [independent-positive/command.json](originals/independent-positive/command.json) · 1026 bytes · SHA256 `59579cbc938b7256296fb4c441d76dced70a7ac84261c3b48b7110af40d2f8f7`
+- [independent-positive/frozen-inputs-after.json](originals/independent-positive/frozen-inputs-after.json) · 463 bytes · SHA256 `d8eff713e08b9ac0dd606b1273190083a3e6d234369caf2c5ec480d810331f70`
+- [independent-positive/frozen-inputs-before.json](originals/independent-positive/frozen-inputs-before.json) · 169985 bytes · SHA256 `8c90651b0fdf59d000e61fd6fb775b2cbdaab04de2df758b569074aa089b3d3f`
+- [independent-positive/junit.xml](originals/independent-positive/junit.xml) · 403 bytes · SHA256 `dfc29b090e888d4a24c81a9cbd3c97743cd2c185c3a76115c80390a9ba6a6bee`
+- [independent-positive/observer-patch-proof.json](originals/independent-positive/observer-patch-proof.json) · 716 bytes · SHA256 `711294a84c286c31da3f04082305d5bb4d19ca3960eb24b359095d27032b306d`
+- [independent-positive/pytest-temp/test_authorized_B_same_instanc0/actual-http.json](originals/independent-positive/pytest-temp/test_authorized_B_same_instanc0/actual-http.json) · 476793 bytes · SHA256 `9c4dc7010a3ca88467b04f24b06989aa9fcc5d2ff2c8f7179d5ea89374179af0`
+- [independent-positive/pytest-temp/test_authorized_B_same_instanc0/actual-material-delivery.json](originals/independent-positive/pytest-temp/test_authorized_B_same_instanc0/actual-material-delivery.json) · 153748 bytes · SHA256 `3b42117d0bbdcf803aec42b62dd8f5ee5f7af0acfc793aafcbd9980253736dff`
+- [independent-positive/pytest.stdout.log](originals/independent-positive/pytest.stdout.log) · 1126 bytes · SHA256 `aa5611baf4d827acd670f41b68bf8efd6434fc354e6f35fcaa909bc415c050d7`
+- [independent-positive/read-only-progress-latest.json](originals/independent-positive/read-only-progress-latest.json) · 1332 bytes · SHA256 `d534e851c0ae6c027fb91c1f6a7f7cef4225311cabcfc78bee6674a14defc430`
+- [independent-positive/read-only-progress.jsonl](originals/independent-positive/read-only-progress.jsonl) · 857 bytes · SHA256 `8af8dc2142db1c901ed79e10e7f92078a3c98938d63482af0e77d92901431174`
+- [independent-positive/runner/finalize_evidence.py](originals/independent-positive/runner/finalize_evidence.py) · 7986 bytes · SHA256 `7071c3951e8f98fd0126de0cf8f99f69f2fbb457ba9dd17eaaa9ee0237b3659e`
+- [independent-positive/runner/freeze_and_patch.py](originals/independent-positive/runner/freeze_and_patch.py) · 3453 bytes · SHA256 `f00679da0200dcabd2ac139379d71b29a6d9b84e3f2d41ac385e604c79b72890`
+- [independent-positive/runner/run_positive.py](originals/independent-positive/runner/run_positive.py) · 2667 bytes · SHA256 `6bc320a2d42c37d5b26d9f7c13544e770d7d6f7a4d02b7da2afc13074dc579e6`
+- [independent-positive/summary.json](originals/independent-positive/summary.json) · 2783 bytes · SHA256 `a646fff9b62602bb7b07a737ae824ff4fb91679a8531d91d408c78fc21f19866`
+- [mypy-805afe60.log](originals/mypy-805afe60.log) · 43 bytes · SHA256 `050c52a2b0c61e8b681ef5c485e0bc03340b8d55148e0acef27d744c8be42033`
+- [positive-observer-ast-bridge.json](originals/positive-observer-ast-bridge.json) · 938 bytes · SHA256 `b7ea4b4d6072a7c2acbbad70ec86351d7c94c3e7c3d3bfd55b4d8c579d137995`
+- [positive-wip/test_authorized_B_same_instanc0/actual-http.json](originals/positive-wip/test_authorized_B_same_instanc0/actual-http.json) · 456183 bytes · SHA256 `fd066c36066c7e56589f690f17a6347199a4560fcdf12bbc74fe5392fe116195`
+- [positive-wip-scope.json](originals/positive-wip-scope.json) · 343 bytes · SHA256 `1d0d0f8ada2cbf4913ab15af11e990635b9fa2d42ec3aedc7a971123e2371cf0`
+- [positive-wip.log](originals/positive-wip.log) · 11644 bytes · SHA256 `9c91e6dc9c3e3c101a92f9198c2d3c646bda80c3c1bb3fc9339ab40d3baa3d2d`
+- [positive-wip.xml](originals/positive-wip.xml) · 11904 bytes · SHA256 `75c66a13cd110e12d86e5cbf4b3ad6fbe1d799c6899d39f5ba7e327f10518a78`
+- [pre-source-push-verification.json](originals/pre-source-push-verification.json) · 18996 bytes · SHA256 `6e387c28337fcf9dba2f2587aec0114b52dcd334dc2d2886e55562f5bb2d8c4f`
+- [qualified-coverage.json](originals/qualified-coverage.json) · 7549 bytes · SHA256 `522db3a9334f9b535d35abc973a3e613b161b40732e2ad25c80beab6e8cb8b7f`
+- [qualified-page-assets-proof.json](originals/qualified-page-assets-proof.json) · 15163 bytes · SHA256 `f134f435872be9b3d0740e42e8bc086027a19272972185092eb9145ecdac8186`
+- [qualified-ui-flow/README.md](originals/qualified-ui-flow/README.md) · 2237 bytes · SHA256 `fd854f4165df0480dbe52ee0bda4f12b35a7ad18894a5c457634dc26424b4994`
+- [qualified-ui-flow/adoption-observer-only.patch](originals/qualified-ui-flow/adoption-observer-only.patch) · 2512 bytes · SHA256 `cd4c13cb3e430cdc9d917127d3bde1cd06f883a13aecff86128a8b1dec8fd0f7`
+- [qualified-ui-flow/command.json](originals/qualified-ui-flow/command.json) · 1058 bytes · SHA256 `40feda686f99c9020c4f3b5891c7a1df53944ebe43cc780191483e35ee6f2c82`
+- [qualified-ui-flow/evidence-sha256.json](originals/qualified-ui-flow/evidence-sha256.json) · 2578 bytes · SHA256 `28eddb114bf376bc6fd3c91a7313addf8f5f1f6a9ef26cde0fa13e9f38cfcb25`
+- [qualified-ui-flow/input-after.json](originals/qualified-ui-flow/input-after.json) · 140901 bytes · SHA256 `b8b1a5c1757f8d723b846d393c33b1038c5378c6a296a3fc3af8681e7e90a218`
+- [qualified-ui-flow/input-before.json](originals/qualified-ui-flow/input-before.json) · 141058 bytes · SHA256 `ee4934dfb3e2cc2ebbf6dd8fe469acdf0c5896662b51206960bcc2c1bd4d367a`
+- [qualified-ui-flow/junit-flow-recovery.xml](originals/qualified-ui-flow/junit-flow-recovery.xml) · 416 bytes · SHA256 `5fdfc2ba05b72fe048a04e5f8eb5b039a8ca125a9120c20e490c7f366db05fa6`
+- [qualified-ui-flow/observer-csv_material_revision.cjs](originals/qualified-ui-flow/observer-csv_material_revision.cjs) · 18677 bytes · SHA256 `b2089e346d2396ab2affbd24bea5de31395a258de5ca70f082d4d2cd92385f09`
+- [qualified-ui-flow/patch-provenance.json](originals/qualified-ui-flow/patch-provenance.json) · 549 bytes · SHA256 `6e753d92f8e102d63add554029cbdcdcb568b723c8987ffd86fe1e1210837c5c`
+- [qualified-ui-flow/pytest/test_visible_material_replacem0/actual-browser-delivery.json](originals/qualified-ui-flow/pytest/test_visible_material_replacem0/actual-browser-delivery.json) · 71057 bytes · SHA256 `8745f4950987a2e8c77a345be7d135b91190402f1912cc701fc5fab8cb50c2dc`
+- [qualified-ui-flow/pytest/test_visible_material_replacem0/actual-http.json](originals/qualified-ui-flow/pytest/test_visible_material_replacem0/actual-http.json) · 2022480 bytes · SHA256 `63b455d9962d1fbf855ef41c060a7a909309e302828fd3ce759e1914020d5266`
+  - [0–262104 bytes](text-parts/qualified-ui-flow/pytest/test_visible_material_replacem0/actual-http.json.part000.txt) · `61ae2a64fa3a2d381b859fc5a60ce90489a25428eaeea420344a18f1f119d14c`
+  - [262104–524193 bytes](text-parts/qualified-ui-flow/pytest/test_visible_material_replacem0/actual-http.json.part001.txt) · `512be66f198bd992477f356076f5f9ba25258783079eaa3c317a5a351aa07cef`
+  - [524193–786324 bytes](text-parts/qualified-ui-flow/pytest/test_visible_material_replacem0/actual-http.json.part002.txt) · `da8bba7b51fd88fd88cec9535cc7e66f23be05c9bcd58826e90c46562079b4b8`
+  - [786324–1048437 bytes](text-parts/qualified-ui-flow/pytest/test_visible_material_replacem0/actual-http.json.part003.txt) · `613f7bb0547c638f280dd06876677d4934cf0b93eff66b9795976061e8b91cc7`
+  - [1048437–1310563 bytes](text-parts/qualified-ui-flow/pytest/test_visible_material_replacem0/actual-http.json.part004.txt) · `261e0809bab03b9f7fe9de04a712bff1297aa76c59b5f7a73a3b726c1dfff594`
+  - [1310563–1572692 bytes](text-parts/qualified-ui-flow/pytest/test_visible_material_replacem0/actual-http.json.part005.txt) · `b078070d5fcaacef13e8691a151e569d727ad40c1b89cd1932f4294de9995a5e`
+  - [1572692–1834821 bytes](text-parts/qualified-ui-flow/pytest/test_visible_material_replacem0/actual-http.json.part006.txt) · `c0e4d25c9348837b17c8e979d3778b391d4a2da1d7bc53b30fc2becea55cacbd`
+  - [1834821–2022480 bytes](text-parts/qualified-ui-flow/pytest/test_visible_material_replacem0/actual-http.json.part007.txt) · `2762ad8dbdbe458acb3e4f9300eee7d3cd8e295bf0396ae96f6a4fc6eafdb523`
+- [qualified-ui-flow/pytest/test_visible_material_replacem0/info.json](originals/qualified-ui-flow/pytest/test_visible_material_replacem0/info.json) · 781 bytes · SHA256 `e42b8510888eaf6a3da9a2cf958fcbe8aeceb7fda00a99305db67a2ad5e7179d`
+- [qualified-ui-flow/pytest/test_visible_material_replacem0/node.stderr](originals/qualified-ui-flow/pytest/test_visible_material_replacem0/node.stderr) · 0 bytes · SHA256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
+- [qualified-ui-flow/pytest/test_visible_material_replacem0/page-result.json](originals/qualified-ui-flow/pytest/test_visible_material_replacem0/page-result.json) · 1948050 bytes · SHA256 `8cd083a55fea444ebb3950a4266ab98bc17bf03d9a3574d8c3d85e866b1cfc1d`
+  - [0–262139 bytes](text-parts/qualified-ui-flow/pytest/test_visible_material_replacem0/page-result.json.part000.txt) · `9002e2aa4fc5bc05c9c378c1e1fb92f1e3ed1af1c79fa562aa38898070068d4b`
+  - [262139–524273 bytes](text-parts/qualified-ui-flow/pytest/test_visible_material_replacem0/page-result.json.part001.txt) · `7e0fce82555b7ada8319bf8e98e81fed8b807574ea5ff83202719de992edb653`
+  - [524273–786360 bytes](text-parts/qualified-ui-flow/pytest/test_visible_material_replacem0/page-result.json.part002.txt) · `d4a19a01b3d16f74a96a95911b60729c052ab5e49f7cf1c0b4ee8d1b4ac413fd`
+  - [786360–1048481 bytes](text-parts/qualified-ui-flow/pytest/test_visible_material_replacem0/page-result.json.part003.txt) · `2e928294ca8910954f3eb26e482cfb18b8e987c9fa87a868359f711d9a624291`
+  - [1048481–1310606 bytes](text-parts/qualified-ui-flow/pytest/test_visible_material_replacem0/page-result.json.part004.txt) · `5acae08ec53b7735b6a990d196175916aa97befa9d83f1a89356724eb09d25e9`
+  - [1310606–1572742 bytes](text-parts/qualified-ui-flow/pytest/test_visible_material_replacem0/page-result.json.part005.txt) · `10a062dde6229f00f3e858e0360a50700d3154b39727d46ade65dacff4f492b3`
+  - [1572742–1834878 bytes](text-parts/qualified-ui-flow/pytest/test_visible_material_replacem0/page-result.json.part006.txt) · `0fb04fc68b19e387628bb0b4826d48ac2ea276b2c4e82e8d832a006649f6ae44`
+  - [1834878–1948050 bytes](text-parts/qualified-ui-flow/pytest/test_visible_material_replacem0/page-result.json.part007.txt) · `296fba44ebb3b9877af3f75920fa204f923e59173c9550393859021c7539ae28`
+- [qualified-ui-flow/qualified-summary.json](originals/qualified-ui-flow/qualified-summary.json) · 1957 bytes · SHA256 `c095a7eddac90a3a299bf0cac3ea9ff74f3c17d267e0be6ee4a919d2e8f5c6da`
+- [qualified-ui-flow/result.json](originals/qualified-ui-flow/result.json) · 1219 bytes · SHA256 `3bdb40b97ecddfb3eb0f624ce965d6b0bfe179a278c0b8ef14d47c3d65b69514`
+- [qualified-ui-flow/stderr.txt](originals/qualified-ui-flow/stderr.txt) · 0 bytes · SHA256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
+- [qualified-ui-flow/stdout.txt](originals/qualified-ui-flow/stdout.txt) · 622 bytes · SHA256 `a4989ddc6db60a4d0d5935ca28b31fa444c6fb2ca41361a3efc25f8cd44b42c3`
+- [remote-after-source-push.tsv](originals/remote-after-source-push.tsv) · 13389 bytes · SHA256 `dd8bb8d66639d75a8b40f360078340a03d8dc48370185ff000e02cfb1681014c`
+- [remote-before-source-push.tsv](originals/remote-before-source-push.tsv) · 13389 bytes · SHA256 `52aedce33ae35e8844458f4c66e188b64645f6ca722c6618106123f331d336d2`
+- [remote-before.tsv](originals/remote-before.tsv) · 13389 bytes · SHA256 `52aedce33ae35e8844458f4c66e188b64645f6ca722c6618106123f331d336d2`
+- [resume-checkpoint.json](originals/resume-checkpoint.json) · 193 bytes · SHA256 `c5c107131be4531cb094da5c14af3045ffa2e61a3f2f6e5eff04ca6ea9eb7516`
+- [ruff-805afe60.log](originals/ruff-805afe60.log) · 19 bytes · SHA256 `82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18`
+- [ruff-final-tests.log](originals/ruff-final-tests.log) · 19 bytes · SHA256 `82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18`
+- [ruff-observers.log](originals/ruff-observers.log) · 19 bytes · SHA256 `82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18`
+- [source-delivery-verification.json](originals/source-delivery-verification.json) · 900 bytes · SHA256 `e577ac845907d225d7b2bd0bf333aee673ca9420d188ecf9e1fc1800019d2db7`
+- [stale-cas-fixture-ast-bridge.json](originals/stale-cas-fixture-ast-bridge.json) · 595 bytes · SHA256 `6e73741a7d52b56702b58679da7f62c031c20a8a6a7a32d3aa4127eedbbe2750`
+- [wip-inputs-before-positive.json](originals/wip-inputs-before-positive.json) · 63657 bytes · SHA256 `62bcd2d1ab96f51b5edc1f743fb193977122ff9851f99daaab728637bafd52ea`
