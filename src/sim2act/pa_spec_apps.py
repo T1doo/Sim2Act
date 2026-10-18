@@ -1320,66 +1320,70 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
         state_write(store, c, live, a["id"], "SUCCEEDED", result=result_ref(b, proved, version))
         store.event(c, job["id"], "SPEC_COMMITTED", dict(result_version=version, artifact_resource=value["resource_id"]))
         # Recheck authority/lease after terminal writes without requiring RUNNING.
-        require(job_scope_gate(store, c, job["principal_id"], job["id"]))
-        terminal = c.execute(select(runs.c.status, runs.c.cancel_intent, runs.c.fence,
-            runs.c.principal_id, runs.c.project_id, runs.c.runtime_id, runs.c.worker_id, runs.c.version,
-            runs.c.fingerprint, runs.c.request_key)
-            .where(runs.c.id == job["id"])).mappings().one()
-        require(not worker.stop.is_set() and not terminal["cancel_intent"]
-            and terminal["status"] == "SUCCEEDED" and terminal["fence"] == run["fence"]
-            and terminal["principal_id"] == job["principal_id"] and terminal["project_id"] == job["project_id"]
-            and terminal["runtime_id"] == job["runtime_id"] and terminal["worker_id"] == run["worker_id"]
-            and terminal["version"] == live["version"] + 1 and terminal["fingerprint"] == job["fingerprint"]
-            and terminal["request_key"] == job["request_key"])
-        final_instance = c.execute(select(internal_instances).where(internal_instances.c.id == instance["id"])).mappings().one()
-        require(final_instance["principal_id"] == job["principal_id"] and final_instance["project_id"] == job["project_id"]
-            and final_instance["runtime_id"] == job["runtime_id"] and final_instance["source_app_id"] == b["draft"]["id"]
-            and final_instance["revision"] == s["expected_revision"] and final_instance["release_id"] == s["release_id"]
-            and type(final_instance["data_version"]) is int and final_instance["data_version"] == version)
-        current_job = c.execute(select(runs).where(runs.c.id == job["id"], runs.c.principal_id == job["principal_id"],
-            runs.c.project_id == job["project_id"], runs.c.runtime_id == job["runtime_id"])).mappings().one()
-        final_binding, _, _ = verify_job(store, c, job["principal_id"], current_job, limits)
-        if runtime_audit is not None:
-            require(ledger_digest(c, current_job) == runtime_audit, "Runtime model audit bytes changed during final save")
-        require(final_binding["audit_fingerprint"] == b["audit_fingerprint"],
-            "Original model audit bytes changed during the final save transaction")
+        from .pa_trial_dispatch import _journal_reads
+        with _journal_reads(worker, c):
+            require(job_scope_gate(store, c, job["principal_id"], job["id"]))
+            terminal = c.execute(select(runs.c.status, runs.c.cancel_intent, runs.c.fence,
+                runs.c.principal_id, runs.c.project_id, runs.c.runtime_id, runs.c.worker_id, runs.c.version,
+                runs.c.fingerprint, runs.c.request_key)
+                .where(runs.c.id == job["id"])).mappings().one()
+            require(not worker.stop.is_set() and not terminal["cancel_intent"]
+                and terminal["status"] == "SUCCEEDED" and terminal["fence"] == run["fence"]
+                and terminal["principal_id"] == job["principal_id"] and terminal["project_id"] == job["project_id"]
+                and terminal["runtime_id"] == job["runtime_id"] and terminal["worker_id"] == run["worker_id"]
+                and terminal["version"] == live["version"] + 1 and terminal["fingerprint"] == job["fingerprint"]
+                and terminal["request_key"] == job["request_key"])
+            final_instance = c.execute(select(internal_instances).where(internal_instances.c.id == instance["id"])).mappings().one()
+            require(final_instance["principal_id"] == job["principal_id"] and final_instance["project_id"] == job["project_id"]
+                and final_instance["runtime_id"] == job["runtime_id"] and final_instance["source_app_id"] == b["draft"]["id"]
+                and final_instance["revision"] == s["expected_revision"] and final_instance["release_id"] == s["release_id"]
+                and type(final_instance["data_version"]) is int and final_instance["data_version"] == version)
+            current_job = c.execute(select(runs).where(runs.c.id == job["id"], runs.c.principal_id == job["principal_id"],
+                runs.c.project_id == job["project_id"], runs.c.runtime_id == job["runtime_id"])).mappings().one()
+            final_binding, _, _ = verify_job(store, c, job["principal_id"], current_job, limits)
+            if runtime_audit is not None:
+                require(ledger_digest(c, current_job) == runtime_audit, "Runtime model audit bytes changed during final save")
+            require(final_binding["audit_fingerprint"] == b["audit_fingerprint"],
+                "Original model audit bytes changed during the final save transaction")
+            from .natural_trial_runs import check_worker_tx
+            check_worker_tx(worker, c, job["id"])
+            if getattr(worker, "pa_trial", None) is not None:
+                from .pa_trial_dispatch import check_terminal_commit
+                check_terminal_commit(worker, c, live, "SUCCEEDED")
+            require(not worker.stop.is_set() and time.time() < live["lease_until"]
+                and time.time() < job["created_at"] + min(limits.run_seconds, plan["definition"]["manifest"]["runtime_limits"]["run_seconds"], s["limits"]["run_seconds"]))
+        return False
+    # This final fresh guard covers all preceding receipt/context writes.
+    from .pa_trial_dispatch import _journal_reads
+    with _journal_reads(worker, c):
+        # No protected effect occurs between it and the transaction return.
+        with store.proof_authorities(c) as authorities:
+            final = commit_guard(worker, c, run, b)
+            owner_fields = ("id", "principal_id", "project_id", "runtime_id", "worker_id",
+                "fence", "version", "lease_until", "created_at", "fingerprint", "request_key")
+            require(all(final[key] == live[key] for key in owner_fields),
+                "Local write ownership interval changed")
+            if store.has_unknown(c, job["id"]):
+                raise DomainError("OUTCOME_UNKNOWN")
+            read_outputs, read_proved = receipts(store, c, final, b)
+            require(fingerprint(read_outputs) == fingerprint(outputs)
+                and fingerprint(read_proved) == fingerprint(proved)
+                and final["context"] == context, "Local write group readback changed")
+            require(c.execute(select(internal_app_runs.c.status).where(
+                internal_app_runs.c.id == a["id"])).scalar_one() == "RUNNING")
+        # Only reads occurred after the final full proof. Recheck its actual
+        # authorities and time bounds after receipt readback, without reusing any
+        # proof across a write, callback or transaction boundary.
+        store.recheck_proof_authorities(c, {"_call_authorities": tuple(sorted(authorities))})
         from .natural_trial_runs import check_worker_tx
         check_worker_tx(worker, c, job["id"])
         if getattr(worker, "pa_trial", None) is not None:
-            from .pa_trial_dispatch import check_terminal_commit
-            check_terminal_commit(worker, c, live, "SUCCEEDED")
-        require(not worker.stop.is_set() and time.time() < live["lease_until"]
-            and time.time() < job["created_at"] + min(limits.run_seconds, plan["definition"]["manifest"]["runtime_limits"]["run_seconds"], s["limits"]["run_seconds"]))
-        return False
-    # This final fresh guard covers all preceding receipt/context writes.
-    # No protected effect occurs between it and the transaction return.
-    with store.proof_authorities(c) as authorities:
-        final = commit_guard(worker, c, run, b)
-        owner_fields = ("id", "principal_id", "project_id", "runtime_id", "worker_id",
-            "fence", "version", "lease_until", "created_at", "fingerprint", "request_key")
-        require(all(final[key] == live[key] for key in owner_fields),
-            "Local write ownership interval changed")
-        if store.has_unknown(c, job["id"]):
-            raise DomainError("OUTCOME_UNKNOWN")
-        read_outputs, read_proved = receipts(store, c, final, b)
-        require(fingerprint(read_outputs) == fingerprint(outputs)
-            and fingerprint(read_proved) == fingerprint(proved)
-            and final["context"] == context, "Local write group readback changed")
-        require(c.execute(select(internal_app_runs.c.status).where(
-            internal_app_runs.c.id == a["id"])).scalar_one() == "RUNNING")
-    # Only reads occurred after the final full proof. Recheck its actual
-    # authorities and time bounds after receipt readback, without reusing any
-    # proof across a write, callback or transaction boundary.
-    store.recheck_proof_authorities(c, {"_call_authorities": tuple(sorted(authorities))})
-    from .natural_trial_runs import check_worker_tx
-    check_worker_tx(worker, c, job["id"])
-    if getattr(worker, "pa_trial", None) is not None:
-        from .pa_trial_dispatch import check_commit
-        check_commit(worker, c, job)
-    require(not worker.stop.is_set() and time.time() < final["lease_until"]
-        and time.time() < job["created_at"] + min(worker.s.run_seconds,
-            plan["definition"]["manifest"]["runtime_limits"]["run_seconds"], s["limits"]["run_seconds"]),
-        "Local write final interval ended")
+            from .pa_trial_dispatch import check_commit
+            check_commit(worker, c, job)
+        require(not worker.stop.is_set() and time.time() < final["lease_until"]
+            and time.time() < job["created_at"] + min(worker.s.run_seconds,
+                plan["definition"]["manifest"]["runtime_limits"]["run_seconds"], s["limits"]["run_seconds"]),
+            "Local write final interval ended")
     return True
 
 

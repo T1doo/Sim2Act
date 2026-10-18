@@ -686,9 +686,10 @@ def advance_model(worker, run, *, _heartbeat_state=None):
     from . import pa_spec_apps as spec
     from .app_jobs import lock_live
     from .db import new_id
+    from .pa_trial_dispatch import _journal_reads
 
     store = worker.store
-    with store.tx() as c:
+    with store.tx() as c, _journal_reads(worker, c):
         job = lock_live(store, c, run)
         require(
             job["context"].get("spec_family") == codec.VERSION,
@@ -750,7 +751,7 @@ def advance_model(worker, run, *, _heartbeat_state=None):
             and request.method == "POST"
             and request.headers.get("Authorization") == "Bearer synthetic-offline-natural-spec"
         )
-        with store.tx() as c:
+        with store.tx() as c, _journal_reads(worker, c):
             current = lock_live(store, c, run)
             require(
                 current["version"] == meta["run_version"]
@@ -898,7 +899,7 @@ def advance_model(worker, run, *, _heartbeat_state=None):
         if failure:
             raise failure
         renew(worker, job, meta["deadline"], _heartbeat_state=_heartbeat_state)
-        with store.tx() as c:
+        with store.tx() as c, _journal_reads(worker, c):
             current = lock_live(store, c, run)
             require(
                 current["version"] == meta["run_version"]
@@ -988,21 +989,22 @@ def advance_model(worker, run, *, _heartbeat_state=None):
             # The last event/receipt callback can change live authority or time.
             # Check authority before replaying any protected receipts/Attempts,
             # then re-read the full evidence before committing VERIFIED.
-            fresh = spec.commit_guard(worker, c, run, current_binding)
-            require(
-                fresh["version"] == current["version"] == meta["run_version"]
-                and fresh["created_at"] == meta["created_at"]
-                and time.time() < meta["deadline"],
-                "Run version changed after model verification callback",
-            )
-            enabled(worker)
-            final_binding = spec.bound(store, c, fresh["principal_id"], fresh, limits)
-            require(final_binding["audit_fingerprint"] == current_binding["audit_fingerprint"])
-            spec.receipts(store, c, fresh, final_binding)
-            if getattr(worker, "pa_trial", None) is not None:
-                from .pa_trial_dispatch import settle_verified
-                settle_verified(worker, c, fresh, aid, raw)
-                spec.commit_guard(worker, c, run, final_binding)
+            with _journal_reads(worker, c):
+                fresh = spec.commit_guard(worker, c, run, current_binding)
+                require(
+                    fresh["version"] == current["version"] == meta["run_version"]
+                    and fresh["created_at"] == meta["created_at"]
+                    and time.time() < meta["deadline"],
+                    "Run version changed after model verification callback",
+                )
+                enabled(worker)
+                final_binding = spec.bound(store, c, fresh["principal_id"], fresh, limits)
+                require(final_binding["audit_fingerprint"] == current_binding["audit_fingerprint"])
+                spec.receipts(store, c, fresh, final_binding)
+                if getattr(worker, "pa_trial", None) is not None:
+                    from .pa_trial_dispatch import settle_verified
+                    settle_verified(worker, c, fresh, aid, raw)
+                    spec.commit_guard(worker, c, run, final_binding)
     except DomainError as rejected:
         with store.tx() as c:
             # The receive transaction has already committed. A later owner,

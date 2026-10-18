@@ -305,7 +305,7 @@ def test_known_accounting_cannot_accept_wrong_original_business_schema(env, tmp_
 def test_original_controller_store_is_fixed_through_late_body_and_failure(env, tmp_path):
     data, b = prepare(env, tmp_path)
     rid = enqueue_generation(data, b)
-    foreign = Store(data[1].database_url, test_only=False)
+    foreign = Store(data[1].database_url, test_only=True)
     sql = []
     event.listen(foreign.engine, "before_cursor_execute", lambda *args: sql.append("SQL"))
     sent, refused = [], []

@@ -178,6 +178,17 @@ def check_commit(worker, c, run):
     _account(worker, _binding(worker))
 
 
+def _journal_reads(worker, c):
+    """Share complete proofs only in this original controller read segment."""
+    from contextlib import nullcontext
+    if type(getattr(worker, "pa_trial", None)) is not JournalTrialBinding:
+        return nullcontext()
+    _binding(worker)
+    gate.require(c.engine is worker.store.engine and c.in_transaction())
+    from .pb_natural_specs import _source_reads
+    return _source_reads(worker.store, c)
+
+
 def check_terminal_commit(worker, c, run, state):
     """Original terminal transaction continuation; never a send/Run admission."""
     b = _binding(worker)
