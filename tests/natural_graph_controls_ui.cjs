@@ -293,7 +293,8 @@ async function run() {
   await click("natural-logic-preview");
   const blocked = postRows(beforeBlocked);
   check(blocked.length === 1 && blocked[0].path === logicBase + "/previews" && blocked[0].status === 400 &&
-    blocked[0].response.error.code === "LOCK_CONFLICT" && $("natural-logic-status").textContent.includes("LOCK_CONFLICT"),
+    blocked[0].response.error.code === "LOCK_CONFLICT" &&
+    $("natural-logic-status").textContent.includes(blocked[0].response.error.message),
   "real natural preview stops at server LOCK_CONFLICT for the manually protected node");
   check($("natural-logic-check").disabled && $("natural-logic-version").disabled && $("natural-logic-commit").disabled,
     "rejected preview cannot CHECK or create a version");
