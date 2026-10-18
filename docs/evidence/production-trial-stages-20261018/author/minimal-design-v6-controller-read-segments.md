@@ -1,0 +1,9 @@
+# 原controller独立读段接线（WIP，待实际资格）
+
+run6冻结faac：gen3成功、Source首NS body/usage已收，原post-receive heartbeat确实提交；其后验证事务仍约31.28秒，晚于原30秒lease约1.28秒，Run总300 deadline未到。原件不能唯一定位rollback事务里的具体guard；不称已证某一行。该轮ERROR保留，不恢复或重发旧key。
+
+原_source_reads只有bound或stage_current子调用寿命，一返回即清缓存。最小改变将原NS控制器的同Connection读段延长到现有事务验证边界：初始读/发送guard/接收后写前读共享原SourceReads；第一处非SELECT现epoch hook清除原token；最终receipt/event callback之后显式新读段并重新完成原guard/bound/receipts/settle/末guard。原local步的最终事件后（含terminal）也新段。所有原执行/成功/迟到body/租约/权限门及写序保留，没有新stage缓存、补账或capability。
+
+私有_journal_reads只对exact JournalTrialBinding及_binding固定原Store/engine、活动同c启用已有_source_reads，其余返回nullcontext，legacy/PB不延长读段。允许复用的仍只是既有完整generation wrapper；第一次全history/checker/candidate/authority不省，后续同事务/driver/thread/epoch且原authorities重核，deepcopy、异常清理；write后重新完整证明。没有跨写、跨事务或跨Run的Grant。
+
+D测试fixture只将foreign Store(sameSQLiteURL,test_only=False)改为合法的独立test_only=True Store/engine，保留替换identity拒绝/foreign SQL0/knownbody原Store保全/业务失败不重发全部断言。原false构造在handler前ValueError，原FAIL如实保留。因本次还修改三个生产文件，下一冻结需重跑未通过链A/B和受影响原C/D bounded节点；不会重跑旧19/12/8/9矩阵。

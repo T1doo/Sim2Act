@@ -1,0 +1,41 @@
+{
+  "kind": "STATIC_WIP_REVIEW_NOT_EXECUTED",
+  "head": "89d612fbc6922964d4a147ff296408d5b0c5beb4",
+  "finding": {
+    "id": "P2_POST_HEARTBEAT_LOCAL_STOP_TIME_RECHECK",
+    "status": "REPORTED_PENDING_FIX",
+    "source": "src/sim2act/production_trial_sender.py",
+    "line_at_read": 457,
+    "cause": "renew_controller checks stop/deadline only before original Store.heartbeat. After the last original guard, heartbeat can take time; final policy freshness checks DB cancellation but not worker.stop. Post-heartbeat local stop/time can otherwise be missed before guard returns.",
+    "minimal_fix": "After committed heartbeat/publication, recheck not worker.stop.is_set() and real time < same original deadline before continuation.",
+    "evidence_type": "Read actual WIP source; no dynamic reproduction or product execution"
+  },
+  "additional_scope_note": "Known prior history branches return or reject before renew; a priorNone concurrent reservation race may perform heartbeat before CAS discovers duplicate, so all-race duplicate-zero-renew is not established.",
+  "files": [
+    {
+      "path": "src/sim2act/natural_spec_runtime.py",
+      "bytes": 42528,
+      "sha256": "b670f7ca078a0b48bed69f1741194c0ef3f6cbc27386957a1664c95b874a1b20"
+    },
+    {
+      "path": "src/sim2act/pa_trial_dispatch.py",
+      "bytes": 54684,
+      "sha256": "bbc3159d658f88a3e259f5b06b2ba6664328941a8a53153a935524b07568fdf7"
+    },
+    {
+      "path": "src/sim2act/production_trial_sender.py",
+      "bytes": 23078,
+      "sha256": "1c17471a89b4c83663ce6811975174c3287503d70a376bd586d3f285cfa0abb0"
+    },
+    {
+      "path": "src/sim2act/natural_live_admission.py",
+      "bytes": 51647,
+      "sha256": "a30a90631ae71fa67ff47bff3259e1cae4da94b1d98077ac46289b1989c33a01"
+    }
+  ],
+  "no_operations": [
+    "No DB/SQL/product/test/network/model/credentials",
+    "No source or sealed-directory writes"
+  ],
+  "directory_status": "UNSEALED_PENDING_FIX_FREEZE_ACTUAL"
+}

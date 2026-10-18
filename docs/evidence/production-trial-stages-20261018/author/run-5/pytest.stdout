@@ -1,0 +1,76 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-9.0.2, pluggy-1.6.0 -- /workspace/sim2act-venv/bin/python
+cachedir: .pytest_cache
+rootdir: /workspace/Sim2Act
+configfile: pyproject.toml
+plugins: anyio-4.15.1
+collecting ... collected 4 items
+
+tests/test_production_trial_stages.py::test_actual_pa_three_two_two_reaches_existing_results_and_pending_owner ERROR
+
+==================================== ERRORS ====================================
+_ ERROR at setup of test_actual_pa_three_two_two_reaches_existing_results_and_pending_owner _
+
+tmp_path_factory = TempPathFactory(_given_basetemp=PosixPath('/workspace/production-trial-stages-20261018/run-5/actual-tmp'), _trace=<plu...PosixPath('/workspace/production-trial-stages-20261018/run-5/actual-tmp'), _retention_count=3, _retention_policy='all')
+
+    @pytest.fixture(scope="module")
+    def actual_prefix(tmp_path_factory):
+        out = tmp_path_factory.mktemp("actual-prefix")
+        url = "sqlite:///" + str(out / "fixture.db")
+        store = Store(url, test_only=True)
+        store.initialize()
+        user = store.user("fixture A", "synthetic-test-A")
+        other = store.user("fixture B", "synthetic-test-B")
+        settings = Settings(url, out, mode="mock")
+        with TestClient(create_app(store, settings)) as client:
+            client.headers["Authorization"] = "Bearer synthetic-test-A"
+            project = client.post("/api/projects", json=dict(name="Fresh stages synthetic fixture"))
+            assert project.status_code == 201, project.text
+            data, binding = prepare((store, settings, client, user, other, project.json()["id"], None), out)
+            workers = []
+    
+            def factory(*args, **kwargs):
+                transport = kwargs["goal_planner_transport"]
+    
+                def pretty(request):
+                    response = transport.handler(request)
+                    return httpx.Response(response.status_code,
+                        content=json.dumps(json.loads(response.content), indent=1).encode())
+    
+                kwargs["goal_planner_transport"] = httpx.MockTransport(pretty)
+                worker = Worker(*args, **kwargs, pa_trial=binding)
+                workers.append(worker)
+                return worker
+    
+            with pytest.MonkeyPatch.context() as patch:
+                patch.setattr(apps, "Worker", factory)
+                generation, app, release, inst, generated = apps.ready(data, style="ordered")
+            source_id = apps.enqueue(data, release, inst)
+            reviewed, source_consent = approve_stage(data, binding, "source", source_id)
+            source_sent = []
+            assert factory(data[0], data[1], goal_planner_transport=apps.transport(source_sent)).once()
+            source_result = apps.inspect(data, inst, source_id)
+            assert source_result.status_code == 200, source_result.text
+>           assert source_result.json()["status"] == "SUCCEEDED", source_result.text
+E           AssertionError: {"namespace":"INTERNAL_APPRUN","formal_publication_enabled":false,"id":"run_a363f6b7925246ee8c4767639aee8c14","app_run_id":"iapprun_906316a2d97d418c8a18fcef663f27f2","instance_id":"iinstance_8e8833dad4b663105e11d29cacc1fcb5","release_id":"irelease_7ea2d796b09a4bc9a43bb4daf251461a","status":"RUNNING","version":1,"cancel_intent":false,"result":null,"result_version":null,"error":null,"known_effects":[],"events":[{"id":"event_b754826e1ef343c98d8ecaa9811fcf02","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338462.5534122,"kind":"ACCEPTED","data":{"namespace":"INTERNAL_APPRUN","app_run_id":"iapprun_906316a2d97d418c8a18fcef663f27f2","instance_id":"iinstance_8e8833dad4b663105e11d29cacc1fcb5","release_id":"irelease_7ea2d796b09a4bc9a43bb4daf251461a","input_fingerprint":"dc9dfb4bf024f23da58fd54ae7fc75a872ded0f94ef5234dd32a7bbe6a34636f"}},{"id":"event_516a9f7796594299a292ed22ab80d904","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338476.5393424,"kind":"CLAIMED","data":{"fence":1}},{"id":"event_9581250c19a542099973e9d9b633f61b","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338485.696455,"kind":"SPEC_STEP_VERIFIED","data":{"step_id":"read_pick","operation_id":"op_b2abbafef03c49638f24d0a32af9b774","fence":1}},{"id":"event_259f0df2106f408aa623f3af6f6d215e","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338509.9316266,"kind":"NS_RESERVED","data":{"attempt_id":"attempt_4cdc714efaf84ad381144f206ffba2ea","parameters_fingerprint":"4ab314c8ad0139752a5aa01cad33947fc5eb0ef336617293752a5887067f413c","reserved_tokens":3990,"request_model":"intern-s2","mode":"MOCK","created_at":1792338509.9274795,"operation_id":"op_6fc6481659484850b4183108092be756","step_id":"duties_pick","fence":1,"reservation_fingerprint":"dfc9bd4fdd2d8e499916088484606dd4a32c3e54fdd32cf4f929ec50fe0a248f"}},{"id":"event_2e45b31b22084decac7ba6db973a7ce9","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338509.9376063,"kind":"NS_WIRE_ARCHIVED","data":{"attempt_id":"attempt_4cdc714efaf84ad381144f206ffba2ea","archive_fingerprint":"893be9f7d6be623814d28e15a1f531128628ea582f8daf39bceeaae02644c2f9"}},{"id":"event_7fdb1ca749744816a893f08d9993028f","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338509.9383967,"kind":"MODEL_RESERVED","data":{"attempt_id":"attempt_4cdc714efaf84ad381144f206ffba2ea","mode":"mock"}},{"id":"event_a2a926470ee5445a91676f42c28fd241","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338509.945418,"kind":"PA_TRIAL_BODY","data":{"attempt_id":"attempt_4cdc714efaf84ad381144f206ffba2ea","family":"pa_trial_request_body.v1","body_fingerprint":"893be9f7d6be623814d28e15a1f531128628ea582f8daf39bceeaae02644c2f9","decoded_sha256":"9eacf1c0f53eecf1be2329d8cb9dd941a1e7a0b15713c06c51052de1cceb5c34","canonical_sha256":null,"byte_count":2966,"complete":true,"omission":"NONE"}},{"id":"event_c734a1900348427ba8de8b0ad0245712","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338538.451996,"kind":"PA_TRIAL_BODY","data":{"attempt_id":"attempt_4cdc714efaf84ad381144f206ffba2ea","family":"pa_trial_response_body.v1","body_fingerprint":"bef49a5929ceeb54373b822bde8682e94a2777e33168e6bf39fde555536964cd","decoded_sha256":"84cc3b4bfcb2604e2ae3b9d468eaac7062117fcd6e7c6a137b1096997ea239f8","canonical_sha256":"8da805c8a32dfb90feeb589a6b71dbb6334171064de806e4443e55b8cfdde086","byte_count":528,"complete":true,"omission":"NONE"}},{"id":"event_3b52429e515d44eaa5848e256abc0e1e","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338538.4600868,"kind":"NS_BODY_ARCHIVED","data":{"attempt_id":"attempt_4cdc714efaf84ad381144f206ffba2ea","archive_fingerprint":"bef49a5929ceeb54373b822bde8682e94a2777e33168e6bf39fde555536964cd"}},{"id":"event_d8c5e6fbd7d54044bcf8b29b3a670ff5","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338538.4744084,"kind":"NS_RECEIVED","data":{"attempt_id":"attempt_4cdc714efaf84ad381144f206ffba2ea","response_fingerprint":"7c9941c064852a5263ac3e92e3495a4048868d38a65fef04d6be40f918a2f3aa","reception_fingerprint":"db07fe9e938c055db79087fa461db515e2a8401fd2e6577062b4f8cbe8d35892"}},{"id":"event_f46c746f1caf462fa3bdea42876349d0","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338573.423643,"kind":"NS_REJECTED","data":{"attempt_id":"attempt_4cdc714efaf84ad381144f206ffba2ea","attempt_fingerprint":"f6f10b1424c263a067a4e8f1cf0bb9375fdd89fbaa22326e140520b829a46763","operation_id":"op_6fc6481659484850b4183108092be756","error":"VERSION_CONFLICT"}}],"steps":[{"step_id":"read_pick","status":"VERIFIED","fingerprint":"b81dccdfc5653b7328191ecb1c820d09d0fe6109dd807327b9a5b4b652f27f8a"}],"semantic_status":"UNKNOWN","owner_acceptance":"PENDING","citation_status":"NOT_RUN","semantic_goal_acceptance":"NOT_RUN","markdown_view":null}
+E           assert 'RUNNING' == 'SUCCEEDED'
+E             
+E             - SUCCEEDED
+E             + RUNNING
+
+tests/test_production_trial_stages.py:128: AssertionError
+=============================== warnings summary ===============================
+../sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: /workspace/production-trial-stages-20261018/run-5/junit.xml -
+=========================== short test summary info ============================
+ERROR tests/test_production_trial_stages.py::test_actual_pa_three_two_two_reaches_existing_results_and_pending_owner - AssertionError: {"namespace":"INTERNAL_APPRUN","formal_publication_enabled":false,"id":"run_a363f6b7925246ee8c4767639aee8c14","app_run_id":"iapprun_906316a2d97d418c8a18fcef663f27f2","instance_id":"iinstance_8e8833dad4b663105e11d29cacc1fcb5","release_id":"irelease_7ea2d796b09a4bc9a43bb4daf251461a","status":"RUNNING","version":1,"cancel_intent":false,"result":null,"result_version":null,"error":null,"known_effects":[],"events":[{"id":"event_b754826e1ef343c98d8ecaa9811fcf02","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338462.5534122,"kind":"ACCEPTED","data":{"namespace":"INTERNAL_APPRUN","app_run_id":"iapprun_906316a2d97d418c8a18fcef663f27f2","instance_id":"iinstance_8e8833dad4b663105e11d29cacc1fcb5","release_id":"irelease_7ea2d796b09a4bc9a43bb4daf251461a","input_fingerprint":"dc9dfb4bf024f23da58fd54ae7fc75a872ded0f94ef5234dd32a7bbe6a34636f"}},{"id":"event_516a9f7796594299a292ed22ab80d904","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338476.5393424,"kind":"CLAIMED","data":{"fence":1}},{"id":"event_9581250c19a542099973e9d9b633f61b","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338485.696455,"kind":"SPEC_STEP_VERIFIED","data":{"step_id":"read_pick","operation_id":"op_b2abbafef03c49638f24d0a32af9b774","fence":1}},{"id":"event_259f0df2106f408aa623f3af6f6d215e","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338509.9316266,"kind":"NS_RESERVED","data":{"attempt_id":"attempt_4cdc714efaf84ad381144f206ffba2ea","parameters_fingerprint":"4ab314c8ad0139752a5aa01cad33947fc5eb0ef336617293752a5887067f413c","reserved_tokens":3990,"request_model":"intern-s2","mode":"MOCK","created_at":1792338509.9274795,"operation_id":"op_6fc6481659484850b4183108092be756","step_id":"duties_pick","fence":1,"reservation_fingerprint":"dfc9bd4fdd2d8e499916088484606dd4a32c3e54fdd32cf4f929ec50fe0a248f"}},{"id":"event_2e45b31b22084decac7ba6db973a7ce9","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338509.9376063,"kind":"NS_WIRE_ARCHIVED","data":{"attempt_id":"attempt_4cdc714efaf84ad381144f206ffba2ea","archive_fingerprint":"893be9f7d6be623814d28e15a1f531128628ea582f8daf39bceeaae02644c2f9"}},{"id":"event_7fdb1ca749744816a893f08d9993028f","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338509.9383967,"kind":"MODEL_RESERVED","data":{"attempt_id":"attempt_4cdc714efaf84ad381144f206ffba2ea","mode":"mock"}},{"id":"event_a2a926470ee5445a91676f42c28fd241","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338509.945418,"kind":"PA_TRIAL_BODY","data":{"attempt_id":"attempt_4cdc714efaf84ad381144f206ffba2ea","family":"pa_trial_request_body.v1","body_fingerprint":"893be9f7d6be623814d28e15a1f531128628ea582f8daf39bceeaae02644c2f9","decoded_sha256":"9eacf1c0f53eecf1be2329d8cb9dd941a1e7a0b15713c06c51052de1cceb5c34","canonical_sha256":null,"byte_count":2966,"complete":true,"omission":"NONE"}},{"id":"event_c734a1900348427ba8de8b0ad0245712","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338538.451996,"kind":"PA_TRIAL_BODY","data":{"attempt_id":"attempt_4cdc714efaf84ad381144f206ffba2ea","family":"pa_trial_response_body.v1","body_fingerprint":"bef49a5929ceeb54373b822bde8682e94a2777e33168e6bf39fde555536964cd","decoded_sha256":"84cc3b4bfcb2604e2ae3b9d468eaac7062117fcd6e7c6a137b1096997ea239f8","canonical_sha256":"8da805c8a32dfb90feeb589a6b71dbb6334171064de806e4443e55b8cfdde086","byte_count":528,"complete":true,"omission":"NONE"}},{"id":"event_3b52429e515d44eaa5848e256abc0e1e","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338538.4600868,"kind":"NS_BODY_ARCHIVED","data":{"attempt_id":"attempt_4cdc714efaf84ad381144f206ffba2ea","archive_fingerprint":"bef49a5929ceeb54373b822bde8682e94a2777e33168e6bf39fde555536964cd"}},{"id":"event_d8c5e6fbd7d54044bcf8b29b3a670ff5","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338538.4744084,"kind":"NS_RECEIVED","data":{"attempt_id":"attempt_4cdc714efaf84ad381144f206ffba2ea","response_fingerprint":"7c9941c064852a5263ac3e92e3495a4048868d38a65fef04d6be40f918a2f3aa","reception_fingerprint":"db07fe9e938c055db79087fa461db515e2a8401fd2e6577062b4f8cbe8d35892"}},{"id":"event_f46c746f1caf462fa3bdea42876349d0","run_id":"run_a363f6b7925246ee8c4767639aee8c14","created_at":1792338573.423643,"kind":"NS_REJECTED","data":{"attempt_id":"attempt_4cdc714efaf84ad381144f206ffba2ea","attempt_fingerprint":"f6f10b1424c263a067a4e8f1cf0bb9375fdd89fbaa22326e140520b829a46763","operation_id":"op_6fc6481659484850b4183108092be756","error":"VERSION_CONFLICT"}}],"steps":[{"step_id":"read_pick","status":"VERIFIED","fingerprint":"b81dccdfc5653b7328191ecb1c820d09d0fe6109dd807327b9a5b4b652f27f8a"}],"semantic_status":"UNKNOWN","owner_acceptance":"PENDING","citation_status":"NOT_RUN","semantic_goal_acceptance":"NOT_RUN","markdown_view":null}
+assert 'RUNNING' == 'SUCCEEDED'
+  
+  - SUCCEEDED
+  + RUNNING
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+=================== 1 warning, 1 error in 275.93s (0:04:35) ====================

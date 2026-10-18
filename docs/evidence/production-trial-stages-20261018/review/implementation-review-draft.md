@@ -1,0 +1,21 @@
+# 原阶段业务桥 WIP 静审
+
+当前初审发现的1项P1、2项P2已读到root修复，尚未形成最终冻结资格结论。原首冻结afda85f65254df40c275add491820571fc9e12f6第一次执行由root报告在fixture Store.claim类型门ERROR、无adapter调用；本独审尚未回读该执行原件，不把它归因产品业务失败。当前新claim与safe-serializer修正未最终freeze。
+
+## 发现和修复
+
+P1_POST_TERMINAL_RUNNING：新check_commit曾无条件走policy.check_run，要求RUNNING，而原Worker.finish和pa_spec_apps终态写后还调用它，必拒PARTIAL/SUCCEEDED。root新增内部check_terminal_commit，调用点传原RUNNING快照（NS用live），核原owner/worker/fence、状态、version+1、lease0、原lease/Run/批准期限、source与完整历史proof。通用check_run未放宽。已静态读到修复。
+
+P2_SOURCE_OWNER_BEFORE_PRIVATE_BODY：Cold以原StageApprove source id调用journal_stage_accounted，原helper先读full Attempts/Run才_journal_owner。现先核stage枚举和Run owner/project/key，gen runtime/source_scope；NS核原phase精确run/runtime/contract/指纹、SUCCEEDED及job_scope_gate，再读private。已静态读到修复。
+
+P2_BINDING_SERIALIZER_CALLBACK：新JournalTrialBinding构造及_binding原直接调用exact Pydantic contract.model_dump，可被model_copy添加同名字段shadow为callback。现新binding用evidence._contract_data安全投影→parse_contract重建，_binding也从安全投影算FP；旧PATrialBinding不改。已静态读到修复。原发现的未修完整源码未封存；post-initial-fix-fragments.txt是父级修复后本次实际读取片段，不冒修前字节。
+
+## 读取时序及测试口径纠正
+
+较早WIP测试出现total_tokens==8，我发出提醒；复核首冻结Git blob确认已在首跑前改为实际apps.wire/first_response的100/900/1000。因此撤回“冻结测试仍错8”的判断，该提醒不是执行失败或修后资格证据，不能算pytest失败。
+
+首执行卡在既有Store.claim硬认PATrialBinding，需要最小真实claim接线；新模式应只选exact未关联原owner/project及固定Generate runtime/key或已存phase候选，保持~associated_sql与原旧关联/check_claim资格门。selected source_scope之后，同c重核_approved/source、gen冻结Goal或原独立phase authority，再写claim。当前diff已如此实现；建议返回deadline继续取原冻结limits与contract caps两者较小run_seconds，不因合同300扩长更紧Run限额。
+
+GA/NS实际provider、token与effective node caps已按阶段复用，原controller guard仍实际运行；Worker新绑定仅固定Store，漂移poison，旧setter行为保留。接收事务固定原Store/c追加capture+journal+原BodyArchive，随后原业务parser和commit gates才可接受；历史duplicate在business continuation拒绝交回可执行CapturedResponse。错误携带实际body/complete/可解析response，供原GA/NS保usage；新reject不重写immutable accounting。对这些路径的最终行为资格仍需冻结原件。
+
+本审没有运行产品/pytest/collect/SQL/DB/网络或读取私有holdout，未写repo或旧sealed。新review目录未seal，等待最终冻结及实际闭合。

@@ -1,0 +1,15 @@
+# c377 frozen static review — execution pending
+
+Exact checkout: `c37736161c69562745078cbc8ee59d95c1f6d287`, clean when read. This is an independent file/Git/AST review; no product/test/DB/HTTP/model execution and no active run-3 artifact inspection.
+
+No remaining definite P1/P2 found in the fixed checker-protocol change. In `production_trial_sender.py:218`, `_derive` enables only the existing `{CHECK_TOOL: check_envelope}` mapping for the fixed `generate` stage. This matches `goal_applications.parse_generation` at line 296. `pa_spec_apps.check_envelope` at line 280 checks only the closed top-level candidate object; it neither compiles nor executes a tool nor accepts the candidate semantically. Other tool names still use the original `model.parse_response` validation. Known usage is derived before protocol validity and remains available for UNKNOWN.
+
+All three receive/history derivation call sites use the same `item.stage == 'generate'` rule (`production_trial_sender.py:156`, `:173`, `:286`). Public sender function signatures are unchanged from `99f1122`. The stage comes from the existing bound reservation identity and original journal/context proof; this patch introduces no caller schema, callback, API selector, credential, source registration or live permit.
+
+The test-only fixture wraps its own original Mock handler, preserving response status and JSON meaning while pretty-printing actual response bytes. The positive test now requires each of seven archived response bodies to have a raw SHA different from its canonical SHA; the existing byte-count/base64/raw-SHA assertions remain. This is a useful distinction between actual capture bytes and canonical response bodies, without changing production serialization or business oracles.
+
+Previously reported static issues remain repaired in this checkout: terminal continuation verifies the original RUNNING snapshot against exact terminal transition instead of calling RUNNING admission after terminal save; historical stage proof checks scalar ownership and original phase/job scope before private Attempt payloads; the new binding reconstructs contracts through safe `_contract_data` and `parse_contract`; generic new-mode claim remains test-only SQLite, excludes qualified associated Runs, and takes the minimum original frozen Run limit/contract cap/approval expiry. Original synthetic binding and public admission remain separate.
+
+The pure-file audit reports 138 tracked production paths, six changed production paths and one new test path versus `4bb3c26`; 11 selected protected production paths retain the baseline Git blobs. `99f1122` to `c3773616` changes only the sender protocol handling and the existing new test file. See `freeze-c377-static-verification.json` and the retained audit script/stdout/stderr.
+
+Root reports run-1 claim integration failure and run-2 checker-protocol fixture error; these reports are not reclassified here because their closed raw evidence has not been inspected in this static step. Run-3 is pending. This static conclusion is not actual qualification PASS, and this review directory remains unsealed for the later closed-evidence audit.

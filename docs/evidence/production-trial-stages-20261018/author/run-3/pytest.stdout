@@ -1,0 +1,83 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-9.0.2, pluggy-1.6.0 -- /workspace/sim2act-venv/bin/python
+cachedir: .pytest_cache
+rootdir: /workspace/Sim2Act
+configfile: pyproject.toml
+plugins: anyio-4.15.1
+collecting ... collected 4 items
+
+tests/test_production_trial_stages.py::test_actual_pa_three_two_two_reaches_existing_results_and_pending_owner ERROR
+
+==================================== ERRORS ====================================
+_ ERROR at setup of test_actual_pa_three_two_two_reaches_existing_results_and_pending_owner _
+
+tmp_path_factory = TempPathFactory(_given_basetemp=PosixPath('/workspace/production-trial-stages-20261018/run-3/actual-tmp'), _trace=<plu...PosixPath('/workspace/production-trial-stages-20261018/run-3/actual-tmp'), _retention_count=3, _retention_policy='all')
+
+    @pytest.fixture(scope="module")
+    def actual_prefix(tmp_path_factory):
+        out = tmp_path_factory.mktemp("actual-prefix")
+        url = "sqlite:///" + str(out / "fixture.db")
+        store = Store(url, test_only=True)
+        store.initialize()
+        user = store.user("fixture A", "synthetic-test-A")
+        other = store.user("fixture B", "synthetic-test-B")
+        settings = Settings(url, out, mode="mock")
+        with TestClient(create_app(store, settings)) as client:
+            client.headers["Authorization"] = "Bearer synthetic-test-A"
+            project = client.post("/api/projects", json=dict(name="Fresh stages synthetic fixture"))
+            assert project.status_code == 201, project.text
+            data, binding = prepare((store, settings, client, user, other, project.json()["id"], None), out)
+            workers = []
+    
+            def factory(*args, **kwargs):
+                transport = kwargs["goal_planner_transport"]
+    
+                def pretty(request):
+                    response = transport.handler(request)
+                    return httpx.Response(response.status_code,
+                        content=json.dumps(json.loads(response.content), indent=1).encode())
+    
+                kwargs["goal_planner_transport"] = httpx.MockTransport(pretty)
+                worker = Worker(*args, **kwargs, pa_trial=binding)
+                workers.append(worker)
+                return worker
+    
+            with pytest.MonkeyPatch.context() as patch:
+                patch.setattr(apps, "Worker", factory)
+                generation, app, release, inst, generated = apps.ready(data, style="ordered")
+            source_id = apps.enqueue(data, release, inst)
+            reviewed, source_consent = approve_stage(data, binding, "source", source_id)
+            source_sent = []
+>           assert factory(data[0], data[1], goal_planner_transport=apps.transport(source_sent)).once()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_production_trial_stages.py:125: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/worker.py:747: in once
+    run = self.store.claim(self.id, self.s.lease_seconds,
+src/sim2act/db.py:1333: in claim
+    trial_deadline = check_journal_claim(self, c, row, trial_binding)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_trial_dispatch.py:976: in check_journal_claim
+    gate.require(run["request_key"] == getattr(b.contract.stage_keys, stage))
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+ok = False, message = 'Exact natural trial changed'
+
+    def require(ok, message="Exact natural trial changed"):
+        if not ok:
+>           raise DomainError("VERSION_CONFLICT", message)
+E           sim2act.errors.DomainError: Exact natural trial changed
+
+src/sim2act/natural_live_admission.py:47: DomainError
+=============================== warnings summary ===============================
+../sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: /workspace/production-trial-stages-20261018/run-3/junit.xml -
+=========================== short test summary info ============================
+ERROR tests/test_production_trial_stages.py::test_actual_pa_three_two_two_reaches_existing_results_and_pending_owner - sim2act.errors.DomainError: Exact natural trial changed
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+=================== 1 warning, 1 error in 194.34s (0:03:14) ====================

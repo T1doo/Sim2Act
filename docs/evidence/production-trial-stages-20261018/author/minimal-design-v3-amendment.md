@@ -1,0 +1,9 @@
+# 实际首跑暴露的最小Claim接线补充
+
+首冻结afda85f65254df40c275add491820571fc9e12f6，run-1首fixture3.05秒ERROR：Store.claim仍硬拒非PATrialBinding（db.py1275）。Session guard adapter_methods=[]/real IO attempts=[]，无预留发送；完整原件保留，不是PASS、不删改。
+
+新JournalTrialBinding仅在test_only SQLite可选原generic API创建的exact trial owner/project队列：固定generation runtime/key或原PHASEready，并强制~associated_sql。原qualified关联选择、旧PATrialBinding及literal资格门原样，新模式不能选任何context或任一association锚存在的Run。selected原Run先走既有source_scope_gate，再原事务check_journal_claim核当前原_approved、固定account source、原完整Goal或独立stage approved authority/当前lineage/原handoff和有限300秒期限；然后才写claim/fence。没有HTTP/Settings/CLI登记，不新造executor/Grant，也不将未安装模式伪装qualified association。
+
+独审确定serializer回调P2：新binding用既有production_evidence._contract_data白名单投影→parse_contract安全重建，拒绝model_copy shadowed方法而不执行；新_binding同投影重核FP，旧PATrialBinding不动。此修正为已有信任边界关闭，不扩故障矩阵。
+
+原四唯一资格重冻结后重新从fresh DB执行，旧首ERROR独立计数。七次完整链之前首run0adapter，无旧矩阵重跑。真实测试最新授权已收到；余额/原ChatAPI禁止收费回退未核实，授权不是缺失项，当前实际仍拒发。credential仅核环境key存在性而非内容，INTERN_API_TOKEN present、生产DB/费用账户配置未观察到；不显示token、不改配置或安全权限。

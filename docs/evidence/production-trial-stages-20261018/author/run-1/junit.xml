@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="1" failures="0" skipped="0" tests="1" time="3.054" timestamp="2026-10-18T15:14:23.144872+00:00" hostname="888ae8c15de7"><testcase classname="tests.test_production_trial_stages" name="test_actual_pa_three_two_two_reaches_existing_results_and_pending_owner" time="2.251"><error message="failed on setup with &quot;sim2act.errors.DomainError: PERMISSION_DENIED&quot;">tmp_path_factory = TempPathFactory(_given_basetemp=PosixPath('/workspace/production-trial-stages-20261018/run-1/actual-tmp'), _trace=&lt;plu...PosixPath('/workspace/production-trial-stages-20261018/run-1/actual-tmp'), _retention_count=3, _retention_policy='all')
+
+    @pytest.fixture(scope="module")
+    def actual_prefix(tmp_path_factory):
+        out = tmp_path_factory.mktemp("actual-prefix")
+        url = "sqlite:///" + str(out / "fixture.db")
+        store = Store(url, test_only=True)
+        store.initialize()
+        user = store.user("fixture A", "synthetic-test-A")
+        other = store.user("fixture B", "synthetic-test-B")
+        settings = Settings(url, out, mode="mock")
+        with TestClient(create_app(store, settings)) as client:
+            client.headers["Authorization"] = "Bearer synthetic-test-A"
+            project = client.post("/api/projects", json=dict(name="Fresh stages synthetic fixture"))
+            assert project.status_code == 201, project.text
+            data, binding = prepare((store, settings, client, user, other, project.json()["id"], None), out)
+            workers = []
+    
+            def factory(*args, **kwargs):
+                worker = Worker(*args, **kwargs, pa_trial=binding)
+                workers.append(worker)
+                return worker
+    
+            with pytest.MonkeyPatch.context() as patch:
+                patch.setattr(apps, "Worker", factory)
+&gt;               generation, app, release, inst, generated = apps.ready(data, style="ordered")
+                                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_production_trial_stages.py:113: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_natural_spec_apps.py:248: in ready
+    rid, result, sent = generate(data, style, repair)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_natural_spec_apps.py:240: in generate
+    assert Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/worker.py:747: in once
+    run = self.store.claim(self.id, self.s.lease_seconds,
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sim2act.db.Store object at 0x7f400dbbc6b0&gt;
+worker_id = 'worker_ba72ee65098e446aa8721197319124d4', lease_seconds = 30
+
+    def claim(self, worker_id, lease_seconds, *, trial_binding=None):
+        from .protocol_jobs import protocol_run_ids
+        from .protocol_recovery import recover_expired_protocols
+    
+        recover_expired_protocols(self)
+        now = time.time()
+        with self.tx() as c:
+            expired = (
+                c.execute(
+                    select(runs.c.id, runs.c.status, runs.c.fence, runs.c.version, runs.c.cancel_intent)
+                    .where(
+                        runs.c.status.in_(["RUNNING", "PAUSE_REQUESTED", "CANCEL_REQUESTED"]),
+                        runs.c.lease_until &lt;= now,
+                    )
+                    .with_for_update(skip_locked=True)
+                )
+                .mappings()
+                .all()
+            )
+            protocol_ids = protocol_run_ids(c, candidates=[row["id"] for row in expired])
+            for r in expired:
+                if r["id"] in protocol_ids:
+                    continue
+                c.execute(
+                    update(runs)
+                    .where(runs.c.id == r["id"])
+                    .values(status="RECONCILING", fence=r["fence"] + 1, version=r["version"] + 1)
+                )
+                self.event(c, r["id"], "WORKER_LOST", {"fence": r["fence"] + 1})
+                # Local tools commit their receipt atomically. Only model response may be unknown.
+                pending = c.execute(
+                    select(attempts.c.id).where(
+                        attempts.c.run_id == r["id"], attempts.c.status == "STARTED"
+                    )
+                ).first()
+                op = c.execute(
+                    select(operations.c.id).where(
+                        operations.c.run_id == r["id"],
+                        operations.c.status.in_(["DISPATCHED", "OUTCOME_UNKNOWN", "RECEIPT_KNOWN"]),
+                    )
+                ).first()
+                state = (
+                    ("RECONCILING" if r["cancel_intent"] else "WAITING_RESOURCE")
+                    if pending or op
+                    else (
+                        "CANCELLED"
+                        if r["cancel_intent"]
+                        else "PAUSED"
+                        if r["status"] == "PAUSE_REQUESTED"
+                        else "QUEUED"
+                    )
+                )
+                c.execute(
+                    update(runs)
+                    .where(runs.c.id == r["id"])
+                    .values(
+                        status=state, error={"code": "OUTCOME_UNKNOWN"} if pending or op else None
+                    )
+                )
+                self.event(c, r["id"], "RECONCILED", {"status": state, "receipts_preserved": True})
+            from .natural_trial_runs import associated_sql, check_claim
+    
+            # Ordinary workers never acquire trial ownership, even before phase
+            # approval. Association and Run become visible in the same commit.
+            eligibility = ~associated_sql()
+            if trial_binding is not None:
+                from sqlalchemy import and_, exists, or_
+    
+                from .natural_live_admission import PHASE, TrialContractV2, entity
+                from .natural_trial_runs import MARKER
+                from .pa_trial_dispatch import PATrialBinding
+    
+                if type(trial_binding) is not PATrialBinding:
+&gt;                   raise DomainError("PERMISSION_DENIED")
+E                   sim2act.errors.DomainError: PERMISSION_DENIED
+
+src/sim2act/db.py:1275: DomainError</error></testcase></testsuite></testsuites>

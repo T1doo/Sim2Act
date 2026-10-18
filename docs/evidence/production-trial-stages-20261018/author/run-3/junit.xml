@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="1" failures="0" skipped="0" tests="1" time="194.337" timestamp="2026-10-18T15:20:54.641319+00:00" hostname="888ae8c15de7"><testcase classname="tests.test_production_trial_stages" name="test_actual_pa_three_two_two_reaches_existing_results_and_pending_owner" time="193.536"><error message="failed on setup with &quot;sim2act.errors.DomainError: Exact natural trial changed&quot;">tmp_path_factory = TempPathFactory(_given_basetemp=PosixPath('/workspace/production-trial-stages-20261018/run-3/actual-tmp'), _trace=&lt;plu...PosixPath('/workspace/production-trial-stages-20261018/run-3/actual-tmp'), _retention_count=3, _retention_policy='all')
+
+    @pytest.fixture(scope="module")
+    def actual_prefix(tmp_path_factory):
+        out = tmp_path_factory.mktemp("actual-prefix")
+        url = "sqlite:///" + str(out / "fixture.db")
+        store = Store(url, test_only=True)
+        store.initialize()
+        user = store.user("fixture A", "synthetic-test-A")
+        other = store.user("fixture B", "synthetic-test-B")
+        settings = Settings(url, out, mode="mock")
+        with TestClient(create_app(store, settings)) as client:
+            client.headers["Authorization"] = "Bearer synthetic-test-A"
+            project = client.post("/api/projects", json=dict(name="Fresh stages synthetic fixture"))
+            assert project.status_code == 201, project.text
+            data, binding = prepare((store, settings, client, user, other, project.json()["id"], None), out)
+            workers = []
+    
+            def factory(*args, **kwargs):
+                transport = kwargs["goal_planner_transport"]
+    
+                def pretty(request):
+                    response = transport.handler(request)
+                    return httpx.Response(response.status_code,
+                        content=json.dumps(json.loads(response.content), indent=1).encode())
+    
+                kwargs["goal_planner_transport"] = httpx.MockTransport(pretty)
+                worker = Worker(*args, **kwargs, pa_trial=binding)
+                workers.append(worker)
+                return worker
+    
+            with pytest.MonkeyPatch.context() as patch:
+                patch.setattr(apps, "Worker", factory)
+                generation, app, release, inst, generated = apps.ready(data, style="ordered")
+            source_id = apps.enqueue(data, release, inst)
+            reviewed, source_consent = approve_stage(data, binding, "source", source_id)
+            source_sent = []
+&gt;           assert factory(data[0], data[1], goal_planner_transport=apps.transport(source_sent)).once()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_production_trial_stages.py:125: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/worker.py:747: in once
+    run = self.store.claim(self.id, self.s.lease_seconds,
+src/sim2act/db.py:1333: in claim
+    trial_deadline = check_journal_claim(self, c, row, trial_binding)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_trial_dispatch.py:976: in check_journal_claim
+    gate.require(run["request_key"] == getattr(b.contract.stage_keys, stage))
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+ok = False, message = 'Exact natural trial changed'
+
+    def require(ok, message="Exact natural trial changed"):
+        if not ok:
+&gt;           raise DomainError("VERSION_CONFLICT", message)
+E           sim2act.errors.DomainError: Exact natural trial changed
+
+src/sim2act/natural_live_admission.py:47: DomainError</error></testcase></testsuite></testsuites>

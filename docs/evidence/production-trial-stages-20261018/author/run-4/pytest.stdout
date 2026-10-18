@@ -1,0 +1,76 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-9.0.2, pluggy-1.6.0 -- /workspace/sim2act-venv/bin/python
+cachedir: .pytest_cache
+rootdir: /workspace/Sim2Act
+configfile: pyproject.toml
+plugins: anyio-4.15.1
+collecting ... collected 4 items
+
+tests/test_production_trial_stages.py::test_actual_pa_three_two_two_reaches_existing_results_and_pending_owner ERROR
+
+==================================== ERRORS ====================================
+_ ERROR at setup of test_actual_pa_three_two_two_reaches_existing_results_and_pending_owner _
+
+tmp_path_factory = TempPathFactory(_given_basetemp=PosixPath('/workspace/production-trial-stages-20261018/run-4/actual-tmp'), _trace=<plu...PosixPath('/workspace/production-trial-stages-20261018/run-4/actual-tmp'), _retention_count=3, _retention_policy='all')
+
+    @pytest.fixture(scope="module")
+    def actual_prefix(tmp_path_factory):
+        out = tmp_path_factory.mktemp("actual-prefix")
+        url = "sqlite:///" + str(out / "fixture.db")
+        store = Store(url, test_only=True)
+        store.initialize()
+        user = store.user("fixture A", "synthetic-test-A")
+        other = store.user("fixture B", "synthetic-test-B")
+        settings = Settings(url, out, mode="mock")
+        with TestClient(create_app(store, settings)) as client:
+            client.headers["Authorization"] = "Bearer synthetic-test-A"
+            project = client.post("/api/projects", json=dict(name="Fresh stages synthetic fixture"))
+            assert project.status_code == 201, project.text
+            data, binding = prepare((store, settings, client, user, other, project.json()["id"], None), out)
+            workers = []
+    
+            def factory(*args, **kwargs):
+                transport = kwargs["goal_planner_transport"]
+    
+                def pretty(request):
+                    response = transport.handler(request)
+                    return httpx.Response(response.status_code,
+                        content=json.dumps(json.loads(response.content), indent=1).encode())
+    
+                kwargs["goal_planner_transport"] = httpx.MockTransport(pretty)
+                worker = Worker(*args, **kwargs, pa_trial=binding)
+                workers.append(worker)
+                return worker
+    
+            with pytest.MonkeyPatch.context() as patch:
+                patch.setattr(apps, "Worker", factory)
+                generation, app, release, inst, generated = apps.ready(data, style="ordered")
+            source_id = apps.enqueue(data, release, inst)
+            reviewed, source_consent = approve_stage(data, binding, "source", source_id)
+            source_sent = []
+            assert factory(data[0], data[1], goal_planner_transport=apps.transport(source_sent)).once()
+            source_result = apps.inspect(data, inst, source_id)
+            assert source_result.status_code == 200, source_result.text
+>           assert source_result.json()["status"] == "SUCCEEDED", source_result.text
+E           AssertionError: {"namespace":"INTERNAL_APPRUN","formal_publication_enabled":false,"id":"run_d21d0cdbd61b483fafd29e917cb8aacb","app_run_id":"iapprun_0789cc0b2fbc4cc1b4d90363d6be0d98","instance_id":"iinstance_b29203b7acfff1e5139dc8684d9ee11c","release_id":"irelease_47d64e6dd4a6471fa9ba618fee054a0d","status":"RUNNING","version":1,"cancel_intent":false,"result":null,"result_version":null,"error":null,"known_effects":[],"events":[{"id":"event_d03b313ddc29433bab2d626bb5adc53b","run_id":"run_d21d0cdbd61b483fafd29e917cb8aacb","created_at":1792337463.979083,"kind":"ACCEPTED","data":{"namespace":"INTERNAL_APPRUN","app_run_id":"iapprun_0789cc0b2fbc4cc1b4d90363d6be0d98","instance_id":"iinstance_b29203b7acfff1e5139dc8684d9ee11c","release_id":"irelease_47d64e6dd4a6471fa9ba618fee054a0d","input_fingerprint":"fe147af66b0b7cde312e28aaf91b6aa572cc63d0ca528cbaca37450a3d4fa2aa"}},{"id":"event_65a49ffb9897475b8863755b3dfea673","run_id":"run_d21d0cdbd61b483fafd29e917cb8aacb","created_at":1792337488.3241165,"kind":"CLAIMED","data":{"fence":1}},{"id":"event_5a1f9f3529d4493880b88f27a4ac22cb","run_id":"run_d21d0cdbd61b483fafd29e917cb8aacb","created_at":1792337498.2987978,"kind":"SPEC_STEP_VERIFIED","data":{"step_id":"read_pick","operation_id":"op_ddfa4834aedd48af9ca5491cb4fc00f2","fence":1}},{"id":"event_a5287089d95c44e4b4af8ecd0451ab86","run_id":"run_d21d0cdbd61b483fafd29e917cb8aacb","created_at":1792337561.834713,"kind":"NS_RESERVED","data":{"attempt_id":"attempt_188cc4acee0d46979c60fb95825b084d","parameters_fingerprint":"b6e1e03f83288554c5a6ad4cb100f957cb3b6f995c45159d780c46ac7363aec8","reserved_tokens":3990,"request_model":"intern-s2","mode":"MOCK","created_at":1792337561.8272178,"operation_id":"op_43d5a6bd79f444139783adf2687dcad8","step_id":"duties_pick","fence":1,"reservation_fingerprint":"a982cf89c708f92ab4c44a895446a93b9b35ec97242855f3df20777fab9ece18"}},{"id":"event_d58cd72bedf84960ad5db30622af217f","run_id":"run_d21d0cdbd61b483fafd29e917cb8aacb","created_at":1792337561.846604,"kind":"NS_WIRE_ARCHIVED","data":{"attempt_id":"attempt_188cc4acee0d46979c60fb95825b084d","archive_fingerprint":"3a6aef719abe89388539aa74f234a6f777f79214f508899a9b011631eba5bd15"}},{"id":"event_789ff51bd4ef49a9bb915d8a166e6f74","run_id":"run_d21d0cdbd61b483fafd29e917cb8aacb","created_at":1792337561.847497,"kind":"MODEL_RESERVED","data":{"attempt_id":"attempt_188cc4acee0d46979c60fb95825b084d","mode":"mock"}},{"id":"event_66787efbdf954411b7934673f57a3d8d","run_id":"run_d21d0cdbd61b483fafd29e917cb8aacb","created_at":1792337561.8604815,"kind":"PA_TRIAL_BODY","data":{"attempt_id":"attempt_188cc4acee0d46979c60fb95825b084d","family":"pa_trial_request_body.v1","body_fingerprint":"3a6aef719abe89388539aa74f234a6f777f79214f508899a9b011631eba5bd15","decoded_sha256":"845b66f47cea04c078f988fb0e547f5214ae7aa0d2e450c1ecbab1ad3f737c74","canonical_sha256":null,"byte_count":2966,"complete":true,"omission":"NONE"}}],"steps":[{"step_id":"read_pick","status":"VERIFIED","fingerprint":"460eb10c7d974541bf1543f7b99c074fb4e891435812434333164b5e753b196b"}],"semantic_status":"UNKNOWN","owner_acceptance":"PENDING","citation_status":"NOT_RUN","semantic_goal_acceptance":"NOT_RUN","markdown_view":null}
+E           assert 'RUNNING' == 'SUCCEEDED'
+E             
+E             - SUCCEEDED
+E             + RUNNING
+
+tests/test_production_trial_stages.py:128: AssertionError
+=============================== warnings summary ===============================
+../sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: /workspace/production-trial-stages-20261018/run-4/junit.xml -
+=========================== short test summary info ============================
+ERROR tests/test_production_trial_stages.py::test_actual_pa_three_two_two_reaches_existing_results_and_pending_owner - AssertionError: {"namespace":"INTERNAL_APPRUN","formal_publication_enabled":false,"id":"run_d21d0cdbd61b483fafd29e917cb8aacb","app_run_id":"iapprun_0789cc0b2fbc4cc1b4d90363d6be0d98","instance_id":"iinstance_b29203b7acfff1e5139dc8684d9ee11c","release_id":"irelease_47d64e6dd4a6471fa9ba618fee054a0d","status":"RUNNING","version":1,"cancel_intent":false,"result":null,"result_version":null,"error":null,"known_effects":[],"events":[{"id":"event_d03b313ddc29433bab2d626bb5adc53b","run_id":"run_d21d0cdbd61b483fafd29e917cb8aacb","created_at":1792337463.979083,"kind":"ACCEPTED","data":{"namespace":"INTERNAL_APPRUN","app_run_id":"iapprun_0789cc0b2fbc4cc1b4d90363d6be0d98","instance_id":"iinstance_b29203b7acfff1e5139dc8684d9ee11c","release_id":"irelease_47d64e6dd4a6471fa9ba618fee054a0d","input_fingerprint":"fe147af66b0b7cde312e28aaf91b6aa572cc63d0ca528cbaca37450a3d4fa2aa"}},{"id":"event_65a49ffb9897475b8863755b3dfea673","run_id":"run_d21d0cdbd61b483fafd29e917cb8aacb","created_at":1792337488.3241165,"kind":"CLAIMED","data":{"fence":1}},{"id":"event_5a1f9f3529d4493880b88f27a4ac22cb","run_id":"run_d21d0cdbd61b483fafd29e917cb8aacb","created_at":1792337498.2987978,"kind":"SPEC_STEP_VERIFIED","data":{"step_id":"read_pick","operation_id":"op_ddfa4834aedd48af9ca5491cb4fc00f2","fence":1}},{"id":"event_a5287089d95c44e4b4af8ecd0451ab86","run_id":"run_d21d0cdbd61b483fafd29e917cb8aacb","created_at":1792337561.834713,"kind":"NS_RESERVED","data":{"attempt_id":"attempt_188cc4acee0d46979c60fb95825b084d","parameters_fingerprint":"b6e1e03f83288554c5a6ad4cb100f957cb3b6f995c45159d780c46ac7363aec8","reserved_tokens":3990,"request_model":"intern-s2","mode":"MOCK","created_at":1792337561.8272178,"operation_id":"op_43d5a6bd79f444139783adf2687dcad8","step_id":"duties_pick","fence":1,"reservation_fingerprint":"a982cf89c708f92ab4c44a895446a93b9b35ec97242855f3df20777fab9ece18"}},{"id":"event_d58cd72bedf84960ad5db30622af217f","run_id":"run_d21d0cdbd61b483fafd29e917cb8aacb","created_at":1792337561.846604,"kind":"NS_WIRE_ARCHIVED","data":{"attempt_id":"attempt_188cc4acee0d46979c60fb95825b084d","archive_fingerprint":"3a6aef719abe89388539aa74f234a6f777f79214f508899a9b011631eba5bd15"}},{"id":"event_789ff51bd4ef49a9bb915d8a166e6f74","run_id":"run_d21d0cdbd61b483fafd29e917cb8aacb","created_at":1792337561.847497,"kind":"MODEL_RESERVED","data":{"attempt_id":"attempt_188cc4acee0d46979c60fb95825b084d","mode":"mock"}},{"id":"event_66787efbdf954411b7934673f57a3d8d","run_id":"run_d21d0cdbd61b483fafd29e917cb8aacb","created_at":1792337561.8604815,"kind":"PA_TRIAL_BODY","data":{"attempt_id":"attempt_188cc4acee0d46979c60fb95825b084d","family":"pa_trial_request_body.v1","body_fingerprint":"3a6aef719abe89388539aa74f234a6f777f79214f508899a9b011631eba5bd15","decoded_sha256":"845b66f47cea04c078f988fb0e547f5214ae7aa0d2e450c1ecbab1ad3f737c74","canonical_sha256":null,"byte_count":2966,"complete":true,"omission":"NONE"}}],"steps":[{"step_id":"read_pick","status":"VERIFIED","fingerprint":"460eb10c7d974541bf1543f7b99c074fb4e891435812434333164b5e753b196b"}],"semantic_status":"UNKNOWN","owner_acceptance":"PENDING","citation_status":"NOT_RUN","semantic_goal_acceptance":"NOT_RUN","markdown_view":null}
+assert 'RUNNING' == 'SUCCEEDED'
+  
+  - SUCCEEDED
+  + RUNNING
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+=================== 1 warning, 1 error in 299.30s (0:04:59) ====================

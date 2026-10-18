@@ -1,0 +1,110 @@
+def check_commit(worker, c, run):
+    b = _binding(worker)
+    gate.require(
+        run["principal_id"] == b.contract.principal_id
+        and run["project_id"] == b.contract.project_id
+    )
+    gate._approved(worker.store, c, b.contract.principal_id, b.contract, b.approval_key)
+    if type(b) is JournalTrialBinding:
+        _admission(worker)(worker.store, c, run["principal_id"], b.contract, b.approval_key,
+            _stage(b, run), run["id"], run["version"], run["fence"])
+        return
+    if type(b.contract) is gate.PBTrialContract and _stage(b, run) == "cold":
+        _pb_source(worker, c, b)
+    _account(worker, _binding(worker))
+
+def check_terminal_commit(worker, c, run, state):
+    """Original terminal transaction continuation; never a send/Run admission."""
+    b = _binding(worker)
+    if type(b) is not JournalTrialBinding:
+        return check_commit(worker, c, run)
+    stage = _stage(b, run)
+    gate.require(state == ("PARTIAL" if stage == "generate" else "SUCCEEDED"))
+    fields = ("id", "principal_id", "project_id", "runtime_id", "worker_id", "fence",
+              "created_at", "fingerprint", "request_key")
+    terminal = c.execute(select(*(getattr(runs.c, k) for k in fields), runs.c.status,
+        runs.c.version, runs.c.cancel_intent, runs.c.lease_until)
+        .where(runs.c.id == run["id"])).mappings().one()
+    gate.require(run["status"] == "RUNNING" and run["worker_id"] == worker.id
+        and not worker.stop.is_set() and not run["cancel_intent"]
+        and all(terminal[k] == run[k] for k in fields)
+        and terminal["status"] == state and terminal["version"] == run["version"] + 1
+        and not terminal["cancel_intent"] and terminal["lease_until"] == 0
+        and time.time() < min(run["lease_until"], b.contract.expires_at,
+                              run["created_at"] + b.contract.caps.run_seconds))
+    gate._approved(worker.store, c, run["principal_id"], b.contract, b.approval_key)
+    _journal_source(worker.store, c, b)
+    if stage == "generate":
+        gate._generation_context(worker.store, c, run, b.contract)
+    else:
+        phase, _ = gate._stage_current(worker.store, c, run["principal_id"], b.contract, stage, run["id"])
+        consent = gate._saved(c, run["principal_id"], gate.entity(b.contract), gate.PHASE,
+                             stage, gate.StageApproveInput)
+        gate.require(phase == consent.authority
+            and consent.approval_key == b.approval_key
+            and fingerprint(phase.model_dump()) == consent.expected_authority_fingerprint)
+    journal_stage_accounted(worker.store, c, run["principal_id"], b.contract,
+                            b.approval_key, run["id"], stage)
+    _binding(worker)
+
+def journal_stage_accounted(store, c, user, contract, key, rid, stage):
+    """Original current lineage calls this only after its full ownership gate."""
+    gate.require(stage in ("generate", "source", "cold") and user == contract.principal_id)
+    owner = c.execute(select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id,
+        runs.c.request_key, runs.c.status).where(runs.c.id == rid)).mappings().first()
+    gate.require(owner is not None and owner["principal_id"] == user
+        and owner["project_id"] == contract.project_id
+        and owner["request_key"] == getattr(contract.stage_keys, stage))
+    if stage == "generate":
+        gate.require(owner["runtime_id"] == contract.runtime_id)
+        from .goal_applications import source_scope_gate
+        source_scope_gate(store, c, rid)
+    else:
+        phase = gate._saved(c, user, gate.entity(contract), gate.PHASE, stage, gate.StageApproveInput)
+        gate.require(phase.approval_key == key and phase.authority.run_id == rid
+            and phase.authority.stage == stage and phase.authority.runtime_id == owner["runtime_id"]
+            and phase.authority.contract_fingerprint == fingerprint(contract.model_dump())
+            and phase.expected_authority_fingerprint == fingerprint(phase.authority.model_dump())
+            and owner["status"] == "SUCCEEDED")
+        from .pa_spec_apps import job_scope_gate
+        gate.require(job_scope_gate(store, c, user, rid))
+    actual = c.execute(select(attempts).where(attempts.c.run_id == rid)
+                       .order_by(attempts.c.created_at, attempts.c.id)).mappings().all()
+    gate.require(len(actual) == (3 if stage == "generate" else 2))
+    markers = [a["parameters"].get("pa_trial_binding", {}) for a in actual]
+    gate.require(all(m.get("version") == JOURNAL_VERSION for m in markers)
+        and len({m.get("account_id") for m in markers}) == 1)
+    b = JournalTrialBinding(contract, key, markers[0].get("account_id"))
+    gate.require(user == contract.principal_id)
+    run = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
+    state, _, _ = _journal_state(store, c, b)
+    slots = [s for s in state.slots if s.identity.stage == stage]
+    gate.require(not state.halted and len(slots) == len(actual)
+        and {s.identity.attempt_id for s in slots} == {a["id"] for a in actual}
+        and all(s.identity.run_id == rid for s in slots))
+    for a in actual:
+        slot, capture, parsed, checked = _journal_chain(store, c, b, run, a["id"])
+        usage = normalize_usage(parsed)
+        gate.require(checked == a and a["status"] == ("RECEIVED" if stage == "generate" else "VERIFIED")
+            and a["usage"] == usage and usage["status"] == "known"
+            and all(getattr(slot.settlement, k) == usage["tokens"].get(k)
+                    for k in ("prompt_tokens", "completion_tokens", "total_tokens")))
+        if stage == "generate":
+            gate.require(a["parameters"].get("generation_raw_evidence") == response_archive(parsed)[1]
+                and a["parameters"].get("generation_received_raw") == response_archive(parsed)[0])
+        else:
+            from .natural_source_archives import REQUEST as NS_REQUEST
+            from .natural_source_archives import RESPONSE as NS_RESPONSE
+            from .natural_source_archives import _read
+            _, original_wire = _read(c, user, run, a["id"], NS_REQUEST)
+            body, archived = _read(c, user, run, a["id"], NS_RESPONSE)
+            gate.require(body.sha256 == capture.raw_sha256
+                and archived == base64.b64decode(capture.body_b64)
+                and body.canonical_sha256 == capture.canonical_sha256
+                and hashlib.sha256(original_wire).hexdigest() == slot.identity.wire_sha256
+                and a["response"].get("received_raw") == response_archive(parsed)[0]
+                and a["response"].get("raw_evidence") == response_archive(parsed)[1])
+            from .db import operations
+            op = c.execute(select(operations.c.status).where(operations.c.run_id == rid,
+                operations.c.id == a["parameters"]["natural_spec"]["operation_id"])).scalar_one()
+            gate.require(op == "VERIFIED")
