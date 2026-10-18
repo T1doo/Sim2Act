@@ -1,0 +1,25 @@
+def _source_history(store, user, contract, key, item, wire):
+    """An original owned key never needs a source read or new send authority."""
+    with store.tx() as c:
+        original, scope, request, quota_request, entity = journal._context(
+            store, c, user, contract, key, item.account_id
+        )
+        anchors = c.execute(
+            select(rows.c.kind).where(
+                rows.c.principal_id == user,
+                rows.c.app_id == scope.project_id,
+                rows.c.kind.in_([journal.KIND, journal.KIND + "_seal"]),
+                rows.c.request_key == scope.trial_key,
+            )
+        ).all()
+        if not anchors:
+            return None
+        journal._history_anchor(c, user, scope, request)
+        _, cursor, quota_revision = journal._quota(c, quota_request, entity, create=False)
+        _, state, _ = journal._ledger(c, scope, request, cursor, quota_revision)
+        policy._bound(store, c, user, original, key, state, cursor, item, wire)
+        slot = next((s for s in state.slots if s.identity.attempt_id == item.attempt_id), None)
+        if slot is None:
+            return None
+        _require(slot.identity == item, "VERSION_CONFLICT")
+    return _history(store, user, original, key, item, wire)

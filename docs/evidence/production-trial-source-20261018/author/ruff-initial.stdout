@@ -1,0 +1,124 @@
+I001 [*] Import block is un-sorted or un-formatted
+  --> tests/test_production_trial_source.py:3:1
+   |
+ 1 |   """Fixed server fixture evidence; no real source or model qualification."""
+ 2 |
+ 3 | / import base64
+ 4 | | import copy
+ 5 | | import hashlib
+ 6 | | import json
+ 7 | | import time
+ 8 | | from dataclasses import replace
+ 9 | |
+10 | | import httpx
+11 | | import pytest
+12 | | from sqlalchemy import delete, event, select
+13 | | from test_production_trial_sender import prepare
+14 | | from test_spec_app_operations import snapshot
+15 | |
+16 | | from sim2act import production_evidence as evidence
+17 | | from sim2act import production_trial_admission as admission
+18 | | from sim2act import production_trial_journal as journal
+19 | | from sim2act import production_trial_policy as policy
+20 | | from sim2act import production_trial_sender as sender
+21 | | from sim2act import production_trial_source as source
+22 | | from sim2act.db import fingerprint
+23 | | from sim2act.db import delivery_graph_requests as rows
+24 | | from sim2act.errors import DomainError
+   | |______________________________________^
+   |
+help: Organize imports
+
+F401 [*] `sim2act.production_trial_policy` imported but unused
+  --> tests/test_production_trial_source.py:19:48
+   |
+17 | from sim2act import production_trial_admission as admission
+18 | from sim2act import production_trial_journal as journal
+19 | from sim2act import production_trial_policy as policy
+   |                                                ^^^^^^
+20 | from sim2act import production_trial_sender as sender
+21 | from sim2act import production_trial_source as source
+   |
+help: Remove unused import: `sim2act.production_trial_policy`
+
+E731 Do not assign a `lambda` expression, use a `def`
+  --> tests/test_production_trial_source.py:95:13
+   |
+93 |       for table in before:
+94 |           if table == rows.name:
+95 | /             unrelated = lambda values: [v for v in values if not v['kind'].startswith(
+96 | |                 (journal.KIND, sender.CAPTURE, source.KIND))]
+   | |_____________________________________________________________^
+97 |               assert unrelated(before[table]) == unrelated(after[table])
+98 |           else:
+   |
+help: Rewrite `unrelated` as a `def`
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_source.py:156:49
+    |
+154 |         ('identity','issuer','fabricated-real-provider','UNKNOWN'),
+155 |     ):
+156 |         changed = copy.deepcopy(t['raw_bundle']); changed[part][field] = value
+    |                                                 ^
+157 |         seed(t, changed)
+158 |         check = load(t)
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_source.py:253:49
+    |
+251 |         assert len(t['state']['sent']) == 1
+252 |         trace.append('mock_handler_after_guard')
+253 |         changed = copy.deepcopy(t['raw_bundle']); changed['status']['revoked'] = True
+    |                                                 ^
+254 |         seed(t, changed)
+255 |         trace.append('server_status_revoked_committed')
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_production_trial_source.py:265:36
+    |
+263 |     assert result.capture_bytes == len(t['state']['reply'])
+264 |     assert load(t).source.decision == 'DENY'
+265 |     before = snapshot(t['data'][0]); duplicate = dispatch(t)
+    |                                    ^
+266 |     assert snapshot(t['data'][0]) == before and duplicate.journal.duplicate
+267 |     assert len(t['state']['sent']) == 1 and not duplicate.adapter_entered
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_production_trial_source.py:281:40
+    |
+279 |     store.test_only = False
+280 |     try:
+281 |         with pytest.raises(DomainError): dispatch(t)
+    |                                        ^
+282 |         with store.tx() as c, pytest.raises(DomainError):
+283 |             source.load_offline(store,c,t['data'][3],t['contract'],t['approval'].request_key,t['identity'].account_id)
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_production_trial_source.py:289:44
+    |
+287 |         worker.s = changed
+288 |         try:
+289 |             with pytest.raises(DomainError): dispatch(t)
+    |                                            ^
+290 |         finally:
+291 |             worker.s = settings
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_production_trial_source.py:294:40
+    |
+292 |     worker.goal_planner_transport = object()
+293 |     try:
+294 |         with pytest.raises(DomainError): dispatch(t)
+    |                                        ^
+295 |     finally:
+296 |         worker.goal_planner_transport = transport
+    |
+
+Found 9 errors.
+[*] 2 fixable with the `--fix` option (1 hidden fix can be enabled with the `--unsafe-fixes` option).
