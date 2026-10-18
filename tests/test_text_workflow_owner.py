@@ -142,7 +142,13 @@ def assert_actual_contract(env, data, contract, *, version):
     assert contract["release_fingerprint"] == data["release"]["fingerprint"]
     assert contract["source_goal"]["card_id"] == data["card"]["id"]
     assert contract["source_goal"]["version"] == data["card"]["version"]
-    assert contract["goal"] == data["card"]["snapshot"]["content"]
+    native_response = env[2].get(f"/api/goal-cards/{data['card']['id']}")
+    assert native_response.status_code == 200, native_response.text
+    native = native_response.json()
+    assert contract["goal"] == native["content"]
+    saved = next(row for row in native["history"] if row["version"] == data["card"]["version"])
+    assert contract["source_goal"]["snapshot"] == saved["snapshot"]
+    assert contract["source_goal"]["fingerprint"] == saved["fingerprint"] == data["card"]["fingerprint"]
     assert contract["material"]["resource_id"] == data["resource"]
     assert contract["material"]["hash"] == data["creation"]["expected_source_hash"]
     assert contract["material"]["content"] == SOURCE
