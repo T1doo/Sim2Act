@@ -29,6 +29,7 @@ from .db import (
     internal_instances,
     internal_releases,
     internal_run_bindings,
+    run_contracts,
     runs,
 )
 from .errors import DomainError
@@ -48,6 +49,19 @@ VERSION_CONSENT = "CREATE_EXACT_CHECKED_CSV_GOAL_RELEASE"
 def require(value,message="Exact frozen CSV Goal revision changed"):
     if not value:
         raise DomainError("VERSION_CONFLICT",message)
+
+
+def extension(namespace):
+    from . import csv_column_revisions, csv_material_revisions
+    for module in (csv_column_revisions,csv_material_revisions):
+        if namespace == module.VERSION:
+            return module
+    require(False,"Unknown CSV revision contract")
+
+
+def material_policy(value):
+    from .csv_material_revisions import VERSION as material_version
+    return value["namespace"] == material_version or value["context"].get("parent",{}).get("material_revision",False)
 
 
 class Preview(Strict):
@@ -173,6 +187,18 @@ def source_gate(store, c, user, iid, key=None, *, current_head=False):
     for rid in sorted(refs):
         store.authorize(c,user,project["runtime_id"],project["id"],rid,"resource.read")
     apps.authorize_source(store,c,user,project,row["rid"],row["runtime_id"])
+    if key is not None:
+        # Only identifier projections from both independent proposal anchors.
+        # Authorize parent and target bindings before any private proposal body.
+        hints = c.execute(select(
+            requests.c.snapshot["request"]["resource_id"].as_string(),
+            requests.c.snapshot["response"]["context"]["source"]["resource_id"].as_string(),
+            requests.c.snapshot["response"]["material"]["resource_id"].as_string(),
+            requests.c.snapshot["response"]["effective_candidate"]["manifest"]["data_bindings"][0]["resource_ref"].as_string())
+            .where(requests.c.app_id == iid,requests.c.principal_id == user,
+                requests.c.kind.in_([PREVIEW,PREVIEW+"_seal"]),requests.c.request_key == key)).all()
+        for rid in sorted({rid for hint in hints for rid in hint if rid is not None}):
+            apps.authorize_source(store,c,user,project,rid,row["runtime_id"])
     return meta
 
 
@@ -250,14 +276,22 @@ def calculate(ctx,release,saved,body,limits):
     return result
 
 
+def preview_pair(c,user,iid,key):
+    """Strict paired request type, only after source_gate authorized its scope."""
+    namespaces = c.execute(select(requests.c.snapshot["response"]["namespace"].as_string()).where(
+        requests.c.app_id == iid,requests.c.principal_id == user,
+        requests.c.kind.in_([PREVIEW,PREVIEW+"_seal"]),requests.c.request_key == key)).scalars().all()
+    from . import csv_material_revisions as material
+    model = material.Preview if material.VERSION in namespaces else Preview
+    return pair(c,user,iid,PREVIEW,key,model)
+
+
 @graph.controlled
 def load_preview(store,c,user,iid,key,limits,*,current=False):
     source_gate(store,c,user,iid,key)
-    body,value = pair(c,user,iid,PREVIEW,key,Preview)
+    body,value = preview_pair(c,user,iid,key)
     if value.get("namespace") != VERSION:
-        from . import csv_column_revisions as successive
-        require(value.get("namespace") == successive.VERSION,"Unknown CSV revision contract")
-        return successive.load(store,c,user,iid,key,limits,body,value,current)
+        return extension(value.get("namespace")).load(store,c,user,iid,key,limits,body,value,current)
     ctx = value["context"]
     require(ctx["instance_id"] == iid and ctx["principal_id"] == user and ctx["limits"] == limits.model_dump())
     require(all(type(ctx[k]) is int for k in ("instance_revision","data_version","graph_revision","original_goal_version"))
@@ -279,7 +313,11 @@ def load_preview(store,c,user,iid,key,limits,*,current=False):
 
 def preview(store,user,iid,body,limits):
     with proposal_tx(store,user,iid,"previews",body,PREVIEW) as c:
-        ctx,base,saved = context(store,c,user,iid,limits)
+        from . import csv_material_revisions as material
+        operation = material if isinstance(body,material.Preview) else None
+        if operation:
+            operation.authorize_proposal(store,c,user,iid,body)
+        ctx,base,saved = (operation.context if operation else context)(store,c,user,iid,limits)
         if graph.lookup(c,user,iid,PREVIEW,body.request_key):
             old,value = load_preview(store,c,user,iid,body.request_key,limits,current=True)
             require(old == body)
@@ -287,8 +325,7 @@ def preview(store,user,iid,body,limits):
         require(len(c.execute(select(requests.c.request_key).where(requests.c.app_id == iid,
             requests.c.kind == PREVIEW)).all()) < 32,"Finite revision proposal capacity exhausted")
         if "revision_contract" in ctx:
-            from . import csv_column_revisions as successive
-            value = successive.calculate(store,c,user,ctx,base,saved,body,limits)
+            value = extension(ctx["revision_contract"]).calculate(store,c,user,ctx,base,saved,body,limits)
         else:
             value = calculate(ctx,base,saved,body,limits)
         remember(c,user,iid,PREVIEW,body.request_key,body,value)
@@ -305,9 +342,7 @@ def bound(store,c,user,release,limits,snapshot=None,*,current=False):
     _,value = load_preview(store,c,user,ref.instance_id,ref.preview_key,limits,current=current and ref.purpose == "CHECK")
     require(reference(ref.instance_id,ref.preview_key,value,ref.purpose) == ref)
     if value["namespace"] != VERSION:
-        from . import csv_column_revisions as successive
-        require(value["namespace"] == successive.VERSION)
-        return successive.bound(store,c,user,release,limits,snapshot,ref,value,current)
+        return extension(value["namespace"]).bound(store,c,user,release,limits,snapshot,ref,value,current)
     if ref.purpose == "CHECK":
         require(SOURCE not in release["snapshot"] and release["id"] == value["context"]["release_id"]
             and snapshot is not None and snapshot["instance_id"] != ref.instance_id)
@@ -362,6 +397,15 @@ def job_gate(store,c,user,rid):
         hints.append((marker.get("instance_id"),marker.get("preview_key")))
     for iid,key in hints:
         source_gate(store,c,user,iid,key)
+    # Independent actual-material hints also protect cold reads if one proposal
+    # marker has been stripped or re-signed. Bodies are read only below.
+    material_ids = c.execute(select(runs.c.resource_refs,runs.c.runtime_id).where(
+        runs.c.id == rid,runs.c.principal_id == user)).mappings().one()
+    contract_resource = c.execute(select(run_contracts.c.snapshot[
+        "resources"][0]["resource_id"].as_string()).where(run_contracts.c.run_id == rid)).scalar()
+    project = store.lock_project(c,user,metadata["project_id"])
+    for resource in set(material_ids["resource_refs"] + ([contract_resource] if contract_resource else [])):
+        apps.authorize_source(store,c,user,project,resource,material_ids["runtime_id"])
     require(len(anchors) == 2 and marker is not None)
     ref,sealed = pair(c,user,rid,JOB,"accepted",Reference)
     binding_meta = c.execute(select(internal_run_bindings.c.snapshot["instance_id"].as_string().label("iid"),
@@ -383,8 +427,8 @@ def verify_job(store,c,user,job,snapshot,release,limits,contract):
     ref = Reference.model_validate(snapshot[MARKER])
     _,value = load_preview(store,c,user,ref.instance_id,ref.preview_key,limits)
     if SOURCE in release["snapshot"] and ref.purpose != "USE":
-        from .csv_column_revisions import VERSION as successive_version
-        require(ref.purpose == "CHECK" and value["namespace"] == successive_version)
+        require(ref.purpose == "CHECK")
+        extension(value["namespace"])
     bound(store,c,user,release,limits,snapshot)
     if ref.purpose == "CHECK":
         _,started = pair(c,user,ref.instance_id,CHECK,ref.preview_key,Check)
@@ -432,9 +476,7 @@ def checked(store,c,user,iid,key,limits,*,current=False):
 def validate_snapshot(store,c,user,snapshot,limits,*,current=False):
     origin = snapshot[SOURCE]
     if origin.get("namespace") != VERSION:
-        from . import csv_column_revisions as successive
-        require(origin.get("namespace") == successive.VERSION,"Unknown CSV Release contract")
-        return successive.validate_snapshot(store,c,user,snapshot,limits,current)
+        return extension(origin.get("namespace")).validate_snapshot(store,c,user,snapshot,limits,current)
     require(set(origin) == {"namespace","reference","check_fingerprint","goal","input","effective_fingerprint"}
         and origin["namespace"] == VERSION)
     ref = Reference.model_validate(origin["reference"])

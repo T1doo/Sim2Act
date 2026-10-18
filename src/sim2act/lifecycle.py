@@ -549,7 +549,8 @@ def switch_preflight(store, c, user, iid, target_id, *, _state_out=None):
         ref = target["snapshot"][csv_revision.SOURCE]["reference"]
         # Use the exact frozen cap for this scope-only preflight. switch_target
         # repeats the check with current platform limits before adoption.
-        _,sealed = csv_revision.pair(c,user,ref["instance_id"],csv_revision.PREVIEW,ref["preview_key"],csv_revision.Preview)
+        csv_revision.source_gate(store,c,user,ref["instance_id"],ref["preview_key"])
+        _,sealed = csv_revision.preview_pair(c,user,ref["instance_id"],ref["preview_key"])
         cap = Limits(**sealed["context"]["limits"])
         value = csv_revision.validate_snapshot(store,c,user,target["snapshot"],cap)
         csv_revision.eligibility(store,c,user,value,cap,i,target_id)
@@ -678,12 +679,12 @@ def create_instance_tx(store, c, user, rid, expected_release_fp, limits, *, requ
     from .csv_goal_revisions import SOURCE
     if SOURCE in r["snapshot"]:
         from . import csv_goal_revisions as csv_revision
-        from .csv_column_revisions import VERSION as successive_version
         if _csv_goal_check is None:
             raise DomainError("UNSUPPORTED_CAPABILITY", "Explicitly adopt this checked version on its original instance")
         ref = csv_revision.Reference.model_validate(_csv_goal_check.model_dump())
         _,value = csv_revision.load_preview(store,c,user,ref.instance_id,ref.preview_key,limits,current=True)
-        if (ref.purpose != "CHECK" or value["namespace"] != successive_version
+        csv_revision.extension(value["namespace"])
+        if (ref.purpose != "CHECK"
                 or ref != csv_revision.reference(ref.instance_id,ref.preview_key,value)
                 or value["context"]["release_id"] != rid
                 or request_key != "csv-goal-check:" + fingerprint([ref.instance_id,ref.preview_key])):

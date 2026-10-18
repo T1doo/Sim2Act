@@ -272,6 +272,7 @@ def enqueue(
         if csv_ref is not None:
             draft,_,_,_ = csv_revision.bound(store,c,user,release,limits,
                 {**request,"instance_id":iid},current=True)
+            _,revision_value = csv_revision.load_preview(store,c,user,csv_ref.instance_id,csv_ref.preview_key,limits)
         resource_ref = draft["candidate"]["manifest"]["data_bindings"][0]["resource_ref"]
         source = c.execute(select(resources).where(resources.c.id == resource_ref)).mappings().one()
         snapshot = {
@@ -289,7 +290,9 @@ def enqueue(
         }
         if csv_review is not None:
             from . import csv_owner_review
-            snapshot["csv_owner_review"] = csv_owner_review.prospective(release, source, input_value, csv_review)
+            material_draft = draft if csv_ref is not None and csv_revision.material_policy(revision_value) else None
+            snapshot["csv_owner_review"] = csv_owner_review.prospective(
+                release, source, input_value, csv_review, effective_draft=material_draft)
         if pa_use is not None:
             snapshot["pa_base_data_version"] = i["data_version"]
         if own_goal is not None:
@@ -323,7 +326,6 @@ def enqueue(
         ).model_dump()
         from . import pa_spec_apps, text_workflows
         if csv_ref is not None:
-            _,revision_value = csv_revision.load_preview(store,c,user,csv_ref.instance_id,csv_ref.preview_key,limits)
             source_goal = revision_value["context"]["goal"]
             snapshot["csv_goal"] = source_goal
             contract["goal"] = csv_revision.goal_spec(source_goal,contract["goal"])
@@ -576,7 +578,10 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
                 raise DomainError("VERSION_CONFLICT", "Offline Replay cannot change executor family")
             offline_replay_model(s["offline_replay"])
         expected_resource = r["snapshot"]["draft"]["candidate"]["manifest"]["data_bindings"][0]["resource_ref"]
-        if "human_correction" in s:
+        if csv_revision.MARKER in s:
+            effective_draft,_,_,_ = csv_revision.bound(store,c,user,r,limits,s)
+            expected_resource = effective_draft["candidate"]["manifest"]["data_bindings"][0]["resource_ref"]
+        elif "human_correction" in s:
             from . import natural_spec_corrections
             _, _, _, correction_source, _ = natural_spec_corrections.bound(store,c,user,job,s,r,limits,_logic_out=logic_source)
             expected_resource = correction_source["resource_id"]

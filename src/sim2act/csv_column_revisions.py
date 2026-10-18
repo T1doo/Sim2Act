@@ -57,6 +57,12 @@ def definition_graph(store, c, draft, manifest, rows, previous, authority, limit
         old = previous["source_versions"][key]
         versions[key] = dict(revision=old["revision"] + (old["content_fingerprint"] != fp),content_fingerprint=fp)
     ctx = copy.deepcopy(authority["context"])
+    # Rows were read through the existing exact source authorization gateway.
+    # A sealed material overlay may bind B while the immutable canonical graph
+    # still describes A. Extend only this derived context, never its anchor or
+    # authorization snapshot, and keep old same-material hashes unchanged.
+    if not {row["id"] for row in rows} <= set(ctx["resource_ids"]):
+        ctx["resource_ids"] = sorted(set(ctx["resource_ids"]) | {row["id"] for row in rows})
     ctx.update(source_versions=versions,graph_fingerprint=None,
         node_revisions={key:rev if rev is not None else versions[key]["revision"] for key,rev in keys.items()})
     ids = {key:previous["stable_ids"][key] for key in keys}
@@ -116,7 +122,11 @@ def parent(store, c, user, rid, limits, scope):
             n = manifest.revision
             require(type(n) is int and n == action.revision == manifest.action_bindings[0].revision
                 and 2 <= n < MAX_SPEC_REVISION,"CSV specification revision limit reached")
-            seed = value["effective_graph"] if value["namespace"] == VERSION else value["baseline_graph"]
+            if value["namespace"] == revision.VERSION:
+                seed = value["baseline_graph"]
+            else:
+                revision.extension(value["namespace"])
+                seed = value["effective_graph"]
             result = (dict(release),draft,manifest,action,report,seed)
         cache = parent_cache(c)
         if (c.get_transaction() is transaction and c.info.get("source_proof_write_epoch",0) == epoch
@@ -129,10 +139,14 @@ def parent_metadata(release,draft,manifest,parent_graph):
     source = release["snapshot"][revision.SOURCE]
     column = manifest.input_schema["properties"]["column"]["enum"]
     require(len(column) == 1 and column == [source["input"]["column"]])
-    return dict(release_id=release["id"],release_fingerprint=release["fingerprint"],
+    value = dict(release_id=release["id"],release_fingerprint=release["fingerprint"],
         effective_fingerprint=draft["fingerprint"],spec_revision=manifest.revision,
         goal=copy.deepcopy(source["goal"]),column=column[0],
         reference=copy.deepcopy(source["reference"]),graph_fingerprint=parent_graph["graph"]["graph_fingerprint"])
+    from .csv_material_revisions import VERSION as material_version
+    if source["namespace"] == material_version or source.get("parent",{}).get("material_revision",False):
+        value["material_revision"] = True
+    return value
 
 
 def context(store,c,user,iid,limits,inst,release):
@@ -143,7 +157,8 @@ def context(store,c,user,iid,limits,inst,release):
     actual,draft,manifest,_,_,seed = parent(store,c,user,release["id"],limits,scope)
     require(actual["fingerprint"] == release["fingerprint"])
     saved = graph.current(store,c,user,inst["project_id"],inst["source_app_id"],limits)
-    _,_,_,_,rows,_ = graph.load_family(store,c,user,inst["project_id"],inst["source_app_id"],limits)
+    from .csv_material_revisions import effective_rows
+    rows = effective_rows(store,c,user,scope,draft)
     parent_graph = definition_graph(store,c,draft,manifest,rows,seed,saved,limits)
     frozen_parent = parent_metadata(release,draft,manifest,parent_graph)
     old = frozen_parent["goal"]
@@ -192,7 +207,8 @@ def calculate(store,c,user,ctx,release,saved,body,limits):
         and ctx["goal"]["version"] == body.goal_version and ctx["goal"]["fingerprint"] == body.goal_fingerprint)
     parent_release,base,manifest,_,_,seed = parent(store,c,user,release["id"],limits,ctx)
     require(parent_release["snapshot"][revision.SOURCE]["reference"]["instance_id"] == ctx["instance_id"])
-    _,_,_,_,rows,_ = graph.load_family(store,c,user,ctx["project_id"],ctx["app_id"],limits)
+    from .csv_material_revisions import effective_rows
+    rows = effective_rows(store,c,user,ctx,base)
     parent_graph = definition_graph(store,c,base,manifest,rows,seed,saved,limits)
     meta = parent_metadata(parent_release,base,manifest,parent_graph)
     require(meta == ctx["parent"] and meta["release_id"] == ctx["release_id"]

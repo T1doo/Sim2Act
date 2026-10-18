@@ -66,12 +66,14 @@ def supported(release):
     )
 
 
-def prospective(release, source, inp, consent):
+def prospective(release, source, inp, consent, *, effective_draft=None):
     if consent != CONSENT or not supported(release):
         raise DomainError(
             "UNSUPPORTED_CAPABILITY", "Only explicit single-step CSV sum scope is supported"
         )
-    draft = release["snapshot"]["draft"]
+    draft = effective_draft if effective_draft is not None else release["snapshot"]["draft"]
+    require(draft["id"] == release["snapshot"]["draft"]["id"]
+        and draft["runtime_id"] == release["snapshot"]["draft"]["runtime_id"])
     require(source["hash"] == draft["candidate"]["source_hash"] and source["format"] == "csv")
     return dict(
         version=VERSION,
@@ -201,14 +203,31 @@ def authority(store, c, user, iid, rid):
     )
     refs = header["resource_refs"]
     require(isinstance(refs, list) and len(refs) == 1)
-    ids = refs + [frozen_resource, release_resource] + intent_resources
+    ids = refs + [frozen_resource] + intent_resources
     if binding["resource"] is not None:
         ids.append(binding["resource"])
     require(all(isinstance(resource, str) for resource in ids))
-    for resource in set(ids):
+    for resource in set(ids + [release_resource]):
         for action in ("resource.read", "data.aggregate_csv"):
             store.authorize(c, user, header["runtime_id"], header["project_id"], resource, action)
     require(all(resource == refs[0] for resource in ids))
+    from . import csv_goal_revisions as revision
+    marker = c.execute(select(internal_run_bindings.c.snapshot[revision.MARKER]).where(
+        internal_run_bindings.c.run_id == rid)).scalar()
+    if marker is None:
+        require(release_resource == refs[0])
+    else:
+        # source_gate authorized original and effective materials before these
+        # projections; load_binding below reconstructs the sealed definition.
+        revision.job_gate(store,c,user,rid)
+        from .db import delivery_graph_requests
+        effective_resources = c.execute(select(delivery_graph_requests.c.snapshot["response"][
+            "effective_candidate"]["manifest"]["data_bindings"][0]["resource_ref"].as_string()).where(
+                delivery_graph_requests.c.principal_id == user,
+                delivery_graph_requests.c.app_id == marker["instance_id"],
+                delivery_graph_requests.c.request_key == marker["preview_key"],
+                delivery_graph_requests.c.kind.in_([revision.PREVIEW,revision.PREVIEW+"_seal"]))).scalars().all()
+        require(effective_resources == [refs[0],refs[0]])
 
 
 def context(store, c, user, iid, rid, limits):
@@ -247,6 +266,13 @@ def context(store, c, user, iid, rid, limits):
         "A new instance result is in progress",
     )
     draft = release["snapshot"]["draft"]
+    from . import csv_goal_revisions as revision
+    if revision.MARKER in s:
+        effective,_,_,_ = revision.bound(store,c,user,release,limits,s)
+        ref = revision.Reference.model_validate(s[revision.MARKER])
+        _,value = revision.load_preview(store,c,user,ref.instance_id,ref.preview_key,limits)
+        if revision.material_policy(value):
+            draft = effective
     candidate = draft["candidate"]
     inp = s["input"]
     validate_value(candidate["manifest"]["input_schema"], inp)
@@ -261,7 +287,8 @@ def context(store, c, user, iid, rid, limits):
         "resource.read",
         dict(resource_id=resource),
     )
-    expected_policy = prospective(release, source, inp, s["csv_review"])
+    expected_policy = prospective(release, source, inp, s["csv_review"],
+        effective_draft=draft if draft is not release["snapshot"]["draft"] else None)
     require(fingerprint(s["csv_owner_review"]) == fingerprint(expected_policy))
     frozen = (
         c.execute(

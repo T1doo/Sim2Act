@@ -251,12 +251,27 @@ async function readApplicationUse(v){
   v.instance=instance;v.principal=instance.principal_id;v.app=app;
   const previous=$("use-column").value,pending=applicationUseRequests.get(applicationUseKey(v));
   const revision=release.snapshot.csv_goal_revision_source;
-  $("use-column").replaceChildren(...app.input_guidance.columns.filter(c=>c.numeric&&(!revision||c.name===revision.input.column)).map(c=>new Option(c.name,c.name)));
+  let material=release.snapshot.draft.candidate.manifest.data_bindings[0].resource_ref,materialHash=null,materialProvenance=null;
+  if(revision&&(revision.namespace==="csv-material-revision.v1"||revision.parent?.material_revision===true)){
+   const ref=revision.reference,same=(a,b)=>goalRunCanonical(a)===goalRunCanonical(b),hash=x=>typeof x==="string"&&/^[a-f0-9]{64}$/.test(x);
+   if(ref?.purpose!=="USE"||ref.instance_id!==v.id||typeof ref.preview_key!=="string"||!ref.preview_key||!hash(ref.preview_fingerprint)||!hash(revision.effective_fingerprint))throw Error("VERSION_CONFLICT");
+   // The original sealed preview describes this Release. Never substitute a
+   // moving Goal/current-context read for the immutable material definition.
+   const frozen=await api(`/api/internal/instances/${v.id}/csv-goal-revisions/previews/${encodeURIComponent(ref.preview_key)}`);if(!current())return;
+   const ctx=frozen.context,candidate=frozen.effective_candidate,bindings=candidate?.manifest?.data_bindings,column=candidate?.manifest?.input_schema?.properties?.column?.enum;
+   if(release.id!==instance.release_id||release.principal_id!==instance.principal_id||app.runtime_id!==instance.runtime_id||frozen.namespace!==revision.namespace||ctx?.revision_contract!==revision.namespace||frozen.request_key!==ref.preview_key||frozen.preview_fingerprint!==ref.preview_fingerprint||frozen.effective_fingerprint!==revision.effective_fingerprint||ctx.instance_id!==v.id||ctx.principal_id!==instance.principal_id||ctx.project_id!==v.project||ctx.app_id!==v.appId||ctx.runtime_id!==instance.runtime_id||ctx.draft_fingerprint!==app.fingerprint||!same(ctx.goal,revision.goal)||!same(frozen.input,revision.input)||!same(ctx.parent,revision.parent)||ctx.release_id!==revision.parent?.release_id||ctx.release_fingerprint!==revision.parent?.release_fingerprint||ctx.instance_revision+1!==instance.revision||frozen.spec_revision!==revision.spec_revision||candidate?.manifest?.revision!==revision.spec_revision||!Array.isArray(bindings)||bindings.length!==1||!/^res_[a-f0-9]{32}$/.test(bindings[0].resource_ref)||!hash(candidate.source_hash)||!Array.isArray(column)||column.length!==1||column[0]!==revision.input.column)throw Error("VERSION_CONFLICT");
+   material=bindings[0].resource_ref;materialHash=candidate.source_hash;
+   if(revision.namespace==="csv-material-revision.v1"){
+    if(frozen.material?.resource_id!==material||frozen.material.hash!==materialHash||frozen.material.format!=="csv"||frozen.material.revision!==1)throw Error("VERSION_CONFLICT");
+   }else if(revision.namespace!=="csv-column-revision.v2"||ctx.parent.material_revision!==true||ctx.source.resource_id!==material||ctx.source.hash!==materialHash)throw Error("VERSION_CONFLICT");
+   materialProvenance={namespace:revision.namespace,reference:ref,effective_fingerprint:frozen.effective_fingerprint,parent_release_id:ctx.release_id,parent_release_fingerprint:ctx.release_fingerprint,goal:revision.goal,original_goal_resources:revision.goal.snapshot.content.resource_refs};
+  }
+  $("use-column").replaceChildren(...(materialProvenance?[new Option(revision.input.column,revision.input.column)]:app.input_guidance.columns.filter(c=>c.numeric&&(!revision||c.name===revision.input.column)).map(c=>new Option(c.name,c.name))));
   if([...$("use-column").options].some(o=>o.value===(pending?.state==="unknown"?pending.body.input.column:previous)))$("use-column").value=pending?.state==="unknown"?pending.body.input.column:previous;
-  const material=release.snapshot.draft.candidate.manifest.data_bindings[0].resource_ref;
   $("use-info").textContent=`${app.name} · 未发布内部版本 · 固定材料 ${material} · 只读CSV求和；仅数值列可变，0模型请求，目标语义验收未执行。`;
+  if(materialProvenance)$("use-info").textContent+=` 当前材料 SHA-256 ${materialHash}；原 Goal 来源 ${materialProvenance.original_goal_resources.join("、")}。`;
   if(revision)$("use-info").textContent+=` 当前 Goal v${revision.goal.version}：${revision.goal.snapshot.content.goal}；固定新列 ${revision.input.column}。`;
-  $("use-provenance").textContent=JSON.stringify({instance_id:v.id,release_id:instance.release_id,revision:instance.revision,release_fingerprint:instance.release_fingerprint,resource_id:material,source:app.candidate.task_proof||app.candidate.extraction||null},null,2);
+  $("use-provenance").textContent=JSON.stringify({instance_id:v.id,release_id:instance.release_id,revision:instance.revision,release_fingerprint:instance.release_fingerprint,resource_id:material,...(materialProvenance?{resource_hash:materialHash,material_revision:materialProvenance}:{}),source:app.candidate.task_proof||app.candidate.extraction||null},null,2);
   $("use-form").hidden=false;$("use-refresh").hidden=false;
   $("use-output").replaceChildren();
   const run=instance.runs.find(r=>r.id===v.selected);

@@ -536,6 +536,8 @@ def mount(app, store, limits, identity):
     natural_logic_patches.mount(app,store,limits,identity)
     from . import csv_goal_revisions
     csv_goal_revisions.mount(app,store,limits,identity)
+    from . import csv_material_revisions
+    csv_material_revisions.mount(app,store,limits,identity)
     user_dependency = Depends(identity)
 
     @app.get("/api/internal/instances/{iid}/runs/{rid}/spec-owner-review")
