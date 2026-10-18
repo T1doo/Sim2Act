@@ -153,7 +153,8 @@ def _captured(c, user, item):
             "VERSION_CONFLICT",
         )
         _require(
-            capture == _derive(body, capture.complete, capture.received_response),
+            capture == _derive(body, capture.complete, capture.received_response,
+                               _generation=item.stage == "generate"),
             "VERSION_CONFLICT",
         )
     else:
@@ -169,7 +170,8 @@ def _captured(c, user, item):
         )
         if capture.raw_bytes == 0:
             _require(
-                capture == _derive(b"", capture.complete, capture.received_response),
+                capture == _derive(b"", capture.complete, capture.received_response,
+                                   _generation=item.stage == "generate"),
                 "VERSION_CONFLICT",
             )
     _require(
@@ -213,7 +215,7 @@ def _history(store, user, contract, key, item, wire):
         )
 
 
-def _derive(payload, complete, received):
+def _derive(payload, complete, received, *, _generation=False):
     _require(type(payload) is bytes and len(payload) <= 131072 and type(complete) is bool)
     raw = None
     try:
@@ -232,7 +234,13 @@ def _derive(payload, complete, received):
     ):
         try:
             valid = returned_model_identity("intern-s2", raw.get("model"))["verdict"] == "ACCEPTED"
-            parse_response(raw)  # Existing generic protocol, never business/tool execution.
+            schemas = None
+            if _generation:
+                from .pa_spec_apps import CHECK_TOOL, check_envelope
+                schemas = {CHECK_TOOL: check_envelope}
+            # The original generation protocol includes its closed checker
+            # envelope. This does not compile/execute/accept the candidate.
+            parse_response(raw, schemas)
         except DomainError:
             valid = False
     outcome = policy.Outcome(
@@ -275,7 +283,7 @@ def _receive(
     _business=None,
 ):
     _require(type(store) is Store and store.test_only and store.sqlite)
-    capture = _derive(payload, complete, received)
+    capture = _derive(payload, complete, received, _generation=item.stage == "generate")
     with store.tx() as c:
         original, _, _, slot, revision, _ = _loaded(store, c, user, contract, key, item, wire)
         _require(slot.attempted, "OUTCOME_UNKNOWN")

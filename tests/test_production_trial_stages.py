@@ -104,6 +104,14 @@ def actual_prefix(tmp_path_factory):
         workers = []
 
         def factory(*args, **kwargs):
+            transport = kwargs["goal_planner_transport"]
+
+            def pretty(request):
+                response = transport.handler(request)
+                return httpx.Response(response.status_code,
+                    content=json.dumps(json.loads(response.content), indent=1).encode())
+
+            kwargs["goal_planner_transport"] = httpx.MockTransport(pretty)
             worker = Worker(*args, **kwargs, pa_trial=binding)
             workers.append(worker)
             return worker
@@ -196,6 +204,8 @@ def test_actual_pa_three_two_two_reaches_existing_results_and_pending_owner(actu
             payload = base64.b64decode(body["body_b64"], validate=True)
             assert hashlib.sha256(payload).hexdigest() == body["sha256"]
             assert len(payload) == body["byte_count"] and body["received_complete"]
+            if row["kind"] == bridge.RESPONSE:
+                assert body["sha256"] != body["canonical_sha256"]
         for stage, rid in (("generate", t["generation"]), ("source", t["source"]), ("cold", t["cold"])):
             bridge.journal_stage_accounted(data[0], c, data[3], binding.contract, binding.approval_key, rid, stage)
     write(t["out"] / "actual-pa-stages.json", dict(accounting=accounting.model_dump(mode="json"),
