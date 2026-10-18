@@ -858,14 +858,8 @@ def revoke_exact(store, user, project_id, eid, fp, body: RevokeInput):
         return dict(status="REVOKED", live_allowed=False, actual_model_requests=0)
 
 
-@controlled
-def admit(store, c, user, contract: TrialContract, approval_key: str, stage: Stage,
-          run_id: str, expected_version: int, fence: int, fee_authority: FeeAuthority | None = None):
-    """Recheck in the caller's transaction, immediately before budget and sender guards.
-
-    The returned fixture permit is never send authority for real HTTP. A future
-    production fee-authority registration requires a separate reviewed change.
-    """
+def _run_context(store, c, user, contract, approval_key, stage, run_id, expected_version, fence):
+    """Shared current approval/phase/Run checks; no source or permission issuance."""
     require(stage in ("generate", "source", "cold"))
     approval = _approved(store, c, user, contract, approval_key)
     phase = None
@@ -878,7 +872,7 @@ def admit(store, c, user, contract: TrialContract, approval_key: str, stage: Sta
                 and fingerprint(phase.model_dump()) == accepted.expected_authority_fingerprint)
     run = c.execute(select(runs.c.id, runs.c.project_id, runs.c.principal_id,
         runs.c.runtime_id, runs.c.request_key, runs.c.status, runs.c.cancel_intent,
-        runs.c.version, runs.c.fence, runs.c.lease_until, runs.c.created_at,
+        runs.c.version, runs.c.fence, runs.c.lease_until, runs.c.created_at, runs.c.worker_id,
         runs.c.resource_refs).where(runs.c.id == run_id).with_for_update()).mappings().first()
     binding = contract.bindings[1 if stage == "cold" else 0]
     at = time.time()
@@ -895,6 +889,29 @@ def admit(store, c, user, contract: TrialContract, approval_key: str, stage: Sta
             and type(run["lease_until"]) in (int, float) and math.isfinite(run["lease_until"])
             and at < min(run["lease_until"], run["created_at"] + contract.caps.run_seconds,
                          contract.expires_at), "Run identity, cancellation, version or finite lease changed")
+    return approval, phase, run, at
+
+
+def _generation_context(store, c, run, contract):
+    """Original frozen generation target checks, separate from any fee authority."""
+    full_job = c.execute(select(runs).where(runs.c.id == run["id"])).mappings().one()
+    frozen = store.frozen_contract(c, full_job)
+    target = contract.bindings[0]
+    require(frozen.application_generation is not None
+            and frozen.application_generation.version == "goal-natural-spec-application.v1"
+            and frozen.source_goal_card is not None
+            and frozen.source_goal_card.model_dump() == dict(card_id=target.card_id,
+                version=target.goal_version, fingerprint=target.goal_fingerprint,
+                snapshot=target.goal_snapshot.model_dump())
+            and frozen.request_model == contract.model)
+
+
+@controlled
+def admit(store, c, user, contract: TrialContract, approval_key: str, stage: Stage,
+          run_id: str, expected_version: int, fence: int, fee_authority: FeeAuthority | None = None):
+    """Original synthetic admission; shared context checks do not issue authority."""
+    approval, phase, run, at = _run_context(
+        store, c, user, contract, approval_key, stage, run_id, expected_version, fence)
     # Do not invoke an arbitrary callback (possibly HTTP) to "discover" entitlement.
     if type(fee_authority) is not SyntheticOnlyFeeAuthority:
         raise DomainError("LIVE_BLOCKED", "No verified production zero-charge authority is registered")
@@ -906,16 +923,7 @@ def admit(store, c, user, contract: TrialContract, approval_key: str, stage: Sta
     # Fresh checks after the trusted fixture callback; no reusable send capability.
     _approved(store, c, user, contract, approval_key)
     if phase is None:
-        full_job = c.execute(select(runs).where(runs.c.id == run_id)).mappings().one()
-        frozen = store.frozen_contract(c, full_job)
-        target = contract.bindings[0]
-        require(frozen.application_generation is not None
-                and frozen.application_generation.version == "goal-natural-spec-application.v1"
-                and frozen.source_goal_card is not None
-                and frozen.source_goal_card.model_dump() == dict(card_id=target.card_id,
-                    version=target.goal_version, fingerprint=target.goal_fingerprint,
-                    snapshot=target.goal_snapshot.model_dump())
-                and frozen.request_model == contract.model)
+        _generation_context(store, c, run, contract)
     return Permit(scope="SYNTHETIC_ONLY", contract_fingerprint=approval.contract_fingerprint,
                   approval_fingerprint=fingerprint(approval.model_dump()), stage=stage,
                   run_id=run_id, runtime_id=run["runtime_id"], run_version=expected_version, fence=fence,
