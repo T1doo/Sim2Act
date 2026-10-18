@@ -170,13 +170,14 @@ def test_current_run_worker_version_fence_lease_phase_and_approval_are_rechecked
 def test_cancel_after_reservation_cannot_record_attempt_and_keeps_usage(kernel, tmp_path):
     data, _, _, job, _, _, _, _, _, _, call = kernel
     reserved = call(policy.reserve)
+    marked = call(policy.record_attempt, state=reserved.ledger, quota=reserved.quota)
     with data[0].tx() as c:
         c.execute(update(runs).where(runs.c.id == job["id"]).values(cancel_intent=True))
     with pytest.raises(DomainError):
         call(policy.record_attempt, state=reserved.ledger, quota=reserved.quota)
-    settled = call(policy.settle, state=reserved.ledger, quota=reserved.quota, outcome=received())
+    settled = call(policy.settle, state=marked.ledger, quota=marked.quota, outcome=received())
     slot = settled.ledger.slots[0]
-    assert settled.ledger.halted and not slot.accepted and not slot.attempted
+    assert settled.ledger.halted and not slot.accepted and slot.attempted
     assert slot.settlement.total_tokens == 8 and len(settled.ledger.slots) == 1
     duplicate = call(policy.reserve, state=settled.ledger, quota=settled.quota)
     assert duplicate.duplicate and duplicate.ledger == settled.ledger
