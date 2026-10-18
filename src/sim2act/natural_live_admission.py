@@ -465,7 +465,15 @@ def _stage_current_bound(store, c, user, contract, stage, job, bound, epoch):
     expected_recipe = (contract.extraction_recipe.model_dump(exclude_none=True)
                        if pb_cold else raw["spec_recipe"])
     require(fingerprint(expected_recipe) == fingerprint(draft["candidate"]["spec_recipe"]))
-    _generation_accounted(store, c, user, contract, approval.request.request_key, gen_id)
+    backend = _generation_accounted(store, c, user, contract, approval.request.request_key, gen_id)
+    if backend is not None and stage == "cold":
+        from .pa_trial_dispatch import journal_stage_accounted
+        source = _saved(c, user, entity(contract), PHASE, "source", StageApproveInput)
+        require(source.approval_key == approval.request.request_key
+            and source.authority.contract_fingerprint == fingerprint(contract.model_dump())
+            and source.authority.generation_run_id == gen_id)
+        journal_stage_accounted(store, c, user, contract, approval.request.request_key,
+                                source.authority.run_id, "source")
     timing = _stage_deadlines(c, user, contract, stage, gen_id)
     authority_model = StageAuthorityV2 if isinstance(contract, TrialContractV2) else StageAuthority
     authority = authority_model(**timing, contract_fingerprint=fingerprint(contract.model_dump()),
@@ -574,6 +582,14 @@ def _pb_origin(store, c, user, contract, approval_key, bound):
 
 
 def _generation_accounted(store, c, user, contract, approval_key, gen_id):
+    from .pa_trial_dispatch import JOURNAL_VERSION, journal_stage_accounted
+    versions = c.execute(select(attempts.c.parameters["pa_trial_binding"]["version"].as_string())
+                         .where(attempts.c.run_id == gen_id)).scalars().all()
+    if any(v != "pa-trial-dispatch.v1" for v in versions):
+        require(versions == [JOURNAL_VERSION] * 3,
+                "Mixed or unknown actual trial backends cannot prove a stage")
+        journal_stage_accounted(store, c, user, contract, approval_key, gen_id, "generate")
+        return JOURNAL_VERSION
     # No caller boolean or cached public pointer can stand in for the paired
     # original trial ledger and independently verified actual provider Attempts.
     try:

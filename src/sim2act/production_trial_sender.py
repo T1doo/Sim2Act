@@ -272,6 +272,7 @@ def _receive(
     received,
     *,
     _server_source=False,
+    _business=None,
 ):
     _require(type(store) is Store and store.test_only and store.sqlite)
     capture = _derive(payload, complete, received)
@@ -322,6 +323,10 @@ def _receive(
             "settle",
             capture.outcome,
         )
+        if _business is not None:
+            from .pa_trial_dispatch import _journal_received
+            binding, run = _business
+            _journal_received(store, c, binding, run, item, wire, payload, complete)
         return _receipt(saved, item, capture, adapter_entered=True)
 
 
@@ -366,7 +371,18 @@ def dispatch_offline(worker, contract, key, identity, wire, source, *, expected_
     )
 
 
-def _dispatch(worker, contract, key, identity, wire, source, *, expected_revision):
+def _dispatch_business(worker, binding, run, identity, wire, original_guard, provider,
+                       *, expected_revision):
+    """Private continuation of the existing original controller call only."""
+    from .pa_trial_dispatch import JournalTrialBinding
+    from .pa_trial_dispatch import _binding as trial_binding
+    _require(type(binding) is JournalTrialBinding and trial_binding(worker) is binding)
+    return _dispatch(worker, binding.contract, binding.approval_key, identity, wire,
+        _SERVER_SOURCE, expected_revision=expected_revision,
+        _business=(binding, run, original_guard, provider))
+
+
+def _dispatch(worker, contract, key, identity, wire, source, *, expected_revision, _business=None):
     """One explicit synthetic exchange; every original key retry is history only."""
     _binding(worker)
     store, settings, transport, worker_id = (
@@ -379,6 +395,9 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
 
     def same_binding():
         _binding(worker)
+        if _business is not None:
+            from .pa_trial_dispatch import _binding as trial_binding
+            _require(trial_binding(worker) is _business[0])
         _require(
             worker.store is store
             and worker.s is settings
@@ -404,10 +423,12 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
     user = original.principal_id
     if worker_id != item.worker_id:
         # A restarted worker may inspect the original key, never inherit its send.
+        _require(_business is None, "OUTCOME_UNKNOWN")
         return _history(store, user, original, key, item, wire)
     if server_source:
         prior = _source_history(store, user, original, key, item, wire)
         if prior is not None:
+            _require(_business is None, "OUTCOME_UNKNOWN")
             return prior
 
     def transition(operation, revision):
@@ -427,16 +448,30 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
     same_binding()
     reserved, supplied = transition("reserve", expected_revision)
     if reserved.duplicate:
+        _require(_business is None, "OUTCOME_UNKNOWN")
         return _history(store, user, original, key, item, wire)
     same_binding()
     marked, supplied = transition("record_attempt", reserved.revision)
     if marked.duplicate:
+        _require(_business is None, "OUTCOME_UNKNOWN")
         return _history(store, user, original, key, item, wire)
     same_binding()
-    provider = configured_provider(worker)
+    provider = configured_provider(worker) if _business is None else _business[3]
     _require(type(provider) is InternModel and provider.transport is transport)
+    token = "synthetic-offline-planner"
+    if _business is not None:
+        params = provider.settings
+        token = ("synthetic-offline-planner" if item.stage == "generate"
+                 else "synthetic-offline-natural-spec")
+        _require(params.mode == "mock" and params.live_enabled is True and params.token == token
+            and params.model == original.model and params.quota_subject == original.quota_subject
+            and params.max_output_tokens == strict_json(wire, 32768)["max_tokens"]
+            and 0 < params.max_output_tokens <= original.caps.max_output_tokens
+            and 0 < params.run_seconds <= original.caps.run_seconds)
 
     def guard(request):
+        same_binding()
+        controller = None if _business is None else _business[2](request)
         same_binding()
         _require(
             worker.goal_planner_transport is transport
@@ -445,7 +480,7 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
             and request.method == "POST"
             and str(request.url) == original.endpoint == InternModel.ENDPOINT
             and request.content == wire
-            and request.headers.get("Authorization") == "Bearer synthetic-offline-planner"
+            and request.headers.get("Authorization") == "Bearer " + token
         )
         with store.tx() as c:
             current, state, _, slot, _, _ = _loaded(store, c, user, original, key, item, wire)
@@ -458,19 +493,24 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
 
                 current_source = load_offline(store, c, user, current, key, item.account_id).source
             _, deadline = policy._fresh(store, c, user, current, key, state, item, current_source)
+            if controller is not None:
+                _require(type(controller) is dict and set(controller) == {"deadline"})
+                deadline = min(deadline, controller["deadline"])
             return dict(deadline=deadline)
 
     payload, complete, received = b"", False, False
+    failure = None
     try:
         captured = provider.request_serialized_captured(wire, guard)
         _require(type(captured) is CapturedResponse and type(captured.body) is bytes)
         payload, complete, received = captured.body, True, True
     except DomainError as error:
+        failure = error
         body = getattr(error, "_received_body", None)
         if type(body) is bytes:
             payload, complete = body, getattr(error, "_received_body_complete", False) is True
     _require(store.engine is engine)
-    return _receive(
+    saved = _receive(
         store,
         user,
         original,
@@ -483,4 +523,23 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
         complete,
         received,
         _server_source=server_source,
+        _business=None if _business is None else _business[:2],
     )
+    if _business is None:
+        return saved
+    try:
+        if failure is not None:
+            raise failure
+        same_binding()
+        slot = next(s for s in saved.journal.ledger.slots if s.identity == item)
+        _require(slot.accepted and saved.adapter_entered and received, "OUTCOME_UNKNOWN")
+        # Only this exchange's actual bytes, never a journal history response.
+        return CapturedResponse(strict_json(payload, 131072), payload)
+    except DomainError as error:
+        error._received_body = payload
+        error._received_body_complete = complete
+        try:
+            error._received_response = strict_json(payload, 131072)
+        except DomainError:
+            pass
+        raise

@@ -26,6 +26,18 @@ from .tools import definitions, dispatch
 
 
 class Worker:
+    @property
+    def store(self):
+        return self._store
+
+    @store.setter
+    def store(self, value):
+        pinned = getattr(self, "_journal_trial_store", None)
+        if pinned is not None and value is not pinned:
+            self._journal_trial_drift = True
+            raise DomainError("VERSION_CONFLICT", "Original trial Store cannot be replaced")
+        self._store = value
+
     def __init__(
         self, store, settings, model=None, *, protocol_runner_factory=None, protocol_clock=None,
         goal_planner_transport=None, pa_trial=None,
@@ -42,7 +54,11 @@ class Worker:
         self.goal_planner_transport = goal_planner_transport
         self.pa_trial = pa_trial
         if pa_trial is not None:
-            from .pa_trial_dispatch import validate
+            from .pa_trial_dispatch import JournalTrialBinding, validate
+            if type(pa_trial) is JournalTrialBinding:
+                self._journal_trial_store = store
+                self._journal_trial_binding = pa_trial
+                self._journal_trial_drift = False
             validate(self)
         if protocol_runner_factory is not None and (not store.test_only or settings.mode != "mock"):
             raise DomainError("PERMISSION_DENIED", "Protocol injection is test-only and offline")
@@ -221,9 +237,12 @@ class Worker:
                         "model_identity_policy_version": MODEL_IDENTITY_POLICY_VERSION,
                         "weight_version": "unknown",
                         **({"pa_trial_binding": {
-                            "version": "pa-trial-dispatch.v1",
+                            "version": getattr(self.pa_trial, "version", "pa-trial-dispatch.v1"),
                             "trial_fingerprint": self.pa_trial.contract_fingerprint,
                             "approval_key": self.pa_trial.approval_key,
+                            **({"account_id": self.pa_trial.account_id, "worker_id": self.id,
+                                "run_version": run["version"], "fence": fence}
+                               if hasattr(self.pa_trial, "account_id") else {}),
                         }} if self.pa_trial is not None else {}),
                         "request_fingerprint": fingerprint(
                             {
@@ -404,8 +423,8 @@ class Worker:
                 from .natural_trial_runs import check_worker_tx
                 check_worker_tx(self, c, run_id)
             if self.pa_trial is not None and state in {"SUCCEEDED", "PARTIAL"}:
-                from .pa_trial_dispatch import check_commit
-                check_commit(self, c, run)
+                from .pa_trial_dispatch import check_terminal_commit
+                check_terminal_commit(self, c, run, state)
             if verify_goal_source and frozen.application_generation is not None and state == "PARTIAL" and (frozen.application_generation.activation is not None or frozen.application_generation.version in {"goal-spec-checklist-application.v1", "goal-natural-spec-application.v1"}):
                 check_active(self, c, run)
                 if run["lease_until"] <= time.time():

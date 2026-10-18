@@ -27,6 +27,24 @@ from .natural_source_archives import BodyArchive, _body
 REQUEST = "pa_trial_request_body.v1"
 RESPONSE = "pa_trial_response_body.v1"
 SENT = "pa_trial_dispatched.v1"
+JOURNAL_VERSION = "UNINSTALLED-pa-journal-trial.v1"
+
+
+@dataclass(frozen=True)
+class JournalTrialBinding:
+    """Explicit P-A offline controller fixture; never installed by an API."""
+
+    contract: gate.TrialContractV2 | gate.TrialContract
+    approval_key: str
+    account_id: str
+    contract_fingerprint: str = field(init=False)
+    version: str = field(default=JOURNAL_VERSION, init=False)
+
+    def __post_init__(self):
+        gate.require(type(self.contract) in (gate.TrialContractV2, gate.TrialContract))
+        gate.require(self.contract.quota_subject == production.canonical_quota_subject(self.account_id))
+        object.__setattr__(self, "contract_fingerprint", fingerprint(self.contract.model_dump()))
+        budget.scope_for(self.contract, self.approval_key)
 
 
 @dataclass(frozen=True)
@@ -47,6 +65,22 @@ class PATrialBinding:
 
 def _binding(worker):
     binding = worker.pa_trial
+    if type(binding) is JournalTrialBinding:
+        from .config import Settings
+        from .db import Store
+        from .worker import Worker
+
+        gate.require(type(worker) is Worker and type(worker.s) is Settings
+            and type(worker.store) is Store and worker.store.test_only and worker.store.sqlite
+            and worker.s.mode == "mock" and worker.s.live_enabled is False and worker.s.token == ""
+            and type(worker.goal_planner_transport) is httpx.MockTransport
+            and worker.s.quota_subject == binding.contract.quota_subject
+            and worker.s.model == binding.contract.model
+            and worker.s.max_output_tokens == binding.contract.caps.max_output_tokens
+            and worker.store is worker._journal_trial_store
+            and binding is worker._journal_trial_binding and not worker._journal_trial_drift
+            and fingerprint(binding.contract.model_dump()) == binding.contract_fingerprint)
+        return binding
     if type(binding) is not PATrialBinding:
         production.blocked()
     gate.require(fingerprint(binding.contract.model_dump()) == binding.contract_fingerprint)
@@ -79,6 +113,11 @@ def _admission(worker):
             and key == b.approval_key
             and user == b.contract.principal_id
         )
+        if type(b) is JournalTrialBinding:
+            from . import production_trial_policy as policy
+            context = policy.check_run(store, c, user, contract, key, stage, rid, version, fence, worker.id)
+            _journal_source(store, c, b)
+            return context
         _, result = production._account_admit(store, c, user, contract, key, stage,
             rid, version, fence, b.registry, worker.id)
         if type(contract) is gate.PBTrialContract and stage == "cold":
@@ -95,6 +134,9 @@ def _admission(worker):
 
 
 def _account(worker, b):
+    if type(b) is JournalTrialBinding:
+        with worker.store.tx() as c:
+            return _journal_source(worker.store, c, b)
     account = production._resolve(worker.store, b.contract.principal_id, b.contract, b.registry)
     gate.require(
         account.scope == "SYNTHETIC_ONLY"
@@ -120,9 +162,48 @@ def check_commit(worker, c, run):
         and run["project_id"] == b.contract.project_id
     )
     gate._approved(worker.store, c, b.contract.principal_id, b.contract, b.approval_key)
+    if type(b) is JournalTrialBinding:
+        _admission(worker)(worker.store, c, run["principal_id"], b.contract, b.approval_key,
+            _stage(b, run), run["id"], run["version"], run["fence"])
+        return
     if type(b.contract) is gate.PBTrialContract and _stage(b, run) == "cold":
         _pb_source(worker, c, b)
     _account(worker, _binding(worker))
+
+
+def check_terminal_commit(worker, c, run, state):
+    """Original terminal transaction continuation; never a send/Run admission."""
+    b = _binding(worker)
+    if type(b) is not JournalTrialBinding:
+        return check_commit(worker, c, run)
+    stage = _stage(b, run)
+    gate.require(state == ("PARTIAL" if stage == "generate" else "SUCCEEDED"))
+    fields = ("id", "principal_id", "project_id", "runtime_id", "worker_id", "fence",
+              "created_at", "fingerprint", "request_key")
+    terminal = c.execute(select(*(getattr(runs.c, k) for k in fields), runs.c.status,
+        runs.c.version, runs.c.cancel_intent, runs.c.lease_until)
+        .where(runs.c.id == run["id"])).mappings().one()
+    gate.require(run["status"] == "RUNNING" and run["worker_id"] == worker.id
+        and not worker.stop.is_set() and not run["cancel_intent"]
+        and all(terminal[k] == run[k] for k in fields)
+        and terminal["status"] == state and terminal["version"] == run["version"] + 1
+        and not terminal["cancel_intent"] and terminal["lease_until"] == 0
+        and time.time() < min(run["lease_until"], b.contract.expires_at,
+                              run["created_at"] + b.contract.caps.run_seconds))
+    gate._approved(worker.store, c, run["principal_id"], b.contract, b.approval_key)
+    _journal_source(worker.store, c, b)
+    if stage == "generate":
+        gate._generation_context(worker.store, c, run, b.contract)
+    else:
+        phase, _ = gate._stage_current(worker.store, c, run["principal_id"], b.contract, stage, run["id"])
+        consent = gate._saved(c, run["principal_id"], gate.entity(b.contract), gate.PHASE,
+                             stage, gate.StageApproveInput)
+        gate.require(phase == consent.authority
+            and consent.approval_key == b.approval_key
+            and fingerprint(phase.model_dump()) == consent.expected_authority_fingerprint)
+    journal_stage_accounted(worker.store, c, run["principal_id"], b.contract,
+                            b.approval_key, run["id"], stage)
+    _binding(worker)
 
 
 def _pb_source(worker, c, b):
@@ -242,6 +323,8 @@ def preflight(worker, c, run, *, generation, natural):
 def wait_unreserved(worker, run_id):
     """Wait only for a not-yet-reserved slot; original heartbeat and deadlines remain."""
     b = _binding(worker)
+    if type(b) is JournalTrialBinding:
+        return _journal_wait(worker, b, run_id)
     scope = budget.scope_for(b.contract, b.approval_key)
     with worker.store.tx() as c:
         budget._context(worker.store, c, scope.principal_id, scope)
@@ -289,6 +372,9 @@ def _request(b, run, aid, wire):
 
 def _identity(worker, c, run, aid):
     b = _binding(worker)
+    if type(b) is JournalTrialBinding:
+        _journal_owner(c, b, run, aid)
+        return b
     header = (
         c.execute(
             select(
@@ -328,14 +414,22 @@ def _identity(worker, c, run, aid):
 
 def _archive(worker, c, run, aid, wire, payload, complete, kind):
     b = _identity(worker, c, run, aid)
+    return _archive_bound(worker.store, c, b, run, aid, wire, payload, complete, kind)
+
+
+def _archive_bound(store, c, b, run, aid, wire, payload, complete, kind):
     scope = budget.scope_for(b.contract, b.approval_key)
-    slot = next(
+    new = type(b) is JournalTrialBinding
+    slot = None if new else next(
         (s for s in budget._ledger(c, scope)["slots"] if s["reservation"]["request_key"] == aid),
         None,
     )
-    if slot is None:
+    if not new and slot is None:
         raise DomainError("VERSION_CONFLICT", "Original trial slot missing")
-    gate.require(slot["reservation"] == _request(b, run, aid, wire).model_dump())
+    if not new:
+        gate.require(slot["reservation"] == _request(b, run, aid, wire).model_dump())
+    else:
+        _journal_owner(c, b, run, aid)
     sealed = (
         c.execute(
             select(
@@ -350,7 +444,7 @@ def _archive(worker, c, run, aid, wire, payload, complete, kind):
     )
     gate.require(
         sealed["generation"] == hashlib.sha256(wire).hexdigest()
-        if slot["reservation"]["stage"] == "generate"
+        if _stage(b, run) == "generate"
         else sealed["natural"] == hashlib.sha256(wire).hexdigest() and sealed["bytes"] == len(wire)
     )
     canonical = None
@@ -403,7 +497,8 @@ def _archive(worker, c, run, aid, wire, payload, complete, kind):
             request is not None
             and request["trial_fp"] == scope.contract_fingerprint
             and request["wire_sha256"] == key["wire_sha256"]
-            and budget._load(c, run["principal_id"], run["id"], SENT, aid) is not None
+            and (_journal_slot(store, c, b, run, aid, wire).attempted if new
+                else budget._load(c, run["principal_id"], run["id"], SENT, aid) is not None)
         )
     else:
         gate.require(
@@ -412,7 +507,7 @@ def _archive(worker, c, run, aid, wire, payload, complete, kind):
             "Request archive can only be created in its original reservation call",
         )
     budget._write(c, run["principal_id"], run["id"], kind, aid, key, item.model_dump(), new=True)
-    worker.store.event(c, run["id"], "PA_TRIAL_BODY", _body_event(aid, kind, item))
+    store.event(c, run["id"], "PA_TRIAL_BODY", _body_event(aid, kind, item))
 
 
 def _body_event(aid, kind, item):
@@ -430,6 +525,14 @@ def _body_event(aid, kind, item):
 
 def reserved(worker, c, run, aid, wire):
     b = _binding(worker)
+    if type(b) is JournalTrialBinding:
+        gate.require("pa_trial_reserving_attempt" not in c.info)
+        c.info["pa_trial_reserving_attempt"] = aid
+        try:
+            _archive(worker, c, run, aid, wire, wire, True, REQUEST)
+        finally:
+            c.info.pop("pa_trial_reserving_attempt", None)
+        return
     scope = budget.scope_for(b.contract, b.approval_key)
     result = budget._reserve(
         worker.store,
@@ -542,6 +645,8 @@ def request_captured(worker, run, aid, wire, original_guard, provider):
         and type(provider.transport) is httpx.MockTransport
         and provider.transport is worker.goal_planner_transport
     )
+    if type(_binding(worker)) is JournalTrialBinding:
+        return _journal_exchange(worker, run, aid, wire, original_guard, provider)
 
     def guard(request):
         result = original_guard(request)
@@ -787,6 +892,10 @@ def _settlement(worker, c, run, aid, raw, *, verified=False):
 
 def settle_verified(worker, c, run, aid, raw):
     b = _identity(worker, c, run, aid)
+    if type(b) is JournalTrialBinding:
+        check_commit(worker, c, run)
+        _journal_chain(worker.store, c, b, run, aid, raw)
+        return
     scope = budget.scope_for(b.contract, b.approval_key)
     check_commit(worker, c, run)
     result = budget._settle(
@@ -805,6 +914,13 @@ def settle_verified(worker, c, run, aid, raw):
 
 def reject(worker, c, run, aid, raw):
     """Evidence-only monotonic failure accounting; no synthetic re-admission."""
+    if type(getattr(worker, "_journal_trial_binding", None)) is JournalTrialBinding:
+        # Receive already committed immutable accounting. No current binding,
+        # duplicate settle or missing response may mint authority/refund here.
+        b = worker._journal_trial_binding
+        gate.require(c.engine is worker._journal_trial_store.engine)
+        _journal_owner(c, b, run, aid)
+        return
     b = _identity(worker, c, run, aid)
     scope = budget.scope_for(b.contract, b.approval_key)
     slot = next(
@@ -828,3 +944,244 @@ def reject(worker, c, run, aid, raw):
         _settlement(worker, c, run, aid, raw),
         admission=denied,
     )
+
+
+def _journal_source(store, c, b):
+    from .production_trial_policy import check_source, evidence
+    from .production_trial_source import load_offline
+
+    loaded = load_offline(store, c, b.contract.principal_id, b.contract,
+                          b.approval_key, b.account_id)
+    return check_source(evidence.requirements_for(b.contract.principal_id, b.contract,
+                        b.approval_key), loaded.source, now=time.time())
+
+
+def _journal_state(store, c, b):
+    from . import production_trial_journal as journal
+
+    gate.require(store.test_only and store.sqlite and c.engine is store.engine)
+    _, scope, request, quota_request, entity = journal._context(
+        store, c, b.contract.principal_id, b.contract, b.approval_key, b.account_id)
+    # Backend mixing cannot acquire history/send authority.
+    old = budget.scope_for(b.contract, b.approval_key)
+    gate.require(budget._load(c, old.principal_id, old.project_id, budget.KIND, old.trial_key) is None)
+    _, cursor, qr = journal._quota(c, quota_request, entity, create=False)
+    _, state, revision = journal._ledger(c, scope, request, cursor, qr)
+    return state, cursor, revision
+
+
+def _journal_wait(worker, b, rid):
+    with worker.store.tx() as c:
+        state, cursor, _ = _journal_state(worker.store, c, b)
+        gate.require(not state.halted and all(s.accepted for s in state.slots))
+        header = c.execute(select(runs.c.created_at, runs.c.principal_id, runs.c.project_id)
+                           .where(runs.c.id == rid)).mappings().one()
+        gate.require(header["principal_id"] == b.contract.principal_id
+                     and header["project_id"] == b.contract.project_id)
+    deadline = min(header["created_at"] + min(worker.s.run_seconds, b.contract.caps.run_seconds),
+                   b.contract.expires_at)
+    last = cursor.last_reserved_at
+    while last is not None and time.time() < last + 60:
+        _binding(worker)
+        if worker.stop.is_set() or time.time() >= deadline:
+            raise DomainError("BUDGET_EXHAUSTED", "Original trial waiting interval ended")
+        worker.stop.wait(min(0.25, max(0, min(last + 60, deadline) - time.time())))
+
+
+def _journal_owner(c, b, run, aid):
+    # Exact scalar binding before any private request/response or journal body.
+    header = c.execute(select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id,
+        attempts.c.mode,
+        *[attempts.c.parameters["pa_trial_binding"][k].as_string().label(k)
+          for k in ("version", "trial_fingerprint", "approval_key", "account_id", "worker_id")],
+        attempts.c.parameters["pa_trial_binding"]["run_version"].as_integer().label("run_version"),
+        attempts.c.parameters["pa_trial_binding"]["fence"].as_integer().label("fence"))
+        .select_from(runs).join(attempts, attempts.c.run_id == runs.c.id)
+        .where(runs.c.id == run["id"], attempts.c.id == aid)).mappings().first()
+    gate.require(header is not None and header["mode"] == "MOCK"
+        and header["version"] == JOURNAL_VERSION
+        and header["trial_fingerprint"] == b.contract_fingerprint
+        and header["approval_key"] == b.approval_key and header["account_id"] == b.account_id
+        and header["principal_id"] == b.contract.principal_id
+        and header["project_id"] == b.contract.project_id
+        and all(header[k] == run[k] for k in ("principal_id", "project_id", "runtime_id")))
+    return header
+
+
+def _journal_slot(store, c, b, run, aid, wire):
+    from . import production_trial_policy as policy
+
+    header = _journal_owner(c, b, run, aid)
+    state, cursor, _ = _journal_state(store, c, b)
+    slot = next((s for s in state.slots if s.identity.attempt_id == aid), None)
+    gate.require(slot is not None)
+    item = slot.identity
+    policy._bound(store, c, run["principal_id"], b.contract, b.approval_key,
+                  state, cursor, item, wire)
+    approval = gate._saved(c, run["principal_id"], gate.entity(b.contract), gate.APPROVE,
+                           "approve", gate.Approval)
+    phase_fp = None
+    if item.stage != "generate":
+        phase = gate._saved(c, run["principal_id"], gate.entity(b.contract), gate.PHASE,
+                            item.stage, gate.StageApproveInput)
+        phase_fp = fingerprint(phase.authority.model_dump())
+    gate.require(item.run_id == run["id"] and item.runtime_id == run["runtime_id"]
+        and item.version == header["run_version"] and item.fence == header["fence"]
+        and item.worker_id == header["worker_id"]
+        and item.stage == _stage(b, run)
+        and item.approval_fingerprint == fingerprint(approval.model_dump())
+        and item.stage_fingerprint == phase_fp)
+    return slot
+
+
+def _journal_exchange(worker, run, aid, wire, original_guard, provider):
+    from . import production_trial_policy as policy
+    from . import production_trial_sender as sender
+
+    b, store = _binding(worker), worker.store
+    with store.tx() as c:
+        _journal_owner(c, b, run, aid)
+        _, _, revision = _journal_state(store, c, b)
+        context = policy.check_run(store, c, run["principal_id"], b.contract, b.approval_key,
+            _stage(b, run), run["id"], run["version"], run["fence"], worker.id)
+        item = policy.identity_for(context, _journal_source(store, c, b), aid, wire)
+        request = _metadata(c, run, aid, REQUEST)
+        gate.require(request is not None and request["wire_sha256"] == item.wire_sha256)
+        if item.stage != "generate":
+            limits = c.execute(select(attempts.c.parameters["natural_spec"]["limits"])
+                               .where(attempts.c.id == aid)).scalar_one()
+            gate.require(all(getattr(provider.settings, k) == v for k, v in limits.items()))
+    return sender._dispatch_business(worker, b, run, item, wire, original_guard, provider,
+                                     expected_revision=revision)
+
+
+def _journal_received(store, c, b, run, item, wire, payload, complete):
+    """Same receive transaction, fixed original Store/binding; no live admission."""
+    _archive_bound(store, c, b, run, item.attempt_id, wire, payload, complete, RESPONSE)
+    if item.stage != "generate":
+        from .natural_source_archives import record_response
+        canonical = None
+        try:
+            parsed = strict_json(payload, 131072)
+            original, evidence = response_archive(parsed)
+            canonical = evidence["sha256"] if original is not None else None
+        except DomainError:
+            pass
+        record_response(store, c, run, item.attempt_id, payload, complete, canonical,
+                        request_body=wire)
+
+
+def _journal_chain(store, c, b, run, aid, raw=None):
+    """Immutable same-aid bodies/accounting proof; no lease or send authority."""
+    from . import production_trial_sender as sender
+
+    _journal_owner(c, b, run, aid)
+    scope = budget.scope_for(b.contract, b.approval_key)
+    payloads = []
+    for kind in (REQUEST, RESPONSE):
+        meta = _metadata(c, run, aid, kind)
+        gate.require(meta is not None and meta["trial_fp"] == b.contract_fingerprint
+            and meta["complete"] and meta["omission"] == "NONE")
+        saved = budget._load(c, run["principal_id"], run["id"], kind, aid)
+        gate.require(saved["request"] == dict(trial=scope.model_dump(), attempt_id=aid,
+            family=kind, wire_sha256=meta["wire_sha256"]))
+        body = BodyArchive.model_validate(saved["response"])
+        gate.require(body.body_b64 is not None)
+        payload = base64.b64decode(body.body_b64, validate=True)
+        gate.require(_body(run, aid, payload, True, body.canonical_sha256,
+            "natural_source_request_body.v1" if kind == REQUEST
+            else "natural_source_response_body.v1") == body)
+        gate.require(meta["sha256"] == hashlib.sha256(payload).hexdigest())
+        payloads.append(payload)
+    wire, payload = payloads
+    slot = _journal_slot(store, c, b, run, aid, wire)
+    capture = sender._captured(c, run["principal_id"], slot.identity)
+    gate.require(slot.accepted and slot.attempted and capture is not None
+        and slot.settlement == capture.outcome and capture.complete
+        and capture.raw_sha256 == hashlib.sha256(payload).hexdigest()
+        and capture.body_b64 == base64.b64encode(payload).decode("ascii"))
+    parsed = strict_json(payload, 131072)
+    canonical, evidence = response_archive(parsed)
+    response = _metadata(c, run, aid, RESPONSE)
+    gate.require(canonical is not None and response["canonical_sha256"] == evidence["sha256"]
+        == capture.canonical_sha256 and capture.canonical_ascii_bytes == evidence["bytes"])
+    if raw is not None:
+        gate.require(response_archive(raw) == (canonical, evidence))
+    actual = c.execute(select(attempts).where(attempts.c.run_id == run["id"],
+                                               attempts.c.id == aid)).mappings().one()
+    params = actual["parameters"]
+    gate.require(actual["request_model"] == b.contract.model and actual["mode"] == "MOCK"
+        and actual["reserved_tokens"] == len(wire) + params["max_tokens"]
+        and params["max_tokens"] == strict_json(wire, 32768)["max_tokens"]
+        and params["max_tokens"] <= b.contract.caps.max_output_tokens
+        and (params.get("generation_wire") == slot.identity.wire_sha256
+             and params.get("generation_fence") == slot.identity.fence
+            if slot.identity.stage == "generate" else
+            params.get("natural_spec_wire", {}).get("sha256") == slot.identity.wire_sha256
+            and params["natural_spec_wire"].get("bytes") == len(wire)
+            and params["natural_spec"].get("fence") == slot.identity.fence
+            and params["natural_spec"].get("run_version") == slot.identity.version))
+    return slot, capture, parsed, actual
+
+
+def journal_stage_accounted(store, c, user, contract, key, rid, stage):
+    """Original current lineage calls this only after its full ownership gate."""
+    gate.require(stage in ("generate", "source", "cold") and user == contract.principal_id)
+    owner = c.execute(select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id,
+        runs.c.request_key, runs.c.status).where(runs.c.id == rid)).mappings().first()
+    gate.require(owner is not None and owner["principal_id"] == user
+        and owner["project_id"] == contract.project_id
+        and owner["request_key"] == getattr(contract.stage_keys, stage))
+    if stage == "generate":
+        gate.require(owner["runtime_id"] == contract.runtime_id)
+        from .goal_applications import source_scope_gate
+        source_scope_gate(store, c, rid)
+    else:
+        phase = gate._saved(c, user, gate.entity(contract), gate.PHASE, stage, gate.StageApproveInput)
+        gate.require(phase.approval_key == key and phase.authority.run_id == rid
+            and phase.authority.stage == stage and phase.authority.runtime_id == owner["runtime_id"]
+            and phase.authority.contract_fingerprint == fingerprint(contract.model_dump())
+            and phase.expected_authority_fingerprint == fingerprint(phase.authority.model_dump())
+            and owner["status"] == "SUCCEEDED")
+        from .pa_spec_apps import job_scope_gate
+        gate.require(job_scope_gate(store, c, user, rid))
+    actual = c.execute(select(attempts).where(attempts.c.run_id == rid)
+                       .order_by(attempts.c.created_at, attempts.c.id)).mappings().all()
+    gate.require(len(actual) == (3 if stage == "generate" else 2))
+    markers = [a["parameters"].get("pa_trial_binding", {}) for a in actual]
+    gate.require(all(m.get("version") == JOURNAL_VERSION for m in markers)
+        and len({m.get("account_id") for m in markers}) == 1)
+    b = JournalTrialBinding(contract, key, markers[0].get("account_id"))
+    gate.require(user == contract.principal_id)
+    run = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
+    state, _, _ = _journal_state(store, c, b)
+    slots = [s for s in state.slots if s.identity.stage == stage]
+    gate.require(not state.halted and len(slots) == len(actual)
+        and {s.identity.attempt_id for s in slots} == {a["id"] for a in actual}
+        and all(s.identity.run_id == rid for s in slots))
+    for a in actual:
+        slot, capture, parsed, checked = _journal_chain(store, c, b, run, a["id"])
+        usage = normalize_usage(parsed)
+        gate.require(checked == a and a["status"] == ("RECEIVED" if stage == "generate" else "VERIFIED")
+            and a["usage"] == usage and usage["status"] == "known"
+            and all(getattr(slot.settlement, k) == usage["tokens"].get(k)
+                    for k in ("prompt_tokens", "completion_tokens", "total_tokens")))
+        if stage == "generate":
+            gate.require(a["parameters"].get("generation_raw_evidence") == response_archive(parsed)[1]
+                and a["parameters"].get("generation_received_raw") == response_archive(parsed)[0])
+        else:
+            from .natural_source_archives import REQUEST as NS_REQUEST
+            from .natural_source_archives import RESPONSE as NS_RESPONSE
+            from .natural_source_archives import _read
+            _, original_wire = _read(c, user, run, a["id"], NS_REQUEST)
+            body, archived = _read(c, user, run, a["id"], NS_RESPONSE)
+            gate.require(body.sha256 == capture.raw_sha256
+                and archived == base64.b64decode(capture.body_b64)
+                and body.canonical_sha256 == capture.canonical_sha256
+                and hashlib.sha256(original_wire).hexdigest() == slot.identity.wire_sha256
+                and a["response"].get("received_raw") == response_archive(parsed)[0]
+                and a["response"].get("raw_evidence") == response_archive(parsed)[1])
+            from .db import operations
+            op = c.execute(select(operations.c.status).where(operations.c.run_id == rid,
+                operations.c.id == a["parameters"]["natural_spec"]["operation_id"])).scalar_one()
+            gate.require(op == "VERIFIED")
