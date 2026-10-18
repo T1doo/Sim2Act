@@ -973,8 +973,8 @@ def check_journal_claim(store, c, run, b):
     gate._approved(store, c, run["principal_id"], b.contract, b.approval_key)
     _journal_source(store, c, b)
     stage = _stage(b, run)
-    gate.require(run["request_key"] == getattr(b.contract.stage_keys, stage))
     if stage == "generate":
+        gate.require(run["request_key"] == b.contract.stage_keys.generate)
         gate._generation_context(store, c, run, b.contract)
     else:
         current, _ = gate._stage_current(store, c, run["principal_id"], b.contract, stage, run["id"])
@@ -1164,10 +1164,10 @@ def journal_stage_accounted(store, c, user, contract, key, rid, stage):
     owner = c.execute(select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id,
         runs.c.request_key, runs.c.status).where(runs.c.id == rid)).mappings().first()
     gate.require(owner is not None and owner["principal_id"] == user
-        and owner["project_id"] == contract.project_id
-        and owner["request_key"] == getattr(contract.stage_keys, stage))
+        and owner["project_id"] == contract.project_id)
     if stage == "generate":
-        gate.require(owner["runtime_id"] == contract.runtime_id)
+        gate.require(owner["runtime_id"] == contract.runtime_id
+            and owner["request_key"] == contract.stage_keys.generate)
         from .goal_applications import source_scope_gate
         source_scope_gate(store, c, rid)
     else:
@@ -1179,6 +1179,16 @@ def journal_stage_accounted(store, c, user, contract, key, rid, stage):
             and owner["status"] == "SUCCEEDED")
         from .pa_spec_apps import job_scope_gate
         gate.require(job_scope_gate(store, c, user, rid))
+        from .db import internal_app_runs, internal_run_bindings
+        app_key = c.execute(select(internal_app_runs.c.request_key)
+            .select_from(internal_run_bindings).join(internal_app_runs,
+                internal_app_runs.c.id == internal_run_bindings.c.app_run_id)
+            .where(internal_run_bindings.c.run_id == rid,
+                internal_app_runs.c.principal_id == user,
+                internal_app_runs.c.id == phase.authority.app_run_id,
+                internal_app_runs.c.instance_id == phase.authority.instance_id)).scalar_one_or_none()
+        gate.require(app_key == getattr(contract.stage_keys, stage)
+            and owner["request_key"] == "internal:" + phase.authority.app_run_id)
     actual = c.execute(select(attempts).where(attempts.c.run_id == rid)
                        .order_by(attempts.c.created_at, attempts.c.id)).mappings().all()
     gate.require(len(actual) == (3 if stage == "generate" else 2))
