@@ -1,0 +1,26 @@
+# ①②读取复用：非作者只读源码复审
+
+基线475777cf0c4c23f83a50d9e957adb6cf9d374ca0，分支dev/pa-page-complete-flow-20261018。父级唯一writer；本人未写仓库或原fixture，未跑长矩阵/Worker/模型/产品HTTP。当前为WIP尚未freeze资格，不能据此声称原valid完成。
+
+**有限结论：已知P2已修，当前三个生产文件未发现其它确定P1/P2，可冻结后运行原valid完整fresh页面资格。** 原方案下当前最高价值缺口仍是把该原生成→新材料绑定→Release/实例→冷Worker→同版可读/下载的主路径真正完成并封存，不能永久以只读tail或直接owner回归代替；本次①②聚焦该可用性，不扩大executor/Grant或通用proof缓存。
+
+## 已确认实现
+
+- lifecycle.py:798新增可选private outputbox，不改变原调用者默认参数或公共返回shape。fullreport早return在verify_records后填{id,fingerprint}；其它家族在原instance/read_release、data_rows、各typed/Run verify及switch_policy之后填。同一已验证结果只输出两个标量，不跨事务输出完整proof或私有Release能力。
+- internal_api.py:333为每次GET创建全新空dict，检查exact keys及id==value.release_id；仅消除为release_fingerprint再开TX深read_release，原Run索引和逐Run inspect_job完整保留。无HTTP跳验证参数。fullreport/自然规范/文本/CSV原家族路径可正确填box；其它inspect_instance调用不需改签名。
+- internal.js:showInternalInstance本次fresh release仅保存在局部变量，通过原current fence后给renderPBUse/openNaturalLogic。生产调用点只有该处；renderPBUse未给fresh对象时仍实际GET。它保留完整snapshot SHA、release id/fp与当前iid匹配及openingCurrent各代检查。openNaturalLogic也增加完整snapshot SHA和id/fp校验；未扩大apps._reuse_origin或_source_origin/test_only等底层proof适用范围。
+- 已知403等内容拒绝路径会invalidateInternalContent，递增instanceGeneration、置instance=null，使后续crypto resume失效。服务器在已授权响应返回后发生但页面尚未获通知的撤权，客户端单凭crypto等待不能感知；不得把本改动宣称即时撤权推送保证。之后业务写/成果读仍须服务器逐次当前授权。
+
+## WIP P2发现与修复
+
+最初WIP的openNaturalLogic新增await paHash后仅看engineeringCurrent及相同instance对象；engineeringCurrent不含workspace/connection generation，实际selectWorkspace只递增workspace、不销毁engineering。因此crypto等待期间Apps→Projects→Apps ABA能使内层用新的workspace创建旧响应面板，外层current返回后检查来不及撤回已发生paint。本人从当时源码报告该P2，未在未修字节上动态复现，也未独立封存最初WIP全文件，不能补写为修前原件已存。
+
+父级修后入口捕获instance、instanceGeneration、workspace和connection，统一current在HTTP/hash/baseline各await后与创建s前检查；s采用原捕获值。外部保存的精确修后函数SHA为6320d249dd0a9daa41c97b798c322cf773b43157b31c755021631575c1ff5255。
+
+本人执行crypto_aba_probe.cjs：从实际修后源码副本抽出openNaturalLogic、实际engineeringCurrent及实际selectWorkspace，受控paHash Promise挂起；workspace ABA、connection ABA、同一instance对象的selection generation变化均不paint，未变current正例能paint。4项PASS、0 Worker/模型/HTTP。它是精确函数控制探针，不是JSDOM实际HTTP或完整页面资格。3源snapshot/manifest与probe后工作树0差异，见source-after-probe.json。
+
+首observer尝试恰遇作者已将函数扩为多行，而脚本仍按单行提取，SyntaxError发生在执行任何产品函数前；原脚本/log保存在first-observer-attempt，并明确标为observer setup失败。没有用它声称产品失败或原P2动态复现。
+
+## 待资格范围
+
+需冻结精确SHA和全部生产输入，完成fresh原tests/test_pa_natural_spec_ui.py原valid参数完整场景，原CJS断言、3次生成MockTransport/2次运行MockTransport、原素材隔离、冷页、实际成果可读与JSON/Markdown下载字节、0真实模型均保留。新增增量RPC/HTTP/Worker日志及有界外层900s只改善观测，不降低oracle。不称此前NOT_VERIFIED已关闭，直到该实际场景成功并回读原始证据。另需最小旧家族metadata-output/fallback兼容和API当前权限拒绝门有实际资格；本人此阶段仅完成有限源码与短函数控制验证。

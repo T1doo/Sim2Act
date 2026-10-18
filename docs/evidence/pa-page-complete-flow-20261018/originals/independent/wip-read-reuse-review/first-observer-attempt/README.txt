@@ -1,0 +1,1 @@
+Observer-only setup failure: source author had already expanded openNaturalLogic to multiline; the first probe extracted only its first line and failed SyntaxError before executing product functions. No Worker/model/HTTP or repo/DB writes. Original script/log retained. Not a product failure or pre-fix dynamic reproduction.

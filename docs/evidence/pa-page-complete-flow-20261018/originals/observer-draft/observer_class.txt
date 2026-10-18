@@ -1,0 +1,136 @@
+class _PageObserver:
+    """Flush test-only evidence; the watchdog targets only this owned Popen Node."""
+
+    def __init__(self, folder, scenario):
+        self.folder = folder
+        self.scenario = scenario
+        self.started = time.monotonic()
+        self.lock = threading.Lock()
+        self.serial = 0
+        self.http_serial = 0
+        self.process = self.watchdog = None
+        self.watchdog_fired = False
+        self.latest = None
+        self.errors = []
+        self.progress = (folder / "progress.jsonl").open("w", encoding="utf-8")
+        self.driver = (folder / "driver.log").open("w", encoding="utf-8")
+        (folder / "http").mkdir()
+        self.sent = self.observed_list("model")
+        self.runtime_sent = self.observed_list("runtime")
+
+    def save(self, name, value):
+        with (self.folder / name).open("w", encoding="utf-8") as target:
+            json.dump(value, target, ensure_ascii=False, indent=2)
+            target.flush()
+
+    def event(self, kind, **details):
+        with self.lock:
+            self.serial += 1
+            value = dict(sequence=self.serial, kind=kind, scenario=self.scenario,
+                utc=datetime.now(UTC).isoformat(), elapsed_seconds=time.monotonic() - self.started,
+                **details)
+            self.progress.write(json.dumps(value, ensure_ascii=False) + "\n")
+            self.progress.flush()
+            self.latest = value
+
+    @contextmanager
+    def phase(self, kind, **details):
+        started = time.monotonic()
+        self.event(kind + "_start", **details)
+        try:
+            yield
+        except BaseException as error:
+            self.event(kind + "_error", duration_seconds=time.monotonic() - started,
+                error_type=type(error).__name__, error=str(error), **details)
+            raise
+        else:
+            self.event(kind + "_end", duration_seconds=time.monotonic() - started, **details)
+
+    def observed_list(self, name):
+        observer = self
+
+        class ObservedList(list):
+            def append(self, payload):
+                super().append(payload)
+                with (observer.folder / (name + "-wire.jsonl")).open("a", encoding="utf-8") as target:
+                    target.write(json.dumps(dict(index=len(self), request=payload), ensure_ascii=False) + "\n")
+                    target.flush()
+                observer.save(name + "-wire.json", self)
+                observer.event(name + "_request", request_index=len(self))
+
+        return ObservedList()
+
+    def own_node(self, process):
+        self.process = process
+        self.event("node_started", pid=process.pid, args=process.args,
+            watchdog_seconds=900, watchdog_scope="OWNED_POPEN_NODE_ONLY")
+        self.watchdog = threading.Timer(900, self.kill_owned_node, args=("WATCHDOG_900_SECONDS",))
+        self.watchdog.daemon = True
+        self.watchdog.start()
+
+    def kill_owned_node(self, reason):
+        if reason == "WATCHDOG_900_SECONDS":
+            self.watchdog_fired = True
+        process = self.process
+        if process is not None and process.poll() is None:
+            self.event("owned_node_kill_start", pid=process.pid, reason=reason)
+            try:
+                process.kill()
+            except ProcessLookupError:
+                self.event("owned_node_already_exited", pid=process.pid, reason=reason)
+            else:
+                self.event("owned_node_kill_signalled", pid=process.pid, reason=reason)
+
+    def http_response(self, request, reply):
+        self.http_serial += 1
+        name = f"http/{self.http_serial:06d}-response.body"
+        raw = reply.content
+        (self.folder / name).write_bytes(raw)
+        metadata = dict(rpc_id=request.get("id"), method=request["method"], path=request["path"],
+            request=request.get("body"), status=reply.status_code,
+            content_type=reply.headers.get("content-type"), response_file=name,
+            response_bytes=len(raw), response_sha256=hashlib.sha256(raw).hexdigest())
+        self.save(f"http/{self.http_serial:06d}-metadata.json", metadata)
+        self.event("http_response_saved", **metadata)
+
+    def stderr_text(self):
+        self.driver.flush()
+        return (self.folder / "driver.log").read_text(encoding="utf-8")
+
+    def __enter__(self):
+        self.event("test_start", subprocess_watchdog_seconds=900,
+            parent_worker_timeout="EXTERNAL_OWNED_900_SECONDS_REQUIRED")
+        return self
+
+    def __exit__(self, error_type, error, error_tb):
+        try:
+            if error is not None:
+                self.errors.append("".join(traceback.format_exception(error_type, error, error_tb)))
+                self.event("test_error", error_type=error_type.__name__, error=str(error))
+            if self.watchdog is not None:
+                self.watchdog.cancel()
+                self.watchdog.join(timeout=5)
+            self.kill_owned_node("FINALIZE_OWNED_NODE")
+            if self.process is not None and self.process.poll() is None:
+                self.process.wait(timeout=10)
+        finally:
+            try:
+                self.save("model-wire.json", self.sent)
+                self.save("runtime-wire.json", self.runtime_sent)
+                self.save("errors.json", self.errors)
+                self.event("test_end", passed=error is None, watchdog_fired=self.watchdog_fired,
+                    provider_requests=len(self.sent), runtime_requests=len(self.runtime_sent),
+                    node_pid=self.process.pid if self.process is not None else None,
+                    node_exit_code=self.process.poll() if self.process is not None else None)
+                self.save("progress-summary.json", dict(scenario=self.scenario,
+                    elapsed_seconds=time.monotonic() - self.started, latest=self.latest,
+                    provider_requests=len(self.sent), runtime_requests=len(self.runtime_sent),
+                    http_responses=self.http_serial, watchdog_fired=self.watchdog_fired,
+                    error_count=len(self.errors)))
+            finally:
+                self.driver.flush()
+                self.driver.close()
+                self.progress.close()
+        return False
+
+

@@ -1,0 +1,11 @@
+# 窄化①②设计独审（实现前）
+
+基线475，父级唯一写入者，源码尚未修改。本意见是设计资格，不是实现通过或测试通过。
+
+① showInternalInstance本次fresh Release一次GET供renderPBUse/openNaturalLogic复用，属于同一已授权响应的纯页面消费，不形成新授权。必须保留selected.snapshot SHA等于fingerprint、release.id及fp匹配当前instance，以及identity/connection/workspace/app/instance/selection/render fences；任何await后重查原current门。没有传入fresh本次对象的原调用者仍应实际GET，不能静默使用旧view对象。不要将共享对象存入跨refresh缓存；后续明确业务写和成果读仍各自服务器当前授权。原naturalLogicView为当前可见表单保留release内容不等于可跨刷新命中的权限缓存。
+
+② lifecycle.inspect_instance可通过每次调用者新建的空private outputbox返回该调用中原已完整验证Release的{id,fingerprint}，API用于同一个response的release_fingerprint，不再另开TX为该标量重放proof。输出必须来自原owned instance/read_release路径并仅在原typed/Run verify完整成功后采用；API核metadata.id==value.release_id，不能从HTTP读入、不能接受caller预置旧值作为证明、不能当未来请求能力。full_report早return和所有旧family路径都要正确填充，或明确保留原safe fallback；不能把泛型实例读取破坏成500。
+
+这两项无需扩大executor/Grant/权限边界。实施中不应顺便扩大apps._reuse_origin、_source_origin的适用范围；原hash/Goal/material/namespace/独立seal/head/tables/current authorities仍由现有完整验证负责。代码落盘后需非作者复核这些具体控制流。
+
+最低实际资格仍为fresh原PA valid完整页面一次，全部原断言/冷页/实际生成与自然步骤mock/成果JSON+Markdown字节/当前授权读取/资产SHA保留；增加增量RPC/HTTP/Worker原日志与外层有界watchdog，真实模型0。不以只读tail或先前owner正例代替原valid结果。完成前NOT_VERIFIED继续保留。
