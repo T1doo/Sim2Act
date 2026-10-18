@@ -1,0 +1,1684 @@
+{
+  "app": {
+    "namespace": "local-record-app.v1",
+    "id": "app_a950db087f4843edb63ff8aedc6e91e7",
+    "name": "Actual page local records",
+    "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+    "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+    "runtime_id": "runtime_42702f7d17274a37ab261ab9f4388a33",
+    "purpose": "Collect independent work items and explicitly mark only A DONE",
+    "goal_id": "goal_7aba840eac134082aa0817a0f67a1f5e",
+    "candidate": {
+      "namespace": "local-record-app.v1",
+      "manifest": {
+        "schema_version": "1.0-draft",
+        "app_id": "app_a950db087f4843edb63ff8aedc6e91e7",
+        "revision": 1,
+        "origin": "goal",
+        "goal_ref": "goal_7aba840eac134082aa0817a0f67a1f5e",
+        "source_run_ref": null,
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "maxLength": 8000
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "resource_id": {
+              "type": "string"
+            },
+            "hash": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "resource_id",
+            "hash"
+          ],
+          "additionalProperties": false
+        },
+        "outputs": {
+          "resource_id": {
+            "source": "step",
+            "ref": "save",
+            "field": "resource_id"
+          },
+          "hash": {
+            "source": "step",
+            "ref": "save",
+            "field": "hash"
+          }
+        },
+        "views": [
+          {
+            "component_ref": "text",
+            "output_field": "resource_id"
+          }
+        ],
+        "workflow": [
+          {
+            "step_id": "save",
+            "binding_id": "save",
+            "depends_on": [],
+            "inputs": {
+              "text": {
+                "source": "input",
+                "field": "text"
+              }
+            }
+          }
+        ],
+        "action_bindings": [
+          {
+            "binding_id": "save",
+            "action_id": "action_0ca24cff95d544d8a8c054675309037e",
+            "revision": 1
+          }
+        ],
+        "data_bindings": [],
+        "runtime_identity_requirements": {
+          "mode": "user_and_project_intersection"
+        },
+        "permission_requirements": [
+          {
+            "tool_ref": "artifact.save_text",
+            "resource_ref": "proj_31126c934d7349d6917075e1b4a3ce14"
+          }
+        ],
+        "dependency_lock": [
+          {
+            "kind": "tool",
+            "ref": "artifact.save_text",
+            "version": "1"
+          },
+          {
+            "kind": "check",
+            "ref": "receipt.readback.v1",
+            "version": "1"
+          }
+        ],
+        "validation_suite_ref": "receipt.readback.v1",
+        "runtime_limits": {
+          "max_requests": 1,
+          "max_tools": 1,
+          "max_repairs": 0,
+          "max_total_tokens": 1,
+          "max_output_tokens": 1,
+          "run_seconds": 300
+        },
+        "data_schema_version": 1
+      },
+      "actions": [
+        {
+          "schema_version": "1.0-draft",
+          "action_id": "action_0ca24cff95d544d8a8c054675309037e",
+          "revision": 1,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "maxLength": 8000
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "hash"
+            ],
+            "additionalProperties": false
+          },
+          "executor": {
+            "kind": "registered_tool",
+            "ref": "artifact.save_text",
+            "version": "1"
+          },
+          "allowed_tool_refs": [],
+          "dependencies": [
+            {
+              "kind": "tool",
+              "ref": "artifact.save_text",
+              "version": "1"
+            },
+            {
+              "kind": "check",
+              "ref": "receipt.readback.v1",
+              "version": "1"
+            }
+          ],
+          "permission_requirements": [
+            {
+              "tool_ref": "artifact.save_text",
+              "resource_ref": "proj_31126c934d7349d6917075e1b4a3ce14"
+            }
+          ],
+          "effect": "project_write",
+          "preconditions": [],
+          "postcheck_refs": [
+            "receipt.readback.v1"
+          ],
+          "limits": {
+            "max_requests": 1,
+            "max_tools": 1,
+            "max_repairs": 0,
+            "max_total_tokens": 1,
+            "max_output_tokens": 1,
+            "run_seconds": 300
+          },
+          "idempotency": "transactional",
+          "reconcile_ref": "operation.lookup.v1",
+          "error_contract": [
+            "INVALID_INPUT",
+            "PERMISSION_DENIED",
+            "GRANT_REVOKED",
+            "VERSION_CONFLICT",
+            "OUTCOME_UNKNOWN"
+          ]
+        }
+      ]
+    },
+    "typed_mapping_version": "local-record-input.v1",
+    "typed_command_schemas": {
+      "CREATE": {
+        "additionalProperties": false,
+        "properties": {
+          "request_key": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Request Key",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 1,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "expected_data_version": {
+            "minimum": 0,
+            "title": "Expected Data Version",
+            "type": "integer"
+          },
+          "expected_release_fingerprint": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Expected Release Fingerprint",
+            "type": "string"
+          },
+          "command": {
+            "const": "CREATE",
+            "title": "Command",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "details": {
+            "maxLength": 2000,
+            "title": "Details",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_key",
+          "expected_revision",
+          "expected_data_version",
+          "expected_release_fingerprint",
+          "command",
+          "title",
+          "details"
+        ],
+        "title": "CreateRecord",
+        "type": "object"
+      },
+      "SET_STATE": {
+        "additionalProperties": false,
+        "properties": {
+          "request_key": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Request Key",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 1,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "expected_data_version": {
+            "minimum": 0,
+            "title": "Expected Data Version",
+            "type": "integer"
+          },
+          "expected_release_fingerprint": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Expected Release Fingerprint",
+            "type": "string"
+          },
+          "command": {
+            "const": "SET_STATE",
+            "title": "Command",
+            "type": "string"
+          },
+          "record_id": {
+            "pattern": "^record_[a-f0-9]{32}$",
+            "title": "Record Id",
+            "type": "string"
+          },
+          "expected_record_revision": {
+            "minimum": 1,
+            "title": "Expected Record Revision",
+            "type": "integer"
+          },
+          "target_state": {
+            "const": "DONE",
+            "title": "Target State",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_key",
+          "expected_revision",
+          "expected_data_version",
+          "expected_release_fingerprint",
+          "command",
+          "record_id",
+          "expected_record_revision",
+          "target_state",
+          "reason"
+        ],
+        "title": "SetState",
+        "type": "object"
+      }
+    },
+    "hard_conditions": [
+      "CREATE assigns a stable record identity and OPEN@1",
+      "Only OPEN to DONE with an explicit reason",
+      "Immutable events and exact record/data CAS; no history overwrite",
+      "No model or semantic acceptance"
+    ],
+    "limits": {
+      "max_events": 64,
+      "max_records": 32
+    },
+    "derived_read_grants_per_event": 2,
+    "formal_publication_enabled": false,
+    "fingerprint": "c2c875e8aedec7dce93305298781e9428d8890edcc5dbd3f8ad2fdb26918b8c8",
+    "definition": {
+      "namespace": "local-record-app.v1",
+      "id": "app_a950db087f4843edb63ff8aedc6e91e7",
+      "name": "Actual page local records",
+      "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+      "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+      "runtime_id": "runtime_42702f7d17274a37ab261ab9f4388a33",
+      "purpose": "Collect independent work items and explicitly mark only A DONE",
+      "goal_id": "goal_7aba840eac134082aa0817a0f67a1f5e",
+      "candidate": {
+        "namespace": "local-record-app.v1",
+        "manifest": {
+          "schema_version": "1.0-draft",
+          "app_id": "app_a950db087f4843edb63ff8aedc6e91e7",
+          "revision": 1,
+          "origin": "goal",
+          "goal_ref": "goal_7aba840eac134082aa0817a0f67a1f5e",
+          "source_run_ref": null,
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "maxLength": 8000
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "resource_id": {
+                "type": "string"
+              },
+              "hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "resource_id",
+              "hash"
+            ],
+            "additionalProperties": false
+          },
+          "outputs": {
+            "resource_id": {
+              "source": "step",
+              "ref": "save",
+              "field": "resource_id"
+            },
+            "hash": {
+              "source": "step",
+              "ref": "save",
+              "field": "hash"
+            }
+          },
+          "views": [
+            {
+              "component_ref": "text",
+              "output_field": "resource_id"
+            }
+          ],
+          "workflow": [
+            {
+              "step_id": "save",
+              "binding_id": "save",
+              "depends_on": [],
+              "inputs": {
+                "text": {
+                  "source": "input",
+                  "field": "text"
+                }
+              }
+            }
+          ],
+          "action_bindings": [
+            {
+              "binding_id": "save",
+              "action_id": "action_0ca24cff95d544d8a8c054675309037e",
+              "revision": 1
+            }
+          ],
+          "data_bindings": [],
+          "runtime_identity_requirements": {
+            "mode": "user_and_project_intersection"
+          },
+          "permission_requirements": [
+            {
+              "tool_ref": "artifact.save_text",
+              "resource_ref": "proj_31126c934d7349d6917075e1b4a3ce14"
+            }
+          ],
+          "dependency_lock": [
+            {
+              "kind": "tool",
+              "ref": "artifact.save_text",
+              "version": "1"
+            },
+            {
+              "kind": "check",
+              "ref": "receipt.readback.v1",
+              "version": "1"
+            }
+          ],
+          "validation_suite_ref": "receipt.readback.v1",
+          "runtime_limits": {
+            "max_requests": 1,
+            "max_tools": 1,
+            "max_repairs": 0,
+            "max_total_tokens": 1,
+            "max_output_tokens": 1,
+            "run_seconds": 300
+          },
+          "data_schema_version": 1
+        },
+        "actions": [
+          {
+            "schema_version": "1.0-draft",
+            "action_id": "action_0ca24cff95d544d8a8c054675309037e",
+            "revision": 1,
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "maxLength": 8000
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "additionalProperties": false
+            },
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "resource_id": {
+                  "type": "string"
+                },
+                "hash": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "resource_id",
+                "hash"
+              ],
+              "additionalProperties": false
+            },
+            "executor": {
+              "kind": "registered_tool",
+              "ref": "artifact.save_text",
+              "version": "1"
+            },
+            "allowed_tool_refs": [],
+            "dependencies": [
+              {
+                "kind": "tool",
+                "ref": "artifact.save_text",
+                "version": "1"
+              },
+              {
+                "kind": "check",
+                "ref": "receipt.readback.v1",
+                "version": "1"
+              }
+            ],
+            "permission_requirements": [
+              {
+                "tool_ref": "artifact.save_text",
+                "resource_ref": "proj_31126c934d7349d6917075e1b4a3ce14"
+              }
+            ],
+            "effect": "project_write",
+            "preconditions": [],
+            "postcheck_refs": [
+              "receipt.readback.v1"
+            ],
+            "limits": {
+              "max_requests": 1,
+              "max_tools": 1,
+              "max_repairs": 0,
+              "max_total_tokens": 1,
+              "max_output_tokens": 1,
+              "run_seconds": 300
+            },
+            "idempotency": "transactional",
+            "reconcile_ref": "operation.lookup.v1",
+            "error_contract": [
+              "INVALID_INPUT",
+              "PERMISSION_DENIED",
+              "GRANT_REVOKED",
+              "VERSION_CONFLICT",
+              "OUTCOME_UNKNOWN"
+            ]
+          }
+        ]
+      },
+      "typed_mapping_version": "local-record-input.v1",
+      "typed_command_schemas": {
+        "CREATE": {
+          "additionalProperties": false,
+          "properties": {
+            "request_key": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Request Key",
+              "type": "string"
+            },
+            "expected_revision": {
+              "minimum": 1,
+              "title": "Expected Revision",
+              "type": "integer"
+            },
+            "expected_data_version": {
+              "minimum": 0,
+              "title": "Expected Data Version",
+              "type": "integer"
+            },
+            "expected_release_fingerprint": {
+              "pattern": "^[a-f0-9]{64}$",
+              "title": "Expected Release Fingerprint",
+              "type": "string"
+            },
+            "command": {
+              "const": "CREATE",
+              "title": "Command",
+              "type": "string"
+            },
+            "title": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Title",
+              "type": "string"
+            },
+            "details": {
+              "maxLength": 2000,
+              "title": "Details",
+              "type": "string"
+            }
+          },
+          "required": [
+            "request_key",
+            "expected_revision",
+            "expected_data_version",
+            "expected_release_fingerprint",
+            "command",
+            "title",
+            "details"
+          ],
+          "title": "CreateRecord",
+          "type": "object"
+        },
+        "SET_STATE": {
+          "additionalProperties": false,
+          "properties": {
+            "request_key": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Request Key",
+              "type": "string"
+            },
+            "expected_revision": {
+              "minimum": 1,
+              "title": "Expected Revision",
+              "type": "integer"
+            },
+            "expected_data_version": {
+              "minimum": 0,
+              "title": "Expected Data Version",
+              "type": "integer"
+            },
+            "expected_release_fingerprint": {
+              "pattern": "^[a-f0-9]{64}$",
+              "title": "Expected Release Fingerprint",
+              "type": "string"
+            },
+            "command": {
+              "const": "SET_STATE",
+              "title": "Command",
+              "type": "string"
+            },
+            "record_id": {
+              "pattern": "^record_[a-f0-9]{32}$",
+              "title": "Record Id",
+              "type": "string"
+            },
+            "expected_record_revision": {
+              "minimum": 1,
+              "title": "Expected Record Revision",
+              "type": "integer"
+            },
+            "target_state": {
+              "const": "DONE",
+              "title": "Target State",
+              "type": "string"
+            },
+            "reason": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            }
+          },
+          "required": [
+            "request_key",
+            "expected_revision",
+            "expected_data_version",
+            "expected_release_fingerprint",
+            "command",
+            "record_id",
+            "expected_record_revision",
+            "target_state",
+            "reason"
+          ],
+          "title": "SetState",
+          "type": "object"
+        }
+      },
+      "hard_conditions": [
+        "CREATE assigns a stable record identity and OPEN@1",
+        "Only OPEN to DONE with an explicit reason",
+        "Immutable events and exact record/data CAS; no history overwrite",
+        "No model or semantic acceptance"
+      ],
+      "limits": {
+        "max_events": 64,
+        "max_records": 32
+      },
+      "derived_read_grants_per_event": 2,
+      "formal_publication_enabled": false
+    },
+    "input_guidance": {
+      "mode": "LOCAL_RECORDS"
+    }
+  },
+  "release": {
+    "id": "irelease_bd6c1df234d149149a013379d5ac924c",
+    "fingerprint": "0aa5840a076b5fd39dc9f497222072ecdb5c31ba15efb191ae058c0a4b2caec7",
+    "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+    "source_app_id": "app_a950db087f4843edb63ff8aedc6e91e7"
+  },
+  "current": {
+    "namespace": "local-record-app.v1",
+    "id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+    "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+    "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+    "source_app_id": "app_a950db087f4843edb63ff8aedc6e91e7",
+    "runtime_id": "runtime_42702f7d17274a37ab261ab9f4388a33",
+    "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+    "revision": 1,
+    "data_version": 3,
+    "release_fingerprint": "0aa5840a076b5fd39dc9f497222072ecdb5c31ba15efb191ae058c0a4b2caec7",
+    "records": [
+      {
+        "record_id": "record_f7f3011709e14189a634f087fbb94d02",
+        "record_revision": 2,
+        "title": "A 合成工作项",
+        "details": "Synthetic A: collect a local record; meaning not evaluated.",
+        "state": "DONE",
+        "last_event_fingerprint": "b74fe81aa3f36cf6a3557cfee4d153998f4bbee0a778eade64abaee60732fc8d"
+      },
+      {
+        "record_id": "record_194eb817059548da9fb20665d83950b2",
+        "record_revision": 1,
+        "title": "B 合成工作项",
+        "details": "Synthetic B: independent OPEN record.",
+        "state": "OPEN",
+        "last_event_fingerprint": "eea064a50529fbfe8dc966414250ab5c9f03859b9ca97ea4930cf20b7366b2dd"
+      }
+    ],
+    "history": [
+      {
+        "version": 1,
+        "event": {
+          "app_id": "app_a950db087f4843edb63ff8aedc6e91e7",
+          "collection_version": 1,
+          "details": "Synthetic A: collect a local record; meaning not evaluated.",
+          "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+          "kind": "CREATE",
+          "namespace": "local-record-event.v1",
+          "previous_collection_fingerprint": null,
+          "previous_event_fingerprint": null,
+          "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+          "reason": "",
+          "record_id": "record_f7f3011709e14189a634f087fbb94d02",
+          "record_revision": 1,
+          "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+          "state": "OPEN",
+          "title": "A 合成工作项"
+        },
+        "event_fingerprint": "46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63",
+        "artifact": {
+          "resource_id": "res_f489d2d423ad479eb4364b29d3c69e09",
+          "hash": "46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63"
+        },
+        "run_id": "run_12b7286f854a47ae89e3c6e02a0b125e",
+        "app_run_id": "iapprun_70a0ddae06f149108e51b9df767466b4"
+      },
+      {
+        "version": 2,
+        "event": {
+          "app_id": "app_a950db087f4843edb63ff8aedc6e91e7",
+          "collection_version": 2,
+          "details": "Synthetic B: independent OPEN record.",
+          "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+          "kind": "CREATE",
+          "namespace": "local-record-event.v1",
+          "previous_collection_fingerprint": "46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63",
+          "previous_event_fingerprint": null,
+          "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+          "reason": "",
+          "record_id": "record_194eb817059548da9fb20665d83950b2",
+          "record_revision": 1,
+          "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+          "state": "OPEN",
+          "title": "B 合成工作项"
+        },
+        "event_fingerprint": "eea064a50529fbfe8dc966414250ab5c9f03859b9ca97ea4930cf20b7366b2dd",
+        "artifact": {
+          "resource_id": "res_1a0b0baa69bf428a8fb199af2dc787eb",
+          "hash": "eea064a50529fbfe8dc966414250ab5c9f03859b9ca97ea4930cf20b7366b2dd"
+        },
+        "run_id": "run_3d678077acd24541898ef541ba5844c1",
+        "app_run_id": "iapprun_abbd98744f5548b695d4125b5cbf907c"
+      },
+      {
+        "version": 3,
+        "event": {
+          "app_id": "app_a950db087f4843edb63ff8aedc6e91e7",
+          "collection_version": 3,
+          "details": "Synthetic A: collect a local record; meaning not evaluated.",
+          "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+          "kind": "SET_STATE",
+          "namespace": "local-record-event.v1",
+          "previous_collection_fingerprint": "eea064a50529fbfe8dc966414250ab5c9f03859b9ca97ea4930cf20b7366b2dd",
+          "previous_event_fingerprint": "46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63",
+          "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+          "reason": "Synthetic explicit reason: owner marked only A complete.",
+          "record_id": "record_f7f3011709e14189a634f087fbb94d02",
+          "record_revision": 2,
+          "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+          "state": "DONE",
+          "title": "A 合成工作项"
+        },
+        "event_fingerprint": "b74fe81aa3f36cf6a3557cfee4d153998f4bbee0a778eade64abaee60732fc8d",
+        "artifact": {
+          "resource_id": "res_d407cb72083a4afcb9bbc5aa386c74f6",
+          "hash": "b74fe81aa3f36cf6a3557cfee4d153998f4bbee0a778eade64abaee60732fc8d"
+        },
+        "run_id": "run_8e9ce7485f1b45d39395a9dfa95fa3ae",
+        "app_run_id": "iapprun_a0663640a54c481099f07d777af305f7"
+      }
+    ],
+    "runs": [
+      {
+        "id": "run_12b7286f854a47ae89e3c6e02a0b125e",
+        "app_run_id": "iapprun_70a0ddae06f149108e51b9df767466b4",
+        "status": "SUCCEEDED",
+        "version": 2,
+        "result_version": 1
+      },
+      {
+        "id": "run_3d678077acd24541898ef541ba5844c1",
+        "app_run_id": "iapprun_abbd98744f5548b695d4125b5cbf907c",
+        "status": "SUCCEEDED",
+        "version": 2,
+        "result_version": 2
+      },
+      {
+        "id": "run_8e9ce7485f1b45d39395a9dfa95fa3ae",
+        "app_run_id": "iapprun_a0663640a54c481099f07d777af305f7",
+        "status": "SUCCEEDED",
+        "version": 2,
+        "result_version": 3
+      }
+    ],
+    "formal_publication_enabled": false
+  },
+  "completed": [
+    {
+      "prepared": {
+        "namespace": "local-record-app.v1",
+        "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+        "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+        "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+        "app_id": "app_a950db087f4843edb63ff8aedc6e91e7",
+        "request_key": "82cb808f-f060-4766-8a80-e7e177204813",
+        "request_fingerprint": "d90450f6b8e34834c6a57da652bed8a45f6b77cbc740321a4714c15a6c01dfc4",
+        "preview": {
+          "event": {
+            "namespace": "local-record-event.v1",
+            "app_id": "app_a950db087f4843edb63ff8aedc6e91e7",
+            "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+            "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+            "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+            "kind": "CREATE",
+            "collection_version": 1,
+            "record_id": "record_f7f3011709e14189a634f087fbb94d02",
+            "record_revision": 1,
+            "previous_event_fingerprint": null,
+            "previous_collection_fingerprint": null,
+            "title": "A 合成工作项",
+            "details": "Synthetic A: collect a local record; meaning not evaluated.",
+            "state": "OPEN",
+            "reason": ""
+          },
+          "event_fingerprint": "46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63",
+          "input": {
+            "request_key": "82cb808f-f060-4766-8a80-e7e177204813",
+            "expected_revision": 1,
+            "expected_data_version": 0,
+            "expected_release_fingerprint": "0aa5840a076b5fd39dc9f497222072ecdb5c31ba15efb191ae058c0a4b2caec7",
+            "command": "CREATE",
+            "title": "A 合成工作项",
+            "details": "Synthetic A: collect a local record; meaning not evaluated."
+          },
+          "instance_revision": 1,
+          "data_version": 0,
+          "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+          "release_fingerprint": "0aa5840a076b5fd39dc9f497222072ecdb5c31ba15efb191ae058c0a4b2caec7",
+          "expires_at": 1792297031.7643428,
+          "typed_mapping_version": "local-record-input.v1"
+        },
+        "preview_fingerprint": "98d34d72f640f1d34cc6a6ba3a1b647fabdaac4be7256fa7f667bb9d22f57c31",
+        "run": {
+          "run_id": "run_12b7286f854a47ae89e3c6e02a0b125e",
+          "app_run_id": "iapprun_70a0ddae06f149108e51b9df767466b4",
+          "status": "SUCCEEDED",
+          "version": 2,
+          "cached": true
+        },
+        "formal_publication_enabled": false
+      },
+      "run": {
+        "namespace": "local-record-app.v1",
+        "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+        "id": "run_12b7286f854a47ae89e3c6e02a0b125e",
+        "app_run_id": "iapprun_70a0ddae06f149108e51b9df767466b4",
+        "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+        "status": "SUCCEEDED",
+        "version": 2,
+        "result_version": 1,
+        "output": {
+          "resource_id": "res_f489d2d423ad479eb4364b29d3c69e09",
+          "hash": "46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63"
+        },
+        "event": {
+          "app_id": "app_a950db087f4843edb63ff8aedc6e91e7",
+          "collection_version": 1,
+          "details": "Synthetic A: collect a local record; meaning not evaluated.",
+          "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+          "kind": "CREATE",
+          "namespace": "local-record-event.v1",
+          "previous_collection_fingerprint": null,
+          "previous_event_fingerprint": null,
+          "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+          "reason": "",
+          "record_id": "record_f7f3011709e14189a634f087fbb94d02",
+          "record_revision": 1,
+          "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+          "state": "OPEN",
+          "title": "A 合成工作项"
+        },
+        "receipt": {
+          "operation_id": "op_075c0c67bcf149f4977fd5ed74b08a60",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_f489d2d423ad479eb4364b29d3c69e09",
+            "hash": "46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63"
+          },
+          "artifact_refs": [
+            "res_f489d2d423ad479eb4364b29d3c69e09"
+          ],
+          "receipt_ref": "op_075c0c67bcf149f4977fd5ed74b08a60",
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "usage_ref": null,
+          "error": null
+        },
+        "error": null,
+        "formal_publication_enabled": false
+      }
+    },
+    {
+      "prepared": {
+        "namespace": "local-record-app.v1",
+        "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+        "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+        "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+        "app_id": "app_a950db087f4843edb63ff8aedc6e91e7",
+        "request_key": "ca3164b6-e72b-44cf-8a8d-280ef35f81e5",
+        "request_fingerprint": "60ded5b6d387b5ee76188c3239d393432d91eeac0895f3f655b27f5eb154b6d4",
+        "preview": {
+          "event": {
+            "namespace": "local-record-event.v1",
+            "app_id": "app_a950db087f4843edb63ff8aedc6e91e7",
+            "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+            "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+            "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+            "kind": "CREATE",
+            "collection_version": 2,
+            "record_id": "record_194eb817059548da9fb20665d83950b2",
+            "record_revision": 1,
+            "previous_event_fingerprint": null,
+            "previous_collection_fingerprint": "46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63",
+            "title": "B 合成工作项",
+            "details": "Synthetic B: independent OPEN record.",
+            "state": "OPEN",
+            "reason": ""
+          },
+          "event_fingerprint": "eea064a50529fbfe8dc966414250ab5c9f03859b9ca97ea4930cf20b7366b2dd",
+          "input": {
+            "request_key": "ca3164b6-e72b-44cf-8a8d-280ef35f81e5",
+            "expected_revision": 1,
+            "expected_data_version": 1,
+            "expected_release_fingerprint": "0aa5840a076b5fd39dc9f497222072ecdb5c31ba15efb191ae058c0a4b2caec7",
+            "command": "CREATE",
+            "title": "B 合成工作项",
+            "details": "Synthetic B: independent OPEN record."
+          },
+          "instance_revision": 1,
+          "data_version": 1,
+          "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+          "release_fingerprint": "0aa5840a076b5fd39dc9f497222072ecdb5c31ba15efb191ae058c0a4b2caec7",
+          "expires_at": 1792297034.495798,
+          "typed_mapping_version": "local-record-input.v1"
+        },
+        "preview_fingerprint": "7d29255ced797f85e59c99083a00bcdc4e8de211e822e2af244a2f9d9b1c5574",
+        "run": {
+          "run_id": "run_3d678077acd24541898ef541ba5844c1",
+          "app_run_id": "iapprun_abbd98744f5548b695d4125b5cbf907c",
+          "status": "SUCCEEDED",
+          "version": 2,
+          "cached": true
+        },
+        "formal_publication_enabled": false
+      },
+      "run": {
+        "namespace": "local-record-app.v1",
+        "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+        "id": "run_3d678077acd24541898ef541ba5844c1",
+        "app_run_id": "iapprun_abbd98744f5548b695d4125b5cbf907c",
+        "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+        "status": "SUCCEEDED",
+        "version": 2,
+        "result_version": 2,
+        "output": {
+          "resource_id": "res_1a0b0baa69bf428a8fb199af2dc787eb",
+          "hash": "eea064a50529fbfe8dc966414250ab5c9f03859b9ca97ea4930cf20b7366b2dd"
+        },
+        "event": {
+          "app_id": "app_a950db087f4843edb63ff8aedc6e91e7",
+          "collection_version": 2,
+          "details": "Synthetic B: independent OPEN record.",
+          "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+          "kind": "CREATE",
+          "namespace": "local-record-event.v1",
+          "previous_collection_fingerprint": "46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63",
+          "previous_event_fingerprint": null,
+          "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+          "reason": "",
+          "record_id": "record_194eb817059548da9fb20665d83950b2",
+          "record_revision": 1,
+          "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+          "state": "OPEN",
+          "title": "B 合成工作项"
+        },
+        "receipt": {
+          "operation_id": "op_8d2c9dbbeec24c2d809bda0fc7109472",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_1a0b0baa69bf428a8fb199af2dc787eb",
+            "hash": "eea064a50529fbfe8dc966414250ab5c9f03859b9ca97ea4930cf20b7366b2dd"
+          },
+          "artifact_refs": [
+            "res_1a0b0baa69bf428a8fb199af2dc787eb"
+          ],
+          "receipt_ref": "op_8d2c9dbbeec24c2d809bda0fc7109472",
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "usage_ref": null,
+          "error": null
+        },
+        "error": null,
+        "formal_publication_enabled": false
+      }
+    },
+    {
+      "prepared": {
+        "namespace": "local-record-app.v1",
+        "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+        "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+        "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+        "app_id": "app_a950db087f4843edb63ff8aedc6e91e7",
+        "request_key": "de5a83d4-9f53-4dee-b443-9c9d1ea7874d",
+        "request_fingerprint": "bcc60a2db4eb139e9d9ab4c6a93ede4beee737cc94e1c823671dfeef1b9952f3",
+        "preview": {
+          "event": {
+            "namespace": "local-record-event.v1",
+            "app_id": "app_a950db087f4843edb63ff8aedc6e91e7",
+            "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+            "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+            "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+            "kind": "SET_STATE",
+            "collection_version": 3,
+            "record_id": "record_f7f3011709e14189a634f087fbb94d02",
+            "record_revision": 2,
+            "previous_event_fingerprint": "46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63",
+            "previous_collection_fingerprint": "eea064a50529fbfe8dc966414250ab5c9f03859b9ca97ea4930cf20b7366b2dd",
+            "title": "A 合成工作项",
+            "details": "Synthetic A: collect a local record; meaning not evaluated.",
+            "state": "DONE",
+            "reason": "Synthetic explicit reason: owner marked only A complete."
+          },
+          "event_fingerprint": "b74fe81aa3f36cf6a3557cfee4d153998f4bbee0a778eade64abaee60732fc8d",
+          "input": {
+            "request_key": "de5a83d4-9f53-4dee-b443-9c9d1ea7874d",
+            "expected_revision": 1,
+            "expected_data_version": 2,
+            "expected_release_fingerprint": "0aa5840a076b5fd39dc9f497222072ecdb5c31ba15efb191ae058c0a4b2caec7",
+            "command": "SET_STATE",
+            "record_id": "record_f7f3011709e14189a634f087fbb94d02",
+            "expected_record_revision": 1,
+            "target_state": "DONE",
+            "reason": "Synthetic explicit reason: owner marked only A complete."
+          },
+          "instance_revision": 1,
+          "data_version": 2,
+          "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+          "release_fingerprint": "0aa5840a076b5fd39dc9f497222072ecdb5c31ba15efb191ae058c0a4b2caec7",
+          "expires_at": 1792297037.2854407,
+          "typed_mapping_version": "local-record-input.v1"
+        },
+        "preview_fingerprint": "48367e6910fd6c6adc9746a5f824fbc6a2257c66e3a5cc9cf74ff8bb8d30c79e",
+        "run": {
+          "run_id": "run_8e9ce7485f1b45d39395a9dfa95fa3ae",
+          "app_run_id": "iapprun_a0663640a54c481099f07d777af305f7",
+          "status": "SUCCEEDED",
+          "version": 2,
+          "cached": true
+        },
+        "formal_publication_enabled": false
+      },
+      "run": {
+        "namespace": "local-record-app.v1",
+        "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+        "id": "run_8e9ce7485f1b45d39395a9dfa95fa3ae",
+        "app_run_id": "iapprun_a0663640a54c481099f07d777af305f7",
+        "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+        "status": "SUCCEEDED",
+        "version": 2,
+        "result_version": 3,
+        "output": {
+          "resource_id": "res_d407cb72083a4afcb9bbc5aa386c74f6",
+          "hash": "b74fe81aa3f36cf6a3557cfee4d153998f4bbee0a778eade64abaee60732fc8d"
+        },
+        "event": {
+          "app_id": "app_a950db087f4843edb63ff8aedc6e91e7",
+          "collection_version": 3,
+          "details": "Synthetic A: collect a local record; meaning not evaluated.",
+          "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+          "kind": "SET_STATE",
+          "namespace": "local-record-event.v1",
+          "previous_collection_fingerprint": "eea064a50529fbfe8dc966414250ab5c9f03859b9ca97ea4930cf20b7366b2dd",
+          "previous_event_fingerprint": "46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63",
+          "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+          "reason": "Synthetic explicit reason: owner marked only A complete.",
+          "record_id": "record_f7f3011709e14189a634f087fbb94d02",
+          "record_revision": 2,
+          "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+          "state": "DONE",
+          "title": "A 合成工作项"
+        },
+        "receipt": {
+          "operation_id": "op_5825c7420b614be594a75da5b7158391",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_d407cb72083a4afcb9bbc5aa386c74f6",
+            "hash": "b74fe81aa3f36cf6a3557cfee4d153998f4bbee0a778eade64abaee60732fc8d"
+          },
+          "artifact_refs": [
+            "res_d407cb72083a4afcb9bbc5aa386c74f6"
+          ],
+          "receipt_ref": "op_5825c7420b614be594a75da5b7158391",
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "usage_ref": null,
+          "error": null
+        },
+        "error": null,
+        "formal_publication_enabled": false
+      }
+    }
+  ],
+  "exact_saved_rows": {
+    "runs": [
+      {
+        "id": "run_12b7286f854a47ae89e3c6e02a0b125e",
+        "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+        "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+        "runtime_id": "runtime_42702f7d17274a37ab261ab9f4388a33",
+        "goal": "Collect independent work items and explicitly mark only A DONE",
+        "resource_refs": [],
+        "status": "SUCCEEDED",
+        "request_key": "internal:iapprun_70a0ddae06f149108e51b9df767466b4",
+        "fingerprint": "4b478953bfc1bddabeaed4a0a2ec0ceb37fb7798ba618fdd111b015b9d90d3d8",
+        "created_at": 1792296132.0944123,
+        "lease_until": 0.0,
+        "fence": 1,
+        "worker_id": "worker_2b2feabf92e748cbbb556de3f8ebac0a",
+        "context": {
+          "kind": "INTERNAL_APPRUN",
+          "local_records": "local-record-app.v1",
+          "messages": [],
+          "requests": 0,
+          "tools": 1,
+          "repairs": 0,
+          "reserved_tokens": 0
+        },
+        "result": {
+          "namespace": "local-record-app.v1",
+          "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+          "app_run_id": "iapprun_70a0ddae06f149108e51b9df767466b4",
+          "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+          "result_version": 1,
+          "record_id": "record_f7f3011709e14189a634f087fbb94d02",
+          "record_revision": 1,
+          "event_fingerprint": "46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63",
+          "artifact": {
+            "resource_id": "res_f489d2d423ad479eb4364b29d3c69e09",
+            "hash": "46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63"
+          }
+        },
+        "error": null,
+        "cancel_intent": false,
+        "version": 2
+      },
+      {
+        "id": "run_3d678077acd24541898ef541ba5844c1",
+        "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+        "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+        "runtime_id": "runtime_42702f7d17274a37ab261ab9f4388a33",
+        "goal": "Collect independent work items and explicitly mark only A DONE",
+        "resource_refs": [],
+        "status": "SUCCEEDED",
+        "request_key": "internal:iapprun_abbd98744f5548b695d4125b5cbf907c",
+        "fingerprint": "07f2abb2fc724968579fdb8a1815fd65b8464e11680e1447197b9f06da33c6ed",
+        "created_at": 1792296134.910461,
+        "lease_until": 0.0,
+        "fence": 1,
+        "worker_id": "worker_d1b04ab202ec482d8737e399d4696c52",
+        "context": {
+          "kind": "INTERNAL_APPRUN",
+          "local_records": "local-record-app.v1",
+          "messages": [],
+          "requests": 0,
+          "tools": 1,
+          "repairs": 0,
+          "reserved_tokens": 0
+        },
+        "result": {
+          "namespace": "local-record-app.v1",
+          "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+          "app_run_id": "iapprun_abbd98744f5548b695d4125b5cbf907c",
+          "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+          "result_version": 2,
+          "record_id": "record_194eb817059548da9fb20665d83950b2",
+          "record_revision": 1,
+          "event_fingerprint": "eea064a50529fbfe8dc966414250ab5c9f03859b9ca97ea4930cf20b7366b2dd",
+          "artifact": {
+            "resource_id": "res_1a0b0baa69bf428a8fb199af2dc787eb",
+            "hash": "eea064a50529fbfe8dc966414250ab5c9f03859b9ca97ea4930cf20b7366b2dd"
+          }
+        },
+        "error": null,
+        "cancel_intent": false,
+        "version": 2
+      },
+      {
+        "id": "run_8e9ce7485f1b45d39395a9dfa95fa3ae",
+        "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+        "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+        "runtime_id": "runtime_42702f7d17274a37ab261ab9f4388a33",
+        "goal": "Collect independent work items and explicitly mark only A DONE",
+        "resource_refs": [],
+        "status": "SUCCEEDED",
+        "request_key": "internal:iapprun_a0663640a54c481099f07d777af305f7",
+        "fingerprint": "9aae26aeffc6c4d5cc2ef71c2dc8fb97fc56843ee2c66c845b1664bdd9a52d89",
+        "created_at": 1792296137.5555372,
+        "lease_until": 0.0,
+        "fence": 1,
+        "worker_id": "worker_9f1295f6ffd348bb95e246bfdbb937a7",
+        "context": {
+          "kind": "INTERNAL_APPRUN",
+          "local_records": "local-record-app.v1",
+          "messages": [],
+          "requests": 0,
+          "tools": 1,
+          "repairs": 0,
+          "reserved_tokens": 0
+        },
+        "result": {
+          "namespace": "local-record-app.v1",
+          "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+          "app_run_id": "iapprun_a0663640a54c481099f07d777af305f7",
+          "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+          "result_version": 3,
+          "record_id": "record_f7f3011709e14189a634f087fbb94d02",
+          "record_revision": 2,
+          "event_fingerprint": "b74fe81aa3f36cf6a3557cfee4d153998f4bbee0a778eade64abaee60732fc8d",
+          "artifact": {
+            "resource_id": "res_d407cb72083a4afcb9bbc5aa386c74f6",
+            "hash": "b74fe81aa3f36cf6a3557cfee4d153998f4bbee0a778eade64abaee60732fc8d"
+          }
+        },
+        "error": null,
+        "cancel_intent": false,
+        "version": 2
+      }
+    ],
+    "operations": [
+      {
+        "id": "op_5825c7420b614be594a75da5b7158391",
+        "run_id": "run_8e9ce7485f1b45d39395a9dfa95fa3ae",
+        "call_id": "record_event",
+        "fingerprint": "29ca5aa57d234e3b70988adc5a4b9f15b90be359d95f4b4ea0a383ddb3a47756",
+        "tool_ref": "artifact.save_text",
+        "status": "VERIFIED",
+        "receipt": {
+          "operation_id": "op_5825c7420b614be594a75da5b7158391",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_d407cb72083a4afcb9bbc5aa386c74f6",
+            "hash": "b74fe81aa3f36cf6a3557cfee4d153998f4bbee0a778eade64abaee60732fc8d"
+          },
+          "artifact_refs": [
+            "res_d407cb72083a4afcb9bbc5aa386c74f6"
+          ],
+          "receipt_ref": "op_5825c7420b614be594a75da5b7158391",
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "usage_ref": null,
+          "error": null
+        }
+      },
+      {
+        "id": "op_075c0c67bcf149f4977fd5ed74b08a60",
+        "run_id": "run_12b7286f854a47ae89e3c6e02a0b125e",
+        "call_id": "record_event",
+        "fingerprint": "a9351c38719af8ed5175684bdb51720bfab53d07fa3c681a2978521f37b8be51",
+        "tool_ref": "artifact.save_text",
+        "status": "VERIFIED",
+        "receipt": {
+          "operation_id": "op_075c0c67bcf149f4977fd5ed74b08a60",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_f489d2d423ad479eb4364b29d3c69e09",
+            "hash": "46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63"
+          },
+          "artifact_refs": [
+            "res_f489d2d423ad479eb4364b29d3c69e09"
+          ],
+          "receipt_ref": "op_075c0c67bcf149f4977fd5ed74b08a60",
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "usage_ref": null,
+          "error": null
+        }
+      },
+      {
+        "id": "op_8d2c9dbbeec24c2d809bda0fc7109472",
+        "run_id": "run_3d678077acd24541898ef541ba5844c1",
+        "call_id": "record_event",
+        "fingerprint": "c8b7a98189430e9da9e003b98a1e527727d95aa1530d916ccd34da048461457f",
+        "tool_ref": "artifact.save_text",
+        "status": "VERIFIED",
+        "receipt": {
+          "operation_id": "op_8d2c9dbbeec24c2d809bda0fc7109472",
+          "status": "VERIFIED",
+          "data": {
+            "resource_id": "res_1a0b0baa69bf428a8fb199af2dc787eb",
+            "hash": "eea064a50529fbfe8dc966414250ab5c9f03859b9ca97ea4930cf20b7366b2dd"
+          },
+          "artifact_refs": [
+            "res_1a0b0baa69bf428a8fb199af2dc787eb"
+          ],
+          "receipt_ref": "op_8d2c9dbbeec24c2d809bda0fc7109472",
+          "check_results": [
+            {
+              "check": "receipt.readback.v1",
+              "status": "PASS"
+            }
+          ],
+          "usage_ref": null,
+          "error": null
+        }
+      }
+    ],
+    "operation_intents": [
+      {
+        "operation_id": "op_075c0c67bcf149f4977fd5ed74b08a60",
+        "request": {
+          "tool": "artifact.save_text",
+          "args": {
+            "text": "{\"app_id\":\"app_a950db087f4843edb63ff8aedc6e91e7\",\"collection_version\":1,\"details\":\"Synthetic A: collect a local record; meaning not evaluated.\",\"instance_id\":\"iinstance_eac60eb45f614f51aa7ac61dd02a8e53\",\"kind\":\"CREATE\",\"namespace\":\"local-record-event.v1\",\"previous_collection_fingerprint\":null,\"previous_event_fingerprint\":null,\"principal_id\":\"user_6068d7691b704c39b0b4087a0834649f\",\"reason\":\"\",\"record_id\":\"record_f7f3011709e14189a634f087fbb94d02\",\"record_revision\":1,\"release_id\":\"irelease_bd6c1df234d149149a013379d5ac924c\",\"state\":\"OPEN\",\"title\":\"A 合成工作项\"}"
+          }
+        }
+      },
+      {
+        "operation_id": "op_5825c7420b614be594a75da5b7158391",
+        "request": {
+          "tool": "artifact.save_text",
+          "args": {
+            "text": "{\"app_id\":\"app_a950db087f4843edb63ff8aedc6e91e7\",\"collection_version\":3,\"details\":\"Synthetic A: collect a local record; meaning not evaluated.\",\"instance_id\":\"iinstance_eac60eb45f614f51aa7ac61dd02a8e53\",\"kind\":\"SET_STATE\",\"namespace\":\"local-record-event.v1\",\"previous_collection_fingerprint\":\"eea064a50529fbfe8dc966414250ab5c9f03859b9ca97ea4930cf20b7366b2dd\",\"previous_event_fingerprint\":\"46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63\",\"principal_id\":\"user_6068d7691b704c39b0b4087a0834649f\",\"reason\":\"Synthetic explicit reason: owner marked only A complete.\",\"record_id\":\"record_f7f3011709e14189a634f087fbb94d02\",\"record_revision\":2,\"release_id\":\"irelease_bd6c1df234d149149a013379d5ac924c\",\"state\":\"DONE\",\"title\":\"A 合成工作项\"}"
+          }
+        }
+      },
+      {
+        "operation_id": "op_8d2c9dbbeec24c2d809bda0fc7109472",
+        "request": {
+          "tool": "artifact.save_text",
+          "args": {
+            "text": "{\"app_id\":\"app_a950db087f4843edb63ff8aedc6e91e7\",\"collection_version\":2,\"details\":\"Synthetic B: independent OPEN record.\",\"instance_id\":\"iinstance_eac60eb45f614f51aa7ac61dd02a8e53\",\"kind\":\"CREATE\",\"namespace\":\"local-record-event.v1\",\"previous_collection_fingerprint\":\"46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63\",\"previous_event_fingerprint\":null,\"principal_id\":\"user_6068d7691b704c39b0b4087a0834649f\",\"reason\":\"\",\"record_id\":\"record_194eb817059548da9fb20665d83950b2\",\"record_revision\":1,\"release_id\":\"irelease_bd6c1df234d149149a013379d5ac924c\",\"state\":\"OPEN\",\"title\":\"B 合成工作项\"}"
+          }
+        }
+      }
+    ],
+    "local_effects": [
+      {
+        "operation_id": "op_075c0c67bcf149f4977fd5ed74b08a60",
+        "resource_id": "res_f489d2d423ad479eb4364b29d3c69e09",
+        "content_hash": "46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63"
+      },
+      {
+        "operation_id": "op_5825c7420b614be594a75da5b7158391",
+        "resource_id": "res_d407cb72083a4afcb9bbc5aa386c74f6",
+        "content_hash": "b74fe81aa3f36cf6a3557cfee4d153998f4bbee0a778eade64abaee60732fc8d"
+      },
+      {
+        "operation_id": "op_8d2c9dbbeec24c2d809bda0fc7109472",
+        "resource_id": "res_1a0b0baa69bf428a8fb199af2dc787eb",
+        "content_hash": "eea064a50529fbfe8dc966414250ab5c9f03859b9ca97ea4930cf20b7366b2dd"
+      }
+    ],
+    "internal_app_runs": [
+      {
+        "id": "iapprun_a0663640a54c481099f07d777af305f7",
+        "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+        "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+        "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+        "request_key": "de5a83d4-9f53-4dee-b443-9c9d1ea7874d",
+        "fingerprint": "2263d70a7592fea684c0a661b117807bc63468d51066d3907ddc9951dc7032c3",
+        "input": {
+          "request_key": "de5a83d4-9f53-4dee-b443-9c9d1ea7874d",
+          "expected_revision": 1,
+          "expected_data_version": 2,
+          "expected_release_fingerprint": "0aa5840a076b5fd39dc9f497222072ecdb5c31ba15efb191ae058c0a4b2caec7",
+          "command": "SET_STATE",
+          "record_id": "record_f7f3011709e14189a634f087fbb94d02",
+          "expected_record_revision": 1,
+          "target_state": "DONE",
+          "reason": "Synthetic explicit reason: owner marked only A complete."
+        },
+        "status": "SUCCEEDED",
+        "output": {
+          "resource_id": "res_d407cb72083a4afcb9bbc5aa386c74f6",
+          "hash": "b74fe81aa3f36cf6a3557cfee4d153998f4bbee0a778eade64abaee60732fc8d"
+        },
+        "error": null,
+        "result_version": 3
+      },
+      {
+        "id": "iapprun_70a0ddae06f149108e51b9df767466b4",
+        "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+        "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+        "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+        "request_key": "82cb808f-f060-4766-8a80-e7e177204813",
+        "fingerprint": "9ccef1cdc208a9d0dcea056f96d81fcc2713863fd2fe9caea2f2cdb8e1e7ea56",
+        "input": {
+          "request_key": "82cb808f-f060-4766-8a80-e7e177204813",
+          "expected_revision": 1,
+          "expected_data_version": 0,
+          "expected_release_fingerprint": "0aa5840a076b5fd39dc9f497222072ecdb5c31ba15efb191ae058c0a4b2caec7",
+          "command": "CREATE",
+          "title": "A 合成工作项",
+          "details": "Synthetic A: collect a local record; meaning not evaluated."
+        },
+        "status": "SUCCEEDED",
+        "output": {
+          "resource_id": "res_f489d2d423ad479eb4364b29d3c69e09",
+          "hash": "46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63"
+        },
+        "error": null,
+        "result_version": 1
+      },
+      {
+        "id": "iapprun_abbd98744f5548b695d4125b5cbf907c",
+        "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+        "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+        "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+        "request_key": "ca3164b6-e72b-44cf-8a8d-280ef35f81e5",
+        "fingerprint": "b369cd7b63658f132abc5f61f57d5e0f8712777bdbb97a7943de78eaec213a0c",
+        "input": {
+          "request_key": "ca3164b6-e72b-44cf-8a8d-280ef35f81e5",
+          "expected_revision": 1,
+          "expected_data_version": 1,
+          "expected_release_fingerprint": "0aa5840a076b5fd39dc9f497222072ecdb5c31ba15efb191ae058c0a4b2caec7",
+          "command": "CREATE",
+          "title": "B 合成工作项",
+          "details": "Synthetic B: independent OPEN record."
+        },
+        "status": "SUCCEEDED",
+        "output": {
+          "resource_id": "res_1a0b0baa69bf428a8fb199af2dc787eb",
+          "hash": "eea064a50529fbfe8dc966414250ab5c9f03859b9ca97ea4930cf20b7366b2dd"
+        },
+        "error": null,
+        "result_version": 2
+      }
+    ],
+    "internal_instance_data": [
+      {
+        "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+        "version": 1,
+        "run_id": "iapprun_70a0ddae06f149108e51b9df767466b4",
+        "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+        "schema_version": 1,
+        "data": {
+          "result": {
+            "resource_id": "res_f489d2d423ad479eb4364b29d3c69e09",
+            "hash": "46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63"
+          },
+          "release_ref": "irelease_bd6c1df234d149149a013379d5ac924c"
+        },
+        "fingerprint": "f936d8c16c67604f153a721303f8c6d321a970f52731b47198085d8572ff7c7c"
+      },
+      {
+        "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+        "version": 3,
+        "run_id": "iapprun_a0663640a54c481099f07d777af305f7",
+        "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+        "schema_version": 1,
+        "data": {
+          "result": {
+            "resource_id": "res_d407cb72083a4afcb9bbc5aa386c74f6",
+            "hash": "b74fe81aa3f36cf6a3557cfee4d153998f4bbee0a778eade64abaee60732fc8d"
+          },
+          "release_ref": "irelease_bd6c1df234d149149a013379d5ac924c"
+        },
+        "fingerprint": "1363d4350275c17f7420d495454b9fa6ce1d8bb4554d38f40b34fb308a344875"
+      },
+      {
+        "instance_id": "iinstance_eac60eb45f614f51aa7ac61dd02a8e53",
+        "version": 2,
+        "run_id": "iapprun_abbd98744f5548b695d4125b5cbf907c",
+        "release_id": "irelease_bd6c1df234d149149a013379d5ac924c",
+        "schema_version": 1,
+        "data": {
+          "result": {
+            "resource_id": "res_1a0b0baa69bf428a8fb199af2dc787eb",
+            "hash": "eea064a50529fbfe8dc966414250ab5c9f03859b9ca97ea4930cf20b7366b2dd"
+          },
+          "release_ref": "irelease_bd6c1df234d149149a013379d5ac924c"
+        },
+        "fingerprint": "a7013c2c528009461e73cb3a888f121e1217d4549d045eb07afbfa7ff84ff449"
+      }
+    ],
+    "resources": [
+      {
+        "id": "res_f489d2d423ad479eb4364b29d3c69e09",
+        "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+        "name": "Constraint checklist.json",
+        "format": "json",
+        "content": "{\"app_id\":\"app_a950db087f4843edb63ff8aedc6e91e7\",\"collection_version\":1,\"details\":\"Synthetic A: collect a local record; meaning not evaluated.\",\"instance_id\":\"iinstance_eac60eb45f614f51aa7ac61dd02a8e53\",\"kind\":\"CREATE\",\"namespace\":\"local-record-event.v1\",\"previous_collection_fingerprint\":null,\"previous_event_fingerprint\":null,\"principal_id\":\"user_6068d7691b704c39b0b4087a0834649f\",\"reason\":\"\",\"record_id\":\"record_f7f3011709e14189a634f087fbb94d02\",\"record_revision\":1,\"release_id\":\"irelease_bd6c1df234d149149a013379d5ac924c\",\"state\":\"OPEN\",\"title\":\"A 合成工作项\"}",
+        "hash": "46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63"
+      },
+      {
+        "id": "res_1a0b0baa69bf428a8fb199af2dc787eb",
+        "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+        "name": "Constraint checklist.json",
+        "format": "json",
+        "content": "{\"app_id\":\"app_a950db087f4843edb63ff8aedc6e91e7\",\"collection_version\":2,\"details\":\"Synthetic B: independent OPEN record.\",\"instance_id\":\"iinstance_eac60eb45f614f51aa7ac61dd02a8e53\",\"kind\":\"CREATE\",\"namespace\":\"local-record-event.v1\",\"previous_collection_fingerprint\":\"46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63\",\"previous_event_fingerprint\":null,\"principal_id\":\"user_6068d7691b704c39b0b4087a0834649f\",\"reason\":\"\",\"record_id\":\"record_194eb817059548da9fb20665d83950b2\",\"record_revision\":1,\"release_id\":\"irelease_bd6c1df234d149149a013379d5ac924c\",\"state\":\"OPEN\",\"title\":\"B 合成工作项\"}",
+        "hash": "eea064a50529fbfe8dc966414250ab5c9f03859b9ca97ea4930cf20b7366b2dd"
+      },
+      {
+        "id": "res_d407cb72083a4afcb9bbc5aa386c74f6",
+        "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+        "name": "Constraint checklist.json",
+        "format": "json",
+        "content": "{\"app_id\":\"app_a950db087f4843edb63ff8aedc6e91e7\",\"collection_version\":3,\"details\":\"Synthetic A: collect a local record; meaning not evaluated.\",\"instance_id\":\"iinstance_eac60eb45f614f51aa7ac61dd02a8e53\",\"kind\":\"SET_STATE\",\"namespace\":\"local-record-event.v1\",\"previous_collection_fingerprint\":\"eea064a50529fbfe8dc966414250ab5c9f03859b9ca97ea4930cf20b7366b2dd\",\"previous_event_fingerprint\":\"46e32cdc512805f2ddf489e93e84926d8c8ddadb32f1cd31337c9c43c07c0c63\",\"principal_id\":\"user_6068d7691b704c39b0b4087a0834649f\",\"reason\":\"Synthetic explicit reason: owner marked only A complete.\",\"record_id\":\"record_f7f3011709e14189a634f087fbb94d02\",\"record_revision\":2,\"release_id\":\"irelease_bd6c1df234d149149a013379d5ac924c\",\"state\":\"DONE\",\"title\":\"A 合成工作项\"}",
+        "hash": "b74fe81aa3f36cf6a3557cfee4d153998f4bbee0a778eade64abaee60732fc8d"
+      }
+    ],
+    "grants": [
+      {
+        "id": "grant_68bb25c939124744b819153a27be03a7",
+        "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+        "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+        "resource_id": "res_f489d2d423ad479eb4364b29d3c69e09",
+        "tool_ref": "resource.read",
+        "expires_at": 1792382533.2008014,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_b778cc7e497f4b73b4d078154e1df7c6",
+        "principal_id": "runtime_42702f7d17274a37ab261ab9f4388a33",
+        "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+        "resource_id": "res_f489d2d423ad479eb4364b29d3c69e09",
+        "tool_ref": "resource.read",
+        "expires_at": 1792382533.2018259,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_6dc72f4aa3014ca7a024fe79ec4203c0",
+        "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+        "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+        "resource_id": "res_1a0b0baa69bf428a8fb199af2dc787eb",
+        "tool_ref": "resource.read",
+        "expires_at": 1792382535.848111,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_3dafadb83a6741b9b443375d9bd1bcf5",
+        "principal_id": "runtime_42702f7d17274a37ab261ab9f4388a33",
+        "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+        "resource_id": "res_1a0b0baa69bf428a8fb199af2dc787eb",
+        "tool_ref": "resource.read",
+        "expires_at": 1792382535.8485208,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_a5a37dc2143d4121beca1ea61e79550d",
+        "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+        "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+        "resource_id": "res_d407cb72083a4afcb9bbc5aa386c74f6",
+        "tool_ref": "resource.read",
+        "expires_at": 1792382539.6353824,
+        "revision": 1,
+        "revoked": false
+      },
+      {
+        "id": "grant_27b7a18f9659444f97a919ceab6872be",
+        "principal_id": "runtime_42702f7d17274a37ab261ab9f4388a33",
+        "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+        "resource_id": "res_d407cb72083a4afcb9bbc5aa386c74f6",
+        "tool_ref": "resource.read",
+        "expires_at": 1792382539.6367023,
+        "revision": 1,
+        "revoked": false
+      }
+    ]
+  },
+  "derived_read_grants": [
+    {
+      "id": "grant_68bb25c939124744b819153a27be03a7",
+      "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+      "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+      "resource_id": "res_f489d2d423ad479eb4364b29d3c69e09",
+      "tool_ref": "resource.read",
+      "expires_at": 1792382533.2008014,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_b778cc7e497f4b73b4d078154e1df7c6",
+      "principal_id": "runtime_42702f7d17274a37ab261ab9f4388a33",
+      "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+      "resource_id": "res_f489d2d423ad479eb4364b29d3c69e09",
+      "tool_ref": "resource.read",
+      "expires_at": 1792382533.2018259,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_6dc72f4aa3014ca7a024fe79ec4203c0",
+      "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+      "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+      "resource_id": "res_1a0b0baa69bf428a8fb199af2dc787eb",
+      "tool_ref": "resource.read",
+      "expires_at": 1792382535.848111,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_3dafadb83a6741b9b443375d9bd1bcf5",
+      "principal_id": "runtime_42702f7d17274a37ab261ab9f4388a33",
+      "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+      "resource_id": "res_1a0b0baa69bf428a8fb199af2dc787eb",
+      "tool_ref": "resource.read",
+      "expires_at": 1792382535.8485208,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_a5a37dc2143d4121beca1ea61e79550d",
+      "principal_id": "user_6068d7691b704c39b0b4087a0834649f",
+      "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+      "resource_id": "res_d407cb72083a4afcb9bbc5aa386c74f6",
+      "tool_ref": "resource.read",
+      "expires_at": 1792382539.6353824,
+      "revision": 1,
+      "revoked": false
+    },
+    {
+      "id": "grant_27b7a18f9659444f97a919ceab6872be",
+      "principal_id": "runtime_42702f7d17274a37ab261ab9f4388a33",
+      "project_id": "proj_31126c934d7349d6917075e1b4a3ce14",
+      "resource_id": "res_d407cb72083a4afcb9bbc5aa386c74f6",
+      "tool_ref": "resource.read",
+      "expires_at": 1792382539.6367023,
+      "revision": 1,
+      "revoked": false
+    }
+  ],
+  "page_worker_calls": 3,
+  "fixture_worker_calls": 0,
+  "real_model_requests": 0,
+  "native_browser": "NOT_RUN",
+  "real_semantic_acceptance": "NOT_RUN"
+}

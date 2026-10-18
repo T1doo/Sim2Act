@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="9" time="34.316" timestamp="2026-10-18T04:00:42.370776+00:00" hostname="31571a76ef61"><testcase classname="tests.test_local_record_apps" name="test_actual_a_b_and_done_fold_independent_records_preserve_immutable_events" time="7.531" /><testcase classname="tests.test_local_record_apps" name="test_preview_is_readonly_business_and_strict_typed_commands" time="2.424" /><testcase classname="tests.test_local_record_apps" name="test_original_key_cold_get_and_exact_replay_never_duplicate_effect" time="3.183"><failure message="AssertionError: assert 400 == 409&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code&#10; +    where &lt;Response [400 Bad Request]&gt; = get(('/api/internal/record-instances/iinstance_55023b75d4ed4ba1bcf867e7bbcc63f3' + '/record-requests/unknown-never-accepted'))&#10; +      where get = &lt;starlette.testclient.TestClient object at 0x7fcb0aa66510&gt;.get">env = (&lt;sim2act.db.Store object at 0x7fcb0c9ec260&gt;, Settings(database_url='sqlite:////workspace/local-record-state-evidence-...b0a2c334994038bbbfc2c185ecc288', 'user_ffeb379b4a394a97831ddb2f2a1e2256', 'proj_24f1906d416b4c32b57dffcbeee0435b', ...)
+evidence = ({'native_browser': 'NOT_RUN', 'pg': 'NOT_RUN', 'real_model_requests': 0, 'real_semantic_acceptance': 'NOT_RUN'}, &lt;function evidence.&lt;locals&gt;.record at 0x7fcb0c3fc400&gt;)
+
+    def test_original_key_cold_get_and_exact_replay_never_duplicate_effect(env, evidence):
+        proof, trace = evidence
+        data = ready(env)
+        body = create_body(current(env, data))
+        first = execute(env, data, body)
+        before = snapshot(env[0])
+        cold = Store(env[1].database_url, test_only=True)
+        try:
+            with TestClient(create_app(cold, env[1])) as client:
+                client.headers["Authorization"] = "Bearer synthetic-test-A"
+                client.event_hooks["response"].append(trace)
+                path = data["path"] + "/record-requests/" + body["request_key"]
+                recovered = ok(client.get(path))
+                assert recovered["preview"] == first["prepared"]["preview"]
+                assert recovered["preview_fingerprint"] == first["prepared"]["preview_fingerprint"]
+                assert recovered["run"]["run_id"] == first["run"]["id"]
+                duplicate_preview = ok(client.post(data["path"] + "/previews", json=body), 201)
+                assert duplicate_preview["preview_fingerprint"] == recovered["preview_fingerprint"]
+                duplicate = ok(client.post(data["path"] + f"/previews/{body['request_key']}/commit",
+                    json=first["submitted"]), 202)
+                assert duplicate["run"]["run_id"] == recovered["run"]["run_id"]
+                assert duplicate["run"]["app_run_id"] == recovered["run"]["app_run_id"]
+                assert duplicate["run"]["cached"]
+                assert client.post(data["path"] + "/previews", json={**body, "title": "different intent"}).status_code == 409
+&gt;               assert client.get(data["path"] + "/record-requests/unknown-never-accepted").status_code == 409
+E               AssertionError: assert 400 == 409
+E                +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+E                +    where &lt;Response [400 Bad Request]&gt; = get(('/api/internal/record-instances/iinstance_55023b75d4ed4ba1bcf867e7bbcc63f3' + '/record-requests/unknown-never-accepted'))
+E                +      where get = &lt;starlette.testclient.TestClient object at 0x7fcb0aa66510&gt;.get
+
+tests/test_local_record_apps.py:363: AssertionError</failure></testcase><testcase classname="tests.test_local_record_apps" name="test_authentic_record_current_scope_stale_cas_refuses_before_any_effect[data_version]" time="3.428" /><testcase classname="tests.test_local_record_apps" name="test_authentic_record_current_scope_stale_cas_refuses_before_any_effect[record_revision]" time="5.377" /><testcase classname="tests.test_local_record_apps" name="test_account_project_instance_and_legacy_family_scope_before_private_bodies" time="2.417"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;OUTCOME_UNKNOWN&quot;,&quot;message&quot;:&quot;Original record request key not found&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:false,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 400 in (403, 409)&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7fcb0cce8ec0&gt;, Settings(database_url='sqlite:////workspace/local-record-state-evidence-...ca63227d544e1aad23a77c183f6d22', 'user_f4186046150747ad826f039971fc7258', 'proj_c4442cfa764a4822a0eaa2ac40359931', ...)
+evidence = ({'native_browser': 'NOT_RUN', 'pg': 'NOT_RUN', 'real_model_requests': 0, 'real_semantic_acceptance': 'NOT_RUN'}, &lt;function evidence.&lt;locals&gt;.record at 0x7fcb0c92d440&gt;)
+
+    def test_account_project_instance_and_legacy_family_scope_before_private_bodies(env, evidence):
+        proof, _ = evidence
+        data = ready(env)
+        first = execute(env, data, create_body(current(env, data)))
+        other_iid = ok(env[2].post(f"/api/internal/record-releases/{data['release']['id']}/instances", json=dict(
+            expected_release_fingerprint=data["release"]["fingerprint"], request_key="other-local-instance")), 201)["instance"]
+        pid = ok(env[2].post("/api/projects", json=dict(name="Other owned record project")), 201)["id"]
+        other_project = ready(env, pid, "other-project-form")
+        csv = ok(env[2].post(f"/api/projects/{env[5]}/apps/csv-preview", json=dict(
+            name="Existing CSV family", resource_id=env[6], goal="Exact synthetic sum")), 201)
+        csv_app = ok(env[2].get(f"/api/apps/{csv['id']}"))
+        approval = ok(env[2].post(f"/api/internal/apps/{csv['id']}/release-approvals", json=dict(
+            expected_draft_fingerprint=csv_app["fingerprint"], sample_input={"column": "amount"})), 201)
+        release = ok(env[2].post(f"/api/internal/approvals/{approval['id']}/commit", json=dict(fingerprint=approval["fingerprint"])))
+        csv_iid = ok(env[2].post(f"/api/internal/releases/{release['id']}/instances", json=dict(
+            expected_release_fingerprint=release["fingerprint"], request_key="legacy-instance")), 201)
+        other_paths = [f"/api/internal/record-instances/{other_iid['id']}", other_project["path"]]
+        other_states = []
+        for path in other_paths:
+            empty = ok(env[2].get(path))
+            assert empty["records"] == [] and empty["history"] == []
+            other_states.append(empty)
+        before = snapshot(env[0])
+        original = env[2].headers["Authorization"]
+        denied = []
+        with guarded(env[0], [first]) as barrier:
+            for path, empty in zip(other_paths, other_states, strict=True):
+                response = env[2].get(path + "/record-requests/create-a")
+&gt;               assert response.status_code in (403, 409), response.text
+E               AssertionError: {"error":{"code":"OUTCOME_UNKNOWN","message":"Original record request key not found","safe_retry":false,"effect_known":false,"user_action":"Check status, configuration and permissions"}}
+E               assert 400 in (403, 409)
+E                +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+
+tests/test_local_record_apps.py:424: AssertionError</failure></testcase><testcase classname="tests.test_local_record_apps" name="test_project_write_revoke_rejects_before_historical_private_bodies" time="4.103" /><testcase classname="tests.test_local_record_apps" name="test_referenced_json_read_revoke_blocks_current_recovery_and_commit_before_bodies" time="3.437" /><testcase classname="tests.test_local_record_apps" name="test_real_json_helper_fault_rolls_back_business_effect_and_keeps_failed_run" time="2.163" /></testsuite></testsuites>

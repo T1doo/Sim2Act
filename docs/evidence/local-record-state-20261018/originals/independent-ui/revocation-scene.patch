@@ -1,0 +1,202 @@
+--- a/tests/test_local_record_apps_ui.py
++++ b/tests/test_local_record_apps_ui.py
+@@ -14,7 +14,7 @@
+ from pathlib import Path
+ 
+ import pytest
+-from sqlalchemy import select
++from sqlalchemy import select, update
+ from test_local_record_apps import (
+     DETAILS_A,
+     DETAILS_B,
+@@ -33,7 +33,7 @@
+     write_json,
+ )
+ 
+-from sim2act.db import Store, attempts, reservations, runs
++from sim2act.db import Store, attempts, fingerprint, grants, reservations, runs
+ from sim2act.worker import Worker
+ 
+ 
+@@ -91,12 +91,13 @@
+         native_browser="NOT_RUN", real_semantic_acceptance="NOT_RUN")
+ 
+ 
+-@pytest.mark.parametrize("scenario", ["flow-recovery", "navigation"])
++@pytest.mark.parametrize("scenario", ["flow-recovery", "navigation", "revocation"])
+ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, tmp_path, scenario):
+     root = Path.cwd().resolve()
+     raw_http, ipc, worker_log = [], [], []
+     process = watchdog = None
+     stores = []
++    revocation_log, revocation_grant = [], None
+     proof = dict(scenario=scenario, status="NOT_COMPLETED", real_model_requests=0,
+         native_browser="NOT_RUN", pg="NOT_RUN", real_semantic_acceptance="NOT_RUN")
+ 
+@@ -118,15 +119,25 @@
+             app_name="Actual page local records", goal="Collect independent work items and explicitly mark only A DONE",
+             title_a=TITLE_A, details_a=DETAILS_A, title_b=TITLE_B, details_b=DETAILS_B,
+             done_reason=DONE_REASON, output=str(tmp_path / "page-result.json"))
+-        if scenario == "navigation":
++        if scenario in {"navigation", "revocation"}:
+             data = ready(env)
+             first = execute(env, data, create_body(current(env, data)))
+-            second = ok(env[2].post(f"/api/internal/record-releases/{data['release']['id']}/instances", json=dict(
+-                expected_release_fingerprint=data["release"]["fingerprint"], request_key="page-navigation-empty-instance")), 201)["instance"]
+             info.update(app=data["app"]["id"], instance=data["instance"]["id"],
+                 iid=data["instance"]["id"], release=data["release"]["id"],
+-                second_instance=second["id"], seed_run=first["run"]["id"],
+-                seed_request_key=first["prepared"]["request_key"])
++                seed_run=first["run"]["id"], seed_request_key=first["prepared"]["request_key"])
++            if scenario == "navigation":
++                second = ok(env[2].post(f"/api/internal/record-releases/{data['release']['id']}/instances", json=dict(
++                    expected_release_fingerprint=data["release"]["fingerprint"], request_key="page-navigation-empty-instance")), 201)["instance"]
++                info["second_instance"] = second["id"]
++            else:
++                info["seed_artifact"] = first["run"]["output"]["resource_id"]
++                with env[0].tx() as connection:
++                    matching = connection.execute(select(grants).where(
++                        grants.c.principal_id == env[3], grants.c.project_id == env[5],
++                        grants.c.resource_id == info["seed_artifact"], grants.c.tool_ref == "resource.read",
++                        grants.c.revoked.is_(False))).mappings().all()
++                    assert len(matching) == 1, "Exactly one known owner-read grant for the synthetic seed artifact"
++                    revocation_grant = dict(matching[0])
+         before_identity = snapshot(env[0], {"grants", "principals"})
+         before_page = snapshot(env[0])
+         write_json(tmp_path / "info.json", info)
+@@ -143,6 +154,7 @@
+                 if request.get("done"):
+                     break
+                 if request.get("command") == "worker":
++                    assert scenario == "flow-recovery", "Read-only page scenarios cannot invoke Worker"
+                     cold = Store(env[1].database_url, test_only=True)
+                     stores.append(cold)
+                     before = states(cold)
+@@ -156,8 +168,36 @@
+                     worker_log.append(dict(run_id=rid, status=after[rid]["status"],
+                         implementation="NORMAL_WORKER_ONCE", cold_store=True, model="NoModel"))
+                     answer = dict(status=200, text=json.dumps(worker_log[-1]))
++                elif request.get("command") == "revoke_seed_artifact_read":
++                    # Fixture-only authority mutation. The page cannot select a Grant,
++                    # principal, project or arbitrary resource through this bridge.
++                    assert scenario == "revocation" and revocation_grant is not None and not revocation_log
++                    assert set(request) == {"id", "command", "run", "resource"}
++                    assert request["run"] == info["seed_run"] and request["resource"] == info["seed_artifact"]
++                    with env[0].tx() as connection:
++                        actual = dict(connection.execute(select(grants).where(
++                            grants.c.id == revocation_grant["id"], grants.c.principal_id == env[3],
++                            grants.c.project_id == env[5], grants.c.resource_id == info["seed_artifact"],
++                            grants.c.tool_ref == "resource.read")).mappings().one())
++                        assert actual == revocation_grant and not actual["revoked"]
++                        changed = connection.execute(update(grants).where(
++                            grants.c.id == actual["id"], grants.c.principal_id == env[3],
++                            grants.c.project_id == env[5], grants.c.resource_id == info["seed_artifact"],
++                            grants.c.tool_ref == "resource.read", grants.c.revoked.is_(False),
++                            grants.c.revision == actual["revision"]).values(
++                                revoked=True, revision=actual["revision"] + 1)).rowcount
++                        assert changed == 1
++                        after_grant = dict(connection.execute(select(grants).where(
++                            grants.c.id == actual["id"])).mappings().one())
++                    revocation_log.append(dict(before=actual, after=after_grant,
++                        run_id=info["seed_run"], resource_id=info["seed_artifact"],
++                        classification="EXPLICIT_SYNTHETIC_FIXTURE_GRANT_REVOCATION"))
++                    answer = dict(status=200, text=json.dumps(dict(
++                        revoked=True, resource_id=info["seed_artifact"], run_id=info["seed_run"])))
+                 else:
+                     assert "command" not in request, request
++                    if scenario == "revocation":
++                        assert request["method"] == "GET", "Revocation page must never POST"
+                     response = env[2].request(request["method"], request["path"],
+                         json=request.get("body"), headers=request.get("headers"))
+                     answer = dict(status=response.status_code, text=response.text,
+@@ -190,6 +230,31 @@
+             write_json(tmp_path / "actual-page-delivery.json", delivered)
+             proof.update(page_worker_calls=3, fixture_worker_calls=0, actual_no_model_runs=3,
+                 page_creation_release_instance_covered=True)
++        elif scenario == "revocation":
++            assert page["classification"] == "ACTUAL_HTTP_JSDOM_LOCAL_RECORD_REVOCATION_NO_WORKER"
++            assert worker_log == [] and len(revocation_log) == 1
++            after_page = snapshot(env[0])
++            assert before_page.keys() == after_page.keys()
++            for table in before_page:
++                if table != "grants":
++                    assert before_page[table] == after_page[table], table
++            expected = {row["id"]: row for row in before_page["grants"]}
++            actual = {row["id"]: row for row in after_page["grants"]}
++            assert expected.keys() == actual.keys()
++            grant_id = revocation_grant["id"]
++            expected[grant_id] = {**revocation_grant, "revoked": True, "revision": revocation_grant["revision"] + 1}
++            assert actual == expected
++            assert before_page["runs"] == after_page["runs"], "Original accepted Run must remain unchanged"
++            write_json(tmp_path / "actual-revocation-proof.json", dict(
++                scenario=scenario, fixture_grant_mutations=revocation_log,
++                changed_tables=[name for name in before_page if before_page[name] != after_page[name]],
++                database_before_fingerprint=fingerprint(before_page),
++                database_after_fingerprint=fingerprint(after_page),
++                only_exact_known_grant_changed=True, all_other_rows_unchanged=True,
++                original_run_rows_unchanged=True, page_worker_calls=0, page_post_count=0))
++            proof.update(page_worker_calls=0, fixture_worker_calls=1, actual_no_model_runs=1,
++                fixture_grant_mutations=1, page_post_count=0, original_run_rows_unchanged=True,
++                page_creation_release_instance_covered=False)
+         else:
+             assert page["classification"] == "ACTUAL_HTTP_JSDOM_LOCAL_RECORD_NAVIGATION_NO_WORKER"
+             assert worker_log == [] and snapshot(env[0]) == before_page
+@@ -215,6 +280,7 @@
+         write_json(tmp_path / "http-trace.json", raw_http)
+         write_json(tmp_path / "ipc.json", ipc)
+         write_json(tmp_path / "worker-log.json", worker_log)
++        write_json(tmp_path / "fixture-revocation-log.json", revocation_log)
+         write_json(tmp_path / "run-summary.json", proof)
+         destination = os.environ.get("SIM2ACT_LOCAL_RECORD_UI_EVIDENCE_DIR")
+         if destination:
+@@ -222,7 +288,8 @@
+             folder.mkdir(parents=True, exist_ok=False)
+             for name in ("info.json", "node.stderr", "page-result.json", "actual-page-delivery.json",
+                     "source-before.json", "source-after.json", "source-changes.json", "http-trace.json",
+-                    "ipc.json", "worker-log.json", "run-summary.json"):
++                    "ipc.json", "worker-log.json", "run-summary.json", "actual-revocation-proof.json",
++                    "fixture-revocation-log.json"):
+                 path = tmp_path / name
+                 if path.exists():
+                     (folder / name).write_bytes(path.read_bytes())
+--- a/tests/local_record_apps_ui.cjs
++++ b/tests/local_record_apps_ui.cjs
+@@ -138,15 +138,36 @@
+  check(!view()&&!$('local-records-panel').textContent,'same-account reconnect cannot restore old account-view contents');
+  check(posts().length===0,'all actual HTTP navigation and recovery races create zero writes');
+ }
++async function revocation(){
++ await open();
++ await select('local-records-run-select',info.seed_run);await click('local-records-run-read');
++ check(view().run?.id===info.seed_run&&view().run.status==='SUCCEEDED','seed same-Run result is genuinely re-read before revocation');
++ await select('local-records-recovery-stage','RUN');input('local-records-recovery-key',info.seed_request_key);await click('local-records-recover');
++ check($('local-records-current').textContent.includes(info.title_a)&&$('local-records-recovery-proof').textContent.includes(info.details_a)&&$('local-records-details').value===info.details_a,'real original-key recovery visibly restores seed body and form before denial');
++ check(posts().length===0,'pre-revocation instance and original-key reads perform zero POST');
++ const revoked=await rpc({command:'revoke_seed_artifact_read',run:info.seed_run,resource:info.seed_artifact});assert.equal(revoked.status,200,revoked.text);
++ const cleared=label=>{
++  for(const id of ['local-records-current','local-records-history','local-records-run-proof','local-records-preview-proof','local-records-preview-summary','local-records-recovery-proof'])check(!$(id).textContent,label+' clears '+id);
++  for(const id of ['local-records-title','local-records-details','local-records-reason'])check(!$(id).value,label+' clears form '+id);
++  check(!view().instance&&!view().preview&&!view().run&&$('local-records-confirm').disabled,label+' clears current claims and blocks confirmation');
++  check($('local-records-recovery-key').value===info.seed_request_key&&$('local-records-recovery-stage').value==='RUN',label+' preserves exact original key and stage');
++  check(!view().panel.textContent.includes(info.title_a)&&!view().panel.textContent.includes(info.details_a),label+' leaves no seed record text in any panel node');
++ };
++ let offset=actions.length;await click('local-records-refresh');
++ let reads=actions.slice(offset);check(reads.length===1&&reads[0].method==='GET'&&reads[0].path===base()&&reads[0].status===403,'manual refresh receives one actual authorization 403 without automatic follow-up');cleared('refresh 403');
++ offset=actions.length;await click('local-records-recover');
++ reads=actions.slice(offset);check(reads.length===1&&reads[0].method==='GET'&&reads[0].path===original(info.seed_request_key)&&reads[0].status===403,'explicit original-key recovery receives actual 403 with zero automatic requests');cleared('recovery 403');
++ check(posts().length===0,'the entire revocation page performs zero POST and invokes no page Worker');
++}
+ (async()=>{
+  let status='FAIL',error;
+- try{await boot();if(info.scenario==='navigation')await navigation();else await flow();status='PASS';}
++ try{await boot();if(info.scenario==='navigation')await navigation();else if(info.scenario==='revocation')await revocation();else await flow();status='PASS';}
+  catch(e){error=e.stack;process.stderr.write(error+'\n');process.exitCode=1;}
+  finally{
+   if(releaseRead){releaseRead();releaseRead=null;}
+   try{await close();}catch(e){status='FAIL';error=error||e.stack;process.exitCode=1;}
+   fs.writeFileSync(info.output,JSON.stringify({status,error,scenario:info.scenario,checks,actions,static_resource_loads,boots,app_id,release_id,instance_id,run_ids,request_keys,first_history,
+-   classification:info.scenario==='navigation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_NAVIGATION_NO_WORKER':'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_FLOW',qualification_role:'UI_AUTHOR',scope:'Actual served JavaScript and ASGI HTTP; only receipt delivery is controlled, synthetic typed inputs and NoModel Worker',native_browser:'NOT_RUN',pg:'NOT_RUN',real_model:'NOT_RUN',real_semantic_acceptance:'NOT_RUN'},null,2)+'\n');
++   classification:info.scenario==='navigation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_NAVIGATION_NO_WORKER':info.scenario==='revocation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_REVOCATION_NO_WORKER':'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_FLOW',qualification_role:'UI_AUTHOR',scope:'Actual served JavaScript and ASGI HTTP; only receipt delivery is controlled, synthetic typed inputs and NoModel Worker',native_browser:'NOT_RUN',pg:'NOT_RUN',real_model:'NOT_RUN',real_semantic_acceptance:'NOT_RUN'},null,2)+'\n');
+   process.stdout.write(JSON.stringify({done:true})+'\n');
+  }
+ })();

@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="8" skipped="0" tests="9" time="26.140" timestamp="2026-10-18T03:59:52.182559+00:00" hostname="31571a76ef61"><testcase classname="tests.test_local_record_apps" name="test_actual_a_b_and_done_fold_independent_records_preserve_immutable_events" time="5.057"><failure message="AssertionError: {'app_run_id': 'iapprun_c4466394f8804972b87c0bcf04cbc7b2', 'error': {'code': 'VERSION_CONFLICT', 'effect_known': True,...act local record contract changed', 'safe_retry': False, ...}, 'event': None, 'formal_publication_enabled': False, ...}&#10;assert 'FAILED' == 'SUCCEEDED'&#10;  &#10;  - SUCCEEDED&#10;  + FAILED">env = (&lt;sim2act.db.Store object at 0x7fcd76b57da0&gt;, Settings(database_url='sqlite:////workspace/local-record-state-evidence-...029ccf57074f49ad7db4acfcbe9df9', 'user_d0dd57f4395d4dcc9bf8a32b671e8221', 'proj_1b9124d0739540ed9c642546a4e33b66', ...)
+evidence = ({'native_browser': 'NOT_RUN', 'pg': 'NOT_RUN', 'real_model_requests': 0, 'real_semantic_acceptance': 'NOT_RUN'}, &lt;function evidence.&lt;locals&gt;.record at 0x7fcd7607bf60&gt;)
+
+    def test_actual_a_b_and_done_fold_independent_records_preserve_immutable_events(env, evidence):
+        proof, trace = evidence
+        identities = snapshot(env[0], {"principals", "grants"})
+        data = ready(env)
+        assert snapshot(env[0], {"principals", "grants"}) == identities
+        assert data["app"]["input_guidance"]["mode"] == "LOCAL_RECORDS"
+        assert [action["executor"] for action in data["app"]["candidate"]["actions"]] == [
+            dict(kind="registered_tool", ref="artifact.save_text", version="1")]
+        catalog = ok(env[2].get("/api/apps", params={"metadata_only": "true"}))
+        entry = next(row for row in catalog["items"] if row["id"] == data["app"]["id"])
+        assert entry["use_family"] == "LOCAL_RECORDS" and entry["csv_instance_candidate"] is False
+        assert entry["definition_version"] == "local-record-app.v1"
+&gt;       first = execute(env, data, create_body(current(env, data)))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_record_apps.py:275: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7fcd76b57da0&gt;, Settings(database_url='sqlite:////workspace/local-record-state-evidence-...029ccf57074f49ad7db4acfcbe9df9', 'user_d0dd57f4395d4dcc9bf8a32b671e8221', 'proj_1b9124d0739540ed9c642546a4e33b66', ...)
+data = {'app': {'candidate': {'actions': [{'action_id': 'action_76593c8497c640db86fb308723f03078', 'allowed_tool_refs': [], '.../record-instances/iinstance_caba00fcc4bd46ada6d0977c2f8ca1ae', 'project': 'proj_1b9124d0739540ed9c642546a4e33b66', ...}
+body = {'command': 'CREATE', 'details': 'Synthetic A: collect a local record; meaning not evaluated.', 'expected_data_version': 0, 'expected_release_fingerprint': '168060b1b78dc788f6dc605020f75291ccc51ca92f3567ddb1c61594a776e948', ...}
+
+    def execute(env, data, body):
+        prepared = preview(env, data, body)
+        accepted, submitted = commit(env, data, prepared)
+        assert accepted["run"]["status"] == "QUEUED"
+        assert Worker(env[0], env[1], NoModel()).once()
+        run = ok(env[2].get(data["path"] + "/runs/" + accepted["run"]["run_id"]))
+&gt;       assert run["status"] == "SUCCEEDED", run
+E       AssertionError: {'app_run_id': 'iapprun_c4466394f8804972b87c0bcf04cbc7b2', 'error': {'code': 'VERSION_CONFLICT', 'effect_known': True,...act local record contract changed', 'safe_retry': False, ...}, 'event': None, 'formal_publication_enabled': False, ...}
+E       assert 'FAILED' == 'SUCCEEDED'
+E         
+E         - SUCCEEDED
+E         + FAILED
+
+tests/test_local_record_apps.py:192: AssertionError</failure></testcase><testcase classname="tests.test_local_record_apps" name="test_preview_is_readonly_business_and_strict_typed_commands" time="3.454" /><testcase classname="tests.test_local_record_apps" name="test_original_key_cold_get_and_exact_replay_never_duplicate_effect" time="3.424"><failure message="AssertionError: {'app_run_id': 'iapprun_ea9e54019a254d32809c5451a529f784', 'error': {'code': 'VERSION_CONFLICT', 'effect_known': True,...act local record contract changed', 'safe_retry': False, ...}, 'event': None, 'formal_publication_enabled': False, ...}&#10;assert 'FAILED' == 'SUCCEEDED'&#10;  &#10;  - SUCCEEDED&#10;  + FAILED">env = (&lt;sim2act.db.Store object at 0x7fcd746c9ac0&gt;, Settings(database_url='sqlite:////workspace/local-record-state-evidence-...a7bba70ea54f3ab7859c00794a8c0c', 'user_595de29599174af58759adb998653e3c', 'proj_5b1302f728744f54821c3683adb3bc9b', ...)
+evidence = ({'native_browser': 'NOT_RUN', 'pg': 'NOT_RUN', 'real_model_requests': 0, 'real_semantic_acceptance': 'NOT_RUN'}, &lt;function evidence.&lt;locals&gt;.record at 0x7fcd765c87c0&gt;)
+
+    def test_original_key_cold_get_and_exact_replay_never_duplicate_effect(env, evidence):
+        proof, trace = evidence
+        data = ready(env)
+        body = create_body(current(env, data))
+&gt;       first = execute(env, data, body)
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_record_apps.py:343: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7fcd746c9ac0&gt;, Settings(database_url='sqlite:////workspace/local-record-state-evidence-...a7bba70ea54f3ab7859c00794a8c0c', 'user_595de29599174af58759adb998653e3c', 'proj_5b1302f728744f54821c3683adb3bc9b', ...)
+data = {'app': {'candidate': {'actions': [{'action_id': 'action_66f5dfb29fb6429a8cb2dfa8408011dd', 'allowed_tool_refs': [], '.../record-instances/iinstance_c2610065c84b43a6a11386d194e051e0', 'project': 'proj_5b1302f728744f54821c3683adb3bc9b', ...}
+body = {'command': 'CREATE', 'details': 'Synthetic A: collect a local record; meaning not evaluated.', 'expected_data_version': 0, 'expected_release_fingerprint': '7caa89bbc44cbe7c6def52c61cb4de71941279ea0cf9b6295515f541fa361bb0', ...}
+
+    def execute(env, data, body):
+        prepared = preview(env, data, body)
+        accepted, submitted = commit(env, data, prepared)
+        assert accepted["run"]["status"] == "QUEUED"
+        assert Worker(env[0], env[1], NoModel()).once()
+        run = ok(env[2].get(data["path"] + "/runs/" + accepted["run"]["run_id"]))
+&gt;       assert run["status"] == "SUCCEEDED", run
+E       AssertionError: {'app_run_id': 'iapprun_ea9e54019a254d32809c5451a529f784', 'error': {'code': 'VERSION_CONFLICT', 'effect_known': True,...act local record contract changed', 'safe_retry': False, ...}, 'event': None, 'formal_publication_enabled': False, ...}
+E       assert 'FAILED' == 'SUCCEEDED'
+E         
+E         - SUCCEEDED
+E         + FAILED
+
+tests/test_local_record_apps.py:192: AssertionError</failure></testcase><testcase classname="tests.test_local_record_apps" name="test_authentic_record_current_scope_stale_cas_refuses_before_any_effect[data_version]" time="2.055"><failure message="AssertionError: {'app_run_id': 'iapprun_c664246ffe2c4d66a63195989c4111da', 'error': {'code': 'VERSION_CONFLICT', 'effect_known': True,...act local record contract changed', 'safe_retry': False, ...}, 'event': None, 'formal_publication_enabled': False, ...}&#10;assert 'FAILED' == 'SUCCEEDED'&#10;  &#10;  - SUCCEEDED&#10;  + FAILED">env = (&lt;sim2act.db.Store object at 0x7fcd76539e80&gt;, Settings(database_url='sqlite:////workspace/local-record-state-evidence-...1719c44ba4441b8daf0fc1e1d1874b', 'user_6667e99de2db4b939edfcf3c706cf5c3', 'proj_7732de75482e43428c728e9289dee756', ...)
+evidence = ({'native_browser': 'NOT_RUN', 'pg': 'NOT_RUN', 'real_model_requests': 0, 'real_semantic_acceptance': 'NOT_RUN'}, &lt;function evidence.&lt;locals&gt;.record at 0x7fcd74824360&gt;)
+stale = 'data_version'
+
+    @pytest.mark.parametrize("stale", ["data_version", "record_revision"])
+    def test_authentic_record_current_scope_stale_cas_refuses_before_any_effect(env, evidence, stale):
+        proof, _ = evidence
+        data = ready(env)
+&gt;       first = execute(env, data, create_body(current(env, data)))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_record_apps.py:375: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7fcd76539e80&gt;, Settings(database_url='sqlite:////workspace/local-record-state-evidence-...1719c44ba4441b8daf0fc1e1d1874b', 'user_6667e99de2db4b939edfcf3c706cf5c3', 'proj_7732de75482e43428c728e9289dee756', ...)
+data = {'app': {'candidate': {'actions': [{'action_id': 'action_bc01cec271684cf99a4e0de108309abe', 'allowed_tool_refs': [], '.../record-instances/iinstance_05c95820d00449fea22a7e90aa953130', 'project': 'proj_7732de75482e43428c728e9289dee756', ...}
+body = {'command': 'CREATE', 'details': 'Synthetic A: collect a local record; meaning not evaluated.', 'expected_data_version': 0, 'expected_release_fingerprint': '3651ebf2df695642345ad5e310bdadea0a9ed53ceb71fde57395391d445a9849', ...}
+
+    def execute(env, data, body):
+        prepared = preview(env, data, body)
+        accepted, submitted = commit(env, data, prepared)
+        assert accepted["run"]["status"] == "QUEUED"
+        assert Worker(env[0], env[1], NoModel()).once()
+        run = ok(env[2].get(data["path"] + "/runs/" + accepted["run"]["run_id"]))
+&gt;       assert run["status"] == "SUCCEEDED", run
+E       AssertionError: {'app_run_id': 'iapprun_c664246ffe2c4d66a63195989c4111da', 'error': {'code': 'VERSION_CONFLICT', 'effect_known': True,...act local record contract changed', 'safe_retry': False, ...}, 'event': None, 'formal_publication_enabled': False, ...}
+E       assert 'FAILED' == 'SUCCEEDED'
+E         
+E         - SUCCEEDED
+E         + FAILED
+
+tests/test_local_record_apps.py:192: AssertionError</failure></testcase><testcase classname="tests.test_local_record_apps" name="test_authentic_record_current_scope_stale_cas_refuses_before_any_effect[record_revision]" time="2.068"><failure message="AssertionError: {'app_run_id': 'iapprun_ba08807a3a4e46bc89ee825e9f6bc43b', 'error': {'code': 'VERSION_CONFLICT', 'effect_known': True,...act local record contract changed', 'safe_retry': False, ...}, 'event': None, 'formal_publication_enabled': False, ...}&#10;assert 'FAILED' == 'SUCCEEDED'&#10;  &#10;  - SUCCEEDED&#10;  + FAILED">env = (&lt;sim2act.db.Store object at 0x7fcd74955850&gt;, Settings(database_url='sqlite:////workspace/local-record-state-evidence-...ada6332f2e4848abfdd03ba7e293f3', 'user_ffd52904592d44f08eb96aa3c7b30c36', 'proj_a555f26b8b5d434cb3cd7958934fd504', ...)
+evidence = ({'native_browser': 'NOT_RUN', 'pg': 'NOT_RUN', 'real_model_requests': 0, 'real_semantic_acceptance': 'NOT_RUN'}, &lt;function evidence.&lt;locals&gt;.record at 0x7fcd74657ce0&gt;)
+stale = 'record_revision'
+
+    @pytest.mark.parametrize("stale", ["data_version", "record_revision"])
+    def test_authentic_record_current_scope_stale_cas_refuses_before_any_effect(env, evidence, stale):
+        proof, _ = evidence
+        data = ready(env)
+&gt;       first = execute(env, data, create_body(current(env, data)))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_record_apps.py:375: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7fcd74955850&gt;, Settings(database_url='sqlite:////workspace/local-record-state-evidence-...ada6332f2e4848abfdd03ba7e293f3', 'user_ffd52904592d44f08eb96aa3c7b30c36', 'proj_a555f26b8b5d434cb3cd7958934fd504', ...)
+data = {'app': {'candidate': {'actions': [{'action_id': 'action_691695d878aa481680615c0000d1d8f5', 'allowed_tool_refs': [], '.../record-instances/iinstance_4dffc811e23b4ae1ba187fa4cd5c3636', 'project': 'proj_a555f26b8b5d434cb3cd7958934fd504', ...}
+body = {'command': 'CREATE', 'details': 'Synthetic A: collect a local record; meaning not evaluated.', 'expected_data_version': 0, 'expected_release_fingerprint': '0f74ff16379d4e544080439cf7bd0d681cf11d0c36f2540589204be0fd273096', ...}
+
+    def execute(env, data, body):
+        prepared = preview(env, data, body)
+        accepted, submitted = commit(env, data, prepared)
+        assert accepted["run"]["status"] == "QUEUED"
+        assert Worker(env[0], env[1], NoModel()).once()
+        run = ok(env[2].get(data["path"] + "/runs/" + accepted["run"]["run_id"]))
+&gt;       assert run["status"] == "SUCCEEDED", run
+E       AssertionError: {'app_run_id': 'iapprun_ba08807a3a4e46bc89ee825e9f6bc43b', 'error': {'code': 'VERSION_CONFLICT', 'effect_known': True,...act local record contract changed', 'safe_retry': False, ...}, 'event': None, 'formal_publication_enabled': False, ...}
+E       assert 'FAILED' == 'SUCCEEDED'
+E         
+E         - SUCCEEDED
+E         + FAILED
+
+tests/test_local_record_apps.py:192: AssertionError</failure></testcase><testcase classname="tests.test_local_record_apps" name="test_account_project_instance_and_legacy_family_scope_before_private_bodies" time="1.931"><failure message="AssertionError: {'app_run_id': 'iapprun_1d0e6ee637d2408ea2670731c3a1a534', 'error': {'code': 'VERSION_CONFLICT', 'effect_known': True,...act local record contract changed', 'safe_retry': False, ...}, 'event': None, 'formal_publication_enabled': False, ...}&#10;assert 'FAILED' == 'SUCCEEDED'&#10;  &#10;  - SUCCEEDED&#10;  + FAILED">env = (&lt;sim2act.db.Store object at 0x7fcd749dec00&gt;, Settings(database_url='sqlite:////workspace/local-record-state-evidence-...a1e2de02ad413bbcbd10a71dfcfa0d', 'user_177fae04e59e4ce6a5b264a91e989118', 'proj_02b8adae26754b638fabc9e68dc5af2e', ...)
+evidence = ({'native_browser': 'NOT_RUN', 'pg': 'NOT_RUN', 'real_model_requests': 0, 'real_semantic_acceptance': 'NOT_RUN'}, &lt;function evidence.&lt;locals&gt;.record at 0x7fcd7709b2e0&gt;)
+
+    def test_account_project_instance_and_legacy_family_scope_before_private_bodies(env, evidence):
+        proof, _ = evidence
+        data = ready(env)
+&gt;       first = execute(env, data, create_body(current(env, data)))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_record_apps.py:399: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7fcd749dec00&gt;, Settings(database_url='sqlite:////workspace/local-record-state-evidence-...a1e2de02ad413bbcbd10a71dfcfa0d', 'user_177fae04e59e4ce6a5b264a91e989118', 'proj_02b8adae26754b638fabc9e68dc5af2e', ...)
+data = {'app': {'candidate': {'actions': [{'action_id': 'action_e352380a367740f3862e35d87096c3b0', 'allowed_tool_refs': [], '.../record-instances/iinstance_6b82518fec5843329fada8e2c8748be5', 'project': 'proj_02b8adae26754b638fabc9e68dc5af2e', ...}
+body = {'command': 'CREATE', 'details': 'Synthetic A: collect a local record; meaning not evaluated.', 'expected_data_version': 0, 'expected_release_fingerprint': '6ddb253e87f0874344e8df835c2c45bab05676710d2c5fa99df6fb2d3857ba4e', ...}
+
+    def execute(env, data, body):
+        prepared = preview(env, data, body)
+        accepted, submitted = commit(env, data, prepared)
+        assert accepted["run"]["status"] == "QUEUED"
+        assert Worker(env[0], env[1], NoModel()).once()
+        run = ok(env[2].get(data["path"] + "/runs/" + accepted["run"]["run_id"]))
+&gt;       assert run["status"] == "SUCCEEDED", run
+E       AssertionError: {'app_run_id': 'iapprun_1d0e6ee637d2408ea2670731c3a1a534', 'error': {'code': 'VERSION_CONFLICT', 'effect_known': True,...act local record contract changed', 'safe_retry': False, ...}, 'event': None, 'formal_publication_enabled': False, ...}
+E       assert 'FAILED' == 'SUCCEEDED'
+E         
+E         - SUCCEEDED
+E         + FAILED
+
+tests/test_local_record_apps.py:192: AssertionError</failure></testcase><testcase classname="tests.test_local_record_apps" name="test_project_write_revoke_rejects_before_historical_private_bodies" time="2.639"><failure message="AssertionError: {'app_run_id': 'iapprun_a690ad0887324beb8e725f68661dca19', 'error': {'code': 'VERSION_CONFLICT', 'effect_known': True,...act local record contract changed', 'safe_retry': False, ...}, 'event': None, 'formal_publication_enabled': False, ...}&#10;assert 'FAILED' == 'SUCCEEDED'&#10;  &#10;  - SUCCEEDED&#10;  + FAILED">env = (&lt;sim2act.db.Store object at 0x7fcd74985730&gt;, Settings(database_url='sqlite:////workspace/local-record-state-evidence-...1563f890d04fde9afd13ed57666c9c', 'user_bc5f1e806e774762b3d73c61ada80b80', 'proj_2bcd0991391f44559dfa80d89c085d7b', ...)
+evidence = ({'native_browser': 'NOT_RUN', 'pg': 'NOT_RUN', 'real_model_requests': 0, 'real_semantic_acceptance': 'NOT_RUN'}, &lt;function evidence.&lt;locals&gt;.record at 0x7fcd765c85e0&gt;)
+
+    def test_project_write_revoke_rejects_before_historical_private_bodies(env, evidence):
+        proof, _ = evidence
+        data = ready(env)
+&gt;       first = execute(env, data, create_body(current(env, data)))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_record_apps.py:460: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7fcd74985730&gt;, Settings(database_url='sqlite:////workspace/local-record-state-evidence-...1563f890d04fde9afd13ed57666c9c', 'user_bc5f1e806e774762b3d73c61ada80b80', 'proj_2bcd0991391f44559dfa80d89c085d7b', ...)
+data = {'app': {'candidate': {'actions': [{'action_id': 'action_1e2502a508de46209536451acbd1af62', 'allowed_tool_refs': [], '.../record-instances/iinstance_693c11cd12ec4213bab9a5ed86d3a9df', 'project': 'proj_2bcd0991391f44559dfa80d89c085d7b', ...}
+body = {'command': 'CREATE', 'details': 'Synthetic A: collect a local record; meaning not evaluated.', 'expected_data_version': 0, 'expected_release_fingerprint': '0faf4c87e855d3d1f5302130b0237ab267a4883b65705da771fe39317c5b7d26', ...}
+
+    def execute(env, data, body):
+        prepared = preview(env, data, body)
+        accepted, submitted = commit(env, data, prepared)
+        assert accepted["run"]["status"] == "QUEUED"
+        assert Worker(env[0], env[1], NoModel()).once()
+        run = ok(env[2].get(data["path"] + "/runs/" + accepted["run"]["run_id"]))
+&gt;       assert run["status"] == "SUCCEEDED", run
+E       AssertionError: {'app_run_id': 'iapprun_a690ad0887324beb8e725f68661dca19', 'error': {'code': 'VERSION_CONFLICT', 'effect_known': True,...act local record contract changed', 'safe_retry': False, ...}, 'event': None, 'formal_publication_enabled': False, ...}
+E       assert 'FAILED' == 'SUCCEEDED'
+E         
+E         - SUCCEEDED
+E         + FAILED
+
+tests/test_local_record_apps.py:192: AssertionError</failure></testcase><testcase classname="tests.test_local_record_apps" name="test_referenced_json_read_revoke_blocks_current_recovery_and_commit_before_bodies" time="2.230"><failure message="AssertionError: {'app_run_id': 'iapprun_61071b9f6aa34a5588ec8b1f3654aab6', 'error': {'code': 'VERSION_CONFLICT', 'effect_known': True,...act local record contract changed', 'safe_retry': False, ...}, 'event': None, 'formal_publication_enabled': False, ...}&#10;assert 'FAILED' == 'SUCCEEDED'&#10;  &#10;  - SUCCEEDED&#10;  + FAILED">env = (&lt;sim2act.db.Store object at 0x7fcd764cd190&gt;, Settings(database_url='sqlite:////workspace/local-record-state-evidence-...ad77d89f5542b0847a29c3b5559faa', 'user_cb48a369897f45758e01b8ff62421d95', 'proj_2c87cc312730407484d690ed1c07370a', ...)
+evidence = ({'native_browser': 'NOT_RUN', 'pg': 'NOT_RUN', 'real_model_requests': 0, 'real_semantic_acceptance': 'NOT_RUN'}, &lt;function evidence.&lt;locals&gt;.record at 0x7fcd74dfcea0&gt;)
+
+    def test_referenced_json_read_revoke_blocks_current_recovery_and_commit_before_bodies(env, evidence):
+        proof, _ = evidence
+        data = ready(env)
+&gt;       first = execute(env, data, create_body(current(env, data)))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_record_apps.py:487: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7fcd764cd190&gt;, Settings(database_url='sqlite:////workspace/local-record-state-evidence-...ad77d89f5542b0847a29c3b5559faa', 'user_cb48a369897f45758e01b8ff62421d95', 'proj_2c87cc312730407484d690ed1c07370a', ...)
+data = {'app': {'candidate': {'actions': [{'action_id': 'action_6310e8566bae45e7b132dcf7ee677f48', 'allowed_tool_refs': [], '.../record-instances/iinstance_30bb526a878a42e5a373c113adc088e5', 'project': 'proj_2c87cc312730407484d690ed1c07370a', ...}
+body = {'command': 'CREATE', 'details': 'Synthetic A: collect a local record; meaning not evaluated.', 'expected_data_version': 0, 'expected_release_fingerprint': 'c81f5ce91a1b509ca4447deb5e814f377baeafacd72c2a278a5329eb2996b12e', ...}
+
+    def execute(env, data, body):
+        prepared = preview(env, data, body)
+        accepted, submitted = commit(env, data, prepared)
+        assert accepted["run"]["status"] == "QUEUED"
+        assert Worker(env[0], env[1], NoModel()).once()
+        run = ok(env[2].get(data["path"] + "/runs/" + accepted["run"]["run_id"]))
+&gt;       assert run["status"] == "SUCCEEDED", run
+E       AssertionError: {'app_run_id': 'iapprun_61071b9f6aa34a5588ec8b1f3654aab6', 'error': {'code': 'VERSION_CONFLICT', 'effect_known': True,...act local record contract changed', 'safe_retry': False, ...}, 'event': None, 'formal_publication_enabled': False, ...}
+E       assert 'FAILED' == 'SUCCEEDED'
+E         
+E         - SUCCEEDED
+E         + FAILED
+
+tests/test_local_record_apps.py:192: AssertionError</failure></testcase><testcase classname="tests.test_local_record_apps" name="test_real_json_helper_fault_rolls_back_business_effect_and_keeps_failed_run" time="2.456"><failure message="assert 0 == 1&#10; +  where 0 = len([])">env = (&lt;sim2act.db.Store object at 0x7fcd76b54d10&gt;, Settings(database_url='sqlite:////workspace/local-record-state-evidence-...282000110d4f32aa38f7863372f8bd', 'user_5e2b1434e905469e929fdf5d7b69d274', 'proj_2091a2ebb11540998c06cf3fcf28b7e4', ...)
+evidence = ({'native_browser': 'NOT_RUN', 'pg': 'NOT_RUN', 'real_model_requests': 0, 'real_semantic_acceptance': 'NOT_RUN'}, &lt;function evidence.&lt;locals&gt;.record at 0x7fcd74d251c0&gt;)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fcd748ed310&gt;
+
+    def test_real_json_helper_fault_rolls_back_business_effect_and_keeps_failed_run(env, evidence, monkeypatch):
+        from sim2act import local_record_apps as records
+    
+        proof, _ = evidence
+        data = ready(env)
+        prepared = preview(env, data, create_body(current(env, data)))
+        accepted, _ = commit(env, data, prepared)
+        business = {"resources", "grants", "local_effects", "operations", "operation_intents", "internal_instance_data", "internal_instances"}
+        before = snapshot(env[0], business)
+        original = records.write_text_artifact
+        calls = []
+    
+        def saved_then_fail(*args, **kwargs):
+            artifact = original(*args, **kwargs)
+            calls.append(artifact)
+            raise DomainError("VERSION_CONFLICT", "Synthetic failure after actual JSON helper before commit")
+    
+        monkeypatch.setattr(records, "write_text_artifact", saved_then_fail)
+        assert Worker(env[0], env[1], NoModel()).once()
+&gt;       assert len(calls) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_local_record_apps.py:534: AssertionError</failure></testcase></testsuite></testsuites>

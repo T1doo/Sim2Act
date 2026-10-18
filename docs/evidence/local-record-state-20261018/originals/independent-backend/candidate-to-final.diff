@@ -1,0 +1,22 @@
+diff --git a/src/sim2act/local_record_apps.py b/src/sim2act/local_record_apps.py
+index 5a2a55b0..8aadbf4c 100644
+--- a/src/sim2act/local_record_apps.py
++++ b/src/sim2act/local_record_apps.py
+@@ -602,7 +602,8 @@ def projection(store, c, user, i, limits):
+     release = read_release(store, c, user, i["release_id"], limits)
+     rows = c.execute(select(typed).where(typed.c.instance_id == i["id"]).order_by(typed.c.version)).mappings().all()
+     require(len(rows) == i["data_version"])
+-    current, history, previous = {}, [], None
++    current: dict = {}
++    history, previous = [], None
+     verified = set()
+     for version, row in enumerate(rows, 1):
+         require(type(row["version"]) is int and row["version"] == version and row["release_id"] == i["release_id"]
+@@ -674,6 +675,7 @@ def build_preview(i, release, body, records, history):
+         old = current.get(body["record_id"])
+         require(old is not None and old["record_revision"] == body["expected_record_revision"]
+             and old["state"] == "OPEN", "Record identity, version or allowed state changed")
++        assert old is not None  # require above rejects before field access.
+         record_id, revision = old["record_id"], old["record_revision"] + 1
+         title, details, reason, state = old["title"], old["details"], body["reason"], body["target_state"]
+     event = dict(namespace=EVENT_VERSION, app_id=i["source_app_id"], instance_id=i["id"], release_id=i["release_id"],
