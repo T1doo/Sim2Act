@@ -41,9 +41,14 @@ class JournalTrialBinding:
     version: str = field(default=JOURNAL_VERSION, init=False)
 
     def __post_init__(self):
+        from .production_evidence import _contract_data, requirements_for
+
         gate.require(type(self.contract) in (gate.TrialContractV2, gate.TrialContract))
+        original = gate.parse_contract(_contract_data(self.contract))
+        requirements_for(original.principal_id, original, self.approval_key)
+        object.__setattr__(self, "contract", original)
         gate.require(self.contract.quota_subject == production.canonical_quota_subject(self.account_id))
-        object.__setattr__(self, "contract_fingerprint", fingerprint(self.contract.model_dump()))
+        object.__setattr__(self, "contract_fingerprint", fingerprint(_contract_data(original)))
         budget.scope_for(self.contract, self.approval_key)
 
 
@@ -68,6 +73,7 @@ def _binding(worker):
     if type(binding) is JournalTrialBinding:
         from .config import Settings
         from .db import Store
+        from .production_evidence import _contract_data
         from .worker import Worker
 
         gate.require(type(worker) is Worker and type(worker.s) is Settings
@@ -79,7 +85,7 @@ def _binding(worker):
             and worker.s.max_output_tokens == binding.contract.caps.max_output_tokens
             and worker.store is worker._journal_trial_store
             and binding is worker._journal_trial_binding and not worker._journal_trial_drift
-            and fingerprint(binding.contract.model_dump()) == binding.contract_fingerprint)
+            and fingerprint(_contract_data(binding.contract)) == binding.contract_fingerprint)
         return binding
     if type(binding) is not PATrialBinding:
         production.blocked()
@@ -954,6 +960,34 @@ def _journal_source(store, c, b):
                           b.approval_key, b.account_id)
     return check_source(evidence.requirements_for(b.contract.principal_id, b.contract,
                         b.approval_key), loaded.source, now=time.time())
+
+
+def check_journal_claim(store, c, run, b):
+    """Fixed original generic P-A queue, explicitly excluding qualified associations."""
+    from .natural_trial_runs import associated_sql
+    gate.require(type(b) is JournalTrialBinding and store.test_only and store.sqlite
+        and run["principal_id"] == b.contract.principal_id
+        and run["project_id"] == b.contract.project_id
+        and run["status"] == "QUEUED" and not run["cancel_intent"]
+        and c.execute(select(runs.c.id).where(runs.c.id == run["id"], associated_sql())).first() is None)
+    gate._approved(store, c, run["principal_id"], b.contract, b.approval_key)
+    _journal_source(store, c, b)
+    stage = _stage(b, run)
+    gate.require(run["request_key"] == getattr(b.contract.stage_keys, stage))
+    if stage == "generate":
+        gate._generation_context(store, c, run, b.contract)
+    else:
+        current, _ = gate._stage_current(store, c, run["principal_id"], b.contract, stage, run["id"])
+        accepted = gate._saved(c, run["principal_id"], gate.entity(b.contract), gate.PHASE,
+                              stage, gate.StageApproveInput)
+        gate.require(current == accepted.authority and accepted.approval_key == b.approval_key
+            and fingerprint(current.model_dump()) == accepted.expected_authority_fingerprint)
+        gate._stage_review_window(current)
+    frozen_seconds = store.frozen_contract(c, run).limits.run_seconds
+    deadline = min(run["created_at"] + min(b.contract.caps.run_seconds, frozen_seconds),
+                   b.contract.expires_at)
+    gate.require(time.time() < deadline)
+    return deadline
 
 
 def _journal_state(store, c, b):

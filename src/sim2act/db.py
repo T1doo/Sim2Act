@@ -1269,9 +1269,12 @@ class Store:
 
                 from .natural_live_admission import PHASE, TrialContractV2, entity
                 from .natural_trial_runs import MARKER
-                from .pa_trial_dispatch import PATrialBinding
+                from .pa_trial_dispatch import JournalTrialBinding, PATrialBinding
 
-                if type(trial_binding) is not PATrialBinding:
+                journal_trial = type(trial_binding) is JournalTrialBinding
+                if type(trial_binding) is not PATrialBinding and not journal_trial:
+                    raise DomainError("PERMISSION_DENIED")
+                if journal_trial and (not self.test_only or not self.sqlite):
                     raise DomainError("PERMISSION_DENIED")
                 phase = delivery_graph_requests.alias("trial_phase")
                 phase_ready = exists(select(phase.c.app_id).where(
@@ -1283,7 +1286,7 @@ class Store:
                     runs.c.context[MARKER]["contract_fingerprint"].as_string() == trial_binding.contract_fingerprint,
                     runs.c.context[MARKER]["approval_key"].as_string() == trial_binding.approval_key,
                     or_(runs.c.context[MARKER]["stage"].as_string() == "generate", phase_ready))
-                if type(trial_binding.contract) is not TrialContractV2:
+                if journal_trial or type(trial_binding.contract) is not TrialContractV2:
                     # Original V1 controller fixtures predate associations. Keep
                     # only their exact frozen Generate/approved phase identities.
                     legacy = and_(~associated_sql(),
@@ -1292,7 +1295,7 @@ class Store:
                         or_(and_(runs.c.runtime_id == trial_binding.contract.runtime_id,
                                  runs.c.request_key == trial_binding.contract.stage_keys.generate),
                             phase_ready))
-                    eligibility = or_(eligibility, legacy)
+                    eligibility = legacy if journal_trial else or_(eligibility, legacy)
             row = (
                 c.execute(
                     select(runs.c.id)
@@ -1325,6 +1328,9 @@ class Store:
             # The queue's metadata lock selected this exact Run. Load only its
             # payload, never the private fields of other queued/history rows.
             row = c.execute(select(runs).where(runs.c.id == row)).mappings().one()
+            if trial_binding is not None and journal_trial:
+                from .pa_trial_dispatch import check_journal_claim
+                trial_deadline = check_journal_claim(self, c, row, trial_binding)
             data = dict(row)
             claimed_at = time.time()
             if trial_deadline is not None and claimed_at >= trial_deadline:
