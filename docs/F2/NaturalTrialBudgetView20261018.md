@@ -14,4 +14,10 @@
 
 计划内资格是一条真实loopback HTTP/JSDOM页面：两份正常材料/Goal、两个正常准备及仅LIVE_BLOCKED同意记录；一个普通生成Run仅claim一次，现有真实准入配SyntheticOnlyFeeAuthority及原预算reserve/未知settle建立合成账本，不运行Worker或模型。页面读无账本409→原key重核→读1槽/1124 envelope/未知用量→双击单GET→一条真实完整预算200迟到时切另一原key，旧响应不覆盖→换项目清空。全页面GET/0POST/0下载，全55表保持；另三项明确合成validator篡改拒绝，非实际HTTP故障。
 
-执行冻结、实际结果与有限独审待完成后补记。当前不生成有效LIVE批准、不读取/填写凭据、不启用LIVE，不恢复旧撤销窗口、不扩大系统网络权限。真实模型/语义、P-B页面、Windows/native、PG、远端CI未因此验收；旧满盘未落盘报告缺口不补签。
+实际页面冻结 `8e2cce44597a0a5adf057d47271b85ab6d763ed6`，原生产冻结 `85b65963ec91d723185164a4f6ee708fc8e19a27`。3个唯一定向pytest最终均通过：首轮两个既有拒绝用例PASS（1.913/1.725秒）、新UI FAIL（7.269秒）；仅补CJS遗漏的现有“读取当前目标卡”可见步骤后，新UI单独PASS（JUnit9.092秒、外12.261秒）。合计4次节点执行3P/1F，原失败不覆盖，未重复已过的两个拒绝用例。两冻结之间只有CJS一行操作变化，生产/Python/旧测试与断言、超时均不变。
+
+最终48个检查标签中45个属于实际页面流程、3个为明确的合成validator篡改拒绝；另4项helper记录含原真实响应副本ACCEPTED和3REJECTED，不另加用例分母。14可见操作、26实际API GET与27静态资产（53页面HTTP），预算GET顺序为真实409/200/200。实际展示1槽/1124 envelope、原generate Run、partial prompt5/completion null/total null、RECONCILING/halted、UNKNOWN费用与币种。完整200响应仅延迟交付，切另一原key并完成恢复后释放，DOM scope逐字段保持、0后续HTTP；随后换项目清空。
+
+两次执行697输入/133生产均零漂移。实际页面55全表before==after，保留每表行数/指纹与严格执行断言，未导出全行副本；独审不另开DB或冒称重算全部行。两轮UI和两个既有门用例均无模型/Worker调用，无有效LIVE令牌。原18文件保全含3份当前合成DB的hash，数据库仅在本环境原路径保全，不复制进仓库。首轮驱动未进入预算GET，其缺失步骤及此前静态P2修正均分别记录。
+
+[执行原件与有限独审](../evidence/natural-trial-budget-view-20261018/README.md)。有限源码/闭合原件独审通过，无剩余已知P1/P2；独审未另跑产品或DB/SQL。本轮交付是P-A现有试验面板的查账入口，不把已有后台门改写成新实现；普通自然LIVE仍明确拒绝。没有读取/填写凭据或改变默认LIVE，不恢复旧撤销窗口、不扩大系统网络权限。真实模型/语义、P-B页面、Windows/native、PG、远端CI未因此验收；旧满盘未落盘报告缺口不补签。
