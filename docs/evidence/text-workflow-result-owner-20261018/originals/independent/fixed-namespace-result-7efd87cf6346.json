@@ -1,0 +1,69 @@
+{
+  "qualification": "BOUNDED_STORAGE_CONTROL_FLOW_ONLY_NOT_ACTUAL_WORKER",
+  "error": "VERSION_CONFLICT",
+  "owner_tables_queried": false,
+  "owner_rows_unchanged": true,
+  "natural_context_calls": 0,
+  "synthetic_release_restored": true,
+  "source_sha256": "7efd87cf634601a80c5132aecbdcbdf8b464000a1f4f036269c9b81fb8b74f69",
+  "traces": [
+    {
+      "sql": "BEGIN IMMEDIATE",
+      "parameters": []
+    },
+    {
+      "sql": "SELECT internal_instances.project_id, internal_instances.principal_id \nFROM internal_instances \nWHERE internal_instances.id = ?",
+      "parameters": [
+        "iinstance_d4444d6dd61f4f4d9d254e189a16f64a"
+      ]
+    },
+    {
+      "sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "parameters": [
+        "proj_ae5f8f599a394cf58ab39b20731b8dc1",
+        "user_bb39131f403c4bff93cafa2a26b1ac7e"
+      ]
+    },
+    {
+      "sql": "SELECT internal_app_runs.id \nFROM internal_app_runs JOIN internal_run_bindings ON internal_run_bindings.app_run_id = internal_app_runs.id \nWHERE internal_run_bindings.run_id = ? AND internal_app_runs.instance_id = ? AND internal_app_runs.principal_id = ?",
+      "parameters": [
+        "run_48e541131f424abb95f42e0f6104ebd4",
+        "iinstance_d4444d6dd61f4f4d9d254e189a16f64a",
+        "user_bb39131f403c4bff93cafa2a26b1ac7e"
+      ]
+    },
+    {
+      "sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(internal_releases.snapshot, ?)), ?)), ?) AS namespace, internal_app_runs.id AS aid, internal_app_runs.release_id, runs.runtime_id, runs.request_key, internal_instances.source_app_id \nFROM internal_app_runs JOIN internal_run_bindings ON internal_run_bindings.app_run_id = internal_app_runs.id JOIN internal_releases ON internal_releases.id = internal_app_runs.release_id JOIN internal_instances ON internal_instances.id = internal_app_runs.instance_id JOIN runs ON runs.id = internal_run_bindings.run_id \nWHERE internal_run_bindings.run_id = ? AND internal_app_runs.instance_id = ? AND internal_app_runs.principal_id = ? AND runs.principal_id = ? AND runs.project_id = ? AND internal_releases.principal_id = ? AND internal_releases.project_id = ?",
+      "parameters": [
+        "$.\"draft\"",
+        "$.\"candidate\"",
+        "$.\"namespace\"",
+        "run_48e541131f424abb95f42e0f6104ebd4",
+        "iinstance_d4444d6dd61f4f4d9d254e189a16f64a",
+        "user_bb39131f403c4bff93cafa2a26b1ac7e",
+        "user_bb39131f403c4bff93cafa2a26b1ac7e",
+        "proj_ae5f8f599a394cf58ab39b20731b8dc1",
+        "user_bb39131f403c4bff93cafa2a26b1ac7e",
+        "proj_ae5f8f599a394cf58ab39b20731b8dc1"
+      ]
+    },
+    {
+      "sql": "SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_graph_requests.request_key, delivery_graph_requests.request_fingerprint, delivery_graph_requests.snapshot, delivery_graph_requests.fingerprint \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.app_id = ? AND delivery_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?",
+      "parameters": [
+        "run_48e541131f424abb95f42e0f6104ebd4",
+        "user_bb39131f403c4bff93cafa2a26b1ac7e",
+        "pa_spec_run_scope",
+        "accepted"
+      ]
+    },
+    {
+      "sql": "SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_graph_requests.request_key, delivery_graph_requests.request_fingerprint, delivery_graph_requests.snapshot, delivery_graph_requests.fingerprint \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.app_id = ? AND delivery_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?",
+      "parameters": [
+        "run_48e541131f424abb95f42e0f6104ebd4",
+        "user_bb39131f403c4bff93cafa2a26b1ac7e",
+        "pa_spec_run_scope_seal",
+        "accepted"
+      ]
+    }
+  ]
+}

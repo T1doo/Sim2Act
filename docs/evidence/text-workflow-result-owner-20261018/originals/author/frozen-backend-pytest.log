@@ -1,0 +1,49 @@
+F......                                                                  [100%]
+=================================== FAILURES ===================================
+_ test_actual_two_inputs_same_instance_explicit_review_cold_recovery_no_inheritance _
+
+env = (<sim2act.db.Store object at 0x7f78029859d0>, Settings(database_url='sqlite:////workspace/text-workflow-result-owner-e...3bf93d161f4a83836fe52078603958', 'user_ca20b1599f784bb0b20d4c8382735dad', 'proj_2449484a28804f2a898c9324b1f1ac35', ...)
+evidence = ({'actual_worker': True, 'native_browser': 'NOT_RUN', 'real_model_requests': 0, 'semantic_acceptance': 'NOT_RUN'}, <function evidence.<locals>.record at 0x7f780200f380>)
+
+    def test_actual_two_inputs_same_instance_explicit_review_cold_recovery_no_inheritance(env, evidence):
+        facts, record = evidence
+        data = flow(env)
+        path = data["path"]
+        initial = state(env[2], path)
+        assert initial["owner_acceptance"] == "PENDING" and initial["sequence"] == 0
+        product_before = snapshot(env[0], owner=False)
+        review, prepared = prepare(env[2], path)
+>       first = assert_actual_contract(env, data, review["payload"]["contract"], version=1)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_text_workflow_owner.py:203: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f78029859d0>, Settings(database_url='sqlite:////workspace/text-workflow-result-owner-e...3bf93d161f4a83836fe52078603958', 'user_ca20b1599f784bb0b20d4c8382735dad', 'proj_2449484a28804f2a898c9324b1f1ac35', ...)
+data = {'app': {'cached': False, 'candidate_fingerprint': '10dd66a030a902016f7696c75998a4f0eb30dfe0050a9c9bc04319929086b6a6',...b5f1035', 'expected_goal_version': 1, ...}, 'input': {'emit_report': True, 'term_a': 'Amber', 'term_b': 'Violet'}, ...}
+contract = {'actual_operations': [{'action_revision': 1, 'actual_reads': [{'purpose': 'BUSINESS_READ', 'resource_id': 'res_5abf0d...41a2bb37b00045', 'app_run_id': 'iapprun_24d8568d0716469db5103cca64a87c02', 'automatic_goal_acceptance': 'NOT_RUN', ...}
+
+    def assert_actual_contract(env, data, contract, *, version):
+        assert contract["version"] == VERSION
+        assert contract["principal_id"] == env[3] and contract["project_id"] == env[5]
+        assert contract["app_id"] == data["app"]["id"]
+        assert contract["instance_id"] == data["instance"]["id"]
+        assert contract["run_id"] == data["run_id"]
+        assert contract["release_id"] == data["release"]["id"]
+        assert contract["release_fingerprint"] == data["release"]["fingerprint"]
+        assert contract["source_goal"]["card_id"] == data["card"]["id"]
+        assert contract["source_goal"]["version"] == data["card"]["version"]
+>       assert contract["goal"] == data["card"]["snapshot"]["content"]
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'snapshot'
+
+tests/test_text_workflow_owner.py:145: KeyError
+=============================== warnings summary ===============================
+../sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/sim2act-venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_text_workflow_owner.py::test_actual_two_inputs_same_instance_explicit_review_cold_recovery_no_inheritance
+1 failed, 6 passed, 1 warning in 60.59s (0:01:00)

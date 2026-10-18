@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="7" time="60.019" timestamp="2026-10-18T03:28:02.641324+00:00" hostname="31571a76ef61"><testcase classname="tests.test_text_workflow_owner" name="test_actual_two_inputs_same_instance_explicit_review_cold_recovery_no_inheritance" time="10.162"><failure message="KeyError: 'content'">env = (&lt;sim2act.db.Store object at 0x7f44fb692480&gt;, Settings(database_url='sqlite:////workspace/text-workflow-result-owner-e...b43243785a4df59de6a4ec2cc66f3e', 'user_c3cbaf631c7c472d82e302c09d7e53c7', 'proj_10075bfdf84547bab184fc9c8b4fc2bf', ...)
+evidence = ({'actual_worker': True, 'native_browser': 'NOT_RUN', 'real_model_requests': 0, 'semantic_acceptance': 'NOT_RUN'}, &lt;function evidence.&lt;locals&gt;.record at 0x7f44facf7060&gt;)
+
+    def test_actual_two_inputs_same_instance_explicit_review_cold_recovery_no_inheritance(env, evidence):
+        facts, record = evidence
+        data = flow(env)
+        path = data["path"]
+        initial = state(env[2], path)
+        assert initial["owner_acceptance"] == "PENDING" and initial["sequence"] == 0
+        product_before = snapshot(env[0], owner=False)
+        review, prepared = prepare(env[2], path)
+&gt;       first = assert_actual_contract(env, data, review["payload"]["contract"], version=1)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_text_workflow_owner.py:203: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7f44fb692480&gt;, Settings(database_url='sqlite:////workspace/text-workflow-result-owner-e...b43243785a4df59de6a4ec2cc66f3e', 'user_c3cbaf631c7c472d82e302c09d7e53c7', 'proj_10075bfdf84547bab184fc9c8b4fc2bf', ...)
+data = {'app': {'cached': False, 'candidate_fingerprint': '01a0d83be98c84b08e3f6c8882df2bbf09cfae1ba30455d55407e352ca20d1c5',...a2953b9', 'expected_goal_version': 1, ...}, 'input': {'emit_report': True, 'term_a': 'Amber', 'term_b': 'Violet'}, ...}
+contract = {'actual_operations': [{'action_revision': 1, 'actual_reads': [{'purpose': 'BUSINESS_READ', 'resource_id': 'res_96c48f...8f04210ea1dcd9', 'app_run_id': 'iapprun_d21c4285d710427db2c1bd577bf0e3db', 'automatic_goal_acceptance': 'NOT_RUN', ...}
+
+    def assert_actual_contract(env, data, contract, *, version):
+        assert contract["version"] == VERSION
+        assert contract["principal_id"] == env[3] and contract["project_id"] == env[5]
+        assert contract["app_id"] == data["app"]["id"]
+        assert contract["instance_id"] == data["instance"]["id"]
+        assert contract["run_id"] == data["run_id"]
+        assert contract["release_id"] == data["release"]["id"]
+        assert contract["release_fingerprint"] == data["release"]["fingerprint"]
+        assert contract["source_goal"]["card_id"] == data["card"]["id"]
+        assert contract["source_goal"]["version"] == data["card"]["version"]
+&gt;       assert contract["goal"] == data["card"]["content"]
+                                   ^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'content'
+
+tests/test_text_workflow_owner.py:145: KeyError</failure></testcase><testcase classname="tests.test_text_workflow_owner" name="test_partial_false_branch_has_no_report_and_cannot_be_signed" time="10.759" /><testcase classname="tests.test_text_workflow_owner" name="test_foreign_account_and_instance_rejected_before_private_body" time="8.093"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;UNSUPPORTED_CAPABILITY&quot;,&quot;message&quot;:&quot;Natural-spec declaration route requires its exact Run family&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 400 in (403, 409)&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code">env = (&lt;sim2act.db.Store object at 0x7f44f8c2dd90&gt;, Settings(database_url='sqlite:////workspace/text-workflow-result-owner-e...b8084cfcfb4f3c88e3533221d87b2a', 'user_f8b8a673dcce4aa196f07b706baf6712', 'proj_8d4057736f55411798b89401f01831d7', ...)
+evidence = ({'actual_worker': True, 'native_browser': 'NOT_RUN', 'real_model_requests': 0, 'semantic_acceptance': 'NOT_RUN'}, &lt;function evidence.&lt;locals&gt;.record at 0x7f44fb13eac0&gt;)
+
+    def test_foreign_account_and_instance_rejected_before_private_body(env, evidence):
+        facts, _ = evidence
+        data = flow(env)
+        review, prepared = prepare(env[2], data["path"])
+        other = env[2].post(f"/api/internal/releases/{data['release']['id']}/instances", json=dict(
+            expected_release_fingerprint=data["release"]["fingerprint"], request_key="owner-other-instance"))
+        assert other.status_code == 201, other.text
+        wrong = data["path"].replace(data["instance"]["id"], other.json()["id"])
+        before = snapshot(env[0])
+        checks = []
+        original_auth = env[2].headers["Authorization"]
+        try:
+            with TypedPrivateBarrier(env[0], data["run_id"], review["payload"]["contract"]["app_run_id"],
+                    data["resource"]) as barrier:
+                barrier.rules["natural_owner_records"] = (natural_owner_records, "id", {review["id"]}, {"payload"})
+                old_path = data["path"].replace("/text-owner-review", "/spec-owner-review")
+                stop_body = dict(command="CANCEL", request_key="old-family-stop", expected_sequence=1,
+                    target_id=review["id"], target_fingerprint=review["fingerprint"],
+                    reason="This old family endpoint must not cancel a four-step review")
+                for method, body in [("GET", None), ("POST", prepared), ("POST", stop_body)]:
+                    response = env[2].request(method,
+                        old_path + ("-requests" if method == "POST" else ""),
+                        **({"json": body} if body else {}))
+&gt;                   assert response.status_code in (403, 409), response.text
+E                   AssertionError: {"error":{"code":"UNSUPPORTED_CAPABILITY","message":"Natural-spec declaration route requires its exact Run family","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E                   assert 400 in (403, 409)
+E                    +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+
+tests/test_text_workflow_owner.py:313: AssertionError</failure></testcase><testcase classname="tests.test_text_workflow_owner" name="test_revoked_material_returns_metadata_and_allows_metadata_cancel" time="7.856" /><testcase classname="tests.test_text_workflow_owner" name="test_changed_current_context_invalidates_preview_before_owner_payload[goal]" time="7.751" /><testcase classname="tests.test_text_workflow_owner" name="test_changed_current_context_invalidates_preview_before_owner_payload[source]" time="7.776" /><testcase classname="tests.test_text_workflow_owner" name="test_changed_current_context_invalidates_preview_before_owner_payload[typed]" time="7.378" /></testsuite></testsuites>

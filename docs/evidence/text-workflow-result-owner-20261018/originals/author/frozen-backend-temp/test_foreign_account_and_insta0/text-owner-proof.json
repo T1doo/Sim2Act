@@ -1,0 +1,296 @@
+{
+  "actual_worker": true,
+  "real_model_requests": 0,
+  "semantic_acceptance": "NOT_RUN",
+  "native_browser": "NOT_RUN",
+  "checks": [
+    {
+      "scope": "old-natural-family",
+      "method": "GET",
+      "request": null,
+      "status": 400,
+      "response": {
+        "error": {
+          "code": "UNSUPPORTED_CAPABILITY",
+          "message": "Natural-spec declaration route requires its exact Run family",
+          "safe_retry": false,
+          "effect_known": true,
+          "user_action": "Check status, configuration and permissions"
+        }
+      }
+    },
+    {
+      "scope": "old-natural-family",
+      "method": "POST",
+      "request": {
+        "command": "PREPARE",
+        "request_key": "owner-preview",
+        "expected_sequence": 0,
+        "expected_contract_fingerprint": "b272a1bf4259995fd9cf0a04affcd752a5375f89371601028fa5650be24094f6"
+      },
+      "status": 400,
+      "response": {
+        "error": {
+          "code": "UNSUPPORTED_CAPABILITY",
+          "message": "Natural-spec declaration route requires its exact Run family",
+          "safe_retry": false,
+          "effect_known": true,
+          "user_action": "Check status, configuration and permissions"
+        }
+      }
+    },
+    {
+      "scope": "old-natural-family",
+      "method": "POST",
+      "request": {
+        "command": "CANCEL",
+        "request_key": "old-family-stop",
+        "expected_sequence": 1,
+        "target_id": "nowner_639af47407974621bb208b801c8c0d72",
+        "target_fingerprint": "c060029078f5eb10dc051e18c67143149ae9ad9c5c6c991367e813480ef60942",
+        "reason": "This old family endpoint must not cancel a four-step review"
+      },
+      "status": 400,
+      "response": {
+        "error": {
+          "code": "UNSUPPORTED_CAPABILITY",
+          "message": "Natural-spec declaration route requires its exact Run family",
+          "safe_retry": false,
+          "effect_known": true,
+          "user_action": "Check status, configuration and permissions"
+        }
+      }
+    },
+    {
+      "scope": "wrong-instance",
+      "method": "GET",
+      "status": 403,
+      "response": {
+        "error": {
+          "code": "PERMISSION_DENIED",
+          "message": "PERMISSION_DENIED",
+          "safe_retry": false,
+          "effect_known": true,
+          "user_action": "Check status, configuration and permissions"
+        }
+      }
+    },
+    {
+      "scope": "wrong-instance",
+      "method": "POST",
+      "status": 403,
+      "response": {
+        "error": {
+          "code": "PERMISSION_DENIED",
+          "message": "PERMISSION_DENIED",
+          "safe_retry": false,
+          "effect_known": true,
+          "user_action": "Check status, configuration and permissions"
+        }
+      }
+    },
+    {
+      "scope": "other-account",
+      "method": "GET",
+      "status": 403,
+      "response": {
+        "error": {
+          "code": "PERMISSION_DENIED",
+          "message": "PERMISSION_DENIED",
+          "safe_retry": false,
+          "effect_known": true,
+          "user_action": "Check status, configuration and permissions"
+        }
+      }
+    },
+    {
+      "scope": "other-account",
+      "method": "POST",
+      "status": 403,
+      "response": {
+        "error": {
+          "code": "PERMISSION_DENIED",
+          "message": "PERMISSION_DENIED",
+          "safe_retry": false,
+          "effect_known": true,
+          "user_action": "Check status, configuration and permissions"
+        }
+      }
+    }
+  ],
+  "blocked": [],
+  "full_binding_reads": [],
+  "statements": [
+    {
+      "sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "executed_sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "parameters": "('92561ca9aa723a135a9d0d05fc8247abfbaa49d5238ab191693de3b9321b2fbd',)"
+    },
+    {
+      "sql": "BEGIN IMMEDIATE",
+      "executed_sql": "BEGIN IMMEDIATE",
+      "parameters": "()"
+    },
+    {
+      "sql": "SELECT internal_instances.project_id, internal_instances.principal_id \nFROM internal_instances \nWHERE internal_instances.id = ?",
+      "executed_sql": "SELECT internal_instances.project_id, internal_instances.principal_id \nFROM internal_instances \nWHERE internal_instances.id = ?",
+      "parameters": "('iinstance_e52b0215227159e30a7833cf58152a05',)"
+    },
+    {
+      "sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "executed_sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "parameters": "('proj_c67315f4341a4618b9bde30adea4bc8c', 'user_dc277b78c7fe4f97ae0105b94a3f3d36')"
+    },
+    {
+      "sql": "SELECT internal_app_runs.id \nFROM internal_app_runs JOIN internal_run_bindings ON internal_run_bindings.app_run_id = internal_app_runs.id \nWHERE internal_run_bindings.run_id = ? AND internal_app_runs.instance_id = ? AND internal_app_runs.principal_id = ?",
+      "executed_sql": "SELECT \"private_read_internal_app_runs\".id \nFROM \"private_read_internal_app_runs\" JOIN internal_run_bindings ON internal_run_bindings.app_run_id = \"private_read_internal_app_runs\".id \nWHERE internal_run_bindings.run_id = ? AND \"private_read_internal_app_runs\".instance_id = ? AND \"private_read_internal_app_runs\".principal_id = ?",
+      "parameters": "('run_5b212add46d84cd08cf37edc7091c2d3', 'iinstance_e52b0215227159e30a7833cf58152a05', 'user_dc277b78c7fe4f97ae0105b94a3f3d36')"
+    },
+    {
+      "sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(internal_releases.snapshot, ?)), ?)), ?) AS namespace, internal_app_runs.id AS aid, internal_app_runs.release_id, runs.runtime_id, runs.request_key, internal_instances.source_app_id \nFROM internal_app_runs JOIN internal_run_bindings ON internal_run_bindings.app_run_id = internal_app_runs.id JOIN internal_releases ON internal_releases.id = internal_app_runs.release_id JOIN internal_instances ON internal_instances.id = internal_app_runs.instance_id JOIN runs ON runs.id = internal_run_bindings.run_id \nWHERE internal_run_bindings.run_id = ? AND internal_app_runs.instance_id = ? AND internal_app_runs.principal_id = ? AND runs.principal_id = ? AND runs.project_id = ? AND internal_releases.principal_id = ? AND internal_releases.project_id = ?",
+      "executed_sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(internal_releases.snapshot, ?)), ?)), ?) AS namespace, \"private_read_internal_app_runs\".id AS aid, \"private_read_internal_app_runs\".release_id, \"private_read_runs\".runtime_id, \"private_read_runs\".request_key, internal_instances.source_app_id \nFROM \"private_read_internal_app_runs\" JOIN internal_run_bindings ON internal_run_bindings.app_run_id = \"private_read_internal_app_runs\".id JOIN internal_releases ON internal_releases.id = \"private_read_internal_app_runs\".release_id JOIN internal_instances ON internal_instances.id = \"private_read_internal_app_runs\".instance_id JOIN \"private_read_runs\" ON \"private_read_runs\".id = internal_run_bindings.run_id \nWHERE internal_run_bindings.run_id = ? AND \"private_read_internal_app_runs\".instance_id = ? AND \"private_read_internal_app_runs\".principal_id = ? AND \"private_read_runs\".principal_id = ? AND \"private_read_runs\".project_id = ? AND internal_releases.principal_id = ? AND internal_releases.project_id = ?",
+      "parameters": "('$.\"draft\"', '$.\"candidate\"', '$.\"namespace\"', 'run_5b212add46d84cd08cf37edc7091c2d3', 'iinstance_e52b0215227159e30a7833cf58152a05', 'user_dc277b78c7fe4f97ae0105b94a3f3d36', 'user_dc277b78c7fe4f97ae0105b94a3f3d36', 'proj_c67315f4341a4618b9bde30adea4bc8c', 'user_dc277b78c7fe4f97ae0105b94a3f3d36', 'proj_c67315f4341a4618b9bde30adea4bc8c')"
+    },
+    {
+      "sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "executed_sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "parameters": "('92561ca9aa723a135a9d0d05fc8247abfbaa49d5238ab191693de3b9321b2fbd',)"
+    },
+    {
+      "sql": "BEGIN IMMEDIATE",
+      "executed_sql": "BEGIN IMMEDIATE",
+      "parameters": "()"
+    },
+    {
+      "sql": "SELECT internal_instances.project_id, internal_instances.principal_id \nFROM internal_instances \nWHERE internal_instances.id = ?",
+      "executed_sql": "SELECT internal_instances.project_id, internal_instances.principal_id \nFROM internal_instances \nWHERE internal_instances.id = ?",
+      "parameters": "('iinstance_e52b0215227159e30a7833cf58152a05',)"
+    },
+    {
+      "sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "executed_sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "parameters": "('proj_c67315f4341a4618b9bde30adea4bc8c', 'user_dc277b78c7fe4f97ae0105b94a3f3d36')"
+    },
+    {
+      "sql": "SELECT internal_app_runs.id \nFROM internal_app_runs JOIN internal_run_bindings ON internal_run_bindings.app_run_id = internal_app_runs.id \nWHERE internal_run_bindings.run_id = ? AND internal_app_runs.instance_id = ? AND internal_app_runs.principal_id = ?",
+      "executed_sql": "SELECT \"private_read_internal_app_runs\".id \nFROM \"private_read_internal_app_runs\" JOIN internal_run_bindings ON internal_run_bindings.app_run_id = \"private_read_internal_app_runs\".id \nWHERE internal_run_bindings.run_id = ? AND \"private_read_internal_app_runs\".instance_id = ? AND \"private_read_internal_app_runs\".principal_id = ?",
+      "parameters": "('run_5b212add46d84cd08cf37edc7091c2d3', 'iinstance_e52b0215227159e30a7833cf58152a05', 'user_dc277b78c7fe4f97ae0105b94a3f3d36')"
+    },
+    {
+      "sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(internal_releases.snapshot, ?)), ?)), ?) AS namespace, internal_app_runs.id AS aid, internal_app_runs.release_id, runs.runtime_id, runs.request_key, internal_instances.source_app_id \nFROM internal_app_runs JOIN internal_run_bindings ON internal_run_bindings.app_run_id = internal_app_runs.id JOIN internal_releases ON internal_releases.id = internal_app_runs.release_id JOIN internal_instances ON internal_instances.id = internal_app_runs.instance_id JOIN runs ON runs.id = internal_run_bindings.run_id \nWHERE internal_run_bindings.run_id = ? AND internal_app_runs.instance_id = ? AND internal_app_runs.principal_id = ? AND runs.principal_id = ? AND runs.project_id = ? AND internal_releases.principal_id = ? AND internal_releases.project_id = ?",
+      "executed_sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(internal_releases.snapshot, ?)), ?)), ?) AS namespace, \"private_read_internal_app_runs\".id AS aid, \"private_read_internal_app_runs\".release_id, \"private_read_runs\".runtime_id, \"private_read_runs\".request_key, internal_instances.source_app_id \nFROM \"private_read_internal_app_runs\" JOIN internal_run_bindings ON internal_run_bindings.app_run_id = \"private_read_internal_app_runs\".id JOIN internal_releases ON internal_releases.id = \"private_read_internal_app_runs\".release_id JOIN internal_instances ON internal_instances.id = \"private_read_internal_app_runs\".instance_id JOIN \"private_read_runs\" ON \"private_read_runs\".id = internal_run_bindings.run_id \nWHERE internal_run_bindings.run_id = ? AND \"private_read_internal_app_runs\".instance_id = ? AND \"private_read_internal_app_runs\".principal_id = ? AND \"private_read_runs\".principal_id = ? AND \"private_read_runs\".project_id = ? AND internal_releases.principal_id = ? AND internal_releases.project_id = ?",
+      "parameters": "('$.\"draft\"', '$.\"candidate\"', '$.\"namespace\"', 'run_5b212add46d84cd08cf37edc7091c2d3', 'iinstance_e52b0215227159e30a7833cf58152a05', 'user_dc277b78c7fe4f97ae0105b94a3f3d36', 'user_dc277b78c7fe4f97ae0105b94a3f3d36', 'proj_c67315f4341a4618b9bde30adea4bc8c', 'user_dc277b78c7fe4f97ae0105b94a3f3d36', 'proj_c67315f4341a4618b9bde30adea4bc8c')"
+    },
+    {
+      "sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "executed_sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "parameters": "('92561ca9aa723a135a9d0d05fc8247abfbaa49d5238ab191693de3b9321b2fbd',)"
+    },
+    {
+      "sql": "BEGIN IMMEDIATE",
+      "executed_sql": "BEGIN IMMEDIATE",
+      "parameters": "()"
+    },
+    {
+      "sql": "SELECT internal_instances.project_id, internal_instances.principal_id \nFROM internal_instances \nWHERE internal_instances.id = ?",
+      "executed_sql": "SELECT internal_instances.project_id, internal_instances.principal_id \nFROM internal_instances \nWHERE internal_instances.id = ?",
+      "parameters": "('iinstance_e52b0215227159e30a7833cf58152a05',)"
+    },
+    {
+      "sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "executed_sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "parameters": "('proj_c67315f4341a4618b9bde30adea4bc8c', 'user_dc277b78c7fe4f97ae0105b94a3f3d36')"
+    },
+    {
+      "sql": "SELECT internal_app_runs.id \nFROM internal_app_runs JOIN internal_run_bindings ON internal_run_bindings.app_run_id = internal_app_runs.id \nWHERE internal_run_bindings.run_id = ? AND internal_app_runs.instance_id = ? AND internal_app_runs.principal_id = ?",
+      "executed_sql": "SELECT \"private_read_internal_app_runs\".id \nFROM \"private_read_internal_app_runs\" JOIN internal_run_bindings ON internal_run_bindings.app_run_id = \"private_read_internal_app_runs\".id \nWHERE internal_run_bindings.run_id = ? AND \"private_read_internal_app_runs\".instance_id = ? AND \"private_read_internal_app_runs\".principal_id = ?",
+      "parameters": "('run_5b212add46d84cd08cf37edc7091c2d3', 'iinstance_e52b0215227159e30a7833cf58152a05', 'user_dc277b78c7fe4f97ae0105b94a3f3d36')"
+    },
+    {
+      "sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(internal_releases.snapshot, ?)), ?)), ?) AS namespace, internal_app_runs.id AS aid, internal_app_runs.release_id, runs.runtime_id, runs.request_key, internal_instances.source_app_id \nFROM internal_app_runs JOIN internal_run_bindings ON internal_run_bindings.app_run_id = internal_app_runs.id JOIN internal_releases ON internal_releases.id = internal_app_runs.release_id JOIN internal_instances ON internal_instances.id = internal_app_runs.instance_id JOIN runs ON runs.id = internal_run_bindings.run_id \nWHERE internal_run_bindings.run_id = ? AND internal_app_runs.instance_id = ? AND internal_app_runs.principal_id = ? AND runs.principal_id = ? AND runs.project_id = ? AND internal_releases.principal_id = ? AND internal_releases.project_id = ?",
+      "executed_sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(internal_releases.snapshot, ?)), ?)), ?) AS namespace, \"private_read_internal_app_runs\".id AS aid, \"private_read_internal_app_runs\".release_id, \"private_read_runs\".runtime_id, \"private_read_runs\".request_key, internal_instances.source_app_id \nFROM \"private_read_internal_app_runs\" JOIN internal_run_bindings ON internal_run_bindings.app_run_id = \"private_read_internal_app_runs\".id JOIN internal_releases ON internal_releases.id = \"private_read_internal_app_runs\".release_id JOIN internal_instances ON internal_instances.id = \"private_read_internal_app_runs\".instance_id JOIN \"private_read_runs\" ON \"private_read_runs\".id = internal_run_bindings.run_id \nWHERE internal_run_bindings.run_id = ? AND \"private_read_internal_app_runs\".instance_id = ? AND \"private_read_internal_app_runs\".principal_id = ? AND \"private_read_runs\".principal_id = ? AND \"private_read_runs\".project_id = ? AND internal_releases.principal_id = ? AND internal_releases.project_id = ?",
+      "parameters": "('$.\"draft\"', '$.\"candidate\"', '$.\"namespace\"', 'run_5b212add46d84cd08cf37edc7091c2d3', 'iinstance_e52b0215227159e30a7833cf58152a05', 'user_dc277b78c7fe4f97ae0105b94a3f3d36', 'user_dc277b78c7fe4f97ae0105b94a3f3d36', 'proj_c67315f4341a4618b9bde30adea4bc8c', 'user_dc277b78c7fe4f97ae0105b94a3f3d36', 'proj_c67315f4341a4618b9bde30adea4bc8c')"
+    },
+    {
+      "sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "executed_sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "parameters": "('92561ca9aa723a135a9d0d05fc8247abfbaa49d5238ab191693de3b9321b2fbd',)"
+    },
+    {
+      "sql": "BEGIN IMMEDIATE",
+      "executed_sql": "BEGIN IMMEDIATE",
+      "parameters": "()"
+    },
+    {
+      "sql": "SELECT internal_instances.project_id, internal_instances.principal_id \nFROM internal_instances \nWHERE internal_instances.id = ?",
+      "executed_sql": "SELECT internal_instances.project_id, internal_instances.principal_id \nFROM internal_instances \nWHERE internal_instances.id = ?",
+      "parameters": "('iinstance_6f5dd0e4750345d09b3ecc2f7da3ca58',)"
+    },
+    {
+      "sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "executed_sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "parameters": "('proj_c67315f4341a4618b9bde30adea4bc8c', 'user_dc277b78c7fe4f97ae0105b94a3f3d36')"
+    },
+    {
+      "sql": "SELECT internal_app_runs.id \nFROM internal_app_runs JOIN internal_run_bindings ON internal_run_bindings.app_run_id = internal_app_runs.id \nWHERE internal_run_bindings.run_id = ? AND internal_app_runs.instance_id = ? AND internal_app_runs.principal_id = ?",
+      "executed_sql": "SELECT \"private_read_internal_app_runs\".id \nFROM \"private_read_internal_app_runs\" JOIN internal_run_bindings ON internal_run_bindings.app_run_id = \"private_read_internal_app_runs\".id \nWHERE internal_run_bindings.run_id = ? AND \"private_read_internal_app_runs\".instance_id = ? AND \"private_read_internal_app_runs\".principal_id = ?",
+      "parameters": "('run_5b212add46d84cd08cf37edc7091c2d3', 'iinstance_6f5dd0e4750345d09b3ecc2f7da3ca58', 'user_dc277b78c7fe4f97ae0105b94a3f3d36')"
+    },
+    {
+      "sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "executed_sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "parameters": "('92561ca9aa723a135a9d0d05fc8247abfbaa49d5238ab191693de3b9321b2fbd',)"
+    },
+    {
+      "sql": "BEGIN IMMEDIATE",
+      "executed_sql": "BEGIN IMMEDIATE",
+      "parameters": "()"
+    },
+    {
+      "sql": "SELECT internal_instances.project_id, internal_instances.principal_id \nFROM internal_instances \nWHERE internal_instances.id = ?",
+      "executed_sql": "SELECT internal_instances.project_id, internal_instances.principal_id \nFROM internal_instances \nWHERE internal_instances.id = ?",
+      "parameters": "('iinstance_6f5dd0e4750345d09b3ecc2f7da3ca58',)"
+    },
+    {
+      "sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "executed_sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?",
+      "parameters": "('proj_c67315f4341a4618b9bde30adea4bc8c', 'user_dc277b78c7fe4f97ae0105b94a3f3d36')"
+    },
+    {
+      "sql": "SELECT internal_app_runs.id \nFROM internal_app_runs JOIN internal_run_bindings ON internal_run_bindings.app_run_id = internal_app_runs.id \nWHERE internal_run_bindings.run_id = ? AND internal_app_runs.instance_id = ? AND internal_app_runs.principal_id = ?",
+      "executed_sql": "SELECT \"private_read_internal_app_runs\".id \nFROM \"private_read_internal_app_runs\" JOIN internal_run_bindings ON internal_run_bindings.app_run_id = \"private_read_internal_app_runs\".id \nWHERE internal_run_bindings.run_id = ? AND \"private_read_internal_app_runs\".instance_id = ? AND \"private_read_internal_app_runs\".principal_id = ?",
+      "parameters": "('run_5b212add46d84cd08cf37edc7091c2d3', 'iinstance_6f5dd0e4750345d09b3ecc2f7da3ca58', 'user_dc277b78c7fe4f97ae0105b94a3f3d36')"
+    },
+    {
+      "sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "executed_sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "parameters": "('61500f94abd88d2a98c55b4a36f2536fad5a0dde87317c9c7ea56b5e3034a31b',)"
+    },
+    {
+      "sql": "BEGIN IMMEDIATE",
+      "executed_sql": "BEGIN IMMEDIATE",
+      "parameters": "()"
+    },
+    {
+      "sql": "SELECT internal_instances.project_id, internal_instances.principal_id \nFROM internal_instances \nWHERE internal_instances.id = ?",
+      "executed_sql": "SELECT internal_instances.project_id, internal_instances.principal_id \nFROM internal_instances \nWHERE internal_instances.id = ?",
+      "parameters": "('iinstance_e52b0215227159e30a7833cf58152a05',)"
+    },
+    {
+      "sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "executed_sql": "SELECT principals.id \nFROM principals \nWHERE principals.token_hash = ?",
+      "parameters": "('61500f94abd88d2a98c55b4a36f2536fad5a0dde87317c9c7ea56b5e3034a31b',)"
+    },
+    {
+      "sql": "BEGIN IMMEDIATE",
+      "executed_sql": "BEGIN IMMEDIATE",
+      "parameters": "()"
+    },
+    {
+      "sql": "SELECT internal_instances.project_id, internal_instances.principal_id \nFROM internal_instances \nWHERE internal_instances.id = ?",
+      "executed_sql": "SELECT internal_instances.project_id, internal_instances.principal_id \nFROM internal_instances \nWHERE internal_instances.id = ?",
+      "parameters": "('iinstance_e52b0215227159e30a7833cf58152a05',)"
+    }
+  ],
+  "scope_before_private_bodies": true
+}
