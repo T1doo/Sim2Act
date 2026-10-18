@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from . import natural_live_admission as gate
 from . import natural_trial_budget as budget
+from . import production_evidence
 from .contracts import Strict
 from .db import attempts, fingerprint, runs
 from .errors import DomainError
@@ -102,6 +103,9 @@ def production_preflight(store, user, contract, approval_key, request):
     with store.tx() as c:
         # Authorize exact identity/contract before reporting unavailable LIVE.
         gate._approved(store, c, user, contract, approval_key)
+        production_evidence.resolve_account(user, contract, approval_key)
+        # Retained downstream gates. Missing source stops before these checks;
+        # it never establishes software qualification or a dispatch permit.
         _qualified()
         return gate.admit(store, c, user, contract, approval_key, request.stage,
                           request.run_id, request.expected_version, request.fence)
