@@ -1,0 +1,11 @@
+观察到的未冻结WIP未发现新增确定P1/P2；不代表运行测试通过。当前字节见wip-static-observations.json，最终需对父级冻结字节另桥接。
+
+owner-review.js:333–354在原key GET、原review全文hash/声明/候选核验及readGeneration/current之后，仅为RUN回执保存child与原Release/id/fp/revision。新增project_id与严格run_十六进制ID要求与natural_spec_corrections.py:474–479既有返回合同兼容，不依赖新增API。
+
+显式按钮:356–372先检查ownerCurrent与busy；showInternalInstance刷新有意清除旧owner/receipt，刷新后改核原engineering、连接、workspace及instance/run精确+1代次，不再要求旧ownerFence仍有效。随后同iid/principal、原Release/id/fp/revision及目录确实含child，才复用showInternalRun；该原控制器负责迟到Run与同Runowner选择。没有永久selectionCurrent闭包、POST或自动人工声明。clearCorrectionView同时移除target并隐藏按钮；双击因旧view忙或target已清而停止。原一层correction backend guard未变。
+
+tests/correction_run_entry.cjs使用实际静态页/控制器，但GET响应合成，并stub renderSwitch/PBUse/openNaturalLogic；它不是实际HTTP后端、Worker、业务新成果或真实身份权限验收。当前设计覆盖成功/QUEUED、手动点击、双击、工作区回执迟到、导航选择迟到及坏项目/Run回执；父级仍在修初次harness，独审没有执行该文件或签PASS。全部网络动作为mock fetch GET，不能用这份短测替代原已通过correction整链。
+
+生产路径另核：production_evidence.py:188–196的resolve_account没有source/record/callback注入参数，requirements_for后固定SOURCE_MISSING；production_trial_admission.py:103–111先原_approved再resolver，原_qualified/admit保留但缺source时到不了。worker.py:779–784从env创建普通Store与Worker，未传pa_trial。pa_trial_dispatch.py:79–89把Journal严格限制在exact Worker/Settings/Store、test_only SQLite、mock/livefalse/空token/exact MockTransport与固定binding/store。因此真正LIVE缺的是受审证据来源与安装/接入代码，不是单补环境变量；现有mock资格不等于LIVE，也不能把用户已有真实调用授权说成没有。
+
+本独审只读源码/纯字节hash，无Git或认证探测、产品/pytest/应用导入/Worker/模型、DB/SQL、网络或私有留出访问；只写本新目录，不写仓库和任何旧sealed目录。目录未封存，待freeze及闭合证据后终审。

@@ -32,7 +32,9 @@ async function boot(){await closePage();const boot=++boots;const load=async path
  }
  const receipt=JSON.parse($("correction-proof").textContent);check(receipt.run_id&&receipt.run_id!==info.run&&receipt.parent_run_id===info.run,"one distinct new Run bound to rejected parent");
  assert.equal((await rpc({command:"worker",rid:receipt.run_id})).status,200);
- await click("internal-refresh");await edit("owner-run",receipt.run_id);
+ check(visible($("correction-open-run")),"accepted correction exposes direct new Run entry");
+ await click("correction-open-run");
+ check($("owner-run").value===receipt.run_id,"new entry selects exact correction Run for review");
  check($("owner-status").textContent.includes("PENDING"),"new successful result has no inherited acceptance");
  const current=JSON.parse($("owner-proof").textContent).contract;
  check(current.goal.goal===info.goal_text&&current.result_version===2,"new typed version preserves Goal");

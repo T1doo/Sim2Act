@@ -284,9 +284,10 @@ for(const [id,recover] of [["app-own-goal-read",false],["app-own-goal-recover",t
 const correctionPending=new Map();
 function clearCorrectionView(){
   $("correction-panel").hidden=true;
+  $("correction-open-run").hidden=true;$("correction-open-run").disabled=true;
   for(const id of ["correction-proof","correction-status","correction-key"])$(id)[id==="correction-key"?"value":"textContent"]="";
   $("correction-ack").checked=false;$("correction-approval").hidden=true;
-  if(ownerView)ownerView.correctionReview=null;
+  if(ownerView){ownerView.correctionReview=null;ownerView.correctionTarget=null;}
 }
 function correctionButtons(view){
   if(!ownerCurrent(view))return;
@@ -296,6 +297,8 @@ function correctionButtons(view){
   $("correction-submit").disabled=view.busy||!!pending||!view.correctionReview||!$("correction-ack").checked;
   $("correction-recover").disabled=view.busy||!view.rid||!$("correction-key").value.trim();
   $("correction-reset").disabled=view.busy||!!pending;
+  $("correction-open-run").hidden=!view.correctionTarget;
+  $("correction-open-run").disabled=view.busy||!view.correctionTarget;
 }
 function correctionPath(v){return `/api/internal/instances/${v.iid}/runs/${encodeURIComponent(v.rid)}`;}
 async function correctionValidate(v,value,current){
@@ -314,6 +317,7 @@ async function correctionValidate(v,value,current){
 }
 function correctionRender(v,value){
   if(!ownerCurrent(v))return;
+  v.correctionTarget=null;
   v.correctionReview=value;$("correction-approval").hidden=false;$("correction-ack").checked=false;
   $("correction-key").value=value.request_key;
   $("correction-proof").textContent=JSON.stringify({original_goal:value.context.goal,original_criteria:value.context.items,
@@ -338,16 +342,35 @@ async function correctionRecover(v,key,stage){
     if(contextHash!==pending.body.expected_context_fingerprint||review.declaration.id!==pending.body.declaration_id||review.declaration.fingerprint!==pending.body.declaration_fingerprint||review.declaration.sequence!==pending.body.expected_owner_sequence)throw Error("原key预览与原请求锚不一致");
   }
   if(review.request_key!==key||(pending&&pending.key===key&&(pending.stage!==stage||pending.body.expected_review_fingerprint&&pending.body.expected_review_fingerprint!==review.review_fingerprint)))throw Error("原key修正回执不一致");
-  if(stage==="RUN"&&(value.run_id===v.rid||value.principal_id!==v.principal||value.instance_id!==v.iid||value.parent_run_id!==v.rid||value.request_key!==key||value.formal_publication_enabled!==false||value.semantic_status!=="UNKNOWN"||value.owner_acceptance!=="PENDING"))throw Error("新Run回执绑定不一致");
+  if(stage==="RUN"&&(!/^run_[a-f0-9]{32}$/.test(value.run_id)||value.run_id===v.rid||value.principal_id!==v.principal||value.project_id!==v.project||value.instance_id!==v.iid||value.parent_run_id!==v.rid||value.request_key!==key||value.formal_publication_enabled!==false||value.semantic_status!=="UNKNOWN"||value.owner_acceptance!=="PENDING"))throw Error("新Run回执绑定不一致");
   if(pending?.key===key)correctionPending.delete(ownerKey(v));
   correctionRender(v,review);
   if(stage==="RUN"){
     v.correctionReview=null;$("correction-approval").hidden=true;
-    $("correction-status").textContent=`旧问题来自结果 v${review.context.result_version} · 新Run ${value.run_id} · ${value.status}${value.result_version?" · 新结果 v"+value.result_version:""}。旧成果与声明保留；刷新运行历史选择新结果，再独立人工判定。`;
+    v.correctionTarget={rid:value.run_id,release:review.context.release_id,releaseFingerprint:review.context.release_fingerprint,revision:review.context.instance_revision};
+    $("correction-status").textContent=`旧问题来自结果 v${review.context.result_version} · 新Run ${value.run_id} · ${value.status}${value.result_version?" · 新结果 v"+value.result_version:""}。旧成果与声明保留；打开此新Run查看进度，完成后独立人工判定。`;
     $("correction-proof").textContent=JSON.stringify(value,null,2);
   }
   correctionButtons(v);return true;
 }
+$("correction-open-run").onclick=safe(async()=>{
+  const v=ownerView,target=v?.correctionTarget;
+  if(!target||!ownerCurrent(v)||v.busy)return;
+  const view=v.engineering,connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;
+  const selection=view.instanceGeneration+1,runSelection=view.runGeneration+1;
+  v.busy=true;correctionButtons(v);
+  try{
+    // Refresh the existing instance controller so its Run/owner selectors include
+    // the accepted child. This deliberately clears the old owner/receipt view.
+    await showInternalInstance(v.iid,view);
+    if(!engineeringCurrent(view)||connection!==identityConnectionGeneration||workspace!==workspaceSelectionGeneration||view.instanceGeneration!==selection||view.runGeneration!==runSelection)return;
+    const instance=view.instance;
+    if(!instance||instance.id!==v.iid||instance.principal_id!==v.principal)return;
+    if(instance.release_id!==target.release||instance.release_fingerprint!==target.releaseFingerprint||instance.revision!==target.revision)throw Error("修正所属版本已变化，请重新核对当前实例");
+    if(!instance.runs.some(run=>run.id===target.rid))throw Error("本次实例读取未包含已接受的修正Run，请读取原key核对");
+    await showInternalRun(target.rid,view,instance);
+  }finally{v.busy=false;}
+});
 $("correction-prepare").onclick=safe(async()=>{
   const v=ownerView;if(!v?.spec||!ownerCurrent(v)||v.busy||correctionPending.has(ownerKey(v))||v.state?.owner_acceptance!=="REJECTED"||!v.state.content_access||v.state.current.human_correction)return;
   const fence=ownerFence(v),context=v.state.current,decl=v.state.latest,scopeKey=ownerKey(v),endpoint=correctionPath(v),serial=++v.readGeneration;

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.324" timestamp="2026-10-18T18:13:38.188990+00:00" hostname="888ae8c15de7"><testcase classname="tests.test_correction_run_entry_ui" name="test_verified_correction_run_entry_and_navigation_isolation" time="0.133"><failure message="AssertionError: node:internal/modules/cjs/loader:1520&#10;    throw err;&#10;    ^&#10;  &#10;  Error: Cannot find module 'jsdom'&#10;  Require stack:&#10;  - /workspace/Sim2Act/tests/correction_run_entry.cjs&#10;      at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)&#10;      at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)&#10;      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)&#10;      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)&#10;      at Module._load (node:internal/modules/cjs/loader:1294:5)&#10;      at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)&#10;      at Module.require (node:internal/modules/cjs/loader:1617:12)&#10;      at require (node:internal/modules/helpers:153:16)&#10;      at Object.&lt;anonymous&gt; (/workspace/Sim2Act/tests/correction_run_entry.cjs:5:15)&#10;      at Module._compile (node:internal/modules/cjs/loader:1872:14) {&#10;    code: 'MODULE_NOT_FOUND',&#10;    requireStack: [ '/workspace/Sim2Act/tests/correction_run_entry.cjs' ]&#10;  }&#10;  &#10;  Node.js v24.19.0&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/correction_run_entry.cjs', '/workspace/correction-run-entry-20261018/pytest-temp...'MODULE_NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/correction_run_entry.cjs' ]\n}\n\nNode.js v24.19.0\n&quot;).returncode">tmp_path = PosixPath('/workspace/correction-run-entry-20261018/pytest-temp/test_verified_correction_run_e0')
+
+    def test_verified_correction_run_entry_and_navigation_isolation(tmp_path):
+        proof = tmp_path / "correction-run-entry.json"
+        completed = subprocess.run(
+            ["node", "tests/correction_run_entry.cjs", str(proof)],
+            env={**os.environ, "NODE_PATH": os.environ.get("NODE_PATH", "/workspace/node-tools/node_modules")},
+            text=True,
+            capture_output=True,
+            timeout=45,
+        )
+&gt;       assert completed.returncode == 0, completed.stdout + completed.stderr
+E       AssertionError: node:internal/modules/cjs/loader:1520
+E           throw err;
+E           ^
+E         
+E         Error: Cannot find module 'jsdom'
+E         Require stack:
+E         - /workspace/Sim2Act/tests/correction_run_entry.cjs
+E             at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E             at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E             at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E             at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E             at Module._load (node:internal/modules/cjs/loader:1294:5)
+E             at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E             at Module.require (node:internal/modules/cjs/loader:1617:12)
+E             at require (node:internal/modules/helpers:153:16)
+E             at Object.&lt;anonymous&gt; (/workspace/Sim2Act/tests/correction_run_entry.cjs:5:15)
+E             at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E           code: 'MODULE_NOT_FOUND',
+E           requireStack: [ '/workspace/Sim2Act/tests/correction_run_entry.cjs' ]
+E         }
+E         
+E         Node.js v24.19.0
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['node', 'tests/correction_run_entry.cjs', '/workspace/correction-run-entry-20261018/pytest-temp...'MODULE_NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/correction_run_entry.cjs' ]\n}\n\nNode.js v24.19.0\n").returncode
+
+tests/test_correction_run_entry_ui.py:17: AssertionError</failure></testcase></testsuite></testsuites>

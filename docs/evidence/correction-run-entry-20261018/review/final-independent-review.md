@@ -1,0 +1,13 @@
+本次最小接线有限独审通过；未发现新增的确定P1/P2。冻结对象为reviewed-source-map.json的精确文件字节，非独审确认的新Git提交或未来push。新增可见入口把已经核验的correction回执，通过显式点击接到原同实例刷新、精确child Run和同Run复审；不自动导航、创建Run、PREPARE/DECIDE，不改变一层correction合同或预算。
+
+owner-review.js已核验原key/review全文、原声明/候选及身份/项目/父Run后才保存导航target；新增project与严格run ID门兼容原后端返回。点击保留原engineering视图、连接、workspace及预期instance/run+1代次。实例刷新有意清除旧owner/receipt，后续仅用精确工程选择围栏，不把旧ownerFence永久挂入selectionCurrent。原实例/身份/ReleaseID+FP/revision与当前目录child成员核对后才showInternalRun；原控制器继续负责迟到Run GET和同Run owner选择。busy与target清除防重复点击。index.html只增加显式入口；原修正预览、批准、父成果和声明不改。
+
+作者manifest.json SHA256 f28d69256f11a7af2a640610a3597d1590667d1ffb1993bf06a998a8e18f4ee9，16份原件共54472B全部独立逐字校验，目录17路径含manifest在本次audit期间不变。13个当前源/依赖文件匹配冻结映射，两个生产文件与WIP静审字节相同；各执行保存的5个页面/脚本SHA也一致。独审没有Git/认证探测、网络或后续推送核实。
+
+运行原件范围：新Node合成导航第二轮24checks PASS；pytest包装器指定既有NODE_PATH后同一新节点1PASS（JUnit4.761秒），再次执行同一24checks，不增加unique病例。既有natural_application_navigation合成导航36checks PASS。新测试执行实际index/app/internal/use/owner控制器，但全部GET响应合成，switch/PBUse/logic renderer被stub；不是实际HTTP服务、Worker、DB、真实账号授权或语义验收。普通成功、QUEUED进度、同child owner PENDING、双击、回执迟到、账号连接/项目/工作区/实例/Run选择迟到与三个坏回执断言均有保存记录。新控件没有POST；已保存calls仅部分导航场景，全面GET-only来自实际运行的fetch断言与源审查，不冒称完整wire日志。旧natural_spec_corrections_ui整链harness只将手工刷新/下拉换为按钮并保留原Goal/理由/复审断言，未重跑，不为它新增业务资格。
+
+失败原件保留：直接Node首轮19checks后在不可达的Run选择场景FAIL，两个生产asset SHA与成功轮相同；作者改为实例内容已可见时held Release GET再选父Run。修前harness全文未在这组原件独立封存，根因解释依据作者说明、原stack和当前可达性代码，不冒独审重放。pytest首次FAIL为Node启动前缺jsdom，原JUnit含Cannot find module；明确指定既有NODE_PATH后通过，没有生产修复。Node三项语法、Ruff与diffcheck五份exit0回执只回读，不独审重跑。独审自己的初版纯文件脚本按早期14文件硬计数，作者随后补2元数据与seal后出现一次AssertionError；原脚本/stdout/stderr以.first保留，改按明确封存清单16项逐字核验后通过，见file-audit-correction.json；不是产品或pytest失败。
+
+生产边界独立源码核实：production_evidence.resolve_account只构建requirements后固定SOURCE_MISSING，无可注入source；production_preflight保留原_approved→resolver→_qualified/admit，缺来源时后两者不可达。worker.main构建普通Worker没有pa_trial，Journal绑定严格test_only SQLite/mock/livefalse/空token/exact MockTransport。已有离线source/journal/sender不等于注册了生产source/controller，不能说仅欠env或把mock结果升级为LIVE。本片不要求新凭据，不把工程30秒候选诊断当provider必须续签，也没有实现受信来源或收费事实。
+
+未执行：本片实际后端HTTP/Worker/模型/DB、真实租户权限、真人语义、原生浏览器/Windows、PG、远端CI、旧长链/故障矩阵；不签整体F2或LIVE。真实调用已有用户授权与是否具备可核余额/零费来源是分开条件。独审仅只读源码和闭合文件，未开DB/SQL/私有留出、运行产品或调用Git/网络；只写本新目录，未写任何旧sealed目录。不背书后续本地commit或push。
