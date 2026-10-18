@@ -1,5 +1,7 @@
 # F2 并行工程 Plan：权威当前状态
 
+2026-10-18 从e730接续[P-B首次局部逻辑修改当前完整页面](PBFirstLogicCurrentPage20261018.md)：核原规格及既有能力后补一条连续页面资格，原PB→首次依赖调整→隔离CHECK→单独批准/新Release→明确新实例→THIRD首成果。严格区分逻辑revision2/新Release/结果version1，保留旧数据；不扩外围或故障矩阵、不预写通过。原环境断连提示后已实命令确认可用，尚未产品执行时完成保全。
+
 2026-10-18 从304b接续[P-A当前未见输入与错误材料](PACurrentUnseenInput20261018.md)已完成有限页面验收：执行`fddccd09a72d628cdb0ea382009c84545a29cb9f`，1唯一pytest/1PASS，86内部检查；统一目录→页面合成PREPARE/DECIDE→2049字节材料实际400且全库零污染→同实例未见THIRD生成v2→旧STALE/新PENDING及冷页两版本只读。5Mock/真实0，689执行输入/133生产0漂移；没有生产改动、不下载、不故障注入。原Windows/native/PG/真实语义/CI及旧缺证门保持；[原件](../evidence/pa-current-unseen-flow-20261018/README.md)。
 
 2026-10-18 [自然规范同Run导航与v1/v2冷页下载](NaturalResultRunNavigation20261018.md)已有限验收：生产仅owner下拉→原机器详情一行；结果v2、目录与下载为既有能力的当前页面资格，同一Release不变。执行 `ba6e1e06babdf591cbd439ee769b1c2a9cd0aa98` 完整HTTP/JSDOM 93检查/4下载通过，原synthetic 36项通过，共2唯一节点；687输入/133生产三轮各0漂移，最终6Mock、含失败总17Mock/真实0。初期3次测试失败和纯解析错误完整保留，非全程绿；[原件与边界](../evidence/natural-result-navigation-20261018/README.md)。关闭仅收窄GET旧文案未重跑，原取消/缺证及Win/native/PG/真实/CI门保持。
