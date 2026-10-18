@@ -875,14 +875,28 @@ def inspect_instance(store, user, iid, limits):
 
 def inspect_job(store, user, iid, rid, limits):
     with store.tx() as c:
-        i, _, _ = scope_job(store, c, user, rid, iid)
-        _, history = projection(store, c, user, i, limits)
-        _, release, job, a, _, _ = accepted_binding(store, c, user, rid, limits)
-        value = next((v for v in history if v["run_id"] == rid), None)
-        op = c.execute(select(operations.c.receipt).where(operations.c.run_id == rid)).scalar_one_or_none()
-        return dict(namespace=VERSION, instance_id=iid, id=rid, app_run_id=a["id"], release_id=release["id"],
-            status=job["status"], version=job["version"], result_version=a["result_version"], output=a["output"],
-            event=value["event"] if value else None, receipt=op, error=job["error"], formal_publication_enabled=False)
+        return _inspect_job(store, c, user, iid, rid, limits)
+
+
+def _inspect_job(store, c, user, iid, rid, limits):
+    i, _, _ = scope_job(store, c, user, rid, iid)
+    _, history = projection(store, c, user, i, limits)
+    _, release, job, a, _, _ = accepted_binding(store, c, user, rid, limits)
+    value = next((v for v in history if v["run_id"] == rid), None)
+    op = c.execute(select(operations.c.receipt).where(operations.c.run_id == rid)).scalar_one_or_none()
+    return dict(namespace=VERSION, instance_id=iid, id=rid, app_run_id=a["id"], release_id=release["id"],
+        status=job["status"], version=job["version"], result_version=a["result_version"], output=a["output"],
+        event=value["event"] if value else None, receipt=op, error=job["error"], formal_publication_enabled=False)
+
+
+def inspect_project_run(store, user, rid, limits):
+    """Typed history read; legacy execution/commands remain closed to this family."""
+    with store.tx() as c:
+        i, release, aid = scope_job(store, c, user, rid)
+        result = _inspect_job(store, c, user, i["id"], rid, limits)
+        require(result["id"] == rid and result["instance_id"] == i["id"]
+            and result["release_id"] == release["id"] and result["app_run_id"] == aid)
+        return dict(result, principal_id=user, project_id=i["project_id"], app_id=i["source_app_id"])
 
 
 def control(store, user, iid, rid, body, limits):

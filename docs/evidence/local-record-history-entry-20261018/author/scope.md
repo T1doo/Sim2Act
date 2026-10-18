@@ -1,0 +1,13 @@
+# Typed local-record project history entry
+
+Base 2ca34f24d4fdcf588bc42b461fb664df699b28a1. Four product files, three tests.
+
+Project history already listed typed local-record Runs, but the generic detail handler invoked legacy Store.inspect, which correctly refused this family. The existing GET route now checks owner first and dispatches only this family to the existing typed inspector in one transaction, returning verified navigation scope. Legacy Store.inspect/command still rejects it. The Projects summary has an explicit button that opens the original app, exact instance and same Run in the existing controller. No automatic business submission.
+
+Initial two selected pytest nodes PASS15.32s/outer19.716953s. The API node verifies owner/project binding, exact verified event/output, direct legacy inspect and generic commands rejection, foreign owner403 before private bodies, actual API revocation403 and unchanged read snapshots. The initial page had24checks/52frontend requests; its raw result is preserved as pre-P2 input.
+
+Finite independent source review found P2: a late detail error after workspace or connection reselection could clear the current result. Only the catch receives these two generation fences; the common current guard remains compatible with existing intentional cross-workspace navigation. Final page-only recheck PASS16.87s/outer20.707557s,30checks/54frontend GET/27assets/oneboot, source drift0. It covers exact typed event and explicit original app/instance/Run opening, double-click navigation, late success/workspace ABA, newer instance selection, project ABA, same-account reconnect and one actual permission403 held across workspace ABA.
+
+The page sends zeroPOST and invokes zeroWorker. One NoModel seed Run is created before the page. One exact pre-existing synthetic owner artifact READ Grant is revoked by a bounded fixture bridge for the final negative check; revision1->2. This is fixture authority mutation, not a page or production capability. All other54tables, all other Grant rows and original Run rows remain unchanged. The API and final page are two unique pytest cases across the batches, not three. Final product Python and API test bytes are identical to the first API pass; the bridge names the only three changed JS/harness inputs.
+
+Actual ASGI/TestClient HTTP and served-page JSDOM only. Real models0; native browser, Windows, real human/semantic acceptance, PG and remoteCI NOT_RUN. No remote Git/auth attempt, production deployment, new executor/Grant/schema or security boundary. Real-account official source and enforceable zero-added-cost evidence remain missing. Private holdout and old instances untouched.

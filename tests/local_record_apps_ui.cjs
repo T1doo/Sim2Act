@@ -138,6 +138,26 @@ async function navigation(){
  check(!view()&&!$('local-records-panel').textContent,'same-account reconnect cannot restore old account-view contents');
  check(posts().length===0,'all actual HTTP navigation and recovery races create zero writes');
 }
+async function projectHistory(){
+ const detail=()=>[...$('runs').querySelectorAll('button')].find(button=>button.closest('.row').textContent.includes(info.seed_run.slice(0,16)));
+ const summary=async()=>{await nav('projects');await wait(()=>!!detail(),'project history Run');await click(detail());check($('result').textContent.includes(info.title_a)&&visible($('local-record-task-open-result')),'project history reads exact typed event and exposes dedicated application entry');check(!$('commands').children.length,'typed history never offers legacy ordinary commands');};
+ await summary();let n=actions.length;await click('local-record-task-open-result',true);
+ check(view()?.run?.id===info.seed_run&&view().run.event.title===info.title_a&&view().run.result_version===1,'history entry opens the exact verified typed Run and event in its own instance');
+ check(actions.slice(n).filter(row=>row.path===`/api/apps/${app_id}`).length===1,'double click starts only one typed application navigation');
+ check(view().selectionCurrent===null,'successful history navigation releases its temporary opening fence');
+ await nav('projects');await held(`/api/runs/${info.seed_run}`,()=>click(detail()),async()=>{await nav('resources');await nav('projects');},'typed history detail workspace ABA');
+ check(!$('result').textContent.includes(info.title_a),'late typed detail does not paint after workspace reselection');
+ await summary();await held(base(),()=>click('local-record-task-open-result'),async()=>{await select('local-records-instance-select',info.second_instance);},'history entry versus new instance selection');
+ check(view()?.instance?.id===info.second_instance&&!view().instance.records.length&&view().selectionCurrent===null,'newer empty instance remains usable without old event or poisoned opening fence');
+ await summary();n=actions.length;await held(`/api/apps/${app_id}`,()=>click('local-record-task-open-result'),async()=>{await select('project-select',info.other);await select('project-select',info.project);await nav('projects');},'history entry project ABA');
+ check(!view()&&actions.slice(n).every(row=>!row.path.startsWith('/api/internal/record-instances/')),'late application read cannot follow an old project into private instance reads');
+ await summary();await held(`/api/apps/${app_id}`,()=>click('local-record-task-open-result'),async()=>{await click('identity-switch');$('token').value='synthetic-test-A';await click('connect');await nav('projects');},'history entry same-account reconnect');
+ check(!view()&&posts().length===0,'all typed history navigation races are read-only and isolated from a new connection');
+ await summary();const revoked=await rpc({command:'revoke_seed_artifact_read',run:info.seed_run,resource:info.seed_artifact});assert.equal(revoked.status,200,revoked.text);
+ await held(`/api/runs/${info.seed_run}`,()=>click(detail()),async()=>{await nav('resources');await nav('projects');$('result').textContent='CURRENT CLEAN';},'typed history late permission 403');
+ check($('result').textContent==='CURRENT CLEAN'&&actions.filter(row=>row.path===`/api/runs/${info.seed_run}`).at(-1).status===403,'late actual permission denial cannot clear the current selection or paint an old error');
+ check(posts().length===0,'history opening and late permission denial perform zero page POST');
+}
 async function revocation(){
  await open();
  await select('local-records-run-select',info.seed_run);await click('local-records-run-read');
@@ -161,13 +181,13 @@ async function revocation(){
 }
 (async()=>{
  let status='FAIL',error;
- try{await boot();if(info.scenario==='navigation')await navigation();else if(info.scenario==='revocation')await revocation();else await flow();status='PASS';}
+ try{await boot();if(info.scenario==='navigation')await navigation();else if(info.scenario==='revocation')await revocation();else if(info.scenario==='project-history')await projectHistory();else await flow();status='PASS';}
  catch(e){error=e.stack;process.stderr.write(error+'\n');process.exitCode=1;}
  finally{
   if(releaseRead){releaseRead();releaseRead=null;}
   try{await close();}catch(e){status='FAIL';error=error||e.stack;process.exitCode=1;}
   fs.writeFileSync(info.output,JSON.stringify({status,error,scenario:info.scenario,checks,actions,static_resource_loads,boots,app_id,release_id,instance_id,run_ids,request_keys,first_history,
-   classification:info.scenario==='navigation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_NAVIGATION_NO_WORKER':info.scenario==='revocation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_REVOCATION_NO_WORKER':'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_FLOW',qualification_role:'UI_AUTHOR',scope:'Actual served JavaScript and ASGI HTTP; only receipt delivery is controlled, synthetic typed inputs and NoModel Worker',native_browser:'NOT_RUN',pg:'NOT_RUN',real_model:'NOT_RUN',real_semantic_acceptance:'NOT_RUN'},null,2)+'\n');
+   classification:info.scenario==='project-history'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_PROJECT_HISTORY_NO_PAGE_WORKER':info.scenario==='navigation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_NAVIGATION_NO_WORKER':info.scenario==='revocation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_REVOCATION_NO_WORKER':'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_FLOW',qualification_role:'UI_AUTHOR',scope:'Actual served JavaScript and ASGI HTTP; only receipt delivery is controlled, synthetic typed inputs and NoModel Worker',native_browser:'NOT_RUN',pg:'NOT_RUN',real_model:'NOT_RUN',real_semantic_acceptance:'NOT_RUN'},null,2)+'\n');
   process.stdout.write(JSON.stringify({done:true})+'\n');
  }
 })();

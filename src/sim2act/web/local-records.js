@@ -311,6 +311,51 @@ async function localRecordsRecover(v){
  }catch(error){if(current()){localRecordsClearPrivate(v);localRecordsStatus(v,`原 key 读取未确认：${error.detail||error.message}。不会重发写入；已有原请求仍保留。`);}}
  finally{localRecordsBusy(v,false);}
 }
+function renderLocalRecordTaskResult(receipt,current){
+ if(!current())return;
+ if(receipt.project_id!==$("project-select").value||receipt.id!==activeRun||receipt.formal_publication_enabled!==false||![receipt.id,receipt.instance_id,receipt.app_id,receipt.app_run_id,receipt.release_id,receipt.principal_id].every(id=>typeof id==="string"&&id))localRecordsError();
+ const result=$("result");result.replaceChildren(row(`本地记录任务 ${receipt.id} · ${receipt.status} · 集合结果版本 ${receipt.result_version??"尚无"}`));
+ if(receipt.status==="SUCCEEDED"){
+  const e=receipt.event;
+  if(!e||e.app_id!==receipt.app_id||e.instance_id!==receipt.instance_id||e.principal_id!==receipt.principal_id||e.release_id!==receipt.release_id||e.collection_version!==receipt.result_version||receipt.receipt?.status!=="VERIFIED")localRecordsError();
+  result.append(row(`本次记录「${e.title}」 · ${e.state} · 记录修订 ${e.record_revision}；已保存本次事件，目标语义未验收。`));
+ }else result.append(row("本次尚无已保存业务事件；历史成功不代表本次完成。"));
+ const button=document.createElement("button");button.id="local-record-task-open-result";button.type="button";button.textContent="在本地记录应用中打开此Run与事件历史";
+ button.disabled=!!internalTaskNavigation?.current();button.onclick=safe(()=>openLocalRecordTaskResult(receipt,button,current));result.append(button);
+}
+async function openLocalRecordTaskResult(receipt,button,selectedCurrent){
+ if(!selectedCurrent()||internalTaskNavigation?.current())return;
+ const identity=token,connection=identityConnectionGeneration,project=$("project-select").value,userSelection=runUserSelectionGeneration;
+ let workspace=workspaceSelectionGeneration,generation=appSelectionGeneration,view=null,selection=null,reading=null;
+ // Same-Run background reads may replace the Projects summary. Human selection,
+ // connection, workspace and exact typed-view selections own this navigation.
+ const scopeCurrent=()=>identity===token&&connection===identityConnectionGeneration&&project===$("project-select").value&&activeRun===receipt.id&&userSelection===runUserSelectionGeneration&&workspace===workspaceSelectionGeneration&&generation===appSelectionGeneration&&(!view||localRecordsView===view);
+ const current=()=>scopeCurrent()&&(selection===null||view.selection===selection)&&(reading===null||view.read===reading);
+ const navigation={current};internalTaskNavigation=navigation;button.disabled=true;
+ try{
+  selectWorkspace("apps");workspace=workspaceSelectionGeneration;
+  const loaded=await showApp(receipt.app_id,project,value=>{generation=value;},scopeCurrent,app=>{
+   if(!localRecordsApp(app)||app.principal_id!==receipt.principal_id||app.project_id!==project)localRecordsError();
+  });
+  if(!loaded||!current())return;view=localRecordsView;
+  if(!view||!localRecordsCurrent(view)||view.app.id!==receipt.app_id)localRecordsError();
+  const selecting=localRecordsSelectInstance(view,receipt.instance_id);selection=view.selection;await selecting;
+  if(!current())return;
+  if(view.instance?.id!==receipt.instance_id||view.instance.release_id!==receipt.release_id||!view.instance.runs.some(run=>run.id===receipt.id&&run.app_run_id===receipt.app_run_id))localRecordsError();
+  view.runSelect.value=receipt.id;
+  const loading=localRecordsReadRun(view);reading=view.read;await loading;
+  if(!current())return;
+  if(view.runSelect.value!==receipt.id||view.run?.id!==receipt.id||view.run.app_run_id!==receipt.app_run_id||view.run.release_id!==receipt.release_id)localRecordsError();
+  view.runStatus.scrollIntoView?.({block:"nearest"});
+ }catch(error){if(current())throw error;}
+ finally{
+  if(view?.selectionCurrent===scopeCurrent){if(scopeCurrent())view.selectionCurrent=null;else if(localRecordsView===view)clearLocalRecordsView();}
+  // showApp can fail while constructing the typed view, before assignment.
+  else if(!view&&localRecordsView?.selectionCurrent===scopeCurrent){if(scopeCurrent())localRecordsView.selectionCurrent=null;else clearLocalRecordsView();}
+  if(internalTaskNavigation===navigation)internalTaskNavigation=null;
+  if(selectedCurrent())button.disabled=false;
+ }
+}
 async function openLocalRecordsApp(app,generation,selectionCurrent=()=>true){
  if(!localRecordsApp(app))localRecordsError();const v=localRecordsBuild(app,generation,selectionCurrent),current=localRecordsFence(v);localRecordsButtons(v);
  if(!await localRecordsValidateApp(v,app,null,current)||!current())return false;v.ready=true;

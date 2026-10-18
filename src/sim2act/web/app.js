@@ -414,7 +414,7 @@ async function readRunDetail(id, userSelection, selectionGuard, validateReceipt)
   if(userSelection){clearRunDetail();$("result").append(row("正在读取任务…"));}
   activeRun = id;
   if(typeof protocolSelectRun === "function")protocolSelectRun(id,userSelection);
-  const project=$("project-select").value,identity=token,generation=++runSelectionGeneration;
+  const project=$("project-select").value,identity=token,generation=++runSelectionGeneration,readWorkspace=workspaceSelectionGeneration,readConnection=identityConnectionGeneration;
   const current=()=>activeRun===id && project===$("project-select").value && identity===token && generation===runSelectionGeneration && selectionGuard();
   let r,attempts;
   try {
@@ -423,9 +423,13 @@ async function readRunDetail(id, userSelection, selectionGuard, validateReceipt)
     if(validateReceipt)validateReceipt(r);
     if(typeof renderSelectedProtocol === "function" && r.namespace === "protocol_jobs.v1"){await renderSelectedProtocol(r,id,current);return;}
     if(typeof clearProtocolSelection === "function")clearProtocolSelection();
+    if(r.namespace === "local-record-app.v1"){
+      const typedCurrent=()=>current()&&readWorkspace===workspaceSelectionGeneration&&readConnection===identityConnectionGeneration&&!$("projects").hidden;
+      if(typedCurrent())renderLocalRecordTaskResult(r,typedCurrent);return;
+    }
     attempts = r.namespace !== "INTERNAL_APPRUN" && ["WAITING_RESOURCE","RECONCILING"].includes(r.status) ? await api(`/api/runs/${id}/unresolved-attempts`) : [];
   } catch(error) {
-    if(!current())return;
+    if(!current()||readWorkspace!==workspaceSelectionGeneration||readConnection!==identityConnectionGeneration)return;
     clearRunDetail();activeRun=null;
     if(typeof clearProtocolSelection === "function")clearProtocolSelection();
     const message=error.httpStatus===403?"当前身份没有读取此任务或核对回执的权限。":"任务详情或核对回执读取失败。";

@@ -1,0 +1,15 @@
+# Typed local-record project history
+
+Base `2ca34f24d4fdcf588bc42b461fb664df699b28a1`. Four product files and three test files. Existing owner-checked GET dispatches to the existing typed inspector, and an explicit Projects button opens the exact original app/instance/Run. The legacy execution/command barrier remains closed.
+
+`author/` is a byte-exact copy of 41 sealed non-DB originals, 5,532,156 bytes; manifest SHA `b8952e83b82d62326934bc456104bbf8155150e9366a241d7286d92d1d181f89`. SQLite fixtures remain local and are excluded. No originals from earlier slices changed.
+
+- `author/execution.json`, `pytest.stdout`, `result.xml`: initial two selected nodes PASS15.32s/outer19.716953s. The API node checks exact typed read, ownership and current permissions, pre-private-read denial and unchanged legacy command barriers. Initial page was24checks/52frontend requests and predates the review P2 fix.
+- `author/p2-recheck/`: final page-only PASS16.87s/outer20.707557s,30checks/54frontend GET/27assets/oneboot, source drift0. Explicit same-app/instance/Run opening, double-click, successful and failing late callbacks, workspace/project ABA, newer instance and same-account reconnect. One actual403 is held after HTTP while workspace changes; the current canvas remains unchanged.
+- `author/p2-recheck/pytest-temp/test_local_record_page_explici0/actual-revocation-proof.json`: exactly one known synthetic READ Grant fixture revocation, revision1→2; the executed strict snapshot oracle confirms other54tables and all other Grant/old Run rows unchanged. Results and fingerprints are retained, without full-row exports for independent recomputation. Page0POST/Worker; one NoModel seed before page. This fixture bridge is not a production permission interface.
+- `author/batch-qualification-bridge.json`: API product/test bytes unchanged between batches; only app.js and two UI harness inputs changed. Two unique pytest cases across both batches, not three.
+- `author/final-source-map.json`, `static-checks.json`, `scope.md`: final frozen inputs, syntax/Ruff/scoped diff receipts and exact limits.
+
+[Finite independent review](review/final-independent-review.md) LIMITED_PASS, P2 closed with no remaining blocking finding. It verified all41 author hashes, final source and API batch bridge, actual54HTTP wires, exact typed result/event and held403, and the narrow executed SQL/snapshot oracle scope. Review seal SHA `e0b56cccaf4aacd487e752e3e26690d3cc968ab8e1a1325477b44d6b0e44bd63`,12files/46,692bytes. Its first pure-file audit TypeError and corrected PASS are both preserved; this was not a product test failure. No independent product/DB/network execution or future commit/push endorsement.
+
+No real model, native browser, real human/semantic acceptance, Windows, PG, remoteCI or remote Git operation. The missing real-account official source and enforceable zero-added-cost evidence are unchanged. Earlier correction-chain fresh pytest FAIL and separate existing-Run continuation PASS remain distinct.

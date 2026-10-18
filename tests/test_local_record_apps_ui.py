@@ -91,7 +91,7 @@ def final_flow_readback(env, page, worker_log, before_identities):
         native_browser="NOT_RUN", real_semantic_acceptance="NOT_RUN")
 
 
-@pytest.mark.parametrize("scenario", ["flow-recovery", "navigation", "revocation"])
+@pytest.mark.parametrize("scenario", ["flow-recovery", "navigation", "revocation", "project-history"])
 def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, tmp_path, scenario):
     root = Path.cwd().resolve()
     raw_http, ipc, worker_log = [], [], []
@@ -119,17 +119,17 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
             app_name="Actual page local records", goal="Collect independent work items and explicitly mark only A DONE",
             title_a=TITLE_A, details_a=DETAILS_A, title_b=TITLE_B, details_b=DETAILS_B,
             done_reason=DONE_REASON, output=str(tmp_path / "page-result.json"))
-        if scenario in {"navigation", "revocation"}:
+        if scenario in {"navigation", "revocation", "project-history"}:
             data = ready(env)
             first = execute(env, data, create_body(current(env, data)))
             info.update(app=data["app"]["id"], instance=data["instance"]["id"],
                 iid=data["instance"]["id"], release=data["release"]["id"],
                 seed_run=first["run"]["id"], seed_request_key=first["prepared"]["request_key"])
-            if scenario == "navigation":
+            if scenario in {"navigation", "project-history"}:
                 second = ok(env[2].post(f"/api/internal/record-releases/{data['release']['id']}/instances", json=dict(
                     expected_release_fingerprint=data["release"]["fingerprint"], request_key="page-navigation-empty-instance")), 201)["instance"]
                 info["second_instance"] = second["id"]
-            else:
+            if scenario in {"revocation", "project-history"}:
                 info["seed_artifact"] = first["run"]["output"]["resource_id"]
                 with env[0].tx() as connection:
                     matching = connection.execute(select(grants).where(
@@ -145,7 +145,7 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
             process = subprocess.Popen(["node", str(Path(__file__).with_name("local_record_apps_ui.cjs")),
                 str(tmp_path / "info.json")], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=errors, text=True, env={**os.environ,
-                    "NODE_PATH": "/workspace/Sim2Act/scripts/engineering-ci/node_modules"})
+                    "NODE_PATH": os.environ.get("NODE_PATH") or str(root / "scripts/engineering-ci/node_modules")})
             watchdog = threading.Timer(600, process.kill)
             watchdog.start()
             for line in process.stdout:
@@ -171,7 +171,7 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
                 elif request.get("command") == "revoke_seed_artifact_read":
                     # Fixture-only authority mutation. The page cannot select a Grant,
                     # principal, project or arbitrary resource through this bridge.
-                    assert scenario == "revocation" and revocation_grant is not None and not revocation_log
+                    assert scenario in {"revocation", "project-history"} and revocation_grant is not None and not revocation_log
                     assert set(request) == {"id", "command", "run", "resource"}
                     assert request["run"] == info["seed_run"] and request["resource"] == info["seed_artifact"]
                     with env[0].tx() as connection:
@@ -196,8 +196,8 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
                         revoked=True, resource_id=info["seed_artifact"], run_id=info["seed_run"])))
                 else:
                     assert "command" not in request, request
-                    if scenario == "revocation":
-                        assert request["method"] == "GET", "Revocation page must never POST"
+                    if scenario in {"revocation", "project-history"}:
+                        assert request["method"] == "GET", "Read-only page scenario must never POST"
                     response = env[2].request(request["method"], request["path"],
                         json=request.get("body"), headers=request.get("headers"))
                     answer = dict(status=response.status_code, text=response.text,
@@ -230,9 +230,12 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
             write_json(tmp_path / "actual-page-delivery.json", delivered)
             proof.update(page_worker_calls=3, fixture_worker_calls=0, actual_no_model_runs=3,
                 page_creation_release_instance_covered=True)
-        elif scenario == "revocation":
-            assert page["classification"] == "ACTUAL_HTTP_JSDOM_LOCAL_RECORD_REVOCATION_NO_WORKER"
+        elif scenario in {"revocation", "project-history"}:
+            expected_classification = ("ACTUAL_HTTP_JSDOM_LOCAL_RECORD_PROJECT_HISTORY_NO_PAGE_WORKER"
+                if scenario == "project-history" else "ACTUAL_HTTP_JSDOM_LOCAL_RECORD_REVOCATION_NO_WORKER")
+            assert page["classification"] == expected_classification
             assert worker_log == [] and len(revocation_log) == 1
+            assert all(row["method"] == "GET" for row in page["actions"])
             after_page = snapshot(env[0])
             assert before_page.keys() == after_page.keys()
             for table in before_page:

@@ -365,6 +365,11 @@ def create_app(store=None, settings=None):
 
     @app.get("/api/runs/{rid}")
     def inspect_run(rid: str, response: Response, user=user_dependency):
+        from . import local_record_apps
+
+        db.require_run_owner(user, rid)
+        if local_record_apps.is_job(db, rid):
+            return local_record_apps.inspect_project_run(db, user, rid, platform_limits)
         result = db.inspect(user, rid)
         if result.get("natural_deadline") is not None:
             if result["contract"]["snapshot"]["natural_planning"].get("activation") is not None:
