@@ -393,11 +393,12 @@ def _stage_current(store, c, user, contract, stage, run_id):
                 runs.c.request_key == contract.stage_keys.generate)).scalars().all()
         if versions == [JOURNAL_VERSION] * 3:
             with _source_reads(store, c):
-                return _stage_current_read(store, c, user, contract, stage, run_id, pa_spec_apps)
+                return _stage_current_read(store, c, user, contract, stage, run_id, pa_spec_apps,
+                                           _journal=True)
     return _stage_current_read(store, c, user, contract, stage, run_id, pa_spec_apps)
 
 
-def _stage_current_read(store, c, user, contract, stage, run_id, pa_spec_apps):
+def _stage_current_read(store, c, user, contract, stage, run_id, pa_spec_apps, *, _journal=False):
     require(stage in ("source", "cold"))
     require(pa_spec_apps.job_scope_gate(store, c, user, run_id))
     job = c.execute(select(runs).where(runs.c.id == run_id)).mappings().first()
@@ -405,10 +406,11 @@ def _stage_current_read(store, c, user, contract, stage, run_id, pa_spec_apps):
             and job["project_id"] == contract.project_id)
     epoch = c.info.get("source_proof_write_epoch", 0)
     bound = pa_spec_apps.bound(store, c, user, job, _limits(contract))
-    return _stage_current_bound(store, c, user, contract, stage, job, bound, epoch)
+    return _stage_current_bound(store, c, user, contract, stage, job, bound, epoch,
+                                _journal=_journal)
 
 
-def _stage_current_bound(store, c, user, contract, stage, job, bound, epoch):
+def _stage_current_bound(store, c, user, contract, stage, job, bound, epoch, *, _journal=False):
     """Continuation of a complete binding proof in this synchronous read call."""
     from . import natural_specs, pa_spec_apps
     from .lifecycle import instance
@@ -422,8 +424,15 @@ def _stage_current_bound(store, c, user, contract, stage, job, bound, epoch):
         and "natural_logic_source" not in release["snapshot"])
     original_pb_source = (type(contract) is PBTrialContract and stage == "source"
         and "spec_task" not in draft["candidate"])
-    if store.test_only and store.sqlite and ordinary and ((pb_cold and "spec_task" in draft["candidate"]) or original_pb_source):
-        # bound() just completed the full Release and P-B lineage proof. This
+    journal_plain = (_journal and type(contract) in (TrialContract, TrialContractV2)
+        and natural_specs.is_candidate(draft["candidate"])
+        and "spec_task" not in draft["candidate"]
+        and not {"human_correction", "logic_check", "pb_use", "project_check", "offline_replay"}.intersection(snapshot)
+        and not {"natural_logic_origin", "correction_run_id", "pb_use_run_id"}.intersection(draft)
+        and "natural_logic_source" not in release["snapshot"])
+    if store.test_only and store.sqlite and (journal_plain or ordinary and
+            ((pb_cold and "spec_task" in draft["candidate"]) or original_pb_source)):
+        # bound() just completed the full Release and family lineage proof. This
         # uninterrupted SQLite transaction retains fresh identity/approval
         # checks without recursively repeating that same Release proof.
         inst, current_release = _stage_instance_after_bound(

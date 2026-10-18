@@ -83,6 +83,7 @@ def _binding(worker):
             and worker.s.quota_subject == binding.contract.quota_subject
             and worker.s.model == binding.contract.model
             and worker.s.max_output_tokens == binding.contract.caps.max_output_tokens
+            and worker.s.lease_seconds == binding.contract.caps.lease_seconds
             and worker.store is worker._journal_trial_store
             and binding is worker._journal_trial_binding and not worker._journal_trial_drift
             and fingerprint(_contract_data(binding.contract)) == binding.contract_fingerprint)
@@ -644,7 +645,7 @@ def _sent(worker, run, aid, wire):
         )
 
 
-def request_captured(worker, run, aid, wire, original_guard, provider):
+def request_captured(worker, run, aid, wire, original_guard, provider, *, _heartbeat_state=None):
     """Existing Intern adapter only; receipt facts precede original business acceptance."""
     gate.require(
         type(provider) is InternModel
@@ -652,7 +653,7 @@ def request_captured(worker, run, aid, wire, original_guard, provider):
         and provider.transport is worker.goal_planner_transport
     )
     if type(_binding(worker)) is JournalTrialBinding:
-        return _journal_exchange(worker, run, aid, wire, original_guard, provider)
+        return _journal_exchange(worker, run, aid, wire, original_guard, provider, _heartbeat_state)
 
     def guard(request):
         result = original_guard(request)
@@ -1068,7 +1069,7 @@ def _journal_slot(store, c, b, run, aid, wire):
     return slot
 
 
-def _journal_exchange(worker, run, aid, wire, original_guard, provider):
+def _journal_exchange(worker, run, aid, wire, original_guard, provider, heartbeat_state):
     from . import production_trial_policy as policy
     from . import production_trial_sender as sender
 
@@ -1086,7 +1087,7 @@ def _journal_exchange(worker, run, aid, wire, original_guard, provider):
                                .where(attempts.c.id == aid)).scalar_one()
             gate.require(all(getattr(provider.settings, k) == v for k, v in limits.items()))
     return sender._dispatch_business(worker, b, run, item, wire, original_guard, provider,
-                                     expected_revision=revision)
+                                     expected_revision=revision, _heartbeat_state=heartbeat_state)
 
 
 def _journal_received(store, c, b, run, item, wire, payload, complete):

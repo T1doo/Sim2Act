@@ -808,7 +808,8 @@ def advance_model(worker, run, *, _heartbeat_state=None):
             captured = provider.request_serialized_captured(wire, sender_guard)
         else:
             from .pa_trial_dispatch import request_captured
-            captured = request_captured(worker, job, aid, wire, sender_guard, provider)
+            captured = request_captured(worker, job, aid, wire, sender_guard, provider,
+                                         _heartbeat_state=_heartbeat_state)
         require(type(captured) is CapturedResponse, "Adapter body capture is missing")
         raw, received_body, received_complete = captured.parsed, captured.body, True
     except DomainError as exc:

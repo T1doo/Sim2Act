@@ -9,6 +9,7 @@ the final DB guard and before transport IO cannot be fenced by a DB transaction.
 import base64
 import hashlib
 import json
+import time
 from typing import Literal
 
 import httpx
@@ -380,14 +381,14 @@ def dispatch_offline(worker, contract, key, identity, wire, source, *, expected_
 
 
 def _dispatch_business(worker, binding, run, identity, wire, original_guard, provider,
-                       *, expected_revision):
+                       *, expected_revision, _heartbeat_state):
     """Private continuation of the existing original controller call only."""
     from .pa_trial_dispatch import JournalTrialBinding
     from .pa_trial_dispatch import _binding as trial_binding
     _require(type(binding) is JournalTrialBinding and trial_binding(worker) is binding)
     return _dispatch(worker, binding.contract, binding.approval_key, identity, wire,
         _SERVER_SOURCE, expected_revision=expected_revision,
-        _business=(binding, run, original_guard, provider))
+        _business=(binding, run, original_guard, provider, _heartbeat_state))
 
 
 def _dispatch(worker, contract, key, identity, wire, source, *, expected_revision, _business=None):
@@ -453,12 +454,33 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
             store, user, original, key, item, wire, supplied, expected_revision=revision
         ), supplied
 
+    def renew_controller():
+        if _business is None or item.stage == "generate":
+            return
+        from .text_workflows import publish_sync_renewal
+        same_binding()
+        run, state, adapter = _business[1], _business[4], _business[3]
+        _require(type(state) is dict and state.get("sync_contention_recovery") is True)
+        deadline = min(run["created_at"] + adapter.settings.run_seconds,
+                       run["created_at"] + original.caps.run_seconds, original.expires_at)
+        _require(not worker.stop.is_set() and time.time() < deadline, "BUDGET_EXHAUSTED")
+        # Original guarded heartbeat, at a transaction boundary only. It
+        # cannot revive an expired owner, renew a stop, or enlarge the deadline.
+        renewed = store.heartbeat(worker_id, item.run_id, item.fence,
+            original.caps.lease_seconds, _deadline=deadline,
+            _wait_seconds=min(5.0, max(0.001, deadline - time.time())), _running_only=True)
+        publish_sync_renewal(worker, run, state, renewed)
+        same_binding()
+        _require(not worker.stop.is_set() and time.time() < deadline, "BUDGET_EXHAUSTED")
+
     same_binding()
+    renew_controller()
     reserved, supplied = transition("reserve", expected_revision)
     if reserved.duplicate:
         _require(_business is None, "OUTCOME_UNKNOWN")
         return _history(store, user, original, key, item, wire)
     same_binding()
+    renew_controller()
     marked, supplied = transition("record_attempt", reserved.revision)
     if marked.duplicate:
         _require(_business is None, "OUTCOME_UNKNOWN")
@@ -479,8 +501,10 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
 
     def guard(request):
         same_binding()
+        renew_controller()
         controller = None if _business is None else _business[2](request)
         same_binding()
+        renew_controller()
         _require(
             worker.goal_planner_transport is transport
             and worker.id == item.worker_id
@@ -541,6 +565,7 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
         same_binding()
         slot = next(s for s in saved.journal.ledger.slots if s.identity == item)
         _require(slot.accepted and saved.adapter_entered and received, "OUTCOME_UNKNOWN")
+        renew_controller()
         # Only this exchange's actual bytes, never a journal history response.
         return CapturedResponse(strict_json(payload, 131072), payload)
     except DomainError as error:
