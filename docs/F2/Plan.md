@@ -2,6 +2,8 @@
 
 2026-10-18 父级有限通过1f725后，实施[P-B重载后的原提取意图只读恢复](PBNaturalExtractionColdRecovery20261018.md)：原POST前同scope WebLock保存并读回17字段无token/正文票据，冷页核来源后锁定原意图，只有显式原GET+独立原SHA+fresh应用成功才清票据。无可靠未受理/关闭证明则未知锁保留；不新造executor/Grant/模型或server journal。必要实际丢201→重载与账号/项目/Run/导航/撤权/篡改/两页边界资格独立冻结，旧取消窗口及真实模型/语义/Win/PG/CI门继续开放。
 
+上述生产7c6c79fa、执行冻结737e80d现有限通过5个唯一actual HTTP/JSDOM+1个原synthetic/staged导航回归，681输入0变；384检查/837 actualHTTP不是额外用例。原batch900秒为4PASS+末例NOT_COMPLETED，末例由同字节并行单例完整通过；两独立正常seed共Mock8/页面Worker0/真实模型0。初始共享种子观测器5setup ERROR、测试引用隔离修复及中断均留原件，非作者有限独审后正常dev推送；[证据与范围](../evidence/pb-cold-recovery-20261018/README.md)。未知票据无安全close合同则继续锁定，既有未执行门保持。
+
 2026-10-18 父级有限独审通过f5后，接续[当前源码原P-B完整连续页面](PBCurrentPageCompletion20261018.md)。旧e039的63项完整页面检查保留为历史通过，当前共享生产字节已变，fresh运行原成功来源→提取→版本/实例→统一目录→第三材料Goal明确运行→同Run成果/人工入口；先只补增量观测与有界看门狗，不改业务oracle、不扩恢复矩阵。旧取消精确安装窗口继续禁止，exit139仍Unknown，真实模型/语义与Win/PG/CI门保持。
 
 原P-B连续正例在491cd75冻结现已1PASS/298.965秒，63检查、68交互、122API、81资产、207原HTTP，3+1+1 Mock、真实模型0；两个业务Run各一次claim实际成功。132生产字节同f5，679输入0变；只验人工入口PENDING与首次P-B v1。未运行旧取消安装窗口，exit139故障因果/产品关联仍Unknown。[结果与独审原件](../evidence/pb-page-complete-flow-20261018/README.md)。

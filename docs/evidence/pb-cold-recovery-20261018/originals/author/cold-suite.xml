@@ -1,0 +1,361 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="5" failures="0" skipped="0" tests="5" time="2.100" timestamp="2026-10-18T05:28:51.566189+00:00" hostname="31571a76ef61"><testcase classname="tests.test_pb_cold_recovery_ui" name="test_pb_cold_original_extraction_recovery_actual_http[cold-original-key]" time="1.515"><error message="failed on setup with &quot;TypeError: isinstance() arg 2 must be a type, a tuple of types, or a union&quot;">tmp_path_factory = TempPathFactory(_given_basetemp=PosixPath('/workspace/pb-cold-recovery-evidence-20261018/cold-suite'), _trace=&lt;pluggy....emp=PosixPath('/workspace/pb-cold-recovery-evidence-20261018/cold-suite'), _retention_count=3, _retention_policy='all')
+
+    @pytest.fixture(scope="module")
+    def pb_cold_seed(tmp_path_factory):
+        """Normal API creation/execution, then close before byte-identical copies."""
+        folder = tmp_path_factory.mktemp("pb-cold-successful-source-seed")
+        database = folder / "fixture.db"
+        sealed = folder / "sealed-source.db"
+        root = Path.cwd().resolve()
+        settings = Settings("sqlite:///" + str(database), folder, mode="mock", goal_planner_provider="intern-s2")
+        store = Store(settings.database_url, test_only=True)
+        client = None
+        seed = None
+        with _PageObserver(folder, "FRESH_SOURCE_SEED_GEN3_WORKER1") as observer:
+            sources = source_inputs(root)
+            observer.save("source-before.json", sources)
+            try:
+                store.initialize()
+                owner = store.user("cold recovery fixture A", "synthetic-test-A")
+                store.user("cold recovery fixture B", "synthetic-test-B")
+                client = TestClient(create_app(store, settings))
+                client.headers["Authorization"] = "Bearer synthetic-test-A"
+                observe_http(client, observer)
+                project = ok(client.post("/api/projects", json=dict(name="Cold recovery actual source")), 201)["id"]
+                resource, card = material(client, project, SOURCE)
+                data = store, settings, client, owner, project, resource, card
+                # Preserve the original fixture's oracle and capture each request before
+                # it enters that oracle, including failures before ready() returns.
+                import test_natural_spec_apps as original_fixture
+                original_transport = original_fixture.httpx.MockTransport
+    
+                def observed_transport(handler):
+                    def request_callback(request):
+                        observer.sent.append(json.loads(request.content))
+                        return handler(request)
+                    return original_transport(request_callback)
+    
+                with observer.phase("normal_generation_and_explicit_release_instance"):
+                    with patch.object(original_fixture.httpx, "MockTransport", observed_transport):
+&gt;                       generation_run, app, release, instance, returned_wire = ready(data, "single")
+                                                                                ^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_pb_cold_recovery_ui.py:118: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_natural_spec_apps.py:248: in ready
+    rid, result, sent = generate(data, style, repair)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_natural_spec_apps.py:240: in generate
+    assert Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sim2act.worker.Worker object at 0x7f4b18e7e960&gt;
+store = &lt;sim2act.db.Store object at 0x7f4b19ab6330&gt;
+settings = Settings(database_url='sqlite:////workspace/pb-cold-recovery-evidence-20261018/cold-suite/pb-cold-successful-source-se...lse, natural_activation_live_id='', application_generation_activation_enabled=False, application_generation_live_id='')
+model = None
+
+    def __init__(
+        self, store, settings, model=None, *, protocol_runner_factory=None, protocol_clock=None,
+        goal_planner_transport=None, pa_trial=None,
+    ):
+        self.store, self.s = store, settings
+        self.id = new_id("worker")
+        self.model = model or (MockModel() if settings.mode == "mock" else InternModel(settings))
+        if goal_planner_transport is not None:
+            import httpx
+    
+            if (not store.test_only or settings.mode != "mock"
+&gt;                   or not isinstance(goal_planner_transport, httpx.MockTransport)):
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   TypeError: isinstance() arg 2 must be a type, a tuple of types, or a union
+
+src/sim2act/worker.py:40: TypeError</error></testcase><testcase classname="tests.test_pb_cold_recovery_ui" name="test_pb_cold_original_extraction_recovery_actual_http[late-scope-navigation]" time="0.000"><error message="failed on setup with &quot;TypeError: isinstance() arg 2 must be a type, a tuple of types, or a union&quot;">tmp_path_factory = TempPathFactory(_given_basetemp=PosixPath('/workspace/pb-cold-recovery-evidence-20261018/cold-suite'), _trace=&lt;pluggy....emp=PosixPath('/workspace/pb-cold-recovery-evidence-20261018/cold-suite'), _retention_count=3, _retention_policy='all')
+
+    @pytest.fixture(scope="module")
+    def pb_cold_seed(tmp_path_factory):
+        """Normal API creation/execution, then close before byte-identical copies."""
+        folder = tmp_path_factory.mktemp("pb-cold-successful-source-seed")
+        database = folder / "fixture.db"
+        sealed = folder / "sealed-source.db"
+        root = Path.cwd().resolve()
+        settings = Settings("sqlite:///" + str(database), folder, mode="mock", goal_planner_provider="intern-s2")
+        store = Store(settings.database_url, test_only=True)
+        client = None
+        seed = None
+        with _PageObserver(folder, "FRESH_SOURCE_SEED_GEN3_WORKER1") as observer:
+            sources = source_inputs(root)
+            observer.save("source-before.json", sources)
+            try:
+                store.initialize()
+                owner = store.user("cold recovery fixture A", "synthetic-test-A")
+                store.user("cold recovery fixture B", "synthetic-test-B")
+                client = TestClient(create_app(store, settings))
+                client.headers["Authorization"] = "Bearer synthetic-test-A"
+                observe_http(client, observer)
+                project = ok(client.post("/api/projects", json=dict(name="Cold recovery actual source")), 201)["id"]
+                resource, card = material(client, project, SOURCE)
+                data = store, settings, client, owner, project, resource, card
+                # Preserve the original fixture's oracle and capture each request before
+                # it enters that oracle, including failures before ready() returns.
+                import test_natural_spec_apps as original_fixture
+                original_transport = original_fixture.httpx.MockTransport
+    
+                def observed_transport(handler):
+                    def request_callback(request):
+                        observer.sent.append(json.loads(request.content))
+                        return handler(request)
+                    return original_transport(request_callback)
+    
+                with observer.phase("normal_generation_and_explicit_release_instance"):
+                    with patch.object(original_fixture.httpx, "MockTransport", observed_transport):
+&gt;                       generation_run, app, release, instance, returned_wire = ready(data, "single")
+                                                                                ^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_pb_cold_recovery_ui.py:118: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_natural_spec_apps.py:248: in ready
+    rid, result, sent = generate(data, style, repair)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_natural_spec_apps.py:240: in generate
+    assert Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sim2act.worker.Worker object at 0x7f4b18e7e960&gt;
+store = &lt;sim2act.db.Store object at 0x7f4b19ab6330&gt;
+settings = Settings(database_url='sqlite:////workspace/pb-cold-recovery-evidence-20261018/cold-suite/pb-cold-successful-source-se...lse, natural_activation_live_id='', application_generation_activation_enabled=False, application_generation_live_id='')
+model = None
+
+    def __init__(
+        self, store, settings, model=None, *, protocol_runner_factory=None, protocol_clock=None,
+        goal_planner_transport=None, pa_trial=None,
+    ):
+        self.store, self.s = store, settings
+        self.id = new_id("worker")
+        self.model = model or (MockModel() if settings.mode == "mock" else InternModel(settings))
+        if goal_planner_transport is not None:
+            import httpx
+    
+            if (not store.test_only or settings.mode != "mock"
+&gt;                   or not isinstance(goal_planner_transport, httpx.MockTransport)):
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   TypeError: isinstance() arg 2 must be a type, a tuple of types, or a union
+
+src/sim2act/worker.py:40: TypeError</error></testcase><testcase classname="tests.test_pb_cold_recovery_ui" name="test_pb_cold_original_extraction_recovery_actual_http[source-revoke-and-poison]" time="0.000"><error message="failed on setup with &quot;TypeError: isinstance() arg 2 must be a type, a tuple of types, or a union&quot;">tmp_path_factory = TempPathFactory(_given_basetemp=PosixPath('/workspace/pb-cold-recovery-evidence-20261018/cold-suite'), _trace=&lt;pluggy....emp=PosixPath('/workspace/pb-cold-recovery-evidence-20261018/cold-suite'), _retention_count=3, _retention_policy='all')
+
+    @pytest.fixture(scope="module")
+    def pb_cold_seed(tmp_path_factory):
+        """Normal API creation/execution, then close before byte-identical copies."""
+        folder = tmp_path_factory.mktemp("pb-cold-successful-source-seed")
+        database = folder / "fixture.db"
+        sealed = folder / "sealed-source.db"
+        root = Path.cwd().resolve()
+        settings = Settings("sqlite:///" + str(database), folder, mode="mock", goal_planner_provider="intern-s2")
+        store = Store(settings.database_url, test_only=True)
+        client = None
+        seed = None
+        with _PageObserver(folder, "FRESH_SOURCE_SEED_GEN3_WORKER1") as observer:
+            sources = source_inputs(root)
+            observer.save("source-before.json", sources)
+            try:
+                store.initialize()
+                owner = store.user("cold recovery fixture A", "synthetic-test-A")
+                store.user("cold recovery fixture B", "synthetic-test-B")
+                client = TestClient(create_app(store, settings))
+                client.headers["Authorization"] = "Bearer synthetic-test-A"
+                observe_http(client, observer)
+                project = ok(client.post("/api/projects", json=dict(name="Cold recovery actual source")), 201)["id"]
+                resource, card = material(client, project, SOURCE)
+                data = store, settings, client, owner, project, resource, card
+                # Preserve the original fixture's oracle and capture each request before
+                # it enters that oracle, including failures before ready() returns.
+                import test_natural_spec_apps as original_fixture
+                original_transport = original_fixture.httpx.MockTransport
+    
+                def observed_transport(handler):
+                    def request_callback(request):
+                        observer.sent.append(json.loads(request.content))
+                        return handler(request)
+                    return original_transport(request_callback)
+    
+                with observer.phase("normal_generation_and_explicit_release_instance"):
+                    with patch.object(original_fixture.httpx, "MockTransport", observed_transport):
+&gt;                       generation_run, app, release, instance, returned_wire = ready(data, "single")
+                                                                                ^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_pb_cold_recovery_ui.py:118: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_natural_spec_apps.py:248: in ready
+    rid, result, sent = generate(data, style, repair)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_natural_spec_apps.py:240: in generate
+    assert Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sim2act.worker.Worker object at 0x7f4b18e7e960&gt;
+store = &lt;sim2act.db.Store object at 0x7f4b19ab6330&gt;
+settings = Settings(database_url='sqlite:////workspace/pb-cold-recovery-evidence-20261018/cold-suite/pb-cold-successful-source-se...lse, natural_activation_live_id='', application_generation_activation_enabled=False, application_generation_live_id='')
+model = None
+
+    def __init__(
+        self, store, settings, model=None, *, protocol_runner_factory=None, protocol_clock=None,
+        goal_planner_transport=None, pa_trial=None,
+    ):
+        self.store, self.s = store, settings
+        self.id = new_id("worker")
+        self.model = model or (MockModel() if settings.mode == "mock" else InternModel(settings))
+        if goal_planner_transport is not None:
+            import httpx
+    
+            if (not store.test_only or settings.mode != "mock"
+&gt;                   or not isinstance(goal_planner_transport, httpx.MockTransport)):
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   TypeError: isinstance() arg 2 must be a type, a tuple of types, or a union
+
+src/sim2act/worker.py:40: TypeError</error></testcase><testcase classname="tests.test_pb_cold_recovery_ui" name="test_pb_cold_original_extraction_recovery_actual_http[target-revoke]" time="0.001"><error message="failed on setup with &quot;TypeError: isinstance() arg 2 must be a type, a tuple of types, or a union&quot;">tmp_path_factory = TempPathFactory(_given_basetemp=PosixPath('/workspace/pb-cold-recovery-evidence-20261018/cold-suite'), _trace=&lt;pluggy....emp=PosixPath('/workspace/pb-cold-recovery-evidence-20261018/cold-suite'), _retention_count=3, _retention_policy='all')
+
+    @pytest.fixture(scope="module")
+    def pb_cold_seed(tmp_path_factory):
+        """Normal API creation/execution, then close before byte-identical copies."""
+        folder = tmp_path_factory.mktemp("pb-cold-successful-source-seed")
+        database = folder / "fixture.db"
+        sealed = folder / "sealed-source.db"
+        root = Path.cwd().resolve()
+        settings = Settings("sqlite:///" + str(database), folder, mode="mock", goal_planner_provider="intern-s2")
+        store = Store(settings.database_url, test_only=True)
+        client = None
+        seed = None
+        with _PageObserver(folder, "FRESH_SOURCE_SEED_GEN3_WORKER1") as observer:
+            sources = source_inputs(root)
+            observer.save("source-before.json", sources)
+            try:
+                store.initialize()
+                owner = store.user("cold recovery fixture A", "synthetic-test-A")
+                store.user("cold recovery fixture B", "synthetic-test-B")
+                client = TestClient(create_app(store, settings))
+                client.headers["Authorization"] = "Bearer synthetic-test-A"
+                observe_http(client, observer)
+                project = ok(client.post("/api/projects", json=dict(name="Cold recovery actual source")), 201)["id"]
+                resource, card = material(client, project, SOURCE)
+                data = store, settings, client, owner, project, resource, card
+                # Preserve the original fixture's oracle and capture each request before
+                # it enters that oracle, including failures before ready() returns.
+                import test_natural_spec_apps as original_fixture
+                original_transport = original_fixture.httpx.MockTransport
+    
+                def observed_transport(handler):
+                    def request_callback(request):
+                        observer.sent.append(json.loads(request.content))
+                        return handler(request)
+                    return original_transport(request_callback)
+    
+                with observer.phase("normal_generation_and_explicit_release_instance"):
+                    with patch.object(original_fixture.httpx, "MockTransport", observed_transport):
+&gt;                       generation_run, app, release, instance, returned_wire = ready(data, "single")
+                                                                                ^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_pb_cold_recovery_ui.py:118: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_natural_spec_apps.py:248: in ready
+    rid, result, sent = generate(data, style, repair)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_natural_spec_apps.py:240: in generate
+    assert Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sim2act.worker.Worker object at 0x7f4b18e7e960&gt;
+store = &lt;sim2act.db.Store object at 0x7f4b19ab6330&gt;
+settings = Settings(database_url='sqlite:////workspace/pb-cold-recovery-evidence-20261018/cold-suite/pb-cold-successful-source-se...lse, natural_activation_live_id='', application_generation_activation_enabled=False, application_generation_live_id='')
+model = None
+
+    def __init__(
+        self, store, settings, model=None, *, protocol_runner_factory=None, protocol_clock=None,
+        goal_planner_transport=None, pa_trial=None,
+    ):
+        self.store, self.s = store, settings
+        self.id = new_id("worker")
+        self.model = model or (MockModel() if settings.mode == "mock" else InternModel(settings))
+        if goal_planner_transport is not None:
+            import httpx
+    
+            if (not store.test_only or settings.mode != "mock"
+&gt;                   or not isinstance(goal_planner_transport, httpx.MockTransport)):
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   TypeError: isinstance() arg 2 must be a type, a tuple of types, or a union
+
+src/sim2act/worker.py:40: TypeError</error></testcase><testcase classname="tests.test_pb_cold_recovery_ui" name="test_pb_cold_original_extraction_recovery_actual_http[storage-lock-and-two-pages]" time="0.001"><error message="failed on setup with &quot;TypeError: isinstance() arg 2 must be a type, a tuple of types, or a union&quot;">tmp_path_factory = TempPathFactory(_given_basetemp=PosixPath('/workspace/pb-cold-recovery-evidence-20261018/cold-suite'), _trace=&lt;pluggy....emp=PosixPath('/workspace/pb-cold-recovery-evidence-20261018/cold-suite'), _retention_count=3, _retention_policy='all')
+
+    @pytest.fixture(scope="module")
+    def pb_cold_seed(tmp_path_factory):
+        """Normal API creation/execution, then close before byte-identical copies."""
+        folder = tmp_path_factory.mktemp("pb-cold-successful-source-seed")
+        database = folder / "fixture.db"
+        sealed = folder / "sealed-source.db"
+        root = Path.cwd().resolve()
+        settings = Settings("sqlite:///" + str(database), folder, mode="mock", goal_planner_provider="intern-s2")
+        store = Store(settings.database_url, test_only=True)
+        client = None
+        seed = None
+        with _PageObserver(folder, "FRESH_SOURCE_SEED_GEN3_WORKER1") as observer:
+            sources = source_inputs(root)
+            observer.save("source-before.json", sources)
+            try:
+                store.initialize()
+                owner = store.user("cold recovery fixture A", "synthetic-test-A")
+                store.user("cold recovery fixture B", "synthetic-test-B")
+                client = TestClient(create_app(store, settings))
+                client.headers["Authorization"] = "Bearer synthetic-test-A"
+                observe_http(client, observer)
+                project = ok(client.post("/api/projects", json=dict(name="Cold recovery actual source")), 201)["id"]
+                resource, card = material(client, project, SOURCE)
+                data = store, settings, client, owner, project, resource, card
+                # Preserve the original fixture's oracle and capture each request before
+                # it enters that oracle, including failures before ready() returns.
+                import test_natural_spec_apps as original_fixture
+                original_transport = original_fixture.httpx.MockTransport
+    
+                def observed_transport(handler):
+                    def request_callback(request):
+                        observer.sent.append(json.loads(request.content))
+                        return handler(request)
+                    return original_transport(request_callback)
+    
+                with observer.phase("normal_generation_and_explicit_release_instance"):
+                    with patch.object(original_fixture.httpx, "MockTransport", observed_transport):
+&gt;                       generation_run, app, release, instance, returned_wire = ready(data, "single")
+                                                                                ^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_pb_cold_recovery_ui.py:118: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_natural_spec_apps.py:248: in ready
+    rid, result, sent = generate(data, style, repair)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_natural_spec_apps.py:240: in generate
+    assert Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sim2act.worker.Worker object at 0x7f4b18e7e960&gt;
+store = &lt;sim2act.db.Store object at 0x7f4b19ab6330&gt;
+settings = Settings(database_url='sqlite:////workspace/pb-cold-recovery-evidence-20261018/cold-suite/pb-cold-successful-source-se...lse, natural_activation_live_id='', application_generation_activation_enabled=False, application_generation_live_id='')
+model = None
+
+    def __init__(
+        self, store, settings, model=None, *, protocol_runner_factory=None, protocol_clock=None,
+        goal_planner_transport=None, pa_trial=None,
+    ):
+        self.store, self.s = store, settings
+        self.id = new_id("worker")
+        self.model = model or (MockModel() if settings.mode == "mock" else InternModel(settings))
+        if goal_planner_transport is not None:
+            import httpx
+    
+            if (not store.test_only or settings.mode != "mock"
+&gt;                   or not isinstance(goal_planner_transport, httpx.MockTransport)):
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   TypeError: isinstance() arg 2 must be a type, a tuple of types, or a union
+
+src/sim2act/worker.py:40: TypeError</error></testcase></testsuite></testsuites>

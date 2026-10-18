@@ -1,0 +1,10 @@
+# P-B cold recovery V3 author draft
+
+This isolated V3 starts from the parent's current repository CJS, SHA9c9b255f0dbb91d1c72839bf58742fef66367dd78b4da82589d304592d958a34. The parent's deniedRead helper and real other-project/other-account 403 reads are preserved. All original assertion/check call sources remain exact and in order; deniedRead, flow and platform functions are byte-identical. See assertion-preservation.json for the static lexical proof (not an AST claim).
+
+Only two bounded enhancements enter existing cases, with no new pytest scene or bridge RPC:
+
+- Navigation: the test observer first computes a real WebCrypto SHA256 result for the exact original full ExtractInput canonical bytes. After the real original-key GET200 and before that digest result reaches the product, the page performs resources-to-apps workspace ABA. Releasing the actual unmodified digest must not paint success/proof, forget the ticket, read a fresh target app or POST. This is GET-only recovery, with no second actor, no prepare and no cancellation/installation window. Nonmatching digest calls remain actual WebCrypto; other SubtleCrypto methods are bound to the original provider. Matched bytes, actual digest and delivery state are recorded in digest_observations.
+- Source boundary: the fixture replaces only request_key in the captured strict metadata raw with a fixed syntactically valid absent UUID, reopens through the actual source page and explicitly GETs it. The actual endpoint must return400 OUTCOME_UNKNOWN/effect_knownfalse; raw, readonly key, locked inputs/preview/commit and zero POST are verified. The fixture then explicitly restores the captured original raw before the existing receipt/candidate poison and actual revoke checks. Fault and repair raw are recorded in storage_faults/actions; the product does not repair or clear this ticket.
+
+Node --check passes. No product test, model/Worker, running DB access or repository write was performed by this author. Parent freeze, independent review and actual execution remain pending. Earlier sealed isolated drafts were not modified.

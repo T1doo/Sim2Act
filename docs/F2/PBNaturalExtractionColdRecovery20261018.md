@@ -29,3 +29,15 @@
 源码与测试完整冻结后运行5个新case及一个受影响的原P-B导航控制回归。根仓库只由root采纳，隔离测试作者与非作者合同/源码/原件独审并行；未完成不得预写PASS。真实模型请求为0，所有模型通过MockTransport；Windows/native、PG、真实语义/场景、远端CI及部署未因此验收。
 
 永久取消的旧精确安装digest并发对照窗口保持NOT_VERIFIED：本片不做第二actor prepare、旧/新实现同predicate或安装digest时序比较。新恢复hash等待的导航隔离只涉及本次只读回执验证。原额外性能探针exit139的因果及产品关联仍Unknown，本轮不重试，不删未知锁/进程；旧满盘独审未落盘缺证保留。
+
+## 实际资格与交付
+
+生产实现提交为 `7c6c79faa1de7a184dca7db468c0e784d5cc0cd6`，最终执行冻结为 `737e80d2304509149fef3161226f92580724d43a`。681项执行输入前后逐字相同；132项生产输入相对1f725仅internal.js改变。五个唯一实际HTTP/JSDOM场景与一个原合成API/已暂存view的控制器回归有限通过，不能把后者称实际HTTP。五场景合计384检查、221交互、482页面API、351资产、13个DOM、837实际HTTP（其中4次为正常合成Grant控制API）；检查数量不是用例数量。
+
+首次五参数因同一共享种子观测器把httpx.MockTransport类替换为函数，触发Worker类型检查TypeError，产生5个setup ERROR。普通API已受理一个QUEUED生成Run，模型/Worker执行均未开始。随后只替换测试fixture模块的httpx引用，仍返回原MockTransport实例，共享原类、Worker守卫和原生成oracle不改。修复及原错误原件保留。
+
+修后原批次在900秒总预算到期时exit124，四个named case通过，最后platform重复执行NOT_COMPLETED；JUnit无name占位不能计PASS。同一冻结字节下并行platform单例完整通过，suite290.44秒、页面213.015秒。它以第二个独立正常fresh来源种子完成，两个种子各生成3次Mock、来源Worker1次Mock，实际总Mock为8、来源Worker2次、页面Worker0、真实模型0；不能把计划的一次种子或每例proof中的shared计数冒充实际总数。
+
+五唯一场景覆盖实际201丢回执→闭页→冷页原key显式GET/fresh app/明确打开；八种选择/导航边界与另一个真实SHA结果投递迟到边界；实际跨账号/项目403；源/目标READ撤销；原request/fresh candidate污染；仅换本地request_key的实际400 OUTCOME_UNKNOWN；缺锁、存储失败、坏JSON、两页BUSY和另一页已清记录后的A页只读恢复。存储fault恢复是明确测试fixture操作，产品没有自动修复未知票据。权限屏障source evaluated=0，target有34次其它仍获权context评估，blocked均空；不能推成零所有私有/底层JSON读取。source-options403的RAM清理分支仅静态复核，实际动态清理覆盖的是by-key403动作分支。
+
+非作者对源码和完整原件的有限独审通过后，737e80d正常推送到本新dev分支；155→156远端heads仅新增本分支，其它不变。文档/证据后续提交不改变该资格字节。[执行、失败/中断、独审、字节映射与原始HTTP](../evidence/pb-cold-recovery-20261018/README.md)。Windows/native、PG、真实模型/语义/场景、远端CI、部署均未执行；旧取消窗口、exit139 Unknown及旧满盘缺证均保持原状态。

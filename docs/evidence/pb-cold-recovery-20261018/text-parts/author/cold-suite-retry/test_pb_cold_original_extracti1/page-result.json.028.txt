@@ -1,0 +1,1115 @@
+ {
+                              "type": "string",
+                              "enum": [
+                                "PASS"
+                              ]
+                            },
+                            "coverage_status": {
+                              "type": "string",
+                              "enum": [
+                                "FULL",
+                                "PARTIAL"
+                              ]
+                            },
+                            "uncovered": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "start": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2048
+                                  },
+                                  "end": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 2048
+                                  },
+                                  "quote": {
+                                    "type": "string",
+                                    "maxLength": 2048
+                                  }
+                                },
+                                "required": [
+                                  "start",
+                                  "end",
+                                  "quote"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "maxItems": 32
+                            },
+                            "semantic_status": {
+                              "type": "string",
+                              "enum": [
+                                "UNKNOWN"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "check",
+                            "citation_status",
+                            "coverage_status",
+                            "uncovered",
+                            "semantic_status"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "human_unresolved": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 4000
+                          },
+                          "maxItems": 16
+                        },
+                        "source_retention": {
+                          "type": "string",
+                          "enum": [
+                            "EXACT"
+                          ]
+                        },
+                        "semantic_goal_acceptance": {
+                          "type": "string",
+                          "enum": [
+                            "NOT_RUN"
+                          ]
+                        },
+                        "owner_acceptance": {
+                          "type": "string",
+                          "enum": [
+                            "PENDING"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "check_version",
+                        "source",
+                        "source_content",
+                        "items",
+                        "feedback",
+                        "human_unresolved",
+                        "source_retention",
+                        "semantic_goal_acceptance",
+                        "owner_acceptance"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "text": {
+                      "type": "string",
+                      "maxLength": 8000
+                    },
+                    "citation_status": {
+                      "type": "string",
+                      "enum": [
+                        "PASS"
+                      ]
+                    },
+                    "semantic_status": {
+                      "type": "string",
+                      "enum": [
+                        "UNKNOWN"
+                      ]
+                    },
+                    "semantic_goal_acceptance": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_RUN"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "checklist",
+                    "text",
+                    "citation_status",
+                    "semantic_status",
+                    "semantic_goal_acceptance"
+                  ],
+                  "additionalProperties": false
+                },
+                "executor": {
+                  "kind": "registered_tool",
+                  "ref": "spec.verify_citations",
+                  "version": "1"
+                },
+                "allowed_tool_refs": [],
+                "dependencies": [
+                  {
+                    "kind": "resource",
+                    "ref": "res_3e71195721424af0a10a87bcd0744df0",
+                    "version": "1"
+                  }
+                ],
+                "permission_requirements": [
+                  {
+                    "tool_ref": "resource.read",
+                    "resource_ref": "res_3e71195721424af0a10a87bcd0744df0"
+                  }
+                ],
+                "effect": "read",
+                "preconditions": [],
+                "postcheck_refs": [
+                  "natural.spec_citations.v1"
+                ],
+                "limits": {
+                  "max_requests": 1,
+                  "max_tools": 3,
+                  "max_repairs": 0,
+                  "max_total_tokens": 64000,
+                  "max_output_tokens": 1024,
+                  "run_seconds": 300
+                },
+                "idempotency": "read_only",
+                "reconcile_ref": "operation.lookup.v1",
+                "error_contract": [
+                  "INVALID_INPUT",
+                  "PERMISSION_DENIED",
+                  "GRANT_REVOKED",
+                  "VERIFICATION_FAILED",
+                  "OUTCOME_UNKNOWN"
+                ]
+              },
+              {
+                "schema_version": "1.0-draft",
+                "action_id": "action_c2a9bf24a7319648a2dc7e2a8504097a",
+                "revision": 1,
+                "input_schema": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "maxLength": 8000
+                    }
+                  },
+                  "required": [
+                    "text"
+                  ],
+                  "additionalProperties": false
+                },
+                "output_schema": {
+                  "type": "object",
+                  "properties": {
+                    "resource_id": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "hash": {
+                      "type": "string",
+                      "maxLength": 2048
+                    }
+                  },
+                  "required": [
+                    "resource_id",
+                    "hash"
+                  ],
+                  "additionalProperties": false
+                },
+                "executor": {
+                  "kind": "registered_tool",
+                  "ref": "artifact.save_text",
+                  "version": "1"
+                },
+                "allowed_tool_refs": [],
+                "dependencies": [
+                  {
+                    "kind": "resource",
+                    "ref": "res_3e71195721424af0a10a87bcd0744df0",
+                    "version": "1"
+                  }
+                ],
+                "permission_requirements": [
+                  {
+                    "tool_ref": "artifact.save_text",
+                    "resource_ref": "proj_122efb16c8c74ba39cc1b2ae4638d676"
+                  }
+                ],
+                "effect": "project_write",
+                "preconditions": [],
+                "postcheck_refs": [
+                  "receipt.readback.v1"
+                ],
+                "limits": {
+                  "max_requests": 1,
+                  "max_tools": 3,
+                  "max_repairs": 0,
+                  "max_total_tokens": 64000,
+                  "max_output_tokens": 1024,
+                  "run_seconds": 300
+                },
+                "idempotency": "transactional",
+                "reconcile_ref": "operation.lookup.v1",
+                "error_contract": [
+                  "INVALID_INPUT",
+                  "PERMISSION_DENIED",
+                  "GRANT_REVOKED",
+                  "VERIFICATION_FAILED",
+                  "OUTCOME_UNKNOWN"
+                ]
+              }
+            ],
+            "spec_recipe": {
+              "version": "natural-spec-recipe.v1",
+              "steps": [
+                {
+                  "step_id": "read_pick",
+                  "operator": "resource.read",
+                  "depends_on": [],
+                  "inputs": {
+                    "resource_id": {
+                      "source": "data",
+                      "ref": "source",
+                      "field": "resource_id"
+                    }
+                  }
+                },
+                {
+                  "step_id": "cold_recovery_inference",
+                  "operator": "model.spec.all",
+                  "depends_on": [
+                    "read_pick"
+                  ],
+                  "inputs": {
+                    "resource_id": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "resource_id"
+                    },
+                    "content": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "content"
+                    },
+                    "hash": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "hash"
+                    },
+                    "format": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "format"
+                    }
+                  }
+                },
+                {
+                  "step_id": "check_pick",
+                  "operator": "spec.verify_citations",
+                  "depends_on": [
+                    "read_pick",
+                    "cold_recovery_inference"
+                  ],
+                  "inputs": {
+                    "resource_id": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "resource_id"
+                    },
+                    "content": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "content"
+                    },
+                    "hash": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "hash"
+                    },
+                    "format": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "format"
+                    },
+                    "items": {
+                      "source": "step",
+                      "ref": "cold_recovery_inference",
+                      "field": "items"
+                    }
+                  }
+                },
+                {
+                  "step_id": "save_pick",
+                  "operator": "artifact.save_text",
+                  "depends_on": [
+                    "check_pick"
+                  ],
+                  "inputs": {
+                    "text": {
+                      "source": "step",
+                      "ref": "check_pick",
+                      "field": "text"
+                    }
+                  }
+                }
+              ]
+            },
+            "source_hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+            "goal": {
+              "title": "Independent cold recovery target",
+              "goal": "Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist",
+              "known": [],
+              "assumptions": [],
+              "unresolved": [
+                "Human question 0",
+                "Human question 1",
+                "Human question 2",
+                "Human question 3",
+                "Human question 4",
+                "Human question 5",
+                "Human question 6",
+                "Human question 7",
+                "Human question 8",
+                "Human question 9",
+                "Human question 10",
+                "Human question 11",
+                "Human question 12",
+                "Human question 13",
+                "Human question 14",
+                "Human question 15"
+              ],
+              "constraints": [
+                "Preserve the full source and uncertain relations"
+              ],
+              "acceptance_checks": [
+                "Human review of completeness and meaning"
+              ],
+              "resource_refs": [
+                "res_3e71195721424af0a10a87bcd0744df0"
+              ]
+            },
+            "model_sample_check": {
+              "check": "natural.spec_citations.v1",
+              "sample_fingerprint": "48cd8b60e4fd0074581f4f632b137e06c9d32b09bbf9fab252be43e560979f52",
+              "citation_status": "PASS",
+              "semantic_goal_acceptance": "NOT_RUN",
+              "source_retention": "EXACT"
+            },
+            "spec_task": {
+              "kind": "pb_natural_spec_task.v1",
+              "source_run_id": "run_f199e04dc9db4adb91e7be718c1c4ca8",
+              "source_proof_fingerprint": "93371123191d04e594cc721323f895062154b4b39bcab7d1aa53c6b08c6fdb58",
+              "source_recipe_fingerprint": "f2dfbd4c06a8f772acafab4237c9e7bcab75d383ccafef6cbc0767b389b71171",
+              "edited_recipe_fingerprint": "3f494fa6ad340ad0f13e34d16965d6ef292014ec95887e6b16f373d2c7fd1ea6",
+              "target_goal_fingerprint": "bf67e4b477cc1ed8a597979bf444cf8bde0a9fe865df492634c13d9b7f396171"
+            }
+          },
+          "candidate_fingerprint": "cd9851580621c10a92ca95499715b99f3421423b9b9a26ca35845efb77c3200f",
+          "app_id": "app_5fc6d1768f6493f2acbcd598f29b2d10",
+          "runtime_id": "appruntime_4e99a3e80089468b1c4fda5535890b0e",
+          "report": {
+            "state": "PREVIEW_ONLY",
+            "execution_performed": false,
+            "publishable": false,
+            "topological_order": [
+              "read_pick",
+              "cold_recovery_inference",
+              "check_pick",
+              "save_pick"
+            ],
+            "execution_mode": "NATURAL_SPEC_MODEL_NODES_DISABLED_BY_DEFAULT",
+            "recipe_fingerprint": "3f494fa6ad340ad0f13e34d16965d6ef292014ec95887e6b16f373d2c7fd1ea6",
+            "plan_fingerprint": "46555bf93ce087589f99f18b2eab615d966846e2c2393887152f605d7bbc97b1",
+            "operation_count": 4,
+            "model_node_requests": 1,
+            "real_model_requests": 0,
+            "citation_check": "natural.spec_citations.v1",
+            "semantic_status": "UNKNOWN",
+            "semantic_goal_acceptance": "NOT_RUN"
+          },
+          "approved_source_limits": {
+            "max_requests": 1,
+            "max_tools": 3,
+            "max_repairs": 0,
+            "max_total_tokens": 64000,
+            "max_output_tokens": 1024,
+            "run_seconds": 300
+          },
+          "preview": {
+            "resource_id": "UNSAVED_PREVIEW",
+            "status": "MODEL_EXECUTION_REQUIRED",
+            "new_model_requests": 0,
+            "project_writes": 0,
+            "source_hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+            "source_content": "The garden sensor samples each hour while solar power is available. On a rainy day it waits until noon. The winter interval has yet to be agreed.",
+            "recipe": {
+              "version": "natural-spec-recipe.v1",
+              "steps": [
+                {
+                  "step_id": "read_pick",
+                  "operator": "resource.read",
+                  "depends_on": [],
+                  "inputs": {
+                    "resource_id": {
+                      "source": "data",
+                      "ref": "source",
+                      "field": "resource_id"
+                    }
+                  }
+                },
+                {
+                  "step_id": "cold_recovery_inference",
+                  "operator": "model.spec.all",
+                  "depends_on": [
+                    "read_pick"
+                  ],
+                  "inputs": {
+                    "resource_id": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "resource_id"
+                    },
+                    "content": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "content"
+                    },
+                    "hash": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "hash"
+                    },
+                    "format": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "format"
+                    }
+                  }
+                },
+                {
+                  "step_id": "check_pick",
+                  "operator": "spec.verify_citations",
+                  "depends_on": [
+                    "read_pick",
+                    "cold_recovery_inference"
+                  ],
+                  "inputs": {
+                    "resource_id": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "resource_id"
+                    },
+                    "content": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "content"
+                    },
+                    "hash": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "hash"
+                    },
+                    "format": {
+                      "source": "step",
+                      "ref": "read_pick",
+                      "field": "format"
+                    },
+                    "items": {
+                      "source": "step",
+                      "ref": "cold_recovery_inference",
+                      "field": "items"
+                    }
+                  }
+                },
+                {
+                  "step_id": "save_pick",
+                  "operator": "artifact.save_text",
+                  "depends_on": [
+                    "check_pick"
+                  ],
+                  "inputs": {
+                    "text": {
+                      "source": "step",
+                      "ref": "check_pick",
+                      "field": "text"
+                    }
+                  }
+                }
+              ]
+            },
+            "human_unresolved": [
+              "Human question 0",
+              "Human question 1",
+              "Human question 2",
+              "Human question 3",
+              "Human question 4",
+              "Human question 5",
+              "Human question 6",
+              "Human question 7",
+              "Human question 8",
+              "Human question 9",
+              "Human question 10",
+              "Human question 11",
+              "Human question 12",
+              "Human question 13",
+              "Human question 14",
+              "Human question 15"
+            ],
+            "citation_status": "NOT_RUN",
+            "semantic_status": "UNKNOWN",
+            "semantic_goal_acceptance": "NOT_RUN"
+          },
+          "consent": "EXTRACT_THIS_SUCCESSFUL_NATURAL_SPEC_RUN_WITH_THIS_REVIEW_AND_TARGET",
+          "artifact_write_consent": "ALLOW_ONLY_THIS_APP_TO_SAVE_VALIDATED_CHECKLIST_JSON_IN_THIS_PROJECT",
+          "new_model_requests": 0,
+          "project_writes": 0,
+          "semantic_status": "UNKNOWN",
+          "owner_acceptance": "PENDING",
+          "formal_publication_enabled": false,
+          "review_fingerprint": "6a0aebdeabf17b7109d608b700fc4c470f56700069b0b15b9cef297337af00a8"
+        },
+        "new_model_requests": 0,
+        "project_writes": 0,
+        "semantic_status": "UNKNOWN",
+        "owner_acceptance": "PENDING",
+        "formal_publication_enabled": false
+      }
+    }
+  ],
+  "static_resource_loads": [
+    {
+      "boot": 1,
+      "path": "/",
+      "status": 200,
+      "sha256": "0d7ec6cf0d250a0c85aac7f73dd213aa057209f18f179f8998ed0b04f6dcdd97"
+    },
+    {
+      "boot": 1,
+      "path": "/app.css",
+      "status": 200,
+      "sha256": "2ad3d886c00de86c04059fa95072c654019c477273597cf7323b9aafe485ceee"
+    },
+    {
+      "boot": 1,
+      "path": "/app.js",
+      "status": 200,
+      "sha256": "bf424b76147f3c031c051fbfcae13f4afbabe9048d86416c69e3409e84006637"
+    },
+    {
+      "boot": 1,
+      "path": "/ordinary-csv.js",
+      "status": 200,
+      "sha256": "b0d3722b2066e01618af8ea2f59ab689fab9afb39333d87ee0944c5174502ce2"
+    },
+    {
+      "boot": 1,
+      "path": "/ordinary-owner.js",
+      "status": 200,
+      "sha256": "be4f5d403fbe52d8824e597397e2779ea7845d1d6d100c51d81c8a70aa39eb24"
+    },
+    {
+      "boot": 1,
+      "path": "/natural-goal.js",
+      "status": 200,
+      "sha256": "485d99733e4535a77960c40c856638dc24436542b193c679988c300fb56fbc9f"
+    },
+    {
+      "boot": 1,
+      "path": "/goal-application.js",
+      "status": 200,
+      "sha256": "c421e74077718155bc15806feb664ff7d67489138cbf9ca243f52924cc40754f"
+    },
+    {
+      "boot": 1,
+      "path": "/internal.js",
+      "status": 200,
+      "sha256": "5de00b3a3fc682b825293ef7688732a22631b46b0e7ceeb67c8af01f9d338105"
+    },
+    {
+      "boot": 1,
+      "path": "/owner-review.js",
+      "status": 200,
+      "sha256": "f0d89d54d9aa86a1a7e3b6945015cb6245ea58b95ab6360414c2389b940aa166"
+    },
+    {
+      "boot": 1,
+      "path": "/protocol.js",
+      "status": 200,
+      "sha256": "dcf97729f2a69872a8b7c33374e9f2cd50e88c8b368c4d417ba133bea8e5f1e8"
+    },
+    {
+      "boot": 1,
+      "path": "/use.js",
+      "status": 200,
+      "sha256": "ab2b946e0afb7ad2408301d5a0ec897d56854639aa1588e65887af9d3bdc31db"
+    },
+    {
+      "boot": 1,
+      "path": "/csv-owner.js",
+      "status": 200,
+      "sha256": "ae96aa523a38ae9f6f5e823a09b1ed73030f2024293f3c59cf36f6c98c22269e"
+    },
+    {
+      "boot": 1,
+      "path": "/csv-full-report.js",
+      "status": 200,
+      "sha256": "cdb62492b477ffcebdf28011afa50803955d3c71bc84ac3efa07803a78034c15"
+    },
+    {
+      "boot": 1,
+      "path": "/local-records.js",
+      "status": 200,
+      "sha256": "28362f85de38e3c221086b40eab62657f3ec502b1ad6368c2d3e4663c7a2dcab"
+    },
+    {
+      "boot": 1,
+      "path": "/csv-goal-revision.js",
+      "status": 200,
+      "sha256": "2c466af32c29e161fb9e5f70a692753ef99c41517d6417e2f97ae6beb79db415"
+    },
+    {
+      "boot": 1,
+      "path": "/conditional-runs.js",
+      "status": 200,
+      "sha256": "8493353812ee7b57e48c6b18e9cf8069a7366e38b07709f7ab6d6320e735393e"
+    },
+    {
+      "boot": 1,
+      "path": "/conditional-apps.js",
+      "status": 200,
+      "sha256": "82303591b0483339dea6fef9c34b6476bac000f3bcc4886fb38f54a08af88ad1"
+    },
+    {
+      "boot": 1,
+      "path": "/report-manifest.js",
+      "status": 200,
+      "sha256": "1e521d342c61f1feb9ed1e1770184b6123f26170b417d78a7246bb8a2052e89a"
+    },
+    {
+      "boot": 1,
+      "path": "/delivery-graph.js",
+      "status": 200,
+      "sha256": "8a47a8d95e95cc6a9419fa0f15919ba57f7e3b4bbe6061d5f31fb0b39c6e37bb"
+    },
+    {
+      "boot": 1,
+      "path": "/manual-locks.js",
+      "status": 200,
+      "sha256": "2faab55b3e524d93e7f7ed832d2303a0c0034e0663b00674adb458e93615710c"
+    },
+    {
+      "boot": 1,
+      "path": "/csv-dag.js",
+      "status": 200,
+      "sha256": "28fc90386a81e174c752956474d18c8275b437557aab835032f75207e85a3812"
+    },
+    {
+      "boot": 1,
+      "path": "/csv-logic.js",
+      "status": 200,
+      "sha256": "732f547e8cb5e264c0cb606db1381477dc39ea62d08ce0f24834bb03dc839f89"
+    },
+    {
+      "boot": 1,
+      "path": "/project-revalidation.js",
+      "status": 200,
+      "sha256": "ffa499d3d07e712443ccd0f33160623bce12871268f625e4453f8bb743db5e72"
+    },
+    {
+      "boot": 1,
+      "path": "/project-natural.js",
+      "status": 200,
+      "sha256": "59ff19f27035197ae772e0117d7e28fd2b0da424571df38f632d466c381874c8"
+    },
+    {
+      "boot": 1,
+      "path": "/project-columns.js",
+      "status": 200,
+      "sha256": "692c5c8219e1648150087df7484efb22d67b4a4fa69ca5194498ca91ffafdc8d"
+    },
+    {
+      "boot": 1,
+      "path": "/project-column-versions.js",
+      "status": 200,
+      "sha256": "0b2d5c7b2859c835af3390beec98c2ef54a4ab71c7c7834f982b54f71cb89387"
+    },
+    {
+      "boot": 1,
+      "path": "/text-logic.js",
+      "status": 200,
+      "sha256": "f7454d76f4b1f221e016daae1de2e0844670d823c3f510e556a25fcce532200f"
+    },
+    {
+      "boot": 2,
+      "path": "/",
+      "status": 200,
+      "sha256": "0d7ec6cf0d250a0c85aac7f73dd213aa057209f18f179f8998ed0b04f6dcdd97"
+    },
+    {
+      "boot": 2,
+      "path": "/app.css",
+      "status": 200,
+      "sha256": "2ad3d886c00de86c04059fa95072c654019c477273597cf7323b9aafe485ceee"
+    },
+    {
+      "boot": 2,
+      "path": "/app.js",
+      "status": 200,
+      "sha256": "bf424b76147f3c031c051fbfcae13f4afbabe9048d86416c69e3409e84006637"
+    },
+    {
+      "boot": 2,
+      "path": "/ordinary-csv.js",
+      "status": 200,
+      "sha256": "b0d3722b2066e01618af8ea2f59ab689fab9afb39333d87ee0944c5174502ce2"
+    },
+    {
+      "boot": 2,
+      "path": "/ordinary-owner.js",
+      "status": 200,
+      "sha256": "be4f5d403fbe52d8824e597397e2779ea7845d1d6d100c51d81c8a70aa39eb24"
+    },
+    {
+      "boot": 2,
+      "path": "/natural-goal.js",
+      "status": 200,
+      "sha256": "485d99733e4535a77960c40c856638dc24436542b193c679988c300fb56fbc9f"
+    },
+    {
+      "boot": 2,
+      "path": "/goal-application.js",
+      "status": 200,
+      "sha256": "c421e74077718155bc15806feb664ff7d67489138cbf9ca243f52924cc40754f"
+    },
+    {
+      "boot": 2,
+      "path": "/internal.js",
+      "status": 200,
+      "sha256": "5de00b3a3fc682b825293ef7688732a22631b46b0e7ceeb67c8af01f9d338105"
+    },
+    {
+      "boot": 2,
+      "path": "/owner-review.js",
+      "status": 200,
+      "sha256": "f0d89d54d9aa86a1a7e3b6945015cb6245ea58b95ab6360414c2389b940aa166"
+    },
+    {
+      "boot": 2,
+      "path": "/protocol.js",
+      "status": 200,
+      "sha256": "dcf97729f2a69872a8b7c33374e9f2cd50e88c8b368c4d417ba133bea8e5f1e8"
+    },
+    {
+      "boot": 2,
+      "path": "/use.js",
+      "status": 200,
+      "sha256": "ab2b946e0afb7ad2408301d5a0ec897d56854639aa1588e65887af9d3bdc31db"
+    },
+    {
+      "boot": 2,
+      "path": "/csv-owner.js",
+      "status": 200,
+      "sha256": "ae96aa523a38ae9f6f5e823a09b1ed73030f2024293f3c59cf36f6c98c22269e"
+    },
+    {
+      "boot": 2,
+      "path": "/csv-full-report.js",
+      "status": 200,
+      "sha256": "cdb62492b477ffcebdf28011afa50803955d3c71bc84ac3efa07803a78034c15"
+    },
+    {
+      "boot": 2,
+      "path": "/local-records.js",
+      "status": 200,
+      "sha256": "28362f85de38e3c221086b40eab62657f3ec502b1ad6368c2d3e4663c7a2dcab"
+    },
+    {
+      "boot": 2,
+      "path": "/csv-goal-revision.js",
+      "status": 200,
+      "sha256": "2c466af32c29e161fb9e5f70a692753ef99c41517d6417e2f97ae6beb79db415"
+    },
+    {
+      "boot": 2,
+      "path": "/conditional-runs.js",
+      "status": 200,
+      "sha256": "8493353812ee7b57e48c6b18e9cf8069a7366e38b07709f7ab6d6320e735393e"
+    },
+    {
+      "boot": 2,
+      "path": "/conditional-apps.js",
+      "status": 200,
+      "sha256": "82303591b0483339dea6fef9c34b6476bac000f3bcc4886fb38f54a08af88ad1"
+    },
+    {
+      "boot": 2,
+      "path": "/report-manifest.js",
+      "status": 200,
+      "sha256": "1e521d342c61f1feb9ed1e1770184b6123f26170b417d78a7246bb8a2052e89a"
+    },
+    {
+      "boot": 2,
+      "path": "/delivery-graph.js",
+      "status": 200,
+      "sha256": "8a47a8d95e95cc6a9419fa0f15919ba57f7e3b4bbe6061d5f31fb0b39c6e37bb"
+    },
+    {
+      "boot": 2,
+      "path": "/manual-locks.js",
+      "status": 200,
+      "sha256": "2faab55b3e524d93e7f7ed832d2303a0c0034e0663b00674adb458e93615710c"
+    },
+    {
+      "boot": 2,
+      "path": "/csv-dag.js",
+      "status": 200,
+      "sha256": "28fc90386a81e174c752956474d18c8275b437557aab835032f75207e85a3812"
+    },
+    {
+      "boot": 2,
+      "path": "/csv-logic.js",
+      "status": 200,
+      "sha256": "732f547e8cb5e264c0cb606db1381477dc39ea62d08ce0f24834bb03dc839f89"
+    },
+    {
+      "boot": 2,
+      "path": "/project-revalidation.js",
+      "status": 200,
+      "sha256": "ffa499d3d07e712443ccd0f33160623bce12871268f625e4453f8bb743db5e72"
+    },
+    {
+      "boot": 2,
+      "path": "/project-natural.js",
+      "status": 200,
+      "sha256": "59ff19f27035197ae772e0117d7e28fd2b0da424571df38f632d466c381874c8"
+    },
+    {
+      "boot": 2,
+      "path": "/project-columns.js",
+      "status": 200,
+      "sha256": "692c5c8219e1648150087df7484efb22d67b4a4fa69ca5194498ca91ffafdc8d"
+    },
+    {
+      "boot": 2,
+      "path": "/project-column-versions.js",
+      "status": 200,
+      "sha256": "0b2d5c7b2859c835af3390beec98c2ef54a4ab71c7c7834f982b54f71cb89387"
+    },
+    {
+      "boot": 2,
+      "path": "/text-logic.js",
+      "status": 200,
+      "sha256": "f7454d76f4b1f221e016daae1de2e0844670d823c3f510e556a25fcce532200f"
+    }
+  ],
+  "boots": 2,
+  "page_errors": [],
+  "lock_events": [
+    {
+      "event": "WAIT",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "ACQUIRE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "RELEASE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "WAIT",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "ACQUIRE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "RELEASE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "WAIT",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "ACQUIRE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "RELEASE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "WAIT",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "ACQUIRE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "RELEASE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "WAIT",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "ACQUIRE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "RELEASE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "WAIT",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "ACQUIRE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "RELEASE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "WAIT",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "ACQUIRE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "RELEASE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "WAIT",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "ACQUIRE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "RELEASE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "WAIT",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "ACQUIRE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "RELEASE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "WAIT",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "ACQUIRE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    },
+    {
+      "event": "RELEASE",
+      "origin": "http://testserver",
+      "name": "sim2act.pb-natural-extraction-recovery.v1:[\"user_86bb776b9a15448cb53f2208ed536d65\",\"proj_122efb16c8c74ba39cc1b2ae4638d676\",\"app_a3138a0e1212ad3f71b112cbb7752c87\",\"iinstance_e210d6e7985e7136cdc0d358c78337da\",\"run_f199e04dc9db4adb91e7be718c1c4ca8\"]"
+    }
+  ],
+  "digest_observations": [
+    {
+      "classification": "ACTUAL_WEBCRYPTO_SHA256_RESULT_DELIVERY_HOLD_DURING_GET_ONLY_RECOVERY",
+      "boot": 2,
+      "label": "original full ExtractInput SHA256 after actual by-key200",
+      "algorithm": "SHA-256",
+      "input_utf8": "{\"artifact_write_consent\":\"ALLOW_ONLY_THIS_APP_TO_SAVE_VALIDATED_CHECKLIST_JSON_IN_THIS_PROJECT\",\"consent\":\"EXTRACT_THIS_SUCCESSFUL_NATURAL_SPEC_RUN_WITH_THIS_REVIEW_AND_TARGET\",\"expected_review_fingerprint\":\"6a0aebdeabf17b7109d608b700fc4c470f56700069b0b15b9cef297337af00a8\",\"review\":{\"card_id\":\"goal_596e9b866c8544639ebb8467cd19a6d8\",\"expected_goal_fingerprint\":\"bf67e4b477cc1ed8a597979bf444cf8bde0a9fe865df492634c13d9b7f396171\",\"expected_goal_version\":1,\"expected_source_hash\":\"e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303\",\"expected_source_proof_fingerprint\":\"93371123191d04e594cc721323f895062154b4b39bcab7d1aa53c6b08c6fdb58\",\"expected_source_recipe_fingerprint\":\"f2dfbd4c06a8f772acafab4237c9e7bcab75d383ccafef6cbc0767b389b71171\",\"name\":\"Cold recovery P-B checklist\",\"recipe\":{\"steps\":[{\"depends_on\":[],\"inputs\":{\"resource_id\":{\"field\":\"resource_id\",\"ref\":\"source\",\"source\":\"data\"}},\"operator\":\"resource.read\",\"step_id\":\"read_pick\"},{\"depends_on\":[\"read_pick\"],\"inputs\":{\"content\":{\"field\":\"content\",\"ref\":\"read_pick\",\"source\":\"step\"},\"format\":{\"field\":\"format\",\"ref\":\"read_pick\",\"source\":\"step\"},\"hash\":{\"field\":\"hash\",\"ref\":\"read_pick\",\"source\":\"step\"},\"resource_id\":{\"field\":\"resource_id\",\"ref\":\"read_pick\",\"source\":\"step\"}},\"operator\":\"model.spec.all\",\"step_id\":\"cold_recovery_inference\"},{\"depends_on\":[\"read_pick\",\"cold_recovery_inference\"],\"inputs\":{\"content\":{\"field\":\"content\",\"ref\":\"read_pick\",\"source\":\"step\"},\"format\":{\"field\":\"format\",\"ref\":\"read_pick\",\"source\":\"step\"},\"hash\":{\"field\":\"hash\",\"ref\":\"read_pick\",\"source\":\"step\"},\"items\":{\"field\":\"items\",\"ref\":\"cold_recovery_inference\",\"source\":\"step\"},\"resource_id\":{\"field\":\"resource_id\",\"ref\":\"read_pick\",\"source\":\"step\"}},\"operator\":\"spec.verify_citations\",\"step_id\":\"check_pick\"},{\"depends_on\":[\"check_pick\"],\"inputs\":{\"text\":{\"field\":\"text\",\"ref\":\"check_pick\",\"source\":\"step\"}},\"operator\":\"artifact.save_text\",\"step_id\":\"save_pick\"}],\"version\":\"natural-spec-recipe.v1\"},\"request_key\":\"34112872-3a53-491a-97ef-8baf08d08e6c\",\"source_run_id\":\"run_f199e04dc9db4adb91e7be718c1c4ca8\"}}",
+      "input_hex": "7b2261727469666163745f77726974655f636f6e73656e74223a22414c4c4f575f4f4e4c595f544849535f4150505f544f5f534156455f56414c4944415445445f434845434b4c4953545f4a534f4e5f494e5f544849535f50524f4a454354222c22636f6e73656e74223a22455854524143545f544849535f5355434345535346554c5f4e41545552414c5f535045435f52554e5f574954485f544849535f5245564945575f414e445f544152474554222c2265787065637465645f7265766965775f66696e6765727072696e74223a2236613061656264656162663137623731303964363038623730306663346334373066353637303030363962306231356239636566323937333337616630306138222c22726576696577223a7b22636172645f6964223a22676f616c5f3539366539623836366338353434363339656262383436376364313961366438222c2265787065637465645f676f616c5f66696e6765727072696e74223a2262663637653462343737636331656438613539373937396266343434636638626465306139666538363564663439323633346331336439623766333936313731222c2265787065637465645f676f616c5f76657273696f6e223a312c2265787065637465645f736f757263655f68617368223a2265353866336633306634383464623730316662333138393032396265313332386162313063633834386262616432626463653432643432663531623931333033222c2265787065637465645f736f757263655f70726f6f665f66696e6765727072696e74223a2239333337313132333139316430346535393463633732313332336638393530363231353462346233396263616237643161613533633662303863366664623538222c2265787065637465645f736f757263655f7265636970655f66696e6765727072696e74223a2266326466626434633036613866373732616361666162343233376339653762636162373564333833636361666566366362633037363762333839623731313731222c226e616d65223a22436f6c64207265636f7665727920502d4220636865636b6c697374222c22726563697065223a7b227374657073223a5b7b22646570656e64735f6f6e223a5b5d2c22696e70757473223a7b227265736f757263655f6964223a7b226669656c64223a227265736f757263655f6964222c22726566223a22736f75726365222c22736f75726365223a2264617461227d7d2c226f70657261746f72223a227265736f757263652e72656164222c22737465705f6964223a22726561645f7069636b227d2c7b22646570656e64735f6f6e223a5b22726561645f7069636b225d2c22696e70757473223a7b22636f6e74656e74223a7b226669656c64223a22636f6e74656e74222c22726566223a22726561645f7069636b222c22736f75726365223a2273746570227d2c22666f726d6174223a7b226669656c64223a22666f726d6174222c22726566223a22726561645f7069636b222c22736f75726365223a2273746570227d2c2268617368223a7b226669656c64223a2268617368222c22726566223a22726561645f7069636b222c22736f75726365223a2273746570227d2c227265736f757263655f6964223a7b226669656c64223a227265736f757263655f6964222c22726566223a22726561645f7069636b222c22736f75726365223a2273746570227d7d2c226f70657261746f72223a226d6f64656c2e737065632e616c6c222c22737465705f6964223a22636f6c645f7265636f766572795f696e666572656e6365227d2c7b22646570656e64735f6f6e223a5b22726561645f7069636b222c22636f6c645f7265636f766572795f696e666572656e6365225d2c22696e70757473223a7b22636f6e74656e74223a7b226669656c64223a22636f6e74656e74222c22726566223a22726561645f7069636b222c22736f75726365223a2273746570227d2c22666f726d6174223a7b226669656c64223a22666f726d6174222c22726566223a22726561645f7069636b222c22736f75726365223a2273746570227d2c2268617368223a7b226669656c64223a2268617368222c22726566223a22726561645f7069636b222c22736f75726365223a2273746570227d2c226974656d73223a7b226669656c64223a226974656d73222c22726566223a22636f6c645f7265636f766572795f696e666572656e6365222c22736f75726365223a2273746570227d2c227265736f757263655f6964223a7b226669656c64223a227265736f757263655f6964222c22726566223a22726561645f7069636b222c22736f75726365223a2273746570227d7d2c226f70657261746f72223a22737065632e7665726966795f6369746174696f6e73222c22737465705f6964223a22636865636b5f7069636b227d2c7b22646570656e64735f6f6e223a5b22636865636b5f7069636b225d2c22696e70757473223a7b2274657874223a7b226669656c64223a2274657874222c22726566223a22636865636b5f7069636b222c22736f75726365223a2273746570227d7d2c226f70657261746f72223a2261727469666163742e736176655f74657874222c22737465705f6964223a22736176655f7069636b227d5d2c2276657273696f6e223a226e61747572616c2d737065632d7265636970652e7631227d2c22726571756573745f6b6579223a2233343131323837322d336135332d343931612d393765662d386261663038643038653663222c22736f757263655f72756e5f6964223a2272756e5f6631393965303464633964623461646239316537626537313863316334636138227d7d",
+      "actual_digest_hex": "d145704643eb3032ae3e98c555ba63580f2ae7b40207efd6ddd65ae9d00fafa1",
+      "actual_result_computed_before_hold": true,
+      "delivered": true
+    }
+  ],
+  "storage_faults": [],
+  "worker_calls": 0,
+  "uuid_calls": [
+    {
+      "boot": 1,
+      "phase": "page",
+      "value": "508e8244-c3b9-47a0-b073-a241d46b28f8"
+    },
+    {
+      "boot": 1,
+      "phase": "page",
+      "value": "34112872-3a53-491a-97ef-8baf08d08e6c"
+    },
+    {
+      "boot": 2,
+      "phase": "page",
+      "value": "c066a1b3-155c-4236-9fdd-f787f8bf9fb8"
+    }
+  ],
+  "real_model": "NOT_RUN",
+  "native_browser": "NOT_RUN",
+  "real_human_semantic_acceptance": "NOT_RUN",
+  "interval_scheduler": "DISABLED_MANUAL_RECOVERY",
+  "app_id": "app_5fc6d1768f6493f2acbcd598f29b2d10",
+  "request_key": "34112872-3a53-491a-97ef-8baf08d08e6c",
+  "ticket": {
+    "namespace": "pb-natural-extraction-recovery.v1",
+    "principal_id": "user_86bb776b9a15448cb53f2208ed536d65",
+    "project_id": "proj_122efb16c8c74ba39cc1b2ae4638d676",
+    "source_app_id": "app_a3138a0e1212ad3f71b112cbb7752c87",
+    "source_instance_id": "iinstance_e210d6e7985e7136cdc0d358c78337da",
+    "source_run_id": "run_f199e04dc9db4adb91e7be718c1c4ca8",
+    "source_app_run_id": "iapprun_849beeee2a654012b62a97d915b0188f",
+    "source_release_id": "irelease_89e3b50ceb154c27931c946dc2e757b5",
+    "source_release_fingerprint": "3604da222cbde9b82ebf48116c1044f926b7a6fc5c0013c826956ec17d5bb900",
+    "source_result_version": 1,
+    "request_key": "34112872-3a53-491a-97ef-8baf08d08e6c",
+    "request_fingerprint": "d145704643eb3032ae3e98c555ba63580f2ae7b40207efd6ddd65ae9d00fafa1",
+    "review_fingerprint": "6a0aebdeabf17b7109d608b700fc4c470f56700069b0b15b9cef297337af00a8",
+    "candidate_fingerprint": "cd9851580621c10a92ca95499715b99f3421423b9b9a26ca35845efb77c3200f",
+    "app_id": "app_5fc6d1768f6493f2acbcd598f29b2d10",
+    "runtime_id": "appruntime_4e99a3e80089468b1c4fda5535890b0e",
+    "source_proof_fingerprint": "93371123191d04e594cc721323f895062154b4b39bcab7d1aa53c6b08c6fdb58"
+  },
+  "navigation_boundaries": [
+    "workspace ABA",
+    "fresh-app response workspace ABA",
+    "project ABA",
+    "instance navigation",
+    "Run selection generation",
+    "app selection ABA",
+    "same-account reconnect ABA",
+    "cross-account switch"
+  ]
+}

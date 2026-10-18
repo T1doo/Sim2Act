@@ -1,0 +1,116 @@
+{
+  "rpc_id": null,
+  "method": "POST",
+  "path": "/api/projects/proj_122efb16c8c74ba39cc1b2ae4638d676/natural-spec-task-runs/run_f199e04dc9db4adb91e7be718c1c4ca8/extraction-reviews",
+  "request": {
+    "source_run_id": "run_f199e04dc9db4adb91e7be718c1c4ca8",
+    "expected_source_proof_fingerprint": "93371123191d04e594cc721323f895062154b4b39bcab7d1aa53c6b08c6fdb58",
+    "expected_source_recipe_fingerprint": "f2dfbd4c06a8f772acafab4237c9e7bcab75d383ccafef6cbc0767b389b71171",
+    "card_id": "goal_596e9b866c8544639ebb8467cd19a6d8",
+    "expected_goal_version": 1,
+    "expected_goal_fingerprint": "bf67e4b477cc1ed8a597979bf444cf8bde0a9fe865df492634c13d9b7f396171",
+    "expected_source_hash": "e58f3f30f484db701fb3189029be1328ab10cc848bbad2bdce42d42f51b91303",
+    "recipe": {
+      "version": "natural-spec-recipe.v1",
+      "steps": [
+        {
+          "step_id": "read_pick",
+          "operator": "resource.read",
+          "depends_on": [],
+          "inputs": {
+            "resource_id": {
+              "source": "data",
+              "ref": "source",
+              "field": "resource_id"
+            }
+          }
+        },
+        {
+          "step_id": "cold_recovery_inference",
+          "operator": "model.spec.all",
+          "depends_on": [
+            "read_pick"
+          ],
+          "inputs": {
+            "resource_id": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "resource_id"
+            },
+            "content": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "content"
+            },
+            "hash": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "hash"
+            },
+            "format": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "format"
+            }
+          }
+        },
+        {
+          "step_id": "check_pick",
+          "operator": "spec.verify_citations",
+          "depends_on": [
+            "read_pick",
+            "cold_recovery_inference"
+          ],
+          "inputs": {
+            "resource_id": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "resource_id"
+            },
+            "content": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "content"
+            },
+            "hash": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "hash"
+            },
+            "format": {
+              "source": "step",
+              "ref": "read_pick",
+              "field": "format"
+            },
+            "items": {
+              "source": "step",
+              "ref": "cold_recovery_inference",
+              "field": "items"
+            }
+          }
+        },
+        {
+          "step_id": "save_pick",
+          "operator": "artifact.save_text",
+          "depends_on": [
+            "check_pick"
+          ],
+          "inputs": {
+            "text": {
+              "source": "step",
+              "ref": "check_pick",
+              "field": "text"
+            }
+          }
+        }
+      ]
+    },
+    "name": "Cold recovery P-B checklist",
+    "request_key": "22213c72-eb9f-4669-aadb-7980aeaca876"
+  },
+  "status": 200,
+  "content_type": "application/json",
+  "response_file": "http/000049-response.body",
+  "response_bytes": 30391,
+  "response_sha256": "bdc44b0ad2627dd7f4c9c02fe58c336b5b3022dff5456556e99c7b09db42c61c"
+}
