@@ -1,0 +1,19 @@
+# 最终唯一完整链：FAIL_NOT_ACCEPTED
+
+冻结执行源 `2b67733eaefb8e67e3a083a5575261b52f2d4cdf`，phase `model-continuation-full-pb`。本报告为 FINAL_RUNTIME_TERMINAL_REVIEW，不再实施、重跑或续接旧Run。完整P-B未接受；源码/15项定向门的有限ACK不升级为整体验收。
+
+原result exit1，2026-10-19 20:25:32.370656–20:35:55.105553 UTC，外层622.734942978秒；完成JUnit为1F/0error/0skip，610.650秒。原完整测试与9f逐字相同，SHA eee8394578c643989c3858826fa2f15ec41fe02436be574e3f6bbfea2c764146。四个最终门同源；本full的2119 before==after==v4 unit before，720tracked与此前独立Git逐blob桥一致，1399依赖单列。result在subprocess.run实际返回后产生，非timeout；owned execution已终态，但不宣称所有后台wrapper均join。
+
+实际有限Mock6=Generate3+Source2+Cold1、real0。数据库行mode=LIVE仅为该合成生产分支标签，不是现实模型/账号IO证明。Generate为PARTIAL、3RECEIVED、已确认候选；Source `run_0dd61f0012c74494badac36aea4f52e3` SUCCEEDED、2VERIFIED Attempt、6VERIFIED Operation。由失败行之前原断言顺序可确认提取/同key重放、原Source字节归档、四个既有拒绝、Release/Instance、目录NATURAL_PB及新Cold显式材料+Goal review/提交/重复cached已越过。
+
+Cold `run_2d23252a4aaf4359bcf13cf5b28524dc` 最终RUNNING/version1/fence1/resultnull/errornull；read_pick已VERIFIED，首模型 `attempt_0ff737bed5e74545ba5a1512b26b886f` 及模型Operation为REJECTED_KNOWN。原NS_RECEIVED/正文保留；无Cold NS_SETTLED，仅此前read_pick的STEP事件。当前五写在同一TX全部回滚，后续原独立拒绝事务本次成功。拒绝事务并非普遍保证能成功，不改签旧reject_owner边界。专用spec-owner-review在失败Cold成功断言后，未执行；公共inspect的PENDING/UNKNOWN不能替代它。Cold结果、第二Cold模型、最终7槽/22归档与完整owner断言均未到达。
+
+实际首败位于新消费者 settle→live→原完整_Run谓词，并非旧_admission最终time门。TX139846120503808 acquired wall1792442107.620009→body_end1792442137.9284286，monotonic30.308419593秒/threadCPU30.273716949秒，28235SQL=28230SELECT+5DML，原序列UPDATE/INSERT/UPDATE/UPDATE/INSERT，epoch87→91。入口剩lease29.984938860秒；postwrite scope入口剩12.315095186秒。完整首证及构建末live实际完成，READY剩0.332997799秒；settle.live进入剩0.273597002秒。实际比较at1792442137.9234967对lease1792442137.6049478，迟0.318548918秒；TX body_end迟0.323480844秒。Run300截止1792442286.3869793和trial1792443342.2525294仍有效。原权限/owner/fence/cancel和时间门严格拒绝，不能把这次失败解释成应该吞错或延lease。
+
+postwrite观察作用域的check_commit1、journal15、source5。15包含祖先Source/Generate路径，observer只把外层模型inputs的aid附在事件上，没有记录每次真实journal调用aid；不能称当前Attempt重跑15次。READY之后check_commit0/journal0/source1，未出现fallback或TAIL_BUSY/尾守卫；对象从SETTLE_BUSY进入INVALID，TX为tx_error。整个TX的bound9可按span实际Run分为Cold5/嵌套Source4，commit_guard3、_pb_source3。计数不自动证明哪些调用可省略。
+
+Source两模型结算仍走原非continuation路径，分别8.603074/8.726968秒并提交；不得拿Source通过当Cold continuation完整通过。Cold首次完整proof已消耗近全部剩余lease，之后必须的freshsource/权限/Run检查仍需要时间。下一最小调查范围只能是本结算TX写前、写后完整首证及祖先遍历的结构，必须保留写后firstproof及所有最终实时门；本轮未实现下一优化，没有重跑或延长TTL。单次时长/SQL差异不能证明主机、GC、观察器或优化因果。
+
+作者README、outcome-summary与原result/JUnit/probe/结束JSON一致，无阻塞误报。ended-state为作者结束后mode=ro导出，DB前后SHA598d2dcaf9c1f582a897bfc2f705a5b41af31de67e684fb0db169d11fcd7fd85一致；独审仅读该JSON，未打开DB。metrics为原事件算术，本独审独立重算了首败比较、TX差值/调用归属。观察器SHA b3ff9acb61bba576994285679457c90b7afb3b36570a2dd6c3e782084445ec04 与已审源相同，存在观察调度开销、undo不join后台的局限；无全局静默、性能余量或任意native事务逃逸保证。
+
+独审未导入产品、访问数据库、执行测试/模型/网络或写仓库/raw旧封印。Windows/PG/真实语义/人工签收/真实模型账户/远端CI未执行。当前仓库所读为2b677 clean；未来docs封包/正常push及远端SHA另由作者闭合，不冒称本独审已经核验未来包。

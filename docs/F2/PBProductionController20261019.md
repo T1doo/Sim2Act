@@ -54,3 +54,13 @@ Cold claim、发送准入和最终提交均重核原来源与提取链。现有�
 最后执行源候选 `2b3846d0802ef2875d9665acc1280b949d1a4131`，原完整 P-B 标准pytest实际1 FAIL/0 skip，19:12:22至19:25:29 UTC，6次有限Mock（Gen3+Source2+Cold1），真实模型与账号IO为0。Source成功，并完成提取、NATURAL_PB目录、显式Cold材料/Goal提交及同key去重；Cold初次本地读取实际提交，首次模型响应结算的完整证明事务跨过原30秒lease，结算写组回滚，Attempt持久化REJECTED_KNOWN，Run仍RUNNING/result null。完整Cold及最终结果/人工验收断言未通过。
 
 最终v26独审为FAIL_NOT_ACCEPTED；按最新收敛边界，本轮停止源码修改及完整链重跑。下一最小待定位点为同一Cold响应结算内完整绑定/admission核查、写后证明与读回/settle_verified链；不得跨写复用旧证明或延长租期。定向结构/边界门和Ruff/mypy通过的实际范围、各历史FAIL、不可回写原始包及最终独审见[最后接续证据](../evidence/pb-cold-local-read-cause-20261019/README.md)。此前Cold本地读取阻塞记录保留，本次进展不覆盖旧失败或旧满盘独审缺口。
+
+## 2026-10-19 后续批准的 v2 结算连续性：FAIL_NOT_ACCEPTED
+
+在独审 v2 窄设计及后续实现授权下，源码 `2b67733eaefb8e67e3a083a5575261b52f2d4cdf` 只改三个指定产品文件及必要定向测试。同一响应、同一写后 epoch 的完整首证后使用局部连续性对象；固定实际连接/事务/driver/线程、完整输入、分角色 Limits 和首证来源身份/较短期限。当前权限、批准/撤销、来源及完整 Run/lease/fence/cancel 仍逐次重核，原五写、nontrial 尾守卫、30秒lease及300秒Run不变，无fallback或跨写复用。
+
+实际定向 pytest15 PASS/0skip、Ruff4文件及mypy113源通过，最终四门均2119输入稳定、720tracked blob与执行SHA一致。单位夹具的 ancestry/sender/ledger/nontrial guard 等替换明确列出，不替代原完整链。
+
+唯一新原完整 P-B 实际1 FAIL/0skip，JUnit610.650秒/外622.734943秒，6次有限Mock，真实模型/账号IO0。Source成功，提取、NATURAL_PB目录、显式Cold材料/Goal及同key去重已越过；Cold第一次模型结算TX耗30.308420秒/线程CPU30.273717秒，28230 SELECT+5写。新对象确实READY，但仅余0.332998秒lease；settle当前Run谓词精确晚0.318549秒，五写回滚，原响应保留、Attempt/模型操作REJECTED_KNOWN，Cold仍RUNNING/result null。READY后没有重复check_commit或journal完整遍历，tail未到，完整Cold/专用owner入口/最终七槽与22正文断言均未执行。
+
+最终独审仍为FAIL_NOT_ACCEPTED。下一最小待定位点是原同一结算TX中写前及写后完整首证、祖先/来源血缘遍历消耗近全部lease后的必需当前重核；本轮按唯一完整链界限停止，无后续优化或重跑。源码、所有历史失败、实际遍历口径/余量、原始包及独审见[本次结算接续证据](../evidence/pb-model-settlement-20261019/README.md)。web未改且未重跑旧有限HTTP/JSDOM；Windows、PG、原生浏览器、真实语义/人工签收和远端CI未核验，旧满盘独审缺口未补回。
