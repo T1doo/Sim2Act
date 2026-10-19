@@ -59,7 +59,7 @@ function verify(){
   check(reads()===before+1,'one fresh authorized lookup per unique result Release per selection');
   check(results().every(n=>n.querySelectorAll('.manifest-views>section').length===3),'synthetic frontend current-draft pollution cannot rewrite immutable historical views');
   const unsupported=w.renderManifestViews({...info.manifest,views:[{component_ref:'chart',output_field:'citations'},{component_ref:'table',output_field:'term'}]},info.example);
-  check(unsupported.textContent.includes('chart 视图尚未支持')&&unsupported.textContent.includes('此字段形状暂不支持')&&!unsupported.querySelector('svg,canvas,table'),'synthetic renderer negatives explicitly reject chart and unsupported table shape');
+  check(unsupported.textContent.includes('图表需要已核对的同Run')&&unsupported.textContent.includes('此字段形状暂不支持')&&!unsupported.querySelector('svg,canvas,.table-chart-controls'),'synthetic renderer refuses chart controls without sameRun context and unsupported table shape');
   tamper=true;await click(instanceButton(info.instance));
   check(!$('internal-data').textContent&&$('internal-run-status').textContent.includes('绑定不一致'),'synthetic wrong fingerprint delivery clears result content');
   await open();hold=true;const held=new Promise(resolve=>{holdReady=resolve;}),opening=click(instanceButton(info.instance));

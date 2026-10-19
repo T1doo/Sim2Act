@@ -1,0 +1,13 @@
+# Explicit table-bar.v1 delivery record
+
+This delivery adds an explicit horizontal bar view to existing authenticated, bounded typed tables. Users select an actual category column and one numeric column, then explicitly request the view. The historical Run and original Release are revalidated. Unit is unspecified; original values and order remain visible. Display does not submit a Run or call a model.
+
+The [author record](README.md), three JUnit files, full [author archive](author-raw.tar.gz), and [closed verification](closed-verification.json) retain all five executions: 3 PASS and 2 FAIL, with all three unique nodes having a latest PASS. Failed watchdog/cleanup and malformed fixture-request executions remain failures. No single all-green three-node batch is claimed.
+
+The separate [independent report](final-independent-review.md) concludes `LIMITED_PASS_EXPLICIT_TABLE_BAR_V1`, with no remaining definite P1/P2 in its bounded scope. [Machine verification](final-verification.json), the [sealed review manifest](review-sealed-manifest.json), and the complete [review archive](review-raw.tar.gz) are included. Review seal SHA256 is `d3e97bcc4d1778a5b7a6418601784f60388528ce37f064ff603e01f453c627c2`; its 34 payload files total 162852 bytes. Archive members were checked against the sealed originals. The reviewer independently hashed 918 non-DB author payloads; 23 DB files were only stat-checked.
+
+Source, tests and F2 documentation pass the staged whitespace check. The full staged check reports 84 whitespace findings solely in original failed pytest trace/JUnit copies: `qualified-installed.log`, `qualified-installed.xml`, `guard-followup.log`, and `guard-followup.xml`. Those forensic bytes are preserved exactly. No whitespace rules are disabled and no raw failures are sanitized.
+
+[DELIVERY-MANIFEST.json](DELIVERY-MANIFEST.json) records the exact repository artifact bytes and hashes; it excludes itself. The author and independent-review manifests remain unchanged. The later local Git commit and clean-worktree receipt live separately at `/workspace/table-chart-delivery-20261019`; this avoids putting a self-referential commit SHA into this commit.
+
+Base is `2deea01b4ca879a84dbbbeab65102fc4ecfb6976` on `dev/production-trial-stages-20261018`; the 14 preceding local commits remain. This slice performs no remote/auth probes or pushes; the current remote HEAD and difference are UNKNOWN. Real provider calls are zero. Windows, PG, native-browser visual/file-save, remote CI, pinned-builder and formal-publication qualification are NOT_RUN; real semantics UNKNOWN and human acceptance PENDING. The old full-disk missing review is NOT_RECOVERED. This is a bounded chart delivery, not whole-F2 acceptance.

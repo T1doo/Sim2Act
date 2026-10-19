@@ -648,7 +648,77 @@ async function internalResultManifests(instance,view,current){
   }
   return manifests;
 }
-function renderManifestViews(manifest,result){
+function manifestTableShape(schema,value){
+  const scalar=(v,t)=>t==="string"?typeof v==="string"&&v.length<=65536:t==="integer"?Number.isSafeInteger(v):t==="number"?typeof v==="number"&&Number.isFinite(v):t==="boolean"&&typeof v==="boolean";
+  const item=schema?.items,columns=Object.keys(item?.properties||{}),types=columns.map(key=>item.properties[key]?.type);
+  return schema?.type==="array"&&Number.isSafeInteger(schema.maxItems)&&schema.maxItems<=64&&schema.maxItems>=0&&item?.type==="object"&&item.additionalProperties===false&&columns.length>0&&columns.length<=16&&Array.isArray(item.required)&&item.required.length===columns.length&&columns.every(key=>item.required.includes(key))&&types.every(type=>["string","integer","number","boolean"].includes(type))&&Array.isArray(value)&&value.length<=schema.maxItems&&JSON.stringify(value).length<=262144&&value.every(entry=>entry&&typeof entry==="object"&&!Array.isArray(entry)&&Object.keys(entry).length===columns.length&&columns.every((key,index)=>Object.hasOwn(entry,key)&&scalar(entry[key],types[index])))?{columns,types}:null;
+}
+function tableBarValues(schema,rows,category,series){
+  const shape=manifestTableShape(schema,rows),index=shape?.columns.indexOf(series);
+  if(!shape||!category||!series||!shape.columns.includes(category)||index<0||!["integer","number"].includes(shape.types[index])||!rows.length)throw Error("请选择存在的类别列和数值系列；空表或非数值不能作图。");
+  const values=rows.map(row=>row[series]);
+  if(values.some(value=>!Number.isFinite(value)||Math.abs(value)>Number.MAX_SAFE_INTEGER))throw Error("数值超出安全展示范围；请查看原表格。");
+  const min=Math.min(0,...values),max=Math.max(0,...values),span=max-min||1;
+  const zero=200+(0-min)/span*420,positions=values.map(value=>200+(value-min)/span*420);
+  if(!Number.isFinite(zero)||values.some((value,index)=>!Number.isFinite(positions[index])||(value!==0&&positions[index]===zero)))throw Error("数值比例超出安全展示范围；请查看原表格。");
+  return {values,min,max,span,zero,positions};
+}
+function renderTableBar(schema,rows,category,series,context){
+  const {values,min,max,zero,positions}=tableBarValues(schema,rows,category,series),node=document.createElement("figure"),caption=document.createElement("figcaption");
+  node.dataset.chartContract="table-bar.v1";
+  caption.textContent=`横向条形图 · table-bar.v1 · Run ${context.run_id} · Release ${context.release_id} · 结果 v${context.result_version} · 字段 ${context.field} · 类别 ${category} · 数值系列 ${series} · 单位：未指定 · 原行顺序，零基线`;
+  node.append(caption);
+  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg"),width=420,left=200,height=values.length*38+48;
+  svg.setAttribute("viewBox",`0 0 660 ${height}`);svg.setAttribute("role","img");svg.setAttribute("aria-label",`${category} / ${series} 横向条形图，单位未指定`);svg.classList.add("table-bar-chart");
+  const element=(name,attrs,text)=>{const el=document.createElementNS(svg.namespaceURI,name);for(const [key,value]of Object.entries(attrs))el.setAttribute(key,String(value));if(text!==undefined)el.textContent=text;svg.append(el);return el;};
+  element("line",{x1:zero,x2:zero,y1:8,y2:height-28,class:"table-bar-axis"});
+  element("text",{x:left,y:height-8},String(min));element("text",{x:left+width,y:height-8,"text-anchor":"end"},String(max));
+  values.forEach((value,index)=>{
+    const x=positions[index],y=12+index*38,label=String(rows[index][category]);
+    const title=`第${index+1}行 · ${category}: ${label} · ${series}: ${value} · 单位未指定`;
+    const bar=element("rect",{x:Math.min(x,zero),y,width:Math.abs(x-zero),height:16,class:"table-bar-value","data-row":index+1,"data-value":value,"aria-label":title});
+    const full=document.createElementNS(svg.namespaceURI,"title");full.textContent=title;bar.append(full);
+    element("text",{x:0,y:y+13},`${index+1}. ${Array.from(label).slice(0,24).join("")}${Array.from(label).length>24?"…":""}`);
+    element("text",{x:left,y:y+31},String(value));
+  });node.append(svg);return node;
+}
+const tableChartReads=new Set();
+function tableChartControl(manifest,field,result,context){
+  if(!context)return null;
+  const {record,view}=context,instance=view.instance,selection=view.instanceGeneration;
+  const run=instance.runs.find(r=>r.app_run_id===record.run_id&&r.result_version===record.version&&r.release_id===record.release_id);
+  const schema=manifest.output_schema.properties[field],shape=manifestTableShape(schema,result[field]);
+  if(!run||!shape)return null;
+  const node=document.createElement("section"),label=document.createElement("p"),category=document.createElement("select"),series=document.createElement("select"),button=document.createElement("button"),status=document.createElement("p"),plot=document.createElement("div");
+  node.className="table-chart-controls";label.textContent="可选图表：明确选择原列，仅改变展示；单位未指定，不推断业务含义。";
+  for(const [select,title,columns]of [[category,"类别列",shape.columns],[series,"数值系列（一个原列）",shape.columns.filter((key,index)=>["integer","number"].includes(shape.types[index]))]]){
+    const wrap=document.createElement("label");wrap.textContent=title;select.setAttribute("aria-label",title);select.append(new Option("请选择原列",""),...columns.map(key=>new Option(key,key)));wrap.append(select);node.append(wrap);
+  }
+  button.type="button";button.textContent="重新核对并显示条形图";button.dataset.chartAction="show";status.setAttribute("role","status");node.prepend(label);node.append(button,status,plot);
+  let generation=0,busy=false;
+  const selected=()=>node.isConnected&&engineeringCurrent(view)&&view.instance===instance&&view.instanceGeneration===selection;
+  const changed=()=>{generation++;plot.replaceChildren();status.textContent="选择已改变；请显式重新核对并显示。";};category.onchange=changed;series.onchange=changed;
+  button.onclick=async()=>{
+    if(!selected()||busy||view.busy)return;
+    plot.replaceChildren();const cat=category.value,numeric=series.value;
+    try{tableBarValues(schema,result[field],cat,numeric);}catch(error){status.textContent=error.message;return;}
+    const connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;
+    const key=JSON.stringify([connection,view.project,instance.id,run.id,record.version,field]);if(tableChartReads.has(key))return;
+    const edit=++generation,runSelection=view.runGeneration,current=()=>selected()&&generation===edit&&view.runGeneration===runSelection&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration;
+    tableChartReads.add(key);busy=true;button.disabled=true;status.textContent="正在重新核对此Run、原Release与表格…";
+    try{
+      const saved=await api(`/api/internal/instances/${encodeURIComponent(instance.id)}/runs/${encodeURIComponent(run.id)}`);if(!current())return;
+      const typed=saved.known_effects?.find(r=>r.run_id===record.run_id);
+      if(saved.id!==run.id||saved.app_run_id!==record.run_id||saved.instance_id!==instance.id||saved.release_id!==record.release_id||saved.result_version!==record.version||saved.status!=="SUCCEEDED"||!typed||typed.fingerprint!==record.fingerprint||!ownerSame(typed.data,record.data)||!ownerSame(saved.result,result))throw Error("VERSION_CONFLICT");
+      const manifests=await internalResultManifests({...instance,data:[typed],runs:[saved]},view,current);if(!current())return;
+      if(!manifests||!ownerSame(manifests.get(record.release_id),manifest))throw Error("VERSION_CONFLICT");
+      plot.append(renderTableBar(schema,saved.result[field],cat,numeric,{run_id:run.id,release_id:record.release_id,result_version:record.version,field}));
+      status.textContent="已重新核对此历史成果；仅展示原数值，语义与人工验收状态不变。";
+    }catch(error){if(current()){plot.replaceChildren();if(error.httpStatus===403)invalidateInternalContent(view);else status.textContent=`图表读取未通过：${error.message}。`;}}
+    finally{tableChartReads.delete(key);busy=false;button.disabled=false;}
+  };return node;
+}
+function renderManifestViews(manifest,result,chartContext=null){
   const group=document.createElement("div");group.className="manifest-views";
   const scalar=(value,type)=>type==="string"?typeof value==="string"&&value.length<=65536:type==="integer"?Number.isSafeInteger(value):type==="number"?typeof value==="number"&&Number.isFinite(value):type==="boolean"&&typeof value==="boolean";
   for(const definition of manifest.views){
@@ -659,18 +729,21 @@ function renderManifestViews(manifest,result){
     if(definition.component_ref==="text"&&schema?.type==="string"&&scalar(value,"string")){
       message.className="manifest-text";message.textContent=value;section.append(message);continue;
     }
-    if(definition.component_ref==="table"){
-      const item=schema?.items,columns=Object.keys(item?.properties||{}),types=columns.map(key=>item.properties[key]?.type);
-      if(schema?.type==="array"&&Number.isSafeInteger(schema.maxItems)&&schema.maxItems<=64&&schema.maxItems>=0&&item?.type==="object"&&item.additionalProperties===false&&columns.length>0&&columns.length<=16&&Array.isArray(item.required)&&item.required.length===columns.length&&columns.every(key=>item.required.includes(key))&&types.every(type=>["string","integer","number","boolean"].includes(type))&&Array.isArray(value)&&value.length<=schema.maxItems&&JSON.stringify(value).length<=262144&&value.every(entry=>entry&&typeof entry==="object"&&!Array.isArray(entry)&&Object.keys(entry).length===columns.length&&columns.every((key,index)=>Object.hasOwn(entry,key)&&scalar(entry[key],types[index])))){
+    if(definition.component_ref==="table"||definition.component_ref==="chart"){
+      const shape=manifestTableShape(schema,value),columns=shape?.columns;
+      if(shape){
         const scroll=document.createElement("div"),table=document.createElement("table"),caption=document.createElement("caption"),head=document.createElement("thead"),body=document.createElement("tbody"),headers=document.createElement("tr");
         scroll.className="manifest-table-scroll";caption.textContent=`${definition.output_field} · ${value.length} 条`;table.append(caption,head,body);head.append(headers);
         for(const key of columns){const th=document.createElement("th");th.scope="col";th.textContent=key;headers.append(th);}
         for(const entry of value){const tr=document.createElement("tr");for(const key of columns){const td=document.createElement("td");td.textContent=String(entry[key]);tr.append(td);}body.append(tr);}
         scroll.append(table);section.append(scroll);
-        if(!value.length){message.textContent="暂无记录；无字面命中不代表语义不存在。";section.append(message);}continue;
+        if(!value.length){message.textContent="暂无记录；无字面命中不代表语义不存在。";section.append(message);}
+        const controls=tableChartControl(manifest,definition.output_field,result,chartContext);
+        if(controls)section.append(controls);
+        else if(definition.component_ref==="chart"){message.textContent="图表需要已核对的同Run与原Release；请从历史成果入口打开。";section.append(message);}continue;
       }
     }
-    message.textContent=definition.component_ref==="chart"?"chart 视图尚未支持：缺少轴、序列和单位合同。可查看原始结果。":"此字段形状暂不支持所选视图；可查看原始结果。";section.append(message);
+    message.textContent="此字段形状暂不支持所选视图；可查看原始结果。";section.append(message);
   }
   if(!manifest.views.length)group.textContent="清单未声明视图；可查看原始结果。";
   return group;
@@ -684,7 +757,7 @@ function internalResult(record,view,manifest) {
   const scope=document.createElement("p");scope.textContent=`检索词：${value.term} · 材料 ${value.resource_id} · revision ${value.revision} · hash ${value.source_hash}`;
   node.dataset.resultVersion=record.version;node.dataset.releaseId=record.release_id;
   const raw=document.createElement("details"),label=document.createElement("summary"),json=document.createElement("pre");label.textContent="查看原始结果";json.textContent=JSON.stringify(value,null,2);raw.append(label,json);
-  node.append(title,scope,renderManifestViews(manifest,value),raw);
+  node.append(title,scope,renderManifestViews(manifest,value,{record,view}),raw);
   if(view.literal)literalResultDownload(node,record,view);
   return node;
 }
