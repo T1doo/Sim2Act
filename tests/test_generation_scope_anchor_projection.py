@@ -1,12 +1,63 @@
 """Scalar eligibility projection only; synthetic markers confer no authority."""
 
 import copy
+import json
 
-from sqlalchemy import delete, insert, update
+import pytest
+from sqlalchemy import delete, event, insert, select, update
 
 from sim2act import goal_applications as generation
-from sim2act.db import attempts, events, fingerprint, run_contracts, runs
+from sim2act.db import attempts, events, fingerprint, projects, run_contracts, runs
+from sim2act.errors import DomainError
 from sim2act.spec_production import VERSION
+
+
+def test_owned_project_statement_rebinds_and_rechecks_the_current_row(env, tmp_path):
+    store, _, _, owner, other, pid, _ = env
+    queries, reports = [], []
+
+    def record(c, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith("SELECT "):
+            queries.append((statement, parameters))
+
+    with store.tx() as c:
+        event.listen(store.engine, "before_cursor_execute", record)
+        try:
+            def compare(label, principal, project_id):
+                queries.clear()
+                old = c.execute(select(projects).where(projects.c.id == project_id,
+                    projects.c.owner_id == principal)).mappings().first()
+                original_queries = list(queries)
+                queries.clear()
+                if old is None:
+                    with pytest.raises(DomainError) as refused:
+                        store.own_project(c, principal, project_id)
+                    assert refused.value.code == "PERMISSION_DENIED"
+                else:
+                    assert dict(store.own_project(c, principal, project_id)) == dict(old)
+                assert queries == original_queries and len(queries) == 1
+                reports.append(dict(case=label, authorized=old is not None,
+                    exact_result_sql_parameters_equal=True))
+
+            compare("owner-A", owner, pid)
+            compare("wrong-B", other, pid)
+            compare("A-after-B", owner, pid)
+            compare("missing-project", owner, pid + "-missing")
+            compare("A-after-missing", owner, pid)
+            savepoint = c.begin_nested()
+            try:
+                changed = c.execute(update(projects).where(projects.c.id == pid).values(owner_id=other))
+                assert changed.rowcount == 1
+                compare("old-owner-after-real-update", owner, pid)
+                compare("new-owner-after-real-update", other, pid)
+            finally:
+                savepoint.rollback()
+            compare("owner-after-rollback", owner, pid)
+        finally:
+            event.remove(store.engine, "before_cursor_execute", record)
+    (tmp_path / "owned-project-query-proof.json").write_text(json.dumps(dict(
+        scope="QUERY_STRUCTURE_ONLY_NOT_RUN_AUTHORITY", real_models=0, mock_exchanges=0,
+        actual_owner_change_rolled_back=True, cases=reports), indent=2))
 
 
 def test_join_preserves_exact_event_and_attempt_cardinality(env):

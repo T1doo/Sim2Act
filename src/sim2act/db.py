@@ -18,6 +18,7 @@ from sqlalchemy import (
     String,
     Table,
     UniqueConstraint,
+    bindparam,
     create_engine,
     insert,
     select,
@@ -45,6 +46,12 @@ projects = Table(
     Column("owner_id", String, nullable=False),
     Column("runtime_id", String, nullable=False),
     Column("name", String, nullable=False),
+)
+# SQL structure only. Every call still binds both identities and reads the
+# current row; no owner, project value, result or authority is retained here.
+_OWNED_PROJECT_QUERY = select(projects).where(
+    projects.c.id == bindparam("owned_project_id", type_=projects.c.id.type),
+    projects.c.owner_id == bindparam("owned_project_principal", type_=projects.c.owner_id.type),
 )
 resources = Table(
     "resources",
@@ -800,11 +807,8 @@ class Store:
 
     def own_project(self, c, principal, project_id):
         p = (
-            c.execute(
-                select(projects).where(
-                    projects.c.id == project_id, projects.c.owner_id == principal
-                )
-            )
+            c.execute(_OWNED_PROJECT_QUERY,
+                {"owned_project_id": project_id, "owned_project_principal": principal})
             .mappings()
             .first()
         )
