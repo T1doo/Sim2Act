@@ -171,6 +171,15 @@ def _read(c, user, job, aid, kind):
     anchors = c.execute(select(events.c.data).where(events.c.run_id == job["id"],
         events.c.kind == ("NS_WIRE_ARCHIVED" if kind == REQUEST else "NS_BODY_ARCHIVED"),
         events.c.data["attempt_id"].as_string() == aid)).scalars().all()
+    return body, _body_payload_from_facts(body, anchors, aid)
+
+
+def _body_payload_from_facts(body, anchors, aid):
+    """Decode after exists/pair/owner/mode checks, using the complete anchor list.
+
+    Caller retains current scope/permissions and exact same-transaction identity
+    checks. Bytes and completeness are evidence, never execution authority.
+    """
     require(anchors == [dict(attempt_id=aid, archive_fingerprint=fingerprint(body.model_dump()))])
     require(body.extent == ("COMPLETE_BODY" if body.received_complete else "RECEIVED_PREFIX"))
     if not body.received_complete or body.omission != "NONE" or body.body_b64 is None:
@@ -182,7 +191,7 @@ def _read(c, user, job, aid, kind):
     require(0 < len(payload) == body.byte_count <= MAX_BODY_BYTES
             and hashlib.sha256(payload).hexdigest() == body.sha256
             and base64.b64encode(payload).decode("ascii") == body.body_b64)
-    return body, payload
+    return payload
 
 
 @dataclass(frozen=True)
@@ -222,8 +231,6 @@ def _source_verification(ledger):
 
 def _source_bodies(c, user, contract, job, ledger):
     from . import natural_live_admission as gate
-    from .goal_applications import response_archive
-    from .model import normalize_usage
     from .production_trial_policy import Ledger
     from .spec_production import evidence_mode
 
@@ -231,6 +238,37 @@ def _source_bodies(c, user, contract, job, ledger):
     rows = c.execute(select(attempts).where(attempts.c.run_id == source_id)).mappings().all()
     production = type(ledger) is Ledger
     require(evidence_mode(c, job) == ("LIVE" if production else "MOCK"))
+    slots = _source_slots_from_facts(rows, ledger, production)
+    expected_ids = {r["id"] for r in rows}
+    for kind in (REQUEST, RESPONSE):
+        keys = gate._keys(c, user, source_id, kind)
+        _source_keys_from_facts(expected_ids, keys)
+    by_id = {r["id"]: r for r in rows}
+    requests, responses, public = [], [], []
+    for slot in slots:
+        row = by_id[slot["reservation"]["request_key"]]
+        require(row["mode"] == ("LIVE" if production else "MOCK") and row["status"] == "VERIFIED"
+                and row["request_model"] == row["response_model"] == contract.model
+                and slot["accepted"] is True and slot["settlement"] is not None)
+        request, wire = _read(c, user, job, row["id"], REQUEST)
+        response, received = _read(c, user, job, row["id"], RESPONSE)
+        canonical = _source_exchange_from_facts(contract, row, slot, request, wire,
+            response, received, production)
+        requests.append(wire)
+        responses.append(received)
+        public.append(dict(attempt_id=row["id"], request_bytes=len(wire),
+            request_sha256=request.sha256, decoded_body_bytes=len(received),
+            decoded_body_sha256=response.sha256, canonical_ascii_bytes=canonical["bytes"],
+            canonical_ascii_sha256=canonical["sha256"]))
+    return requests, responses, public
+
+
+def _source_slots_from_facts(rows, ledger, production):
+    """Compare complete Attempt/slot multisets after current evidence-mode gating.
+
+    The caller must fully validate the original ledger/accounting first; this
+    projection is not _ledger, an approval or a fresh source check.
+    """
     if production:
         # Preserve the journal's raw-body hash; never relabel it canonical.
         slots = [dict(reservation=dict(request_key=s.identity.attempt_id,
@@ -241,26 +279,31 @@ def _source_bodies(c, user, contract, job, ledger):
         slots = [s for s in ledger["slots"] if s["reservation"]["stage"] == "source"]
     require(len(rows) == len(slots) == 2
             and {r["id"] for r in rows} == {s["reservation"]["request_key"] for s in slots})
-    expected_ids = {r["id"] for r in rows}
-    for kind in (REQUEST, RESPONSE):
-        keys = gate._keys(c, user, source_id, kind)
-        if not expected_ids <= keys:
-            raise DomainError("OUTCOME_UNKNOWN", "Original execution has no complete body archive")
-        require(keys == expected_ids, "Source archive contains an unrelated Attempt")
-    by_id = {r["id"]: r for r in rows}
-    requests, responses, public = [], [], []
-    for slot in slots:
-        row = by_id[slot["reservation"]["request_key"]]
-        require(row["mode"] == ("LIVE" if production else "MOCK") and row["status"] == "VERIFIED"
-                and row["request_model"] == row["response_model"] == contract.model
-                and slot["accepted"] is True and slot["settlement"] is not None)
-        request, wire = _read(c, user, job, row["id"], REQUEST)
-        response, received = _read(c, user, job, row["id"], RESPONSE)
-        raw = strict_json(received, MAX_BODY_BYTES)
-        original, canonical = response_archive(raw)
-        usage = normalize_usage(raw)
-        envelope = strict_json(wire, MAX_BODY_BYTES)
-        require(isinstance(envelope, dict) and envelope.get("model") == contract.model
+    return slots
+
+
+def _source_keys_from_facts(expected_ids, keys):
+    """Original missing-vs-extra error order for one complete archive key set."""
+    if not expected_ids <= keys:
+        raise DomainError("OUTCOME_UNKNOWN", "Original execution has no complete body archive")
+    require(keys == expected_ids, "Source archive contains an unrelated Attempt")
+
+
+def _source_exchange_from_facts(contract, row, slot, request, wire, response, received, production):
+    """Original full byte/usage exchange check after both ordered archive reads.
+
+    Requires complete source rows/slots, status/model checks and _read identity,
+    seals, anchors and payload checks. Caller retains current permissions and
+    role contract/caps; this leaf neither reads bodies nor authorizes a Run.
+    """
+    from .goal_applications import response_archive
+    from .model import normalize_usage
+
+    raw = strict_json(received, MAX_BODY_BYTES)
+    original, canonical = response_archive(raw)
+    usage = normalize_usage(raw)
+    envelope = strict_json(wire, MAX_BODY_BYTES)
+    require(isinstance(envelope, dict) and envelope.get("model") == contract.model
                 and envelope.get("stream") is False
                 and type(envelope.get("max_tokens")) is int
                 and 0 < envelope["max_tokens"] <= contract.caps.max_output_tokens
@@ -277,13 +320,7 @@ def _source_bodies(c, user, contract, job, ledger):
                 and slot["settlement"]["response_ascii_bytes"] == canonical["bytes"]
                 and all(slot["settlement"][k] == usage["tokens"][k] for k in
                     ("prompt_tokens", "completion_tokens", "total_tokens")))
-        requests.append(wire)
-        responses.append(received)
-        public.append(dict(attempt_id=row["id"], request_bytes=len(wire),
-            request_sha256=request.sha256, decoded_body_bytes=len(received),
-            decoded_body_sha256=response.sha256, canonical_ascii_bytes=canonical["bytes"],
-            canonical_ascii_sha256=canonical["sha256"]))
-    return requests, responses, public
+    return canonical
 
 
 @controlled

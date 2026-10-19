@@ -1460,6 +1460,16 @@ def _journal_chain(store, c, b, run, aid, raw=None):
         gate.require(response_archive(raw) == (canonical, evidence))
     actual = c.execute(select(attempts).where(attempts.c.run_id == run["id"],
                                                attempts.c.id == aid)).mappings().one()
+    _journal_attempt_from_facts(b, wire, slot, actual)
+    return slot, capture, parsed, actual
+
+
+def _journal_attempt_from_facts(b, wire, slot, actual):
+    """Bind the original Attempt after owner, full bodies/slot/capture/raw checks.
+
+    Not a replacement for current authority, _journal_slot or full policy
+    _bound: caller must retain its transaction and complete ledger validation.
+    """
     params = actual["parameters"]
     gate.require(actual["request_model"] == b.contract.model and actual["mode"] == _binding_mode(b)
         and actual["reserved_tokens"] == len(wire) + params["max_tokens"]
@@ -1472,7 +1482,6 @@ def _journal_chain(store, c, b, run, aid, raw=None):
             and params["natural_spec_wire"].get("bytes") == len(wire)
             and params["natural_spec"].get("fence") == slot.identity.fence
             and params["natural_spec"].get("run_version") == slot.identity.version))
-    return slot, capture, parsed, actual
 
 
 def journal_stage_accounted(store, c, user, contract, key, rid, stage):
@@ -1520,17 +1529,10 @@ def journal_stage_accounted(store, c, user, contract, key, rid, stage):
     gate.require(user == contract.principal_id)
     run = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
     state, _, _ = _journal_state(store, c, b)
-    slots = [s for s in state.slots if s.identity.stage == stage]
-    gate.require(not state.halted and len(slots) == len(actual)
-        and {s.identity.attempt_id for s in slots} == {a["id"] for a in actual}
-        and all(s.identity.run_id == rid for s in slots))
+    _stage_slots_from_facts(state, actual, rid, stage)
     for a in actual:
         slot, capture, parsed, checked = _journal_chain(store, c, b, run, a["id"])
-        usage = normalize_usage(parsed)
-        gate.require(checked == a and a["status"] == ("RECEIVED" if stage == "generate" else "VERIFIED")
-            and a["usage"] == usage and usage["status"] == "known"
-            and all(getattr(slot.settlement, k) == usage["tokens"].get(k)
-                    for k in ("prompt_tokens", "completion_tokens", "total_tokens")))
+        _stage_usage_from_facts(a, stage, slot, parsed, checked)
         if stage == "generate":
             gate.require(a["parameters"].get("generation_raw_evidence") == response_archive(parsed)[1]
                 and a["parameters"].get("generation_received_raw") == response_archive(parsed)[0])
@@ -1540,13 +1542,44 @@ def journal_stage_accounted(store, c, user, contract, key, rid, stage):
             from .natural_source_archives import _read
             _, original_wire = _read(c, user, run, a["id"], NS_REQUEST)
             body, archived = _read(c, user, run, a["id"], NS_RESPONSE)
-            gate.require(body.sha256 == capture.raw_sha256
+            _stage_source_archive_from_facts(a, body, archived, original_wire, slot, capture, parsed)
+            from .db import operations
+            op = c.execute(select(operations.c.status).where(operations.c.run_id == rid,
+                operations.c.id == a["parameters"]["natural_spec"]["operation_id"])).scalar_one()
+            gate.require(op == "VERIFIED")
+
+
+def _stage_slots_from_facts(state, actual, rid, stage):
+    """Use full checked ledger and Attempt multisets after original stage gates.
+
+    Caller keeps exact 3/2 stage count, marker/account checks, phase/ownership,
+    current permissions and _journal_state. This is not a ledger verifier.
+    """
+    slots = [s for s in state.slots if s.identity.stage == stage]
+    gate.require(not state.halted and len(slots) == len(actual)
+        and {s.identity.attempt_id for s in slots} == {a["id"] for a in actual}
+        and all(s.identity.run_id == rid for s in slots))
+
+
+def _stage_usage_from_facts(a, stage, slot, parsed, checked):
+    """Original accounting comparison after the complete same-aid journal chain."""
+    usage = normalize_usage(parsed)
+    gate.require(checked == a and a["status"] == ("RECEIVED" if stage == "generate" else "VERIFIED")
+            and a["usage"] == usage and usage["status"] == "known"
+            and all(getattr(slot.settlement, k) == usage["tokens"].get(k)
+                    for k in ("prompt_tokens", "completion_tokens", "total_tokens")))
+
+
+def _stage_source_archive_from_facts(a, body, archived, original_wire, slot, capture, parsed):
+    """Join checked NS bytes to checked controller bytes before Operation SELECT.
+
+    Caller retains both ordered _read gates, the entire stage history and the
+    original following VERIFIED Operation check. Matching hashes alone do not
+    establish authority or replace the raw-byte comparison here.
+    """
+    gate.require(body.sha256 == capture.raw_sha256
                 and archived == base64.b64decode(capture.body_b64)
                 and body.canonical_sha256 == capture.canonical_sha256
                 and hashlib.sha256(original_wire).hexdigest() == slot.identity.wire_sha256
                 and a["response"].get("received_raw") == response_archive(parsed)[0]
                 and a["response"].get("raw_evidence") == response_archive(parsed)[1])
-            from .db import operations
-            op = c.execute(select(operations.c.status).where(operations.c.run_id == rid,
-                operations.c.id == a["parameters"]["natural_spec"]["operation_id"])).scalar_one()
-            gate.require(op == "VERIFIED")

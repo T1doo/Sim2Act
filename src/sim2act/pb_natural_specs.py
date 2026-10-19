@@ -362,7 +362,20 @@ def _source(store, c, user, pid, rid, limits, *, _source_origin=True):
     typed = c.execute(select(internal_instance_data).where(
         internal_instance_data.c.instance_id == snap["instance_id"],
         internal_instance_data.c.run_id == app_run["id"])).mappings().one()
-    proof = dict(version=VERSION, principal_id=user, project_id=pid, source_run_id=rid,
+    proof = _source_proof_fields(user, pid, rid, binding, draft, snap, app_run, job, typed, proved)
+    proof.update(runtime_audit_fingerprint=source_audit(store, c, user, pid, rid),
+        citation_status="PASS", semantic_status="UNKNOWN", owner_acceptance="PENDING")
+    return binding, proof
+
+
+def _source_proof_fields(user, pid, rid, binding, draft, snap, app_run, job, typed, proved):
+    """Build only the original prefix, before the caller's fresh source_audit.
+
+    Requires the complete same-transaction source gate, successful Run,
+    role-Limits verify_job result and typed row. This is not a source verifier
+    or authority; the caller must still append the complete current audit.
+    """
+    return dict(version=VERSION, principal_id=user, project_id=pid, source_run_id=rid,
         source_app_id=draft["id"], source_app_fingerprint=draft["fingerprint"],
         instance_id=snap["instance_id"], app_run_id=app_run["id"], release_id=snap["release_id"],
         release_fingerprint=binding["release"]["fingerprint"], result_version=app_run["result_version"],
@@ -371,10 +384,7 @@ def _source(store, c, user, pid, rid, limits, *, _source_origin=True):
         run_fingerprint=fingerprint(dict(job)), binding_fingerprint=fingerprint(snap),
         app_run_fingerprint=fingerprint(dict(app_run)), typed_fingerprint=fingerprint(dict(typed)),
         output_fingerprint=fingerprint(app_run["output"]),
-        receipt_fingerprint=fingerprint(proved), audit_fingerprint=binding["audit_fingerprint"],
-        runtime_audit_fingerprint=source_audit(store, c, user, pid, rid),
-        citation_status="PASS", semantic_status="UNKNOWN", owner_acceptance="PENDING")
-    return binding, proof
+        receipt_fingerprint=fingerprint(proved), audit_fingerprint=binding["audit_fingerprint"])
 
 
 def candidate(body, proof, material, goal, aid, pid, limits):
@@ -393,10 +403,25 @@ def review(store, c, user, pid, body, limits, runtime=None):
     from . import pa_spec_apps as spec
 
     binding, proof = source(store, c, user, pid, body.source_run_id, limits)
-    require(fingerprint(proof) == body.expected_source_proof_fingerprint
-            and proof["recipe_fingerprint"] == body.expected_source_recipe_fingerprint)
+    _review_source_from_facts(body, proof)
     material, goal = spec.target(store, c, user, pid, body.card_id, body.expected_goal_version,
         body.expected_goal_fingerprint, runtime, family=natural.VERSION)
+    return _review_from_facts(user, pid, body, limits, binding, proof, material, goal)
+
+
+def _review_source_from_facts(body, proof):
+    """Original source comparison before target IO; proof must be complete/current."""
+    require(fingerprint(proof) == body.expected_source_proof_fingerprint
+            and proof["recipe_fingerprint"] == body.expected_source_recipe_fingerprint)
+
+
+def _review_from_facts(user, pid, body, limits, binding, proof, material, goal):
+    """Original target/candidate tail after source comparison and current target gates.
+
+    Supply full Source proof/history/audit, the exact target material/Goal and
+    this role's complete Limits. The inherited source Limits stay distinct.
+    No IO, authority refresh or earlier source comparison is performed here.
+    """
     require(goal.card_id != binding["goal"]["card_id"] and body.name.strip()
             and material["resource_id"] != binding["source"]["resource_id"]
             and material["hash"] != binding["source"]["hash"]
