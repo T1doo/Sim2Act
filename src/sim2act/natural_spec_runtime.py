@@ -5,18 +5,27 @@ Reservation and raw reception survive rejection; project effects remain local
 and are committed by the existing pa_spec_apps transaction only.
 """
 
+from __future__ import annotations
+
 import copy
 import hashlib
 import json
 import time
-from dataclasses import replace
+from contextlib import contextmanager
+from dataclasses import dataclass, field, replace
+from sqlite3 import Connection as SQLiteConnection
+from threading import Event, get_ident
+from typing import TYPE_CHECKING, cast
 
 import httpx
 from sqlalchemy import insert, literal, select, update
+from sqlalchemy.engine import Connection
 
 from . import natural_specs as codec
+from .config import Settings
 from .contracts import Limits, strict_json, validate_value
 from .db import (
+    Store,
     attempts,
     events,
     fingerprint,
@@ -36,6 +45,10 @@ from .model import (
     require_returned_model,
     returned_model_identity,
 )
+
+if TYPE_CHECKING:
+    from .spec_production import ProductionTrialBinding
+    from .worker import Worker
 
 
 def require(value, message="Natural model evidence changed"):
@@ -696,6 +709,300 @@ def fail_owned(worker, run, error):
         store.event(c, header["id"], "STATE", dict(status=state, error=error.public()))
 
 
+def _model_inputs(values):
+    return fingerprint({k: (v.model_dump() if type(v) is Limits else
+        dict(sha256=hashlib.sha256(v).hexdigest(), bytes=len(v)) if type(v) is bytes else v)
+        for k, v in values.items()})
+
+
+@dataclass
+class _ModelSettlementRead:
+    """Only this model response's completed postwrite proof; never a permit."""
+    worker: Worker
+    connection: Connection
+    inputs: dict
+    scope_nonce: object
+    store: Store = field(init=False)
+    settings: Settings = field(init=False)
+    settings_values: dict = field(init=False)
+    binding: ProductionTrialBinding = field(init=False)
+    stop: Event = field(init=False)
+    transport: object = field(init=False)
+    worker_id: str = field(init=False)
+    token: object = field(init=False)
+    transaction: object = field(init=False)
+    driver: SQLiteConnection = field(init=False)
+    changes: int = field(init=False)
+    thread: int = field(init=False)
+    input_fingerprint: str = field(init=False)
+    binding_fingerprint: str = field(init=False)
+    authorities: set = field(default_factory=set)
+    admission: dict = field(default_factory=dict)
+    source_identity: str | None = None
+    source_deadline: float = float("inf")
+    state: str = "BUILDING"
+    active: bool = True
+
+    def __post_init__(self):
+        w, c = self.worker, self.connection
+        self.store, self.settings = w.store, w.s
+        self.binding = cast("ProductionTrialBinding", w.pa_trial)
+        self.settings_values = dict(vars(w.s))
+        self.stop, self.transport, self.worker_id = w.stop, w.goal_planner_transport, w.id
+        self.token, self.transaction = c.info.get("pb_source_reads"), c.get_transaction()
+        require(isinstance(c.connection.driver_connection, SQLiteConnection))
+        self.driver = cast(SQLiteConnection, c.connection.driver_connection)
+        self.changes, self.thread = self.driver.total_changes, get_ident()
+        self.binding_fingerprint = self.binding_key()
+        self.input_fingerprint = _model_inputs(self.inputs)
+        self.check()
+
+    def binding_key(self):
+        b = self.binding
+        return fingerprint(dict(contract=b.contract.model_dump(), key=b.approval_key,
+            account=b.account_id, version=b.version, fingerprint=b.contract_fingerprint))
+
+    def check(self):
+        from .pb_natural_specs import _source_reads_current
+        w, c = self.worker, self.connection
+        require(self.active and self.state not in {"INVALID", "CLOSED"}
+            and c.info.get("_model_settlement_scope") is self.scope_nonce
+            and w.store is self.store and c.engine is self.store.engine
+            and w.s is self.settings and vars(w.s) == self.settings_values
+            and w.pa_trial is self.binding and w.stop is self.stop
+            and w.goal_planner_transport is self.transport and w.id == self.worker_id
+            and getattr(w, "_journal_trial_store", None) is self.store
+            and getattr(w, "_journal_trial_binding", None) is self.binding
+            and getattr(w, "_journal_trial_drift", None) is False
+            and c.get_transaction() is self.transaction
+            and c.connection.driver_connection is self.driver
+            and self.driver.total_changes == self.changes and self.thread == get_ident()
+            and _source_reads_current(self.store, c, self.token)
+            and self.binding_key() == self.binding_fingerprint
+            and _model_inputs(self.inputs) == self.input_fingerprint,
+            "Model settlement read segment or complete inputs changed")
+
+    def add(self, **values):
+        self.check()
+        require(self.state == "BUILDING" and not (set(values) & self.inputs.keys())
+            and set(values) <= {"fresh", "post_binding", "actual_attempt", "actual_operation",
+                "trial_limits", "frozen_limits", "declared", "action_limits", "full_admission",
+                "current_journal"}, "Model proof inputs cannot be rebound")
+        self.inputs.update(values)
+        self.input_fingerprint = _model_inputs(self.inputs)
+
+    def live(self):
+        from . import natural_live_admission as gate
+        from . import pa_trial_dispatch as trial
+        from .db import runs
+        from .natural_trial_runs import associated_sql
+        w, c, b = self.worker, self.connection, self.binding
+        self.check()
+        require(trial._binding(w) is b)
+        self.check()
+        enabled(w)
+        self.check()
+        with self.store.proof_authorities(c) as current_authorities:
+            approval = gate._approved(self.store, c, b.contract.principal_id,
+                                      b.contract, b.approval_key)
+            self.check()
+            require(fingerprint(approval.model_dump()) == self.admission["approval"])
+            require(gate._keys(c, b.contract.principal_id, gate.entity(b.contract), gate.PHASE)
+                    <= {"source", "cold"})
+            phase = gate._saved(c, b.contract.principal_id, gate.entity(b.contract),
+                                gate.PHASE, "cold", gate.StageApproveInput)
+            self.check()
+            require(phase.approval_key == b.approval_key
+                and fingerprint(phase.authority.model_dump()) == phase.expected_authority_fingerprint
+                == self.admission["phase"])
+            source = trial._journal_source(self.store, c, b)
+            self.check()
+            # Observation time is fresh on each resolver call. Exact evidence
+            # identity stays pinned; its finite interval is never cached ALLOW.
+            identity = fingerprint({k: getattr(source, k) for k in (
+                "requirements_fingerprint", "account_id", "quota_subject", "provider", "model",
+                "endpoint", "evidence_fingerprint", "decision", "legal_free_entitlement",
+                "enforced_non_chargeable", "revoked")})
+            require(source.requirements_fingerprint == self.admission["requirements"]
+                and (self.source_identity is None or identity == self.source_identity))
+            self.source_identity = identity
+            self.source_deadline = min(self.source_deadline, source.expires_at)
+            self.authorities.update(current_authorities)
+            for authority in sorted(self.authorities):
+                self.store.authorize(c, *authority)
+                self.check()
+            require(c.execute(select(runs.c.id).where(runs.c.id == self.inputs["fresh"]["id"],
+                associated_sql())).first() is None, "Qualified model settlement is excluded")
+            self.check()
+            actual = c.execute(select(runs).where(runs.c.id == self.inputs["fresh"]["id"])
+                               .with_for_update()).mappings().one()
+            self.check()
+            require(fingerprint(dict(actual)) == fingerprint(self.inputs["fresh"])
+                and actual["worker_id"] == w.id and not w.stop.is_set())
+            at = time.time()
+            gate._require_run_context_row(b.contract.principal_id, b.contract, "cold", actual,
+                self.inputs["meta"]["run_version"], self.inputs["meta"]["fence"],
+                approval, phase.authority, at)
+            deadlines = [actual["lease_until"], b.contract.expires_at, self.source_deadline,
+                self.inputs["meta"]["deadline"],
+                self.inputs["post_binding"]["snapshot"]["natural_spec_clock"]["deadline"]]
+            for name in ("platform", "node", "trial_limits", "frozen_limits", "declared", "action_limits"):
+                value = self.inputs[name]
+                deadlines.append(actual["created_at"] + (value.run_seconds if type(value) is Limits
+                                                         else value["run_seconds"]))
+            self.check()
+            require(not w.stop.is_set() and time.time() < min(deadlines),
+                    "Model settlement final finite interval ended")
+
+    def settle(self, worker, c, run, aid, raw):
+        try:
+            require(self.state == "READY")
+            self.state = "SETTLE_BUSY"
+            self.check()
+            require(worker is self.worker and c is self.connection
+                and fingerprint(dict(run)) == fingerprint(self.inputs["fresh"])
+                and aid == self.inputs["aid"] and raw is self.inputs["raw"])
+            from .pa_trial_dispatch import _identity
+            require(_identity(worker, c, run, aid) is self.binding)
+            self.check()
+            self.live()
+            self.state = "SETTLED"
+        except BaseException:
+            self.invalidate()
+            raise
+
+    @contextmanager
+    def tail(self, worker, c, run, binding):
+        try:
+            require(self.state == "SETTLED")
+            self.state = "TAIL_BUSY"
+            self.check()
+            require(worker is self.worker and c is self.connection
+                and fingerprint(dict(run)) == fingerprint(self.inputs["call_run"])
+                and fingerprint(binding) == fingerprint(self.inputs["post_binding"]))
+            self.live()
+            with self.store.proof_authorities(c) as authorities:
+                yield
+            self.authorities.update(authorities)
+            self.check()
+            self.live()
+            self.state = "TAIL_DONE"
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def tail_row(self, worker, c, run, binding):
+        self.check()
+        require(self.state == "TAIL_BUSY" and worker is self.worker and c is self.connection
+            and fingerprint(dict(run)) == fingerprint(self.inputs["fresh"])
+            and fingerprint(binding) == fingerprint(self.inputs["post_binding"]))
+
+    def invalidate(self):
+        self.active, self.state = False, "INVALID"
+        self.authorities.clear()
+
+
+@contextmanager
+def _model_settlement_read(worker, c, inputs):
+    from . import natural_live_admission as gate
+    from . import pa_spec_apps as spec
+    from . import pa_trial_dispatch as trial
+    from .db import runs
+    from .natural_trial_runs import associated_sql
+    from .pb_natural_specs import _source_reads_current
+    b, store = getattr(worker, "pa_trial", None), worker.store
+    eligible = (b is not None and trial._production_binding(b) and type(b.contract) is gate.PBTrialContract
+        and trial._stage(b, inputs["current"]) == "cold"
+        and _source_reads_current(store, c, c.info.get("pb_source_reads")))
+    if eligible:
+        token = c.info.get("pb_source_reads")
+        input_key = _model_inputs(inputs)
+        settings, settings_values = worker.s, dict(vars(worker.s))
+        driver = c.connection.driver_connection
+        require(isinstance(driver, SQLiteConnection))
+        changes = cast(SQLiteConnection, driver).total_changes
+        associated = c.execute(select(runs.c.id).where(runs.c.id == inputs["current"]["id"],
+                                                      associated_sql())).first()
+        require(_source_reads_current(store, c, token) and _model_inputs(inputs) == input_key
+            and worker.store is store and worker.pa_trial is b and worker.s is settings
+            and vars(settings) == settings_values and c.connection.driver_connection is driver
+            and cast(SQLiteConnection, driver).total_changes == changes,
+            "Model eligibility callback changed the read segment")
+        eligible = associated is None
+    proof = None
+    nonce = object()
+    out: dict = {}
+    try:
+        if eligible:
+            require("_model_settlement_scope" not in c.info, "Model settlement scope reentered")
+            c.info["_model_settlement_scope"] = nonce
+            proof = _ModelSettlementRead(worker, c, inputs, nonce)
+        with store.proof_authorities(c) as authorities:
+            fresh = spec.commit_guard(worker, c, inputs["call_run"], inputs["binding"],
+                                      **({"_model_out": out} if proof is not None else {}))
+            if proof is not None:
+                proof.check()
+            require(fresh["version"] == inputs["current"]["version"] == inputs["meta"]["run_version"]
+                and fresh["created_at"] == inputs["meta"]["created_at"]
+                and time.time() < inputs["meta"]["deadline"],
+                "Run version changed after model verification callback")
+            if proof is not None:
+                proof.admission = dict(out)
+                proof.add(fresh=fresh, full_admission=proof.admission)
+            enabled(worker)
+            if proof is not None:
+                proof.check()
+            final_binding = spec.bound(store, c, fresh["principal_id"], fresh, inputs["platform"])
+            if proof is not None:
+                proof.check()
+                proof.add(post_binding=final_binding,
+                    declared=final_binding["draft"]["candidate"]["manifest"]["runtime_limits"])
+            require(final_binding["audit_fingerprint"] == inputs["binding"]["audit_fingerprint"])
+            spec.receipts(store, c, fresh, final_binding)
+            if proof is not None:
+                proof.check()
+                require(trial._identity(worker, c, fresh, inputs["aid"]) is proof.binding)
+                proof.check()
+                slot, capture, parsed, actual = trial._journal_chain(store, c, proof.binding, fresh,
+                                                                    inputs["aid"], inputs["raw"])
+                proof.check()
+                require(actual["id"] == inputs["aid"] and actual["run_id"] == fresh["id"]
+                    and actual["status"] == "VERIFIED" and actual["response"] == inputs["response"]
+                    and actual["usage"] == inputs["usage"]
+                    and actual["parameters"]["natural_spec"] == inputs["meta"]
+                    and actual["parameters"]["natural_spec_wire"]["sha256"]
+                        == hashlib.sha256(inputs["wire"]).hexdigest()
+                    and actual["parameters"]["natural_spec_wire"]["bytes"] == len(inputs["wire"]))
+                proof.add(actual_attempt=dict(actual), current_journal=dict(
+                    slot=slot.model_dump(), capture=capture.model_dump(), parsed=parsed))
+                op = c.execute(select(operations).where(operations.c.id == inputs["meta"]["operation_id"],
+                    operations.c.run_id == fresh["id"])).mappings().one()
+                require(op["status"] == "VERIFIED" and op["receipt"] == inputs["receipt"])
+                proof.add(actual_operation=dict(op))
+                frozen = store._frozen_contract_after_scope(c, fresh).limits
+                proof.add(
+                    trial_limits=gate._limits(proof.binding.contract), frozen_limits=frozen,
+                    action_limits=inputs["action"]["limits"])
+                proof.authorities.update(authorities)
+                proof.live()
+                proof.state = "READY"
+        yield fresh, final_binding, proof
+        if proof is not None:
+            proof.check()
+            require(proof.state == "TAIL_DONE", "Model settlement scope exited before final checks")
+            proof.active, proof.state = False, "CLOSED"
+    except BaseException:
+        if proof is not None:
+            proof.invalidate()
+        raise
+    finally:
+        if proof is not None:
+            proof.active = False
+            proof.authorities.clear()
+        if c.info.get("_model_settlement_scope") is nonce:
+            c.info.pop("_model_settlement_scope", None)
+
+
 def advance_model(worker, run, *, _heartbeat_state=None):
     from . import pa_spec_apps as spec
     from .app_jobs import lock_live
@@ -1009,21 +1316,17 @@ def advance_model(worker, run, *, _heartbeat_state=None):
             # Check authority before replaying any protected receipts/Attempts,
             # then re-read the full evidence before committing VERIFIED.
             with _journal_reads(worker, c):
-                fresh = spec.commit_guard(worker, c, run, current_binding)
-                require(
-                    fresh["version"] == current["version"] == meta["run_version"]
-                    and fresh["created_at"] == meta["created_at"]
-                    and time.time() < meta["deadline"],
-                    "Run version changed after model verification callback",
-                )
-                enabled(worker)
-                final_binding = spec.bound(store, c, fresh["principal_id"], fresh, limits)
-                require(final_binding["audit_fingerprint"] == current_binding["audit_fingerprint"])
-                spec.receipts(store, c, fresh, final_binding)
-                if getattr(worker, "pa_trial", None) is not None:
-                    from .pa_trial_dispatch import settle_verified
-                    settle_verified(worker, c, fresh, aid, raw)
-                    spec.commit_guard(worker, c, run, final_binding)
+                inputs = dict(call_run=run, current=dict(current), binding=current_binding,
+                    platform=limits, node=node_limits, aid=aid, raw=raw, wire=wire, meta=meta,
+                    step=step, action=action, intent=intent, response=response,
+                    usage=received_usage, receipt=receipt)
+                with _model_settlement_read(worker, c, inputs) as (fresh, final_binding, model_after):
+                    if getattr(worker, "pa_trial", None) is not None:
+                        from .pa_trial_dispatch import settle_verified
+                        settle_verified(worker, c, fresh, aid, raw,
+                            **({"_model_after": model_after} if model_after is not None else {}))
+                        spec.commit_guard(worker, c, run, final_binding,
+                            **({"_model_after": model_after} if model_after is not None else {}))
     except DomainError as rejected:
         with store.tx() as c:
             # The receive transaction has already committed. A later owner,

@@ -1181,7 +1181,20 @@ def verify_instance_records(store, c, user, instance, records, limits):
 
 
 @controlled
-def commit_guard(worker, c, run, b, delta=0, *, _commit_out=None):
+def commit_guard(worker, c, run, b, delta=0, *, _commit_out=None, _model_out=None,
+                 _model_after=None):
+    if _model_after is not None:
+        from .natural_spec_runtime import _ModelSettlementRead
+        require(type(_model_after) is _ModelSettlementRead and delta == 0
+                and _commit_out is None and _model_out is None)
+        with _model_after.tail(worker, c, run, b):
+            return _commit_guard(worker, c, run, b, delta, _model_after=_model_after)
+    return _commit_guard(worker, c, run, b, delta, _commit_out=_commit_out,
+                         _model_out=_model_out)
+
+
+def _commit_guard(worker, c, run, b, delta=0, *, _commit_out=None, _model_out=None,
+                  _model_after=None):
     from .app_jobs import lock_live
     job = lock_live(worker.store, c, run)
     if natural.is_candidate(b["draft"]["candidate"]):
@@ -1222,7 +1235,12 @@ def commit_guard(worker, c, run, b, delta=0, *, _commit_out=None):
     check_worker_tx(worker, c, job["id"])
     if getattr(worker, "pa_trial", None) is not None:
         from .pa_trial_dispatch import check_commit
-        check_commit(worker, c, job, **({"_read_out": _commit_out} if _commit_out is not None else {}))
+        if _model_after is None:
+            check_commit(worker, c, job,
+                **({"_read_out": _commit_out} if _commit_out is not None else {}),
+                **({"_model_out": _model_out} if _model_out is not None else {}))
+        else:
+            _model_after.tail_row(worker, c, job, b)
     return job
 
 

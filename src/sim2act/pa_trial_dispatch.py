@@ -203,7 +203,9 @@ def _account(worker, b, *, connection=None):
     return account
 
 
-def check_commit(worker, c, run, *, _read_out=None):
+def check_commit(worker, c, run, *, _read_out=None, _model_out=None):
+    if _model_out is not None:
+        _model_out.clear()
     if _read_out is not None:
         previous = _read_out.pop("stamp", None)
         if type(previous) is _CommitReadback:
@@ -219,6 +221,11 @@ def check_commit(worker, c, run, *, _read_out=None):
             gate._approved(worker.store, c, b.contract.principal_id, b.contract, b.approval_key)
             context = _admission(worker)(worker.store, c, run["principal_id"], b.contract, b.approval_key,
                 _stage(b, run), run["id"], run["version"], run["fence"])
+        if _model_out is not None:
+            gate.require(_production_binding(b) and type(b.contract) is gate.PBTrialContract
+                         and context.stage == "cold")
+            _model_out.update(approval=context.approval_fingerprint,
+                phase=context.stage_fingerprint, requirements=context.requirements_fingerprint)
         if read_entry is not None:
             from .pb_natural_specs import _source_reads_current
             token = c.info.get("pb_source_reads")
@@ -1179,7 +1186,11 @@ def _settlement(worker, c, run, aid, raw, *, verified=False):
     )
 
 
-def settle_verified(worker, c, run, aid, raw):
+def settle_verified(worker, c, run, aid, raw, *, _model_after=None):
+    if _model_after is not None:
+        from .natural_spec_runtime import _ModelSettlementRead
+        gate.require(type(_model_after) is _ModelSettlementRead)
+        return _model_after.settle(worker, c, run, aid, raw)
     b = _identity(worker, c, run, aid)
     if _journal_binding(b):
         check_commit(worker, c, run)
