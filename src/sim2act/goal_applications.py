@@ -436,6 +436,67 @@ def parse_generation(raw, selected):
 
 
 def history(store, c, run):
+    """Reuse only completed production history inside its original read scope.
+
+    History uses the frozen generation limits, independently of each caller's
+    full candidate Limits. Neither candidate proofs nor stage permits are shared.
+    """
+    from .pb_natural_specs import _source_reads_current
+    token = c.info.get("pb_source_reads")
+    if not _source_reads_current(store, c, token) or run["status"] != "PARTIAL":
+        return _history(store, c, run)
+    from .natural_specs import GENERATION
+    from .spec_production import VERSION as PRODUCTION_VERSION
+    run_fingerprint = fingerprint(dict(run))
+    key = ("completed-production-generation-history", run["principal_id"],
+        run["project_id"], run["id"], run_fingerprint)
+
+    def current():
+        if (not _source_reads_current(store, c, token)
+                or fingerprint(dict(run)) != run_fingerprint):
+            return False
+        scope = token.results.get(("journal-trial-complete-generation-scope", run["id"]))
+        if scope is None:
+            return False
+        anchor = scope[0]
+        return (anchor["owner"] == {k: run[k] for k in ("principal_id", "project_id", "runtime_id")}
+            and anchor["hints"]["owner"] == run["principal_id"]
+            and anchor["hints"]["project"] == run["project_id"]
+            and anchor["hints"]["runtime"] == run["runtime_id"]
+            and anchor["hints"]["kind"] == GENERATION
+            and anchor["versions"] == [PRODUCTION_VERSION] * 3)
+
+    try:
+        # The original gate refreshes the actual owner/lineage anchors and its
+        # authorities before either eligibility or a completed-history hit.
+        source_scope_gate(store, c, run["id"])
+        if not current():
+            return _history(store, c, run)
+        if key in token.inflight:
+            raise DomainError("VERSION_CONFLICT", "Incomplete generation history cannot be reused")
+        if key in token.results:
+            value, authorities = token.results[key]
+            store.recheck_proof_authorities(c, {"_call_authorities": authorities})
+            if current():
+                return copy.deepcopy(value)
+            return _history(store, c, run)
+        token.inflight.add(key)
+        try:
+            with store.proof_authorities(c) as authorities:
+                value = _history(store, c, run)
+            if current() and len(value[1]) == 3 and all(row["status"] == "RECEIVED" for row in value[1]):
+                # No nested message/Attempt JSON aliases escape into the cache.
+                stored = copy.deepcopy((value[0], [dict(row) for row in value[1]]))
+                token.results[key] = (stored, tuple(sorted(authorities)))
+            return value
+        finally:
+            token.inflight.discard(key)
+    except BaseException:
+        token.results.clear()
+        raise
+
+
+def _history(store, c, run):
     """Reconstruct every request from frozen input and separately anchored received responses."""
     messages = initial_messages(store, c, run)
     selected = store.frozen_contract(c, run).application_generation
