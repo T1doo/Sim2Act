@@ -51,7 +51,7 @@ def observe_original_lease_failures(monkeypatch, tmp_path):
         except Exception as error:
             record("original_heartbeat_error", type=type(error).__name__,
                 sqlite_errorcode=getattr(getattr(error, "orig", None), "sqlite_errorcode", None),
-                trace=failure_trace(error))
+                trace=failure_trace(error, guard_code=guard.__code__))
             raise
         record("original_heartbeat_return", run_id=args[2] if len(args) > 2 else None, returned=result)
         return result
@@ -60,7 +60,8 @@ def observe_original_lease_failures(monkeypatch, tmp_path):
         try:
             return guard(*args, **kwargs)
         except DomainError as error:
-            record("original_guard_error", error=error.public(), trace=failure_trace(error))
+            record("original_guard_error", error=error.public(),
+                trace=failure_trace(error, guard_code=guard.__code__))
             raise
 
     monkeypatch.setattr(Store, "heartbeat", observed_heartbeat)

@@ -32,7 +32,7 @@ from sim2act.errors import DomainError
 from sim2act.worker import Worker
 
 
-def failure_trace(error):
+def failure_trace(error, *, guard_code=None):
     try:
         frames, guard_values = [], []
         trace = error.__traceback__
@@ -40,7 +40,7 @@ def failure_trace(error):
             frame = trace.tb_frame
             frames.append(dict(file=frame.f_code.co_filename,
                 function=frame.f_code.co_name, line=trace.tb_lineno))
-            if frame.f_code is Store.guard.__code__:
+            if frame.f_code is (Store.guard.__code__ if guard_code is None else guard_code):
                 expected = frame.f_locals.get("fence")
                 row = frame.f_locals.get("r")
                 values = dict(expected_fence=expected if type(expected) is int else "Unknown",
