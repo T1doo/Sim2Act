@@ -227,38 +227,50 @@ function csvRunDownloadValue(instanceId,run,records){
  return {instance_id:instanceId,run_id:run.id,release_id:run.release_id,result_version:run.result_version,
   result:{resource_id:result.resource_id,column:result.column,sum:result.sum,count:result.count}};
 }
+function csvRunDownloadCSV(value){
+ const r=value.result,text=[value.instance_id,value.run_id,value.release_id,r.resource_id,r.column];
+ if(text.some(field=>typeof field!=="string"||/[\p{Cc}\p{Cf}]/u.test(field)||/^[=+\-@]/.test(field.trimStart())))throw Error("此结果的文本字段不适合CSV外部表格读取；为保留原值，请下载JSON。");
+ const decimal=typeof r.sum==="string"&&r.sum.length<=4096&&r.sum.match(/^[+-]?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/);
+ if(!decimal||decimal[0]!==r.sum)throw Error("求和结果不是可原样导出的有界十进制字符串；请下载JSON。");
+ const cell=field=>{const literal=String(field);return /[",\r\n]/.test(literal)?'"'+literal.replaceAll('"','""')+'"':literal;};
+ const header=["instance_id","run_id","release_id","result_version","resource_id","column","sum","count"];
+ const row=[value.instance_id,value.run_id,value.release_id,value.result_version,r.resource_id,r.column,r.sum,r.count];
+ return header.join(",")+"\r\n"+row.map(cell).join(",")+"\r\n";
+}
 function csvRunDownloadControl(v,run){
  const instance=v.instance,read=v.readGeneration,appRunId=run.app_run_id,expected=csvRunDownloadValue(v.id,run,instance.data);
  if(!expected)return;
- const node=document.createElement("div"),button=document.createElement("button"),status=document.createElement("p");
- button.type="button";button.textContent="下载此运行结果 JSON";status.setAttribute("role","status");status.setAttribute("aria-live","polite");
- node.append(button,status);let downloading=false;
+ const node=document.createElement("div"),status=document.createElement("p"),buttons=[];
+ status.setAttribute("role","status");status.setAttribute("aria-live","polite");let downloading=false;
  const selected=()=>node.isConnected&&applicationUseCurrent(v)&&v.instance===instance&&v.readGeneration===read&&v.selected===expected.run_id;
- button.onclick=async()=>{
-  if(downloading||v.busy||!selected())return;
-  const connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;
-  const key=JSON.stringify([connection,v.project,v.id,expected.run_id,expected.result_version]);
-  if(applicationUseDownloads.has(key))return;
-  const current=()=>selected()&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration;
-  applicationUseDownloads.add(key);
-  downloading=true;button.disabled=true;status.textContent="正在重新核对此运行的权限与结果…";
-  try{
-   const saved=await api(`/api/internal/instances/${encodeURIComponent(v.id)}/runs/${encodeURIComponent(expected.run_id)}`);
-   if(!current())return;
-   const value=csvRunDownloadValue(v.id,saved,saved.known_effects);
-   if(saved.app_run_id!==appRunId||!value||JSON.stringify(value)!==JSON.stringify(expected))throw Error("VERSION_CONFLICT");
-   const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)+"\n"],{type:"application/json;charset=utf-8"}));
-   const link=document.createElement("a");link.href=url;link.download=`sim2act-${v.id}-${expected.run_id}-v${expected.result_version}.json`;link.hidden=true;
-   try{document.body.append(link);link.click();status.textContent=`已生成所选运行结果 v${value.result_version} 的 JSON 下载。`;}
-   finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),0);}
-  }catch(error){
-   if(current()){
-    if(error.httpStatus===403)clearApplicationUseData(v);
-    else status.textContent=`结果读取未通过：${error.message}。未下载文件。`;
-   }
-  }finally{applicationUseDownloads.delete(key);downloading=false;button.disabled=false;}
- };
- return node;
+ for(const format of ["json","csv"]){
+  const button=document.createElement("button");button.type="button";button.dataset.downloadFormat=format;button.textContent=`下载此运行结果 ${format.toUpperCase()}`;buttons.push(button);node.append(button);
+  button.onclick=async()=>{
+   if(downloading||v.busy||!selected())return;
+   const connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;
+   const key=JSON.stringify([connection,v.project,v.id,expected.run_id,expected.result_version]);
+   if(applicationUseDownloads.has(key))return;
+   const current=()=>selected()&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration;
+   applicationUseDownloads.add(key);downloading=true;for(const control of buttons)control.disabled=true;status.textContent="正在重新核对此运行的权限与结果…";
+   try{
+    const saved=await api(`/api/internal/instances/${encodeURIComponent(v.id)}/runs/${encodeURIComponent(expected.run_id)}`);
+    if(!current())return;
+    const value=csvRunDownloadValue(v.id,saved,saved.known_effects);
+    if(saved.app_run_id!==appRunId||!value||JSON.stringify(value)!==JSON.stringify(expected))throw Error("VERSION_CONFLICT");
+    const content=format==="csv"?csvRunDownloadCSV(value):JSON.stringify(value,null,2)+"\n";
+    const url=URL.createObjectURL(new Blob([content],{type:format==="csv"?"text/csv;charset=utf-8":"application/json;charset=utf-8"}));
+    const link=document.createElement("a");link.href=url;link.download=`sim2act-${v.id}-${expected.run_id}-v${expected.result_version}.${format}`;link.hidden=true;
+    try{document.body.append(link);link.click();status.textContent=`已生成所选运行结果 v${value.result_version} 的 ${format.toUpperCase()} 下载。`;}
+    finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),0);}
+   }catch(error){
+    if(current()){
+     if(error.httpStatus===403)clearApplicationUseData(v);
+     else status.textContent=`结果读取未通过：${error.message}。未下载文件。`;
+    }
+   }finally{applicationUseDownloads.delete(key);downloading=false;for(const control of buttons)control.disabled=false;}
+  };
+ }
+ node.append(status);return node;
 }
 async function readApplicationUse(v){
  const generation=++v.readGeneration,connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration,current=()=>applicationUseCurrent(v)&&generation===v.readGeneration&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration;
