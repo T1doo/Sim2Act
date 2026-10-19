@@ -33,6 +33,7 @@ from sim2act.errors import DomainError
     "fixed_source_missing", "fixed_source_deny", "fixed_source_expired", "qualification_deny",
     "run_cancelled", "phase_seal_changed", "first_full_failure", "settings_during_full",
     "controller_during_full",
+    "source_callback_controller_drift",
 ])
 def test_postwrite_commit_readback_boundary(env, tmp_path, monkeypatch, case):
     http_calls = []
@@ -109,6 +110,10 @@ def test_postwrite_commit_readback_boundary(env, tmp_path, monkeypatch, case):
         if case == "source_callback_write":
             calls["callback_rows"] += active_connection[0].execute(update(runs)
                 .where(runs.c.id == rid).values(goal="Synthetic boundary unit")).rowcount
+        elif case == "source_callback_controller_drift":
+            # Worker.store's rejected replacement sets this sticky flag even
+            # when its original Store pointer remains unchanged.
+            worker._journal_trial_drift = True
         scope = evidence.requirements_for(user, current, key)
         at = time.time()
         return policy.SourceVerificationResult(requirements_fingerprint=fingerprint(scope.model_dump()),
@@ -173,7 +178,8 @@ def test_postwrite_commit_readback_boundary(env, tmp_path, monkeypatch, case):
                         delivery_graph_requests.c.app_id == gate.entity(contract),
                         delivery_graph_requests.c.kind == gate.PHASE + "_seal").values(request_fingerprint="0" * 64)).rowcount
                 rejected = case in {"authority_revoke", "fixed_source_missing", "fixed_source_deny",
-                    "fixed_source_expired", "qualification_deny", "run_cancelled", "phase_seal_changed"}
+                    "fixed_source_expired", "qualification_deny", "run_cancelled", "phase_seal_changed",
+                    "source_callback_controller_drift"}
                 try:
                     trial.check_commit_after_readback(worker, c, run, out)
                 except DomainError as caught:
@@ -190,7 +196,7 @@ def test_postwrite_commit_readback_boundary(env, tmp_path, monkeypatch, case):
                     assert calls["full"] == 2
                 elif case in {"missing_stamp", "no_scope", "settings_changed", "successful_write", "failed_write", "source_callback_write"}:
                     assert calls["full"] == 2
-                elif case in {"fixed_source_missing", "fixed_source_deny", "fixed_source_expired", "qualification_deny", "authority_revoke"}:
+                elif case in {"fixed_source_missing", "fixed_source_deny", "fixed_source_expired", "qualification_deny", "authority_revoke", "source_callback_controller_drift"}:
                     assert calls["full"] == 1  # No retry can replace a current rejection.
                 if rejected:
                     assert error is not None
