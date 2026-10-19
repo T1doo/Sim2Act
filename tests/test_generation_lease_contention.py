@@ -12,11 +12,12 @@ import sys
 import threading
 import time
 from contextlib import contextmanager
+from functools import wraps
 from types import CodeType
 
 import pytest
 import test_natural_spec_apps as apps
-from sqlalchemy import select, update
+from sqlalchemy import event, select, update
 from test_pb_spec_production_controller import prepare_pb
 from test_spec_app_operations import snapshot
 from test_spec_production_controller import configured
@@ -28,6 +29,13 @@ from sim2act import pa_trial_dispatch as trial
 from sim2act.db import Store, attempts, grants, runs
 from sim2act.errors import DomainError
 from sim2act.worker import Worker
+
+
+def _frames(thread_id):
+    frame = sys._current_frames().get(thread_id)
+    while frame is not None:
+        yield frame
+        frame = frame.f_back
 
 
 def test_generate_recovers_one_bounded_sqlite_busy_without_losing_original_lease(env, tmp_path, monkeypatch):
@@ -47,7 +55,8 @@ def test_generate_recovers_one_bounded_sqlite_busy_without_losing_original_lease
 
     def record(kind, **values):
         item = dict(sequence=next(numbers), kind=kind, wall=time.time(),
-                    monotonic=time.monotonic(), thread=threading.get_ident(), **values)
+                    monotonic=time.monotonic(), process_cpu=time.process_time(),
+                    thread_cpu=time.thread_time(), thread=threading.get_ident(), **values)
         with event_lock:
             events.append(item)
         return item
@@ -80,6 +89,7 @@ def test_generate_recovers_one_bounded_sqlite_busy_without_losing_original_lease
             record("tx_committed", transaction=token)
         except Exception as error:
             record("tx_error", transaction=token, error=type(error).__name__,
+                   detail=error.public() if isinstance(error, DomainError) else str(error),
                    sqlite_errorcode=getattr(getattr(error, "orig", None), "sqlite_errorcode", None))
             raise
         finally:
@@ -145,6 +155,7 @@ def test_generate_recovers_one_bounded_sqlite_busy_without_losing_original_lease
             result = original_heartbeat(self, worker_id, run_id, *args, **kwargs)
         except Exception as error:
             record("heartbeat_error", run_id=run_id, error=type(error).__name__,
+                   detail=error.public() if isinstance(error, DomainError) else str(error),
                    sqlite_errorcode=getattr(getattr(error, "orig", None), "sqlite_errorcode", None), stack=stack())
             if targeted and getattr(getattr(error, "orig", None), "sqlite_errorcode", None) == 5:
                 busy.set()
@@ -164,6 +175,38 @@ def test_generate_recovers_one_bounded_sqlite_busy_without_losing_original_lease
     monkeypatch.setattr(Store, "heartbeat", traced_heartbeat)
     monkeypatch.setattr(Worker, "reserve", traced_reserve)
     monkeypatch.setattr(db, "time", ExactClockProbe())
+
+    def observe_span(owner, name):
+        original = getattr(owner, name)
+
+        @wraps(original)
+        def observed(*args, **kwargs):
+            token = next(numbers)
+            record("span_enter", span=token, function=name)
+            try:
+                return original(*args, **kwargs)
+            finally:
+                record("span_exit", span=token, function=name)
+
+        monkeypatch.setattr(owner, name, observed)
+
+    from sim2act import goal_runs, ordinary_artifacts, ordinary_corrections, ordinary_csv
+    for owner, name in ((Store, "_frozen_contract_after_scope"),
+                        (generation, "source_scope_gate"), (goal_runs, "verify_source"),
+                        (ordinary_csv, "frozen"), (ordinary_artifacts, "validate_contract"),
+                        (ordinary_corrections, "validate")):
+        observe_span(owner, name)
+
+    def before_sql(c, cursor, statement, parameters, context, executemany):
+        token = next(numbers)
+        context._generation_lease_probe = token
+        record("sql_enter", sql=token, statement=statement, transaction=active.get(threading.get_ident()))
+
+    def after_sql(c, cursor, statement, parameters, context, executemany):
+        record("sql_exit", sql=context._generation_lease_probe)
+
+    event.listen(store.engine, "before_cursor_execute", before_sql)
+    event.listen(store.engine, "after_cursor_execute", after_sql)
 
     def owned_writer():
         if not request_lock.wait(50):
@@ -225,6 +268,9 @@ def test_generate_recovers_one_bounded_sqlite_busy_without_losing_original_lease
                 guard_error = error.public()
         record("original_interval_probe", recovered=recovered.is_set(), counters=counters, error=guard_error)
     finally:
+        if running.is_alive():
+            record("foreground_before_teardown", stack=[dict(file=f.f_code.co_filename,
+                function=f.f_code.co_name, line=f.f_lineno) for f in _frames(running.ident)])
         worker.stop.set()
         release_foreground.set()
         release_lock.set()
@@ -237,6 +283,8 @@ def test_generate_recovers_one_bounded_sqlite_busy_without_losing_original_lease
             original_lease=selected.get("old_lease"), recovered=recovered.is_set(), guard_error=guard_error,
             counters=counters, observation_errors=io_errors, foreground_errors=failure, events=events), indent=2))
         data[2].close()
+        event.remove(store.engine, "before_cursor_execute", before_sql)
+        event.remove(store.engine, "after_cursor_execute", after_sql)
     assert not running.is_alive() and not holder.is_alive() and io_errors == [] and failure == []
     assert len(sent) == len(fixture["sends"]) == 1 and len(reserve_calls) == 2
     assert counters["requests"] == counters["attempts"] == 1 and counters["status"] == "RUNNING"
@@ -257,7 +305,7 @@ def test_generation_true_revocation_latches_and_stops_unreserved_progress(env, t
                  deadline=min(run["created_at"] + data[1].run_seconds, binding.contract.expires_at))
     with data[0].tx() as c:
         changed = c.execute(update(grants).where(grants.c.principal_id == data[3],
-            grants.c.runtime_id == run["runtime_id"], grants.c.project_id == data[4],
+            grants.c.project_id == data[4],
             grants.c.resource_id == data[5], grants.c.revoked.is_(False)).values(revoked=True))
         assert changed.rowcount > 0
     before = snapshot(data[0])
