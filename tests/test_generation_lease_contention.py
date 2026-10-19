@@ -209,9 +209,13 @@ def test_generate_recovers_one_bounded_sqlite_busy_without_losing_original_lease
     event.listen(store.engine, "after_cursor_execute", after_sql)
 
     def owned_writer():
-        if not request_lock.wait(50):
-            io_errors.append("Writer was never requested")
-            return
+        request_until = time.monotonic() + 75
+        while not request_lock.wait(.1):
+            if release_foreground.is_set():
+                return
+            if time.monotonic() >= request_until:
+                io_errors.append("Writer was never requested within the bounded scheduler window")
+                return
         try:
             with sqlite3.connect(store.engine.url.database, timeout=2) as c:
                 record("owned_writer_begin_attempt")
