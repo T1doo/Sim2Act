@@ -167,8 +167,9 @@ def setup(env):
     return store, settings, client, user, pid, rid, card
 
 
-def generate(data, style="single", repair=False):
-    store, settings, client, _, pid, rid, card = data
+def generation_transport(data, style="single", repair=False):
+    """Existing finite fake payloads; no enqueue, Worker or accounting override."""
+    _, _, _, _, _, rid, _ = data
     sent = []
     source_rid = rid
 
@@ -226,6 +227,12 @@ def generate(data, style="single", repair=False):
         )
         return httpx.Response(200, json=wire(message, "tool_calls"))
 
+    return sent, httpx.MockTransport(handler)
+
+
+def generate(data, style="single", repair=False):
+    store, settings, client, _, pid, _, card = data
+    sent, model_transport = generation_transport(data, style, repair)
     made = client.post(
         f"/api/projects/{pid}/goal-cards/{card['id']}/application-runs",
         json=dict(
@@ -237,7 +244,7 @@ def generate(data, style="single", repair=False):
     )
     assert made.status_code == 202, made.text
     rid = made.json()["run_id"]
-    assert Worker(store, settings, goal_planner_transport=httpx.MockTransport(handler)).once()
+    assert Worker(store, settings, goal_planner_transport=model_transport).once()
     result = client.get(f"/api/runs/{rid}")
     assert result.status_code == 200, result.text
     assert result.json()["status"] == "PARTIAL", result.text

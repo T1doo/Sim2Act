@@ -435,6 +435,73 @@ class Worker:
                     if current["status"] != state or current["cancel_intent"] or current["fence"] != fence or current["version"] != run["version"] + 1:
                         raise DomainError("VERSION_CONFLICT", "Spec generation terminal ownership changed")
 
+    def _heartbeat_lease(self, run, stopped, committed=None):
+        from .text_workflows import _sqlite_heartbeat_contention
+
+        store, worker_id = self.store, self.id
+        lease_seconds = self.s.lease_seconds
+        if committed is None:
+            committed = dict(lock=threading.Lock(), lease_until=run["lease_until"], failure=None)
+
+        def reject(error):
+            # Every caller holds the metadata lock: decision and publication
+            # share the same boundary as foreground admission to the next step.
+            if committed.get("failure") is None:
+                committed["failure"] = error
+            return committed["failure"]
+
+        deadline = run["created_at"] + self.s.run_seconds
+        while not stopped.is_set() and not self.stop.is_set():
+            with committed["lock"]:
+                if committed.get("failure") is not None:
+                    return committed["failure"]
+                lease_until = committed["lease_until"]
+                cutoff = min(lease_until, deadline)
+                remaining = cutoff - time.time()
+                if remaining <= 0:
+                    return reject(DomainError("BUDGET_EXHAUSTED", "Original heartbeat interval ended"))
+                retry_end = time.monotonic() + remaining
+            if stopped.wait(min(lease_seconds / 3, remaining / 2)):
+                return None
+            # Driver lock waits consume this original interval. A wall-clock
+            # rollback cannot create another retry interval or an unbounded loop.
+            for attempt in range(16):
+                if stopped.is_set() or self.stop.is_set():
+                    return None
+                try:
+                    with committed["lock"]:
+                        if committed.get("failure") is not None:
+                            return committed["failure"]
+                        # A same-owner foreground heartbeat may have committed
+                        # between attempts. Only that real commit starts a new interval.
+                        if committed["lease_until"] > lease_until:
+                            break
+                        remaining = min(cutoff - time.time(), retry_end - time.monotonic())
+                        if remaining <= 0:
+                            return reject(DomainError("BUDGET_EXHAUSTED", "Original heartbeat interval ended"))
+                        options = (
+                            dict(_deadline=cutoff, _wait_seconds=min(5.0, remaining))
+                            if store.sqlite else {}
+                        )
+                        renewed = store.heartbeat(worker_id, run["id"], run["fence"],
+                                                  lease_seconds, **options)
+                        if renewed is None:
+                            return reject(DomainError("VERSION_CONFLICT", "Missing committed Run heartbeat"))
+                        committed["lease_until"] = renewed
+                except Exception as error:
+                    with committed["lock"]:
+                        if committed.get("failure") is not None:
+                            return committed["failure"]
+                        if _sqlite_heartbeat_contention(store, error):
+                            if committed["lease_until"] > lease_until:
+                                break
+                            if (attempt < 15 and time.time() < cutoff
+                                    and time.monotonic() < retry_end):
+                                continue
+                        return reject(error)
+                break
+        return None
+
     def process(self, run):
         from .natural_trial_runs import check_worker
         check_worker(self, run["id"])
@@ -531,18 +598,57 @@ class Worker:
                 },
             ]
         hb_stop = threading.Event()
+        hb_committed = dict(lock=threading.Lock(), lease_until=run["lease_until"], failure=None)
 
         def heartbeat():
-            while not hb_stop.wait(self.s.lease_seconds / 3):
+            try:
+                error = self._heartbeat_lease(run, hb_stop, hb_committed)
+            except Exception as unexpected:
+                error = unexpected
+            if error is not None:
+                with hb_committed["lock"]:
+                    if hb_committed["failure"] is None:
+                        hb_committed["failure"] = error
+
+        def raise_heartbeat_error(error):
+            if error is not None:
+                if isinstance(error, DomainError):
+                    raise error
+                raise DomainError("RESOURCE_UNAVAILABLE", "Worker heartbeat renewal failed") from error
+
+        def check_heartbeat():
+            with hb_committed["lock"]:
+                raise_heartbeat_error(hb_committed["failure"])
+
+        def renew_foreground():
+            if not self.store.sqlite:
+                check_heartbeat()
+                return
+            # SQLite's foreground writer can repeatedly win BEGIN IMMEDIATE.
+            # Renew outside business transactions before starting the next step.
+            # This serializes only metadata heartbeats, never model/tool calls.
+            with hb_committed["lock"]:
+                raise_heartbeat_error(hb_committed["failure"])
+                cutoff = min(hb_committed["lease_until"], run["created_at"] + self.s.run_seconds)
+                remaining = cutoff - time.time()
+                if remaining <= 0:
+                    raise DomainError("BUDGET_EXHAUSTED", "Original heartbeat interval ended")
                 try:
-                    self.store.heartbeat(self.id, rid, fence, self.s.lease_seconds)
-                except Exception:
-                    hb_stop.set()
+                    renewed = self.store.heartbeat(self.id, rid, fence, self.s.lease_seconds,
+                        _deadline=cutoff, _wait_seconds=min(5.0, remaining))
+                except DomainError:
+                    raise
+                except Exception as error:
+                    raise DomainError("RESOURCE_UNAVAILABLE", "Worker heartbeat renewal failed") from error
+                if renewed is None:
+                    raise DomainError("VERSION_CONFLICT", "Missing committed Run heartbeat")
+                hb_committed["lease_until"] = renewed
 
         hb = threading.Thread(target=heartbeat, daemon=True)
         hb.start()
         try:
             while not self.stop.is_set():
+                renew_foreground()
                 with self.store.tx() as c:
                     current = self.store.guard(c, rid, fence)
                 if current["status"] != "RUNNING":
@@ -577,6 +683,7 @@ class Worker:
                     start = time.monotonic()
                     raw = None
                     try:
+                        check_heartbeat()
                         raw = self.model.request(ctx["messages"], goal_tools)
                         msg, pending = parse_response(raw)
                         identity = returned_model_identity(
@@ -668,9 +775,11 @@ class Worker:
                     for call in pending:
                         if call["id"] in completed_ids:
                             continue
+                        renew_foreground()
                         if contract.source_goal_card is not None:
                             with self.store.tx() as c:
                                 self.store.frozen_contract(c, self.store.guard(c, rid, fence))
+                        check_heartbeat()
                         receipt = dispatch(self.store, rid, fence, call)
                         ctx["messages"].append(
                             {

@@ -195,7 +195,7 @@ def _journal_scope_anchor(store, c, rid, *, expected=None):
     if (hints is None or hints["kind"] != "goal-natural-spec-application.v1"
             or hints["aid"] is not None or len(accepted) != 1
             or accepted[0]["kind"] != hints["kind"] or accepted[0]["aid"] is not None
-            or versions not in ([JOURNAL_VERSION] * 3, [PRODUCTION_VERSION] * 3)):
+            or versions not in ([JOURNAL_VERSION] * 3, [PRODUCTION_VERSION] * 3, ["pa-trial-dispatch.v1"] * 3)):
         return None
     return dict(owner=dict(owner), refs=refs, hints=dict(hints),
                 accepted=[dict(row) for row in accepted], versions=versions)
@@ -669,7 +669,7 @@ def verified_candidate(store, c, run, limits):
     from .spec_production import VERSION as PRODUCTION_VERSION
     versions = c.execute(select(attempts.c.parameters["pa_trial_binding"]["version"].as_string())
                          .where(attempts.c.run_id == run["id"])).scalars().all()
-    if versions not in ([JOURNAL_VERSION] * 3, [PRODUCTION_VERSION] * 3):
+    if versions not in ([JOURNAL_VERSION] * 3, [PRODUCTION_VERSION] * 3, ["pa-trial-dispatch.v1"] * 3):
         return _verified_candidate(store, c, run, limits)
     key = ("journal-trial-complete-generation", run["principal_id"], run["project_id"],
            run["id"], fingerprint(dict(run)),

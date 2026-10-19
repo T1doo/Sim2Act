@@ -110,6 +110,7 @@ def anchor(c, rid, kind, aid):
 
 
 def counters(c, job, manifest):
+    from .natural_trial_runs import MARKER, context_association
     from .spec_production import evidence_mode
     rows = (
         c.execute(
@@ -130,9 +131,14 @@ def counters(c, job, manifest):
         )
     )
     rows.sort(key=lambda r: r["parameters"]["natural_spec"]["ordinal"])
+    context_keys = {"kind", "messages", "requests", "repairs", "reserved_tokens", "tools", "spec_family"}
+    associated = context_association(c, job) if MARKER in ctx else None
+    if associated is not None:
+        require(associated.stage in {"source", "cold"})
+        context_keys.add(MARKER)
     require(
         set(ctx)
-        == {"kind", "messages", "requests", "repairs", "reserved_tokens", "tools", "spec_family"}
+        == context_keys
         and ctx["spec_family"] == codec.VERSION
         and ctx["kind"] == "INTERNAL_APPRUN"
         and isinstance(ctx["messages"], list)

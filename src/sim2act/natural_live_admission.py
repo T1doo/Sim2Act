@@ -396,7 +396,7 @@ def _stage_current(store, c, user, contract, stage, run_id):
             .where(runs.c.principal_id == user, runs.c.project_id == contract.project_id,
                 runs.c.runtime_id == contract.runtime_id,
                 runs.c.request_key == contract.stage_keys.generate)).scalars().all()
-        if versions in ([JOURNAL_VERSION] * 3, [PRODUCTION_VERSION] * 3):
+        if versions in ([JOURNAL_VERSION] * 3, [PRODUCTION_VERSION] * 3, ["pa-trial-dispatch.v1"] * 3):
             with _source_reads(store, c):
                 return _stage_current_read(store, c, user, contract, stage, run_id, pa_spec_apps,
                                            _journal=True)

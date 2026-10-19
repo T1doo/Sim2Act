@@ -96,29 +96,48 @@ def _existing(c, user, contract, stage):
     return body
 
 
+@controlled
+def context_association(c, job):
+    """Validate metadata only; never grants claim, send or stage authority.
+
+    Called after the caller's ordinary source scope proof. Preserve the marker
+    in durable context and accept it only with both original paired histories.
+    """
+    associated = c.execute(select(runs.c.id, runs.c.principal_id, runs.c.project_id,
+        runs.c.runtime_id, runs.c.created_at, runs.c.fingerprint,
+        runs.c.context[MARKER].label("marker")).where(
+        runs.c.id == job["id"], associated_sql())).mappings().first()
+    if associated is None:
+        gate.require(MARKER not in job["context"])
+        return None
+    body = Association.model_validate(job["context"].get(MARKER))
+    frozen = c.execute(select(run_contracts).where(
+        run_contracts.c.run_id == job["id"])).mappings().one()
+    gate.require(
+        associated["marker"] == body.model_dump()
+        and all(associated[k] == job[k] for k in (
+            "id", "principal_id", "project_id", "runtime_id", "created_at", "fingerprint"))
+        and body.run_id == job["id"]
+        and body.principal_id == job["principal_id"]
+        and body.project_id == job["project_id"]
+        and body.created_at == job["created_at"]
+        and body.run_fingerprint == job["fingerprint"]
+        and fingerprint(frozen["snapshot"]) == frozen["fingerprint"] == body.frozen_fingerprint
+        and gate._saved(c, body.principal_id, body.run_id,
+            ASSOCIATION, body.request_key, Association) == body
+        and gate._saved(c, body.principal_id, gate.entity(body),
+            ASSOCIATION, body.request_key, Association) == body
+    )
+    return body
+
+
 def _check_run(store, c, body):
     # Authorize the exact Run before any context/contract or association body.
     from .goal_applications import source_scope_gate
 
     source_scope_gate(store, c, body.run_id)
     job = c.execute(select(runs).where(runs.c.id == body.run_id)).mappings().one()
-    frozen = (
-        c.execute(select(run_contracts).where(run_contracts.c.run_id == body.run_id))
-        .mappings()
-        .one()
-    )
-    gate.require(
-        job["principal_id"] == body.principal_id
-        and job["project_id"] == body.project_id
-        and job["created_at"] == body.created_at
-        and job["fingerprint"] == body.run_fingerprint
-        and fingerprint(frozen["snapshot"]) == frozen["fingerprint"] == body.frozen_fingerprint
-        and job["context"].get(MARKER) == body.model_dump()
-    )
-    gate.require(
-        gate._saved(c, body.principal_id, body.run_id, ASSOCIATION, body.request_key, Association)
-        == body
-    )
+    gate.require(context_association(c, job) == body)
     return job
 
 
