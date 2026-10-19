@@ -729,6 +729,13 @@ def _model_inputs(values):
     return fingerprint(_model_value(values))
 
 
+def _model_source_key(source):
+    return fingerprint({k: getattr(source, k) for k in (
+        "requirements_fingerprint", "account_id", "quota_subject", "provider", "model",
+        "endpoint", "evidence_fingerprint", "decision", "legal_free_entitlement",
+        "enforced_non_chargeable", "revoked")})
+
+
 @dataclass
 class _ModelSettlementRead:
     """Only this model response's completed postwrite proof; never a permit."""
@@ -833,13 +840,8 @@ class _ModelSettlementRead:
             self.check()
             # Observation time is fresh on each resolver call. Exact evidence
             # identity stays pinned; its finite interval is never cached ALLOW.
-            identity = fingerprint({k: getattr(source, k) for k in (
-                "requirements_fingerprint", "account_id", "quota_subject", "provider", "model",
-                "endpoint", "evidence_fingerprint", "decision", "legal_free_entitlement",
-                "enforced_non_chargeable", "revoked")})
             require(source.requirements_fingerprint == self.admission["requirements"]
-                and (self.source_identity is None or identity == self.source_identity))
-            self.source_identity = identity
+                and _model_source_key(source) == self.source_identity)
             self.source_deadline = min(self.source_deadline, source.expires_at)
             self.authorities.update(current_authorities)
             for authority in sorted(self.authorities):
@@ -962,6 +964,8 @@ def _model_settlement_read(worker, c, inputs):
                 "Run version changed after model verification callback")
             if proof is not None:
                 proof.admission = dict(out)
+                proof.source_identity = out["source_identity"]
+                proof.source_deadline = out["source_deadline"]
                 proof.add(fresh=fresh, full_admission=proof.admission)
             enabled(worker)
             if proof is not None:

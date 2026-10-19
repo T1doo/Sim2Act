@@ -16,6 +16,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+import test_pb_spec_production_controller as prepared
 from sqlalchemy import event, insert, select, update
 from sqlalchemy.exc import OperationalError
 from test_pb_spec_production_controller import prepare_pb
@@ -52,6 +53,7 @@ from sim2act.model import CapturedResponse, InternModel, normalize_usage
     "reject_owner", "limits_platform", "limits_node", "tail_reentry",
     "output_drift", "failed_write",
     "tail_extra_expiry", "row_mapping_drift",
+    "source_identity_drift", "source_deadline_drift",
 ])
 def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, monkeypatch, case):
     def forbidden(*_, **__):
@@ -60,12 +62,30 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
         for method in ("handle_request", "handle_async_request"):
             if hasattr(transport, method):
                 monkeypatch.setattr(transport, method, forbidden)
-    data, selected = prepare_pb(env, tmp_path)
+    # Grant expiry is part of the frozen authorization fingerprint. Establish
+    # this synthetic fixture deadline before the original contract is approved.
+    if case in {"grant_expiry", "reject_owner"}:
+        original_frozen = prepared.frozen
+        def expiring_contract(data, **kwargs):
+            contract, consent = original_frozen(data, **kwargs)
+            with data[0].tx() as c:
+                c.execute(update(grants).where(grants.c.resource_id == contract.bindings[1].resource_id)
+                          .values(expires_at=time.time() + 10))
+                authorization = gate.authorization_fingerprint(c, data[3], contract.project_id,
+                    contract.runtime_id, [b.resource_id for b in contract.bindings])
+            contract = contract.model_copy(update=dict(authorization_fingerprint=authorization))
+            return contract, consent.model_copy(update=dict(
+                expected_contract_fingerprint=fingerprint(contract.model_dump())))
+        with monkeypatch.context() as fixture_patch:
+            fixture_patch.setattr(prepared, "frozen", expiring_contract)
+            data, selected = prepare_pb(env, tmp_path)
+    else:
+        data, selected = prepare_pb(env, tmp_path)
     store, settings, client, user, pid, *_ = data
     contract = selected.contract
     binding = production.ProductionTrialBinding(contract, selected.approval_key, selected.account_id)
     clock = [time.time()]
-    if case in {"grant_expiry", "tail_extra_expiry"}:
+    if case in {"grant_expiry", "tail_extra_expiry", "reject_owner", "source_deadline_drift"}:
         monkeypatch.setattr(time, "time", lambda: clock[0])
     rid, aid, app_id = new_id("run"), new_id("attempt"), new_id("apprun")
     target = contract.bindings[1]
@@ -95,9 +115,6 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
             authority=authority, expected_authority_fingerprint=fingerprint(authority.model_dump()),
             approval_key=binding.approval_key, request_key="unit-model-phase",
             consent="BIND_ONLY_THIS_ACCEPTED_STAGE_RUN_APP_RELEASE_AND_COMPLETE_GOAL_TO_ORIGINAL_TRIAL"))
-        if case == "grant_expiry":
-            c.execute(update(grants).where(grants.c.resource_id == target.resource_id)
-                      .values(expires_at=clock[0] + 10))
         if case == "tail_extra_expiry":
             c.execute(update(grants).where(grants.c.resource_id == env[6])
                       .values(expires_at=clock[0] + 10))
@@ -160,10 +177,12 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
                 b["audit_fingerprint"] = "0" * 64
             if case == "row_mapping_drift":
                 b["app_run"]["input"]["nested_drift"] = True
+            if case in {"source_identity_drift", "source_deadline_drift"}:
+                state["source_changed"] = True
         return {}, []
     monkeypatch.setattr(spec, "receipts", receipts_stub)
 
-    def phase_stub(s, c, current_user, current_contract, key, stage, run_id, version, fence):
+    def phase_stub(s, c, current_user, current_contract, key, stage, run_id, version, fence, worker_id):
         if state["post"]:
             state["post_admission"] += 1
             trace.append("full_post_admission")
@@ -175,8 +194,10 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
                                      approval, authority, time.time())
         return SimpleNamespace(stage="cold", approval_fingerprint=fingerprint(approval.model_dump()),
             stage_fingerprint=fingerprint(authority.model_dump()),
+            deadline=min(actual["lease_until"], contract.expires_at),
             requirements_fingerprint=fingerprint(evidence.requirements_for(user, contract, key).model_dump()))
-    monkeypatch.setattr(trial, "_admission", lambda _: phase_stub)
+    monkeypatch.setattr(policy, "check_run", phase_stub)
+    monkeypatch.setattr(trial, "_pb_source", lambda *_: None)
 
     def guard_body(w, c, original, b, delta=0, *, _commit_out=None, _model_out=None, _model_after=None):
         current = own_live(store, c, original)
@@ -213,17 +234,20 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
                 with pytest.raises(OperationalError):
                     connection[0].exec_driver_sql("UPDATE missing_model_settlement_table SET value=1")
         scope = evidence.requirements_for(current_user, current_contract, key)
+        changed = state.get("source_changed", False)
+        if case == "source_deadline_drift" and changed:
+            clock[0] += 11
+            state["source_changed"] = False
         return policy.SourceVerificationResult(requirements_fingerprint=fingerprint(scope.model_dump()),
             account_id=binding.account_id, quota_subject=scope.quota_subject, provider=scope.provider,
-            model=scope.model, endpoint=scope.endpoint, evidence_fingerprint="a" * 64, decision="ALLOW",
+            model=scope.model, endpoint=scope.endpoint,
+            evidence_fingerprint=("b" if case == "source_identity_drift" and changed else "a") * 64,
+            decision="ALLOW",
             legal_free_entitlement=True, enforced_non_chargeable=True, revoked=False,
-            observed_at=time.time(), expires_at=contract.expires_at)
+            observed_at=time.time(), expires_at=(clock[0] + 10
+                if case == "source_deadline_drift" and not state["post"] else
+                now + 10 if case == "source_deadline_drift" and not changed else contract.expires_at))
     monkeypatch.setattr(evidence, "resolve_account", source)
-    if case == "reject_owner":
-        monkeypatch.setattr(time, "time", lambda: clock[0])
-        with store.tx() as c:
-            c.execute(update(grants).where(grants.c.resource_id == target.resource_id)
-                      .values(expires_at=clock[0] + 10))
 
     def reserve(run_id, fence, ctx, *, request_tools, natural_spec_request):
         wire = runtime.body(ctx["messages"], [], node.max_output_tokens)
@@ -317,6 +341,9 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
             with pytest.raises(DomainError) as caught:
                 runtime.advance_model(worker, run)
             error = caught.value.public()
+        (tmp_path / "boundary-handoff.json").write_text(json.dumps(dict(
+            case=case, error=error, trace=trace, post=state["post"],
+            armed=state["armed"], post_admission=state["post_admission"]), indent=2) + "\n")
         with store.tx() as c:
             attempt = dict(c.execute(select(attempts).where(attempts.c.id == aid)).mappings().one())
             op = dict(c.execute(select(operations).where(operations.c.run_id == rid)).mappings().one())

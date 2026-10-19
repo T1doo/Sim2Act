@@ -145,7 +145,7 @@ def validate(worker):
     _account(worker, b)
 
 
-def _admission(worker):
+def _admission(worker, *, _source_out=None):
     def admitted(store, c, user, contract, key, stage, rid, version, fence):
         b = _binding(worker)
         gate.require(
@@ -159,6 +159,10 @@ def _admission(worker):
             if type(contract) is gate.PBTrialContract and stage == "cold":
                 _pb_source(worker, c, b)
             current_source = _journal_source(store, c, b)
+            if _source_out is not None:
+                from .natural_spec_runtime import _model_source_key
+                _source_out.update(identity=_model_source_key(current_source),
+                                   expires_at=current_source.expires_at)
             if _production_binding(b):
                 gate.require(time.time() < min(context.deadline, current_source.expires_at),
                              "Production admission expired during verification")
@@ -217,15 +221,18 @@ def check_commit(worker, c, run, *, _read_out=None, _model_out=None):
         and run["project_id"] == b.contract.project_id
     )
     if _journal_binding(b):
+        source_out: dict = {}
         with worker.store.proof_authorities(c) as authorities:
             gate._approved(worker.store, c, b.contract.principal_id, b.contract, b.approval_key)
-            context = _admission(worker)(worker.store, c, run["principal_id"], b.contract, b.approval_key,
+            context = _admission(worker, **({"_source_out": source_out} if _model_out is not None else {}))(
+                worker.store, c, run["principal_id"], b.contract, b.approval_key,
                 _stage(b, run), run["id"], run["version"], run["fence"])
         if _model_out is not None:
             gate.require(_production_binding(b) and type(b.contract) is gate.PBTrialContract
                          and context.stage == "cold")
             _model_out.update(approval=context.approval_fingerprint,
-                phase=context.stage_fingerprint, requirements=context.requirements_fingerprint)
+                phase=context.stage_fingerprint, requirements=context.requirements_fingerprint,
+                source_identity=source_out["identity"], source_deadline=source_out["expires_at"])
         if read_entry is not None:
             from .pb_natural_specs import _source_reads_current
             token = c.info.get("pb_source_reads")
