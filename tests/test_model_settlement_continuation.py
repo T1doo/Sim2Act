@@ -330,7 +330,9 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
             assert state["post_admission"] == 1 and state["journal"] == 1
             assert trace.index("post_journal") < trace.index("ready") < trace.index("tail_body")
             assert state["context"].state == "CLOSED" and not state["context"].active
-            assert sum(row["kind"] != "SELECT" for row in sql if row["transaction"] == state["tx"]) == 5
+            statements = [row["kind"] for row in sql if row["transaction"] == state["tx"]]
+            assert [kind for kind in statements if kind != "SELECT"] == [
+                "BEGIN", "UPDATE", "INSERT", "UPDATE", "UPDATE", "INSERT"]
         else:
             assert "NS_SETTLED" not in kinds and "SPEC_STEP_VERIFIED" not in kinds
             assert app_state == "QUEUED" and op["receipt"] is None
