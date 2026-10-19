@@ -4,6 +4,7 @@ import json
 import signal
 import threading
 import time
+from contextlib import nullcontext
 from dataclasses import replace
 
 from sqlalchemy import insert, select, update
@@ -129,13 +130,23 @@ class Worker:
             check_worker_tx(self, c, run_id)
             if self.store.frozen_contract(c, run).ordinary_csv_report is not None:
                 raise DomainError("PERMISSION_DENIED", "事前CSV完整报告合同禁止模型请求或预留")
-            if self.pa_trial is not None:
-                from .pa_trial_dispatch import preflight
-                preflight(self, c, run, generation=generation_request,
-                          natural=natural_spec_request is not None)
-            if natural_spec_request is not None:
-                from .natural_spec_runtime import reservation_check
-                reservation_check(self, c, run, context, request_tools, natural_spec_request, s)
+            from .natural_live_admission import PBTrialContract
+            from .pa_trial_dispatch import _journal_reads, _production_binding
+            # The original P-B production natural checks share complete proofs
+            # only in this read segment. Authority and Run guards still run;
+            # the token ends before quota/reservation/business writes.
+            proof_reads = (_journal_reads(self, c) if natural_spec_request is not None
+                and self.store.test_only and self.store.sqlite
+                and _production_binding(self.pa_trial)
+                and type(self.pa_trial.contract) is PBTrialContract else nullcontext())
+            with proof_reads:
+                if self.pa_trial is not None:
+                    from .pa_trial_dispatch import preflight
+                    preflight(self, c, run, generation=generation_request,
+                              natural=natural_spec_request is not None)
+                if natural_spec_request is not None:
+                    from .natural_spec_runtime import reservation_check
+                    reservation_check(self, c, run, context, request_tools, natural_spec_request, s)
             if generation_request:
                 from .goal_applications import check_sender as check_generation_sender
 

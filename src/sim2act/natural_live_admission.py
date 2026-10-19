@@ -390,13 +390,15 @@ def _stage_current(store, c, user, contract, stage, run_id):
     from .pb_natural_specs import _source_reads
     from .spec_production import VERSION as PRODUCTION_VERSION
 
-    if store.test_only and store.sqlite and type(contract) in (TrialContract, TrialContractV2):
+    if store.test_only and store.sqlite and type(contract) in (TrialContract, TrialContractV2, PBTrialContract):
         versions = c.execute(select(attempts.c.parameters["pa_trial_binding"]["version"].as_string())
             .select_from(runs).join(attempts, attempts.c.run_id == runs.c.id)
             .where(runs.c.principal_id == user, runs.c.project_id == contract.project_id,
                 runs.c.runtime_id == contract.runtime_id,
                 runs.c.request_key == contract.stage_keys.generate)).scalars().all()
-        if versions in ([JOURNAL_VERSION] * 3, [PRODUCTION_VERSION] * 3, ["pa-trial-dispatch.v1"] * 3):
+        eligible = (versions == [PRODUCTION_VERSION] * 3 if type(contract) is PBTrialContract
+            else versions in ([JOURNAL_VERSION] * 3, [PRODUCTION_VERSION] * 3, ["pa-trial-dispatch.v1"] * 3))
+        if eligible:
             with _source_reads(store, c):
                 return _stage_current_read(store, c, user, contract, stage, run_id, pa_spec_apps,
                                            _journal=True)

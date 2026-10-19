@@ -3,7 +3,9 @@
 import copy
 import json
 import sqlite3
+import threading
 import time
+from contextlib import contextmanager
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -11,7 +13,7 @@ import httpx
 import pytest
 import test_natural_spec_apps as apps
 from fastapi.testclient import TestClient
-from sqlalchemy import select, update
+from sqlalchemy import event, select, update
 from test_natural_live_admission import frozen
 from test_pb_trial_dispatch import approve_stage, failure_trace
 from test_spec_app_operations import snapshot
@@ -20,6 +22,7 @@ from test_spec_production_controller import no_real_http as no_real_http
 
 from sim2act import natural_live_admission as gate
 from sim2act import natural_source_archives as archive
+from sim2act import natural_spec_runtime as runtime
 from sim2act import natural_specs as natural
 from sim2act import pa_trial_dispatch as trial
 from sim2act import pb_natural_specs as pb
@@ -171,10 +174,84 @@ def refused_archive_copies(data, binding, root):
     return reports
 
 
+def observe_reservation_reads(monkeypatch):
+    """Passively inspect real checks and ensure their scope exits before writes."""
+    local, reports, tokens = threading.local(), [], []
+    reserve, preflight = Worker.reserve, trial.preflight
+    reservation_check, journal_reads = runtime.reservation_check, trial._journal_reads
+
+    def check_token(worker, c, name):
+        record = getattr(local, "record", None)
+        if record is not None:
+            token = c.info.get("pb_source_reads")
+            assert pb._source_reads_current(worker.store, c, token)
+            assert token is record["token"]
+            record["checks"].append(name)
+
+    def observed_preflight(worker, c, run, **kwargs):
+        check_token(worker, c, "preflight")
+        return preflight(worker, c, run, **kwargs)
+
+    def observed_check(worker, c, *args):
+        check_token(worker, c, "reservation_check")
+        result = reservation_check(worker, c, *args)
+        check_token(worker, c, "reservation_check_return")
+        return result
+
+    @contextmanager
+    def observed_reads(worker, c):
+        record = getattr(local, "record", None)
+        with journal_reads(worker, c):
+            if record is not None:
+                assert record["depth"] == 0
+                token = c.info.get("pb_source_reads")
+                assert pb._source_reads_current(worker.store, c, token)
+                assert all(token is not old for old in tokens)
+                tokens.append(token)
+                record["token"], record["depth"] = token, 1
+            try:
+                yield
+            finally:
+                if record is not None:
+                    record["depth"] = 0
+        if record is not None:
+            assert "pb_source_reads" not in c.info
+            assert token.results == {} and token.inflight == set()
+            record["cleared"] = True
+
+    def observed_reserve(worker, run_id, *args, **kwargs):
+        if kwargs.get("natural_spec_request") is None:
+            return reserve(worker, run_id, *args, **kwargs)
+        record = dict(run_id=run_id, depth=0, checks=[], writes=0, cleared=False)
+        local.record = record
+        try:
+            result = reserve(worker, run_id, *args, **kwargs)
+            assert record["checks"] == ["preflight", "reservation_check", "reservation_check_return"]
+            assert record["cleared"] and record["depth"] == 0 and record["writes"] > 0
+            reports.append({k: v for k, v in record.items() if k != "token"})
+            return result
+        finally:
+            local.record = None
+
+    def before_sql(c, cursor, statement, parameters, context, executemany):
+        record = getattr(local, "record", None)
+        if record is not None and not statement.lstrip().upper().startswith("SELECT "):
+            assert record["depth"] == 0
+            record["writes"] += 1
+
+    monkeypatch.setattr(Worker, "reserve", observed_reserve)
+    monkeypatch.setattr(trial, "preflight", observed_preflight)
+    monkeypatch.setattr(runtime, "reservation_check", observed_check)
+    monkeypatch.setattr(trial, "_journal_reads", observed_reads)
+    return reports, before_sql
+
+
 def test_pb_production_original_source_extraction_explicit_use_and_cold(env, tmp_path, monkeypatch):
     data, binding, fixture, factory = configured(env, tmp_path, monkeypatch, prepare_case=prepare_pb)
     generation, _, release, source_instance, generated = apps.ready(data, style="ordered")
     assert len(generated) == 3
+    read_reports, before_sql = observe_reservation_reads(monkeypatch)
+    event.listen(data[0].engine, "before_cursor_execute", before_sql)
     source_id = apps.enqueue(data, release, source_instance, key=binding.contract.stage_keys.source)
     approve_stage(data, binding, "source", source_id)
     source_bytes = []
@@ -225,6 +302,7 @@ def test_pb_production_original_source_extraction_explicit_use_and_cold(env, tmp
 
     # Fresh Store/client/Worker on the same durable database; no old worker result.
     cold_store = Store(data[1].database_url, test_only=True)
+    event.listen(cold_store.engine, "before_cursor_execute", before_sql)
     cold_client = TestClient(create_app(cold_store, data[1]))
     cold_client.headers["Authorization"] = "Bearer synthetic-test-A"
     cold_data = (cold_store, data[1], cold_client, *data[3:])
@@ -267,6 +345,8 @@ def test_pb_production_original_source_extraction_explicit_use_and_cold(env, tmp
         history = journal.read(cold_store, data[3], binding.contract, binding.approval_key, binding.account_id)
         assert len(history.ledger.slots) == len(fixture["sends"]) == 7
         assert not history.ledger.halted and all(s.accepted for s in history.ledger.slots)
+        assert len(read_reports) == 4
+        assert [r["run_id"] for r in read_reports] == [source_id] * 2 + [cold_id] * 2
         assert [s.identity.stage for s in history.ledger.slots] == ["generate"] * 3 + ["source"] * 2 + ["cold"] * 2
         assert all(b.reserved_at - a.reserved_at >= 60 for a, b in zip(history.ledger.slots[:-1], history.ledger.slots[1:], strict=True))
         with cold_store.tx() as c:
@@ -280,6 +360,7 @@ def test_pb_production_original_source_extraction_explicit_use_and_cold(env, tmp
             generation=generation, source=source_id, extraction=made["id"], cold=cold_id,
             original_source=resolved.public_receipt, refusals=failures, result=result.json(),
             owner=owner.json(), journal=history.model_dump(mode="json"),
+            reservation_read_segments=read_reports,
             same_key_no_duplicate=True, extraction_new_sends=0, cold_store_reopened=True), indent=2))
     finally:
         cold_client.close()
