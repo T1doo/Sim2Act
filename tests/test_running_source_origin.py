@@ -37,9 +37,14 @@ def test_running_original_source_reuses_only_exact_read_release_origin(env, tmp_
     client.close()
 
 
-def check_running_source_origin(store, user, project, resource, job, limits, tmp_path, monkeypatch):
+def check_running_source_origin(store, user, project, resource, job, limits, tmp_path, monkeypatch,
+                               *, expected_source_attempts=0):
     """Structural binding check; never sends or supplies live Run authority."""
     source = job["id"]
+    with store.tx() as c:
+        before_attempts = [dict(row) for row in c.execute(select(attempts).where(
+            attempts.c.run_id == source).order_by(attempts.c.id)).mappings()]
+    assert len(before_attempts) == expected_source_attempts
     original, origins = spec.verify_origin, []
 
     def verified(*args, **kwargs):
@@ -84,11 +89,17 @@ def check_running_source_origin(store, user, project, resource, job, limits, tmp
         assert all(not row for row in c.execute(select(grants.c.revoked).where(
             grants.c.principal_id == user, grants.c.project_id == project,
             grants.c.resource_id == resource)).scalars())
-        assert not c.execute(select(attempts.c.id).where(attempts.c.run_id == source)).first()
+        after_attempts = [dict(row) for row in c.execute(select(attempts).where(
+            attempts.c.run_id == source).order_by(attempts.c.id)).mappings()]
+        assert after_attempts == before_attempts
+        actual_attempts = len(after_attempts)
+        assert actual_attempts == expected_source_attempts
     (tmp_path / "same-call-origin-proof.json").write_text(json.dumps(dict(
         scope="STRUCTURAL_SOURCE_BINDING_NOT_RUN_OWNERSHIP_OR_PB_ACCEPTANCE",
         real_models=0, new_mock_exchanges=0,
         optimized_full_origins=optimized_count, fallback_full_origins=fallback_count,
         binding_fingerprint=fingerprint(plain(optimized)), full_fallback_identical=True,
         actual_midcall_grant_revoke_refused=denied.value.code,
-        revoked_transaction_rolled_back=True, source_attempts=0), indent=2))
+        revoked_transaction_rolled_back=True, source_attempts=actual_attempts,
+        full_source_attempt_rows_unchanged=True,
+        actual_run_status=job["status"]), indent=2))

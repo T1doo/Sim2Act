@@ -764,7 +764,7 @@ def _bound(store, c, user, job, limits, *, validate_input=True, _source_origin=F
     origin_out: dict[str, Any] = {}
     source_origin = (_source_origin is True and store.test_only and store.sqlite
         and job["status"] == "SUCCEEDED" and job["context"].get("spec_family") == natural.VERSION)
-    runtime_origin = (store.test_only and store.sqlite and job["status"] == "RUNNING"
+    runtime_origin = (store.test_only and store.sqlite and job["status"] in {"QUEUED", "RUNNING", "SUCCEEDED"}
         and job["context"].get("spec_family") == natural.VERSION)
     local_origin = source_origin or runtime_origin
     segment = _source_transaction(store, c) if local_origin else None
