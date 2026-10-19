@@ -33,6 +33,7 @@ def check_history_reads(database, run_id, out):
     out.mkdir(exist_ok=False)
     original_hash = hashlib.sha256(database.read_bytes()).hexdigest()
     original = generation._history
+    original_scope = generation.source_scope_gate
     http_calls, reports = [], []
 
     def forbidden(*args, **kwargs):
@@ -62,9 +63,11 @@ def check_history_reads(database, run_id, out):
         (out / "original.json").write_text(json.dumps(expected, indent=2) + "\n")
         accepted_job = copy.deepcopy(job)
         for case in ("same", "returned_mutation", "write", "failed_write", "new_transaction",
-                "grant_revoke", "grant_expire", "run_identity", "first_failure", "no_scope"):
+                "grant_revoke", "grant_expire", "history_recheck_revoke", "history_recheck_write",
+                "run_identity", "first_failure", "no_scope"):
             store = clone(case)
-            state = dict(full_calls=0, armed=False, injected=False, mutation_rowcount=None)
+            state = dict(full_calls=0, armed=False, injected=False, mutation_rowcount=None,
+                scope_depth=0, injection_scope_depth=None)
             recheck = store.recheck_proof_authorities
 
             def complete(*args, case=case, state=state, **kwargs):
@@ -74,20 +77,34 @@ def check_history_reads(database, run_id, out):
                 return original(*args, **kwargs)
 
             def fresh(c, proof, case=case, state=state, job=accepted_job, recheck=recheck):
-                if state["armed"] and not state["injected"] and case.startswith("grant_"):
+                inject = ((case.startswith("grant_") and state["scope_depth"] > 0)
+                    or (case.startswith("history_recheck_") and state["scope_depth"] == 0))
+                if state["armed"] and not state["injected"] and inject:
                     state["injected"] = True
-                    values = {"revoked": True, "revision": grants.c.revision + 1} if case == "grant_revoke" else {"expires_at": time.time() - 1}
-                    changed = c.execute(update(grants).where(grants.c.principal_id == job["runtime_id"],
-                        grants.c.project_id == job["project_id"], grants.c.resource_id == job["resource_refs"][0],
-                        grants.c.tool_ref == "resource.read").values(**values))
+                    state["injection_scope_depth"] = state["scope_depth"]
+                    if case == "history_recheck_write":
+                        changed = c.execute(update(runs).where(runs.c.id == run_id).values(version=runs.c.version))
+                    else:
+                        values = {"expires_at": time.time() - 1} if case == "grant_expire" else {"revoked": True, "revision": grants.c.revision + 1}
+                        changed = c.execute(update(grants).where(grants.c.principal_id == job["runtime_id"],
+                            grants.c.project_id == job["project_id"], grants.c.resource_id == job["resource_refs"][0],
+                            grants.c.tool_ref == "resource.read").values(**values))
                     state["mutation_rowcount"] = changed.rowcount
                     assert changed.rowcount > 0
                 return recheck(c, proof)
 
-            error, first_error, actual = None, None, None
+            def scope(*args, state=state, **kwargs):
+                state["scope_depth"] += 1
+                try:
+                    return original_scope(*args, **kwargs)
+                finally:
+                    state["scope_depth"] -= 1
+
+            error, first_error, oracle_error, actual = None, None, None, None
             try:
                 with pytest.MonkeyPatch.context() as patch:
                     patch.setattr(generation, "_history", complete)
+                    patch.setattr(generation, "source_scope_gate", scope)
                     patch.setattr(store, "recheck_proof_authorities", fresh)
                     if case == "no_scope":
                         with store.tx() as c:
@@ -120,22 +137,30 @@ def check_history_reads(database, run_id, out):
                                 current_job["principal_id"] = "user_" + "0" * 32
                                 with pytest.raises(DomainError) as oracle:
                                     original(store, c, current_job)
-                                assert oracle.value.code == "PERMISSION_DENIED"
+                                oracle_error = oracle.value.public()
                             state["armed"] = True
                             try:
                                 with pb._source_reads(store, c):
                                     actual = plain(generation.history(store, c, current_job))
                             except DomainError as denied:
-                                assert case in {"grant_revoke", "grant_expire", "run_identity"}
-                                assert denied.code == ("PERMISSION_DENIED" if case == "run_identity" else "GRANT_REVOKED")
+                                assert case in {"grant_revoke", "grant_expire", "history_recheck_revoke", "run_identity"}
                                 error = denied.public()
+                                if case == "run_identity":
+                                    assert error == oracle_error
+                                else:
+                                    assert denied.code == "GRANT_REVOKED"
+                if case in {"grant_revoke", "grant_expire", "history_recheck_revoke", "run_identity"}:
+                    assert error is not None, "A required rejection returned history"
+                if case.startswith(("grant_", "history_recheck_")):
+                    assert state["injected"] and state["mutation_rowcount"] > 0
+                    assert (state["injection_scope_depth"] == 0) == case.startswith("history_recheck_")
                 if error is None:
                     assert actual == expected
                     assert state["full_calls"] == (1 if case in {"same", "returned_mutation"} else 2)
                 else:
                     assert state["full_calls"] == (2 if case == "run_identity" else 1)
                 report = dict(case=case, result="PASS", actual=actual, error=error,
-                    first_error=first_error, actual_fingerprint=fingerprint(actual), **state)
+                    first_error=first_error, oracle_error=oracle_error, actual_fingerprint=fingerprint(actual), **state)
                 (out / (case + ".json")).write_text(json.dumps(report, indent=2) + "\n")
                 reports.append({k: v for k, v in report.items() if k != "actual"})
                 print("history " + case + " PASS", flush=True)
