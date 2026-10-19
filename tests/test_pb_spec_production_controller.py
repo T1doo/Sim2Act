@@ -342,8 +342,12 @@ def test_pb_production_original_source_extraction_explicit_use_and_cold(env, tmp
     monkeypatch.setattr(controller, "environment", cold_environment)
     try:
         current = cold_client.get("/api/internal/instances/" + inst["id"]).json()
+        current_app = cold_client.get("/api/apps/" + made["id"])
+        assert current_app.status_code == 200, current_app.text
+        app = current_app.json()
+        assert app["fingerprint"] == made["candidate_fingerprint"]
         use_review = dict(expected_revision=current["revision"],
-            expected_release_fingerprint=release["fingerprint"], expected_app_fingerprint=made["fingerprint"],
+            expected_release_fingerprint=release["fingerprint"], expected_app_fingerprint=app["fingerprint"],
             expected_recipe_fingerprint=fingerprint(binding.contract.extraction_recipe.model_dump(exclude_none=True)),
             resource_id=target.resource_id, card_id=target.card_id,
             expected_goal_version=target.goal_version, expected_goal_fingerprint=target.goal_fingerprint,
