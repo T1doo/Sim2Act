@@ -72,7 +72,10 @@ class Worker:
 
     def reserve(self, run_id, fence, context, *, request_tools=None, verify_goal_source=False,
                 planner_request=False, generation_request=False, natural_spec_request=None,
-                _generation_heartbeat_state=None):
+                _generation_heartbeat_state=None, _natural_heartbeat_state=None):
+        if _natural_heartbeat_state is not None and (natural_spec_request is None
+                or planner_request or generation_request or not self.store.sqlite):
+            raise DomainError("PERMISSION_DENIED", "Natural heartbeat has the wrong request family")
         from .natural_trial_runs import check_worker
         check_worker(self, run_id)
         if _generation_heartbeat_state is not None:
@@ -129,7 +132,13 @@ class Worker:
                 "characters": len(serialized.decode("utf-8")),
             }
             envelope = len(serialized) + s.max_output_tokens
-        with self.store.tx() as c:
+        reservation_writer = nullcontext()
+        if _natural_heartbeat_state is not None:
+            from .text_workflows import natural_reservation_writer
+            reservation_writer = natural_reservation_writer(self,
+                dict(id=run_id, fence=fence, created_at=natural_spec_request["created_at"]),
+                _natural_heartbeat_state, deadline=natural_spec_request["deadline"])
+        with reservation_writer, self.store.tx() as c:
             if protocol_request or verify_goal_source:
                 owner = (
                     c.execute(

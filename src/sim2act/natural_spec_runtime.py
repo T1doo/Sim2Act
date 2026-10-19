@@ -752,8 +752,15 @@ def advance_model(worker, run, *, _heartbeat_state=None):
     wire = body(ctx["messages"], [], node_limits.max_output_tokens)
     if len(wire) > 32768:
         raise DomainError("BUDGET_EXHAUSTED", "Complete runtime wire exceeds bound")
-    renew(worker, job, meta["deadline"], _heartbeat_state=_heartbeat_state)
-    aid = worker.reserve(job["id"], job["fence"], ctx, request_tools=[], natural_spec_request=meta)
+    if _heartbeat_state is not None and store.sqlite:
+        # Quota waiting must keep background renewal available. The original
+        # guarded renewal now runs after that wait, immediately before the
+        # reservation transaction under the same renewal writer lock.
+        aid = worker.reserve(job["id"], job["fence"], ctx, request_tools=[],
+            natural_spec_request=meta, _natural_heartbeat_state=_heartbeat_state)
+    else:
+        renew(worker, job, meta["deadline"], _heartbeat_state=_heartbeat_state)
+        aid = worker.reserve(job["id"], job["fence"], ctx, request_tools=[], natural_spec_request=meta)
     renew(worker, job, meta["deadline"], _heartbeat_state=_heartbeat_state)
 
     held_attempt = {}

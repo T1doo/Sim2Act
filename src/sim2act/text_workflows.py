@@ -11,7 +11,7 @@ import logging
 import sqlite3
 import threading
 import time
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from typing import Literal
 
 from pydantic import Field
@@ -901,33 +901,52 @@ def publish_sync_renewal(worker, run, state, renewed):
             run_id=run["id"], fence=run["fence"], lease_until=renewed)
 
 
-def renew_sync(worker, run, state, *, deadline=None, lease_seconds=None):
-    """Serialize metadata renewals through their actual commit and publication.
+def _renew_sync_locked(worker, run, state, *, deadline=None, lease_seconds=None):
+    """Original guarded renewal; caller already holds the renewal writer lock."""
+    with state["lock"]:
+        fatal = state.get("fatal_heartbeat")
+        bounds = [state["lease_until"], run["created_at"] + worker.s.run_seconds]
+        if state["deadline"] is not None:
+            bounds.append(state["deadline"])
+    if fatal is not None:
+        raise fatal
+    if deadline is not None:
+        bounds.append(deadline)
+    cutoff = min(bounds)
+    remaining = cutoff - time.time()
+    if worker.stop.is_set() or remaining <= 0:
+        raise DomainError("BUDGET_EXHAUSTED", "Original heartbeat interval ended")
+    renewed = worker.store.heartbeat(worker.id, run["id"], run["fence"],
+        worker.s.lease_seconds if lease_seconds is None else lease_seconds,
+        _deadline=cutoff, _wait_seconds=min(5.0, remaining), _running_only=True)
+    publish_sync_renewal(worker, run, state, renewed)
+    return renewed
 
-    The separate lock is never acquired by a business transaction. The short
-    state lock remains safe for validation that already holds a DB transaction.
+
+def renew_sync(worker, run, state, *, deadline=None, lease_seconds=None):
+    """Serialize renewals through their actual commit and publication.
+
+    Acquire this writer lock before opening a DB transaction. The short state
+    lock remains safe for validation that already holds a DB transaction.
     """
     with state["lock"]:
         renewal_lock = state.setdefault("renewal_lock", threading.Lock())
     with renewal_lock:
-        with state["lock"]:
-            fatal = state.get("fatal_heartbeat")
-            bounds = [state["lease_until"], run["created_at"] + worker.s.run_seconds]
-            if state["deadline"] is not None:
-                bounds.append(state["deadline"])
-        if fatal is not None:
-            raise fatal
-        if deadline is not None:
-            bounds.append(deadline)
-        cutoff = min(bounds)
-        remaining = cutoff - time.time()
-        if worker.stop.is_set() or remaining <= 0:
-            raise DomainError("BUDGET_EXHAUSTED", "Original heartbeat interval ended")
-        renewed = worker.store.heartbeat(worker.id, run["id"], run["fence"],
-            worker.s.lease_seconds if lease_seconds is None else lease_seconds,
-            _deadline=cutoff, _wait_seconds=min(5.0, remaining), _running_only=True)
-        publish_sync_renewal(worker, run, state, renewed)
-        return renewed
+        return _renew_sync_locked(worker, run, state, deadline=deadline, lease_seconds=lease_seconds)
+
+
+@contextmanager
+def natural_reservation_writer(worker, run, state, *, deadline):
+    """Keep the original post-quota renewal and reservation writer together.
+
+    The caller has finished quota waiting and has not opened its reservation
+    transaction. Background renewal remains available throughout that wait.
+    """
+    with state["lock"]:
+        renewal_lock = state.setdefault("renewal_lock", threading.Lock())
+    with renewal_lock:
+        _renew_sync_locked(worker, run, state, deadline=deadline)
+        yield
 
 
 def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
