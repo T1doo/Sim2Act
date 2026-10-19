@@ -95,18 +95,26 @@ def test_source_audit_digest_read_segment(prefix, cloned, monkeypatch, change):
 
     store, user, pid = cloned[0], cloned[3], cloned[4]
     original, calls, rechecks, gates = pb._source_audit, [], [], []
+    armed, gate_depth = [False], [0]
     actual_recheck = store.recheck_proof_authorities
     actual_gate = pb.source_gate
 
     def source_gate(*args):
         gates.append(True)
-        return actual_gate(*args)
+        gate_depth[0] += 1
+        try:
+            return actual_gate(*args)
+        finally:
+            gate_depth[0] -= 1
 
     def counted(*args):
         calls.append(True)
         return original(*args)
 
     def recheck(c, proof):
+        if not armed[0] or gate_depth[0]:
+            return actual_recheck(c, proof)
+        armed[0] = False
         rechecks.append(proof["_call_authorities"])
         if change == "recheck_write":
             c.execute(update(runs).where(runs.c.id == prefix.source_id)
@@ -131,6 +139,8 @@ def test_source_audit_digest_read_segment(prefix, cloned, monkeypatch, change):
             token = c.info["pb_source_reads"]
             first = pb.source_audit(store, c, user, pid, prefix.source_id)
             assert first == expected and len(calls) == 1
+            armed[0] = True
+            first_gate_count = len(gates)
             if change == "write":
                 c.execute(update(runs).where(runs.c.id == prefix.source_id)
                     .values(error={"synthetic_audit_probe": "changed"}))
@@ -156,7 +166,7 @@ def test_source_audit_digest_read_segment(prefix, cloned, monkeypatch, change):
                 second = pb.source_audit(store, c, user, pid, prefix.source_id)
                 assert (second != first) == (change in {"write", "recheck_write"})
                 assert len(calls) == (1 if change == "same" else 2)
-                assert len(gates) >= 2, "Every audit still executes the complete original source gate"
+                assert len(gates) > first_gate_count, "Every audit still executes the complete original source gate"
                 if change in {"same", "recheck_write"}:
                     assert rechecks and rechecks[0]
         assert not token.results and not token.inflight and "pb_source_reads" not in c.info
