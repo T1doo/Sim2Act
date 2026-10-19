@@ -764,13 +764,16 @@ def _bound(store, c, user, job, limits, *, validate_input=True, _source_origin=F
     origin_out: dict[str, Any] = {}
     source_origin = (_source_origin is True and store.test_only and store.sqlite
         and job["status"] == "SUCCEEDED" and job["context"].get("spec_family") == natural.VERSION)
-    segment = _source_transaction(store, c) if source_origin else None
+    runtime_origin = (store.test_only and store.sqlite and job["status"] == "RUNNING"
+        and job["context"].get("spec_family") == natural.VERSION)
+    local_origin = source_origin or runtime_origin
+    segment = _source_transaction(store, c) if local_origin else None
     epoch, thread = c.info.get("source_proof_write_epoch", 0), get_ident()
     original_limits = limits.model_dump()
-    with (store.proof_authorities(c) if source_origin else nullcontext(set())) as authorities:
+    with (store.proof_authorities(c) if local_origin else nullcontext(set())) as authorities:
         snapshot, app_run, release = app_jobs.load_binding(store, c, user, job, limits,
             return_release=True, _logic_out=logic_out,
-            **({"_origin_out": origin_out} if source_origin else {}))
+            **({"_origin_out": origin_out} if local_origin else {}))
     accepted = c.execute(select(events.c.data).where(events.c.run_id == job["id"], events.c.kind == "ACCEPTED")).scalars().all()
     require(fingerprint(accepted) == fingerprint([dict(namespace=app_jobs.KIND, app_run_id=snapshot["app_run_id"],
         instance_id=snapshot["instance_id"], release_id=snapshot["release_id"], input_fingerprint=snapshot["request_fingerprint"])]))
@@ -792,10 +795,10 @@ def _bound(store, c, user, job, limits, *, validate_input=True, _source_origin=F
         draft, manifest, report, source, goal = pb_natural_uses.bound(store, c, user, job, snapshot, release, limits,
             family=pb_natural_uses.PA if "pa_use" in snapshot else pb_natural_uses.PB,_logic_out=logic_out)
     else:
-        # Only pb.source's complete successful original Source proof opts in.
-        # This empty local out was filled by the real read_release above; it is
-        # never caller evidence, a connection memo or a cross-guard capability.
-        ordinary_source = (source_origin and segment is not None
+        # The real read_release above just completed this exact origin proof.
+        # The local out stays within this bound call and its original Limits;
+        # it never supplies authority across a write, callback or transaction.
+        ordinary_source = (local_origin and segment is not None
             and "spec_task" not in draft["candidate"]
             and not {"project_check", "offline_replay"}.intersection(snapshot)
             and not {"natural_logic_origin", "correction_run_id", "pb_use_run_id", "pa_use_run_id"}.intersection(draft)
