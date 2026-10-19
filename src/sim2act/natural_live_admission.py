@@ -929,8 +929,14 @@ def _run_context(store, c, user, contract, approval_key, stage, run_id, expected
         runs.c.runtime_id, runs.c.request_key, runs.c.status, runs.c.cancel_intent,
         runs.c.version, runs.c.fence, runs.c.lease_until, runs.c.created_at, runs.c.worker_id,
         runs.c.resource_refs).where(runs.c.id == run_id).with_for_update()).mappings().first()
-    binding = contract.bindings[1 if stage == "cold" else 0]
     at = time.time()
+    _require_run_context_row(user, contract, stage, run, expected_version, fence, approval, phase, at)
+    return approval, phase, run, at
+
+
+def _require_run_context_row(user, contract, stage, run, expected_version, fence, approval, phase, at):
+    """The original complete Run predicate, also after a synchronous readback."""
+    binding = contract.bindings[1 if stage == "cold" else 0]
     require(type(expected_version) is int and type(fence) is int
             and run is not None and run["principal_id"] == user
             and run["project_id"] == contract.project_id
@@ -944,7 +950,6 @@ def _run_context(store, c, user, contract, approval_key, stage, run_id, expected
             and type(run["lease_until"]) in (int, float) and math.isfinite(run["lease_until"])
             and at < min(run["lease_until"], run["created_at"] + contract.caps.run_seconds,
                          contract.expires_at), "Run identity, cancellation, version or finite lease changed")
-    return approval, phase, run, at
 
 
 def _generation_context(store, c, run, contract):

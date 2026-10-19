@@ -203,20 +203,128 @@ def _account(worker, b, *, connection=None):
     return account
 
 
-def check_commit(worker, c, run):
+def check_commit(worker, c, run, *, _read_out=None):
+    if _read_out is not None:
+        previous = _read_out.pop("stamp", None)
+        if type(previous) is _CommitReadback:
+            previous.consumed = True
     b = _binding(worker)
     gate.require(
         run["principal_id"] == b.contract.principal_id
         and run["project_id"] == b.contract.project_id
     )
-    gate._approved(worker.store, c, b.contract.principal_id, b.contract, b.approval_key)
     if _journal_binding(b):
-        _admission(worker)(worker.store, c, run["principal_id"], b.contract, b.approval_key,
-            _stage(b, run), run["id"], run["version"], run["fence"])
+        with worker.store.proof_authorities(c) as authorities:
+            gate._approved(worker.store, c, b.contract.principal_id, b.contract, b.approval_key)
+            context = _admission(worker)(worker.store, c, run["principal_id"], b.contract, b.approval_key,
+                _stage(b, run), run["id"], run["version"], run["fence"])
+        if _read_out is not None:
+            from .pb_natural_specs import _source_reads_current
+            token = c.info.get("pb_source_reads")
+            if (_production_binding(b) and type(b.contract) is gate.PBTrialContract
+                    and context.stage == "cold" and _source_reads_current(worker.store, c, token)):
+                from .natural_trial_runs import associated_sql
+                actual = c.execute(select(runs).where(runs.c.id == run["id"])).mappings().one()
+                if (fingerprint(dict(actual)) == fingerprint(dict(run))
+                        and c.execute(select(runs.c.id).where(runs.c.id == run["id"], associated_sql())).first() is None
+                        and _source_reads_current(worker.store, c, token)):
+                    _read_out["stamp"] = _CommitReadback(worker, worker.store, c, token, b,
+                        worker.s, dict(vars(worker.s)), worker.stop, worker.goal_planner_transport,
+                        worker.id, fingerprint(dict(actual)), context.approval_fingerprint,
+                        context.stage_fingerprint, tuple(sorted(authorities)),
+                        fingerprint(dict(contract=b.contract.model_dump(), key=b.approval_key,
+                            account=b.account_id, version=b.version, fingerprint=b.contract_fingerprint)))
         return
+    gate._approved(worker.store, c, b.contract.principal_id, b.contract, b.approval_key)
     if type(b.contract) is gate.PBTrialContract and _stage(b, run) == "cold":
         _pb_source(worker, c, b)
     _account(worker, _binding(worker))
+
+
+@dataclass
+class _CommitReadback:
+    """One local continuation of a successful full proof, never a stored permit."""
+    worker: object
+    store: object
+    connection: object
+    token: object
+    binding: object
+    settings: object
+    settings_values: dict
+    stop: object
+    transport: object
+    worker_id: str
+    run_fingerprint: str
+    approval_fingerprint: str
+    phase_fingerprint: str | None
+    authorities: tuple
+    binding_fingerprint: str
+    consumed: bool = False
+
+
+def check_commit_after_readback(worker, c, run, read_out):
+    """Continue only this exact postwrite SQLite proof; otherwise reprove it all.
+
+    The first check_commit has already proved the complete phase and source
+    lineage. No write, transaction, settings or callback drift may separate it
+    from this readback. Current consent, fixed source and actual authorities are
+    still checked here; PostgreSQL and all other controllers use the full path.
+    """
+    from .pb_natural_specs import _source_reads_current
+    stamp = read_out.pop("stamp", None)
+    if type(stamp) is not _CommitReadback or stamp.consumed:
+        return check_commit(worker, c, run)
+    stamp.consumed = True
+
+    def unchanged():
+        return (worker is stamp.worker and worker.store is stamp.store
+            and c is stamp.connection and worker.pa_trial is stamp.binding
+            and worker.s is stamp.settings and vars(worker.s) == stamp.settings_values
+            and worker.stop is stamp.stop and worker.goal_planner_transport is stamp.transport
+            and worker.id == stamp.worker_id
+            and fingerprint(dict(contract=worker.pa_trial.contract.model_dump(),
+                key=worker.pa_trial.approval_key, account=worker.pa_trial.account_id,
+                version=worker.pa_trial.version, fingerprint=worker.pa_trial.contract_fingerprint)) == stamp.binding_fingerprint
+            and fingerprint(dict(run)) == stamp.run_fingerprint
+            and _source_reads_current(worker.store, c, stamp.token))
+
+    if not unchanged():
+        return check_commit(worker, c, run)
+    b = _binding(worker)
+    if not unchanged():
+        return check_commit(worker, c, run)
+    approval = gate._approved(worker.store, c, run["principal_id"], b.contract, b.approval_key)
+    if not unchanged() or fingerprint(approval.model_dump()) != stamp.approval_fingerprint:
+        return check_commit(worker, c, run)
+    gate.require(gate._keys(c, run["principal_id"], gate.entity(b.contract), gate.PHASE) <= {"source", "cold"})
+    accepted = gate._saved(c, run["principal_id"], gate.entity(b.contract), gate.PHASE,
+        "cold", gate.StageApproveInput)
+    gate.require(accepted.approval_key == b.approval_key
+        and accepted.authority.run_id == run["id"] and accepted.authority.stage == "cold"
+        and accepted.authority.runtime_id == run["runtime_id"]
+        and fingerprint(accepted.authority.model_dump()) == accepted.expected_authority_fingerprint
+        == stamp.phase_fingerprint)
+    if not unchanged():
+        return check_commit(worker, c, run)
+    source = _journal_source(worker.store, c, b)
+    if not unchanged():
+        return check_commit(worker, c, run)
+    worker.store.recheck_proof_authorities(c, {"_call_authorities": stamp.authorities})
+    if not unchanged():
+        return check_commit(worker, c, run)
+    actual = c.execute(select(runs).where(runs.c.id == run["id"]).with_for_update()).mappings().one()
+    at = time.time()
+    gate._require_run_context_row(run["principal_id"], b.contract, "cold", actual,
+        run["version"], run["fence"], approval, accepted.authority, at)
+    gate.require(fingerprint(dict(actual)) == stamp.run_fingerprint
+        and actual["worker_id"] == worker.id and not worker.stop.is_set()
+        and at < source.expires_at,
+        "Production readback ownership or finite interval changed")
+    if not unchanged():
+        return check_commit(worker, c, run)
+    gate.require(not worker.stop.is_set() and time.time() < min(actual["lease_until"],
+        actual["created_at"] + b.contract.caps.run_seconds, b.contract.expires_at, source.expires_at),
+        "Production readback final interval ended")
 
 
 def _journal_reads(worker, c):

@@ -1181,7 +1181,7 @@ def verify_instance_records(store, c, user, instance, records, limits):
 
 
 @controlled
-def commit_guard(worker, c, run, b, delta=0):
+def commit_guard(worker, c, run, b, delta=0, *, _commit_out=None):
     from .app_jobs import lock_live
     job = lock_live(worker.store, c, run)
     if natural.is_candidate(b["draft"]["candidate"]):
@@ -1222,7 +1222,7 @@ def commit_guard(worker, c, run, b, delta=0):
     check_worker_tx(worker, c, job["id"])
     if getattr(worker, "pa_trial", None) is not None:
         from .pa_trial_dispatch import check_commit
-        check_commit(worker, c, job)
+        check_commit(worker, c, job, **({"_read_out": _commit_out} if _commit_out is not None else {}))
     return job
 
 
@@ -1407,8 +1407,9 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
     from .pa_trial_dispatch import _journal_reads
     with _journal_reads(worker, c):
         # No protected effect occurs between it and the transaction return.
+        commit_readback = {}
         with store.proof_authorities(c) as authorities:
-            final = commit_guard(worker, c, run, b)
+            final = commit_guard(worker, c, run, b, _commit_out=commit_readback)
             owner_fields = ("id", "principal_id", "project_id", "runtime_id", "worker_id",
                 "fence", "version", "lease_until", "created_at", "fingerprint", "request_key")
             require(all(final[key] == live[key] for key in owner_fields),
@@ -1428,8 +1429,8 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
         from .natural_trial_runs import check_worker_tx
         check_worker_tx(worker, c, job["id"])
         if getattr(worker, "pa_trial", None) is not None:
-            from .pa_trial_dispatch import check_commit
-            check_commit(worker, c, job)
+            from .pa_trial_dispatch import check_commit_after_readback
+            check_commit_after_readback(worker, c, final, commit_readback)
         require(not worker.stop.is_set() and time.time() < final["lease_until"]
             and time.time() < job["created_at"] + min(worker.s.run_seconds,
                 plan["definition"]["manifest"]["runtime_limits"]["run_seconds"], s["limits"]["run_seconds"]),
