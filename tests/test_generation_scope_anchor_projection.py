@@ -37,6 +37,10 @@ def test_join_preserves_exact_event_and_attempt_cardinality(env):
             accepted=[dict(id="accepted-1", kind=policy["version"], aid=None, app_id=policy["app_id"])])
         assert generation._journal_scope_anchor(store, c, run_id, expected=owner) == anchor
         assert generation._journal_scope_anchor(store, c, run_id, expected=owner | dict(principal_id="other")) is None
+        # Statement structure may be shared; the actual Run parameter/result
+        # must remain fresh on every alternating call.
+        assert generation._journal_scope_anchor(store, c, run_id + "-missing") is None
+        assert generation._journal_scope_anchor(store, c, run_id, expected=owner) == anchor
 
         mutations = [
             delete(run_contracts).where(run_contracts.c.run_id == run_id),

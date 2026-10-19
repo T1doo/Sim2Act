@@ -8,11 +8,12 @@ import hashlib
 import json
 import threading
 import time
+from functools import lru_cache
 from typing import Literal
 
 import httpx
 from pydantic import Field
-from sqlalchemy import and_, insert, select, update
+from sqlalchemy import and_, bindparam, insert, select, update
 
 from .contracts import (
     ActionSpec,
@@ -124,8 +125,8 @@ def source_scope_gate(store, c, rid):
     if key in token.results:
         anchor, authorities = token.results[key]
         try:
-            owner = c.execute(select(runs.c.principal_id, runs.c.project_id,
-                runs.c.runtime_id).where(runs.c.id == rid)).mappings().first()
+            owner = c.execute(_journal_scope_statements()[0],
+                {"scope_anchor_run_id": rid}).mappings().first()
             if owner is None or dict(owner) != anchor["owner"]:
                 raise DomainError("VERSION_CONFLICT", "Generation scope owner changed")
             store.own_project(c, owner["principal_id"], owner["project_id"])
@@ -182,19 +183,13 @@ def _ordinary_generation_reads(store, c, rid):
         for row in actual)
 
 
-def _journal_scope_anchor(store, c, rid, *, expected=None):
-    """Owned scalar anchors, only after a completed scope proof or its exact hit."""
-    from .pa_trial_dispatch import JOURNAL_VERSION
-    from .spec_production import VERSION as PRODUCTION_VERSION
-    owner = c.execute(select(runs.c.principal_id, runs.c.project_id,
-        runs.c.runtime_id).where(runs.c.id == rid)).mappings().first()
-    if owner is None or expected is not None and dict(owner) != expected:
-        return None
-    store.own_project(c, owner["principal_id"], owner["project_id"])
-    # Keep the original owned scalar gate above, then project the same fields
-    # in one read. LEFT joins retain missing rows; each event/Attempt keeps its
-    # own identity so the join cannot turn one ACCEPTED into three events.
-    rows = c.execute(select(runs.c.resource_refs.label("run_refs"),
+@lru_cache(maxsize=1)
+def _journal_scope_statements():
+    """Immutable SQL structure only; no Run IDs, results or proof authority."""
+    rid = bindparam("scope_anchor_run_id", type_=runs.c.id.type)
+    owner = select(runs.c.principal_id, runs.c.project_id,
+        runs.c.runtime_id).where(runs.c.id == rid)
+    projection = (select(runs.c.resource_refs.label("run_refs"),
         run_contracts.c.run_id.label("contract_run_id"), run_contracts.c.fingerprint,
         run_contracts.c.snapshot["application_generation"]["version"].as_string().label("kind"),
         run_contracts.c.snapshot["application_generation"]["app_id"].as_string().label("app_id"),
@@ -214,7 +209,23 @@ def _journal_scope_anchor(store, c, rid, *, expected=None):
         .select_from(runs).outerjoin(run_contracts, run_contracts.c.run_id == runs.c.id)
         .outerjoin(events, and_(events.c.run_id == runs.c.id, events.c.kind == "ACCEPTED"))
         .outerjoin(attempts, attempts.c.run_id == runs.c.id)
-        .where(runs.c.id == rid).order_by(events.c.id, attempts.c.id).limit(4)).mappings().all()
+        .where(runs.c.id == rid).order_by(events.c.id, attempts.c.id).limit(4))
+    return owner, projection
+
+
+def _journal_scope_anchor(store, c, rid, *, expected=None):
+    """Owned scalar anchors, only after a completed scope proof or its exact hit."""
+    from .pa_trial_dispatch import JOURNAL_VERSION
+    from .spec_production import VERSION as PRODUCTION_VERSION
+    owner_query, projection = _journal_scope_statements()
+    parameters = {"scope_anchor_run_id": rid}
+    owner = c.execute(owner_query, parameters).mappings().first()
+    if owner is None or expected is not None and dict(owner) != expected:
+        return None
+    store.own_project(c, owner["principal_id"], owner["project_id"])
+    # Every call still reads owner -> expected -> current project -> projection.
+    # LEFT joins and original row identities/cardinality remain unchanged.
+    rows = c.execute(projection, parameters).mappings().all()
     # Exactly one ACCEPTED and three Attempts is the only eligible product.
     # The fourth projected row already disproves it; never expand bad history.
     if not rows or len(rows) > 3 or rows[0]["contract_run_id"] is None:
