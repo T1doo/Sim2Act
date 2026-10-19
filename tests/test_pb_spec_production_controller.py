@@ -3,6 +3,7 @@
 import copy
 import json
 import sqlite3
+import time
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -12,7 +13,7 @@ import test_natural_spec_apps as apps
 from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 from test_natural_live_admission import frozen
-from test_pb_trial_dispatch import approve_stage
+from test_pb_trial_dispatch import approve_stage, failure_trace
 from test_spec_app_operations import snapshot
 from test_spec_production_controller import configured
 from test_spec_production_controller import no_real_http as no_real_http
@@ -30,6 +31,36 @@ from sim2act.api import create_app
 from sim2act.db import Store, attempts, delivery_graph_requests, fingerprint
 from sim2act.errors import DomainError
 from sim2act.worker import Worker
+
+
+@pytest.fixture(autouse=True)
+def observe_original_lease_failures(monkeypatch, tmp_path):
+    heartbeat, guard = Store.heartbeat, Store.guard
+
+    def record(kind, **fields):
+        with (tmp_path / "lease-observations.jsonl").open("a") as stream:
+            stream.write(json.dumps(dict(at=time.time(), kind=kind, **fields)) + "\n")
+
+    def observed_heartbeat(*args, **kwargs):
+        try:
+            result = heartbeat(*args, **kwargs)
+            record("original_heartbeat_return", returned=result)
+            return result
+        except Exception as error:
+            record("original_heartbeat_error", type=type(error).__name__,
+                sqlite_errorcode=getattr(getattr(error, "orig", None), "sqlite_errorcode", None),
+                trace=failure_trace(error))
+            raise
+
+    def observed_guard(*args, **kwargs):
+        try:
+            return guard(*args, **kwargs)
+        except DomainError as error:
+            record("original_guard_error", error=error.public(), trace=failure_trace(error))
+            raise
+
+    monkeypatch.setattr(Store, "heartbeat", observed_heartbeat)
+    monkeypatch.setattr(Store, "guard", observed_guard)
 
 
 def prepare_pb(env, out):
@@ -79,12 +110,15 @@ def refused_archive_copies(data, binding, root):
         try:
             with store.tx() as c:
                 if fault == "generation_marker":
-                    row = c.execute(select(attempts).where(
-                        attempts.c.parameters["pa_trial_binding"]["version"].as_string() == controller.VERSION)
-                        .order_by(attempts.c.created_at)).mappings().first()
-                    params = copy.deepcopy(row["parameters"])
-                    params.pop("pa_trial_binding")
-                    c.execute(update(attempts).where(attempts.c.id == row["id"]).values(parameters=params))
+                    from sim2act.db import runs
+                    rows = c.execute(select(attempts).join(runs, attempts.c.run_id == runs.c.id).where(
+                        runs.c.runtime_id == binding.contract.runtime_id,
+                        runs.c.request_key == binding.contract.stage_keys.generate)).mappings().all()
+                    assert len(rows) == 3
+                    for row in rows:
+                        params = copy.deepcopy(row["parameters"])
+                        params.pop("pa_trial_binding")
+                        c.execute(update(attempts).where(attempts.c.id == row["id"]).values(parameters=params))
                 else:
                     kind = trial.RESPONSE if fault == "trial_provenance" else archive.RESPONSE
                     row = c.execute(select(delivery_graph_requests).where(
@@ -194,7 +228,11 @@ def test_pb_production_original_source_extraction_explicit_use_and_cold(env, tmp
             consent=use.CONSENT)
         queued = cold_client.post(base + "/pb-use-runs", json=submitted)
         assert queued.status_code == 202, queued.text
-        assert cold_client.post(base + "/pb-use-runs", json=submitted).json() == queued.json()
+        replayed = cold_client.post(base + "/pb-use-runs", json=submitted)
+        assert replayed.status_code == 202, replayed.text
+        assert queued.json()["cached"] is False and replayed.json()["cached"] is True
+        assert {k: v for k, v in replayed.json().items() if k != "cached"} == {
+            k: v for k, v in queued.json().items() if k != "cached"}
         cold_id = queued.json()["run_id"]
         approve_stage(cold_data, binding, "cold", cold_id)
         assert factory(cold_store, data[1], goal_planner_transport=apps.transport([], apps.COLD)).once()
