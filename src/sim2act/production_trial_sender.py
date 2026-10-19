@@ -39,7 +39,7 @@ _SERVER_SOURCE = object()
 
 
 class Capture(policy.evidence.EvidenceData):
-    provenance: Literal["UNINSTALLED_SYNTHETIC_ADAPTER"] = "UNINSTALLED_SYNTHETIC_ADAPTER"
+    provenance: Literal["UNINSTALLED_SYNTHETIC_ADAPTER", "SPEC_PRODUCTION_CONTROLLER"] = "UNINSTALLED_SYNTHETIC_ADAPTER"
     raw_sha256: str = Field(pattern=policy.gate.HASH)
     raw_bytes: int = Field(ge=0, le=131072)
     body_b64: str | None = Field(default=None, max_length=43692)
@@ -73,6 +73,11 @@ def _require(ok, code="LIVE_BLOCKED"):
 
 def _binding(worker):
     _require(type(worker) is Worker and type(worker.s) is Settings and type(worker.store) is Store)
+    from .pa_trial_dispatch import _production_binding
+    if _production_binding(getattr(worker, "pa_trial", None)):
+        from .spec_production import environment
+        environment(worker.store, worker.s, worker.goal_planner_transport)
+        return
     _require(
         worker.store.test_only
         and worker.store.sqlite
@@ -141,6 +146,25 @@ def _captured(c, user, item):
         capture = Capture.model_validate_json(json.dumps(prior["response"]))
     except (ValidationError, TypeError, ValueError):
         _require(False, "VERSION_CONFLICT")
+    from .db import attempts, run_contracts
+    from .spec_production import VERSION as PRODUCTION_VERSION
+    marker = c.execute(select(attempts.c.mode,
+        attempts.c.parameters["pa_trial_binding"]["version"].as_string().label("version"))
+        .where(attempts.c.id == item.attempt_id, attempts.c.run_id == item.run_id)).mappings().first()
+    mode = c.execute(select(run_contracts.c.snapshot["mode"].as_string())
+                     .where(run_contracts.c.run_id == item.run_id)).scalar_one_or_none()
+    _require(mode in ("mock", "live"), "VERSION_CONFLICT")
+    production = mode == "live"
+    if production:
+        _require(marker is not None and marker["version"] == PRODUCTION_VERSION
+                 and marker["mode"] == "LIVE", "VERSION_CONFLICT")
+    else:
+        # The original policy-only synthetic sender predates Core Attempts.
+        # Its independently frozen Run mode still prevents a LIVE downgrade.
+        _require(marker is None or marker["mode"] == "MOCK"
+                 and marker["version"] != PRODUCTION_VERSION, "VERSION_CONFLICT")
+    _require(capture.provenance == ("SPEC_PRODUCTION_CONTROLLER" if production
+                                   else "UNINSTALLED_SYNTHETIC_ADAPTER"))
     if capture.body_b64 is not None:
         try:
             body = base64.b64decode(capture.body_b64, validate=True)
@@ -155,7 +179,7 @@ def _captured(c, user, item):
         )
         _require(
             capture == _derive(body, capture.complete, capture.received_response,
-                               _generation=item.stage == "generate"),
+                               _generation=item.stage == "generate", _production=production),
             "VERSION_CONFLICT",
         )
     else:
@@ -172,7 +196,7 @@ def _captured(c, user, item):
         if capture.raw_bytes == 0:
             _require(
                 capture == _derive(b"", capture.complete, capture.received_response,
-                                   _generation=item.stage == "generate"),
+                                   _generation=item.stage == "generate", _production=production),
                 "VERSION_CONFLICT",
             )
     _require(
@@ -216,7 +240,7 @@ def _history(store, user, contract, key, item, wire):
         )
 
 
-def _derive(payload, complete, received, *, _generation=False):
+def _derive(payload, complete, received, *, _generation=False, _production=False):
     _require(type(payload) is bytes and len(payload) <= 131072 and type(complete) is bool)
     raw = None
     try:
@@ -254,6 +278,7 @@ def _derive(payload, complete, received, *, _generation=False):
     )
     omission = "EMPTY" if not payload else "OVERSIZE" if len(payload) > 32768 else "NONE"
     return Capture(
+        provenance="SPEC_PRODUCTION_CONTROLLER" if _production else "UNINSTALLED_SYNTHETIC_ADAPTER",
         raw_sha256=outcome.response_sha256,
         raw_bytes=len(payload),
         body_b64=base64.b64encode(payload).decode("ascii") if omission == "NONE" else None,
@@ -283,15 +308,21 @@ def _receive(
     _server_source=False,
     _business=None,
 ):
-    _require(type(store) is Store and store.test_only and store.sqlite)
-    capture = _derive(payload, complete, received, _generation=item.stage == "generate")
+    from .pa_trial_dispatch import _production_binding
+    production = _business is not None and _production_binding(_business[0])
+    _require(type(store) is Store and (production or store.test_only and store.sqlite))
+    capture = _derive(payload, complete, received, _generation=item.stage == "generate", _production=production)
     with store.tx() as c:
         original, _, _, slot, revision, _ = _loaded(store, c, user, contract, key, item, wire)
         _require(slot.attempted, "OUTCOME_UNKNOWN")
         if _server_source:
             from .production_trial_source import load_offline
 
-            source = load_offline(store, c, user, original, key, item.account_id).source
+            if production:
+                from .spec_production import receive_source
+                source = receive_source(store, c, _business[0], source)
+            else:
+                source = load_offline(store, c, user, original, key, item.account_id).source
         prior = _captured(c, user, item)
         if prior is not None:
             _require(prior == capture and slot.settlement == capture.outcome, "VERSION_CONFLICT")
@@ -383,9 +414,9 @@ def dispatch_offline(worker, contract, key, identity, wire, source, *, expected_
 def _dispatch_business(worker, binding, run, identity, wire, original_guard, provider,
                        *, expected_revision, _heartbeat_state):
     """Private continuation of the existing original controller call only."""
-    from .pa_trial_dispatch import JournalTrialBinding
     from .pa_trial_dispatch import _binding as trial_binding
-    _require(type(binding) is JournalTrialBinding and trial_binding(worker) is binding)
+    from .pa_trial_dispatch import _journal_binding
+    _require(_journal_binding(binding) and trial_binding(worker) is binding)
     return _dispatch(worker, binding.contract, binding.approval_key, identity, wire,
         _SERVER_SOURCE, expected_revision=expected_revision,
         _business=(binding, run, original_guard, provider, _heartbeat_state))
@@ -394,6 +425,15 @@ def _dispatch_business(worker, binding, run, identity, wire, original_guard, pro
 def _dispatch(worker, contract, key, identity, wire, source, *, expected_revision, _business=None):
     """One explicit synthetic exchange; every original key retry is history only."""
     _binding(worker)
+    from .pa_trial_dispatch import _production_binding
+    production = _production_binding(getattr(worker, "pa_trial", None))
+    if production:
+        from .pa_trial_dispatch import _binding as trial_binding
+        # Public offline entries accept synthetic inputs. Production can only
+        # continue the original controller's exact, already verified binding.
+        _require(type(_business) is tuple and len(_business) == 5
+                 and _business[0] is worker.pa_trial
+                 and trial_binding(worker) is _business[0])
     store, settings, transport, worker_id = (
         worker.store,
         worker.s,
@@ -445,7 +485,11 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
             from .production_trial_source import load_offline
 
             with store.tx() as c:
-                current_source = load_offline(store, c, user, original, key, item.account_id).source
+                if production:
+                    from .spec_production import source as production_source
+                    current_source = production_source(store, c, _business[0])
+                else:
+                    current_source = load_offline(store, c, user, original, key, item.account_id).source
                 return journal._apply_in_transaction(
                     store, c, user, original, key, item, wire, current_source, revision, operation
                 ), current_source
@@ -488,12 +532,13 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
     same_binding()
     provider = configured_provider(worker) if _business is None else _business[3]
     _require(type(provider) is InternModel and provider.transport is transport)
-    token = "synthetic-offline-planner"
+    token = settings.token if production else "synthetic-offline-planner"
     if _business is not None:
         params = provider.settings
-        token = ("synthetic-offline-planner" if item.stage == "generate"
-                 else "synthetic-offline-natural-spec")
-        _require(params.mode == "mock" and params.live_enabled is True and params.token == token
+        token = (settings.token if production else
+                 "synthetic-offline-planner" if item.stage == "generate" else "synthetic-offline-natural-spec")
+        _require(params.mode == ("live" if production else "mock")
+            and params.live_enabled is True and params.token == token
             and params.model == original.model and params.quota_subject == original.quota_subject
             and params.max_output_tokens == strict_json(wire, 32768)["max_tokens"]
             and 0 < params.max_output_tokens <= original.caps.max_output_tokens
@@ -523,7 +568,11 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
             if server_source:
                 from .production_trial_source import load_offline
 
-                current_source = load_offline(store, c, user, current, key, item.account_id).source
+                if production:
+                    from .spec_production import source as production_source
+                    current_source = production_source(store, c, _business[0])
+                else:
+                    current_source = load_offline(store, c, user, current, key, item.account_id).source
             _, deadline = policy._fresh(store, c, user, current, key, state, item, current_source)
             if controller is not None:
                 _require(type(controller) is dict and set(controller) == {"deadline"})

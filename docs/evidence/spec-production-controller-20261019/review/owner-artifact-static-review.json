@@ -1,0 +1,41 @@
+{
+  "scope": "Read-only source only; qualified-third outputs not read",
+  "source": [
+    {
+      "path": "/workspace/Sim2Act/src/sim2act/pa_spec_apps.py",
+      "bytes": 97520,
+      "sha256": "bbcec02ba895869738f4f0e81bd10fa904341f9d11458cb2b27374bbc738a83d"
+    },
+    {
+      "path": "/workspace/Sim2Act/src/sim2act/owner_acceptance.py",
+      "bytes": 43473,
+      "sha256": "7efd87cf634601a80c5132aecbdcbdf8b464000a1f4f036269c9b81fb8b74f69"
+    },
+    {
+      "path": "/workspace/Sim2Act/src/sim2act/natural_spec_runtime.py",
+      "bytes": 43032,
+      "sha256": "3703ac831ab5508104d52adac42154ff4393a188b20ef8a7f8192a6cf206e6d5"
+    }
+  ],
+  "routes": {
+    "owner": "owner_acceptance.py:544 natural_state -> natural_read -> natural_review_scope/natural_authority -> spec.verify_job",
+    "artifact": "pa_spec_apps.py:1468 read_artifact -> job_scope_gate -> verify_job -> authorized_read saved output"
+  },
+  "static_no_explicit_mock_only_owner_or_artifact_gate": true,
+  "latest_only_owner": "natural_context requires current instance revision/release and data_version == this appRun result_version; after Cold v2, Source v1 may return HTTP200 with content_access=false and VERSION_CONFLICT invalidation. This is not a mode failure.",
+  "new_finding": {
+    "id": "P2_PRODUCTION_RESULT_REF_FALSE_REAL_REQUEST_ZERO",
+    "location": "src/sim2act/pa_spec_apps.py:1019",
+    "source": "def result_ref(binding, proved, version):\n    s = binding[\"snapshot\"]\n    return dict(namespace=binding[\"draft\"][\"candidate\"][\"namespace\"], app_run_id=s[\"app_run_id\"], instance_id=s[\"instance_id\"],\n        release_id=s[\"release_id\"], result_version=version, plan_fingerprint=binding[\"plan\"][\"plan_fingerprint\"],\n        **(dict(saved_app_fingerprint=binding[\"release\"][\"snapshot\"][\"draft\"][\"fingerprint\"],\n                pb_use_review_fingerprint=s[\"pb_use\"][\"expected_review_fingerprint\"],\n                target_goal_id=binding[\"goal\"][\"card_id\"], target_resource_id=binding[\"source\"][\"resource_id\"])\n           if \"pb_use\" in s else {}),\n        **(dict(saved_app_fingerprint=binding[\"release\"][\"snapshot\"][\"draft\"][\"fingerprint\"],\n                pa_use_review_fingerprint=s[\"pa_use\"][\"expected_review_fingerprint\"],\n                target_goal_id=binding[\"goal\"][\"card_id\"], target_resource_id=binding[\"source\"][\"resource_id\"])\n           if \"pa_use\" in s else {}),\n        receipt_refs=[p[\"operation_id\"] for p in proved],\n        model_requests=sum(a[\"executor\"][\"ref\"] in natural.MODEL_KINDS for a in binding[\"draft\"][\"candidate\"][\"actions\"]), **({\"real_model_requests\": 0} if natural.is_candidate(binding[\"draft\"][\"candidate\"]) else {}), citation_status=\"PASS\", semantic_status=\"UNKNOWN\", semantic_goal_acceptance=\"NOT_RUN\",\n        formal_publication_enabled=False)",
+    "trigger": "Successful real ProductionController natural source/cold result; all natural candidates currently add real_model_requests=0 regardless of original mode/evidence.",
+    "limit": "Third software qualification uses MockTransport, so actual real I/O remains0 and this is not a claim that a real call occurred.",
+    "minimal_fix": "Keep old mock result bytes; production results must not assert literal real-request zero. Derive truthful metadata from verified original mode/attempt evidence or omit that unsupported zero claim for live."
+  },
+  "planned_readonly_check": "Use only closed successful fixture clone; no Worker/model/approval/source patches needed for GET. Snapshot55 before/after and real HTTP tripwire support narrow non-writing route software qualification, not real entitlement or human DECIDE.",
+  "observer_correction": {
+    "operation": "first rg guessed natural_owner.py/pa_spec_owner.py/natural_spec_artifacts.py names",
+    "outcome": "exit2; those files do not exist; corrected via rg --files and exact routes owner_acceptance.py/pa_spec_apps.py",
+    "product_or_test_execution": false
+  },
+  "review_sealed": false
+}

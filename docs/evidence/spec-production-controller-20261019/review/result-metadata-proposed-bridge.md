@@ -1,0 +1,9 @@
+结果计量字段最小修复的证据桥建议
+
+同意在明确限制下采用定向测试与精确 AST/字节桥，不要求单为删除错误零断言重跑七次完整控制器请求。第三轮闭合文件独立解析为5个唯一节点均PASS，execution outer618.715700260s、156输入before/after相等；这是旧real_model_requests=0表示的执行源结果，不改签最终源完整资格。
+
+必要边界：_bound只从已经原完整验证的FrozenRunContract.mode传run_mode；result_ref mock对象全字节等价，live仅省略real_model_requests，原model_requests及所有身份字段不变。state_write与verify_job两个原result_ref调用不改。新增定向测试比较完整输出，两条实际Source/Cold原result JSON分别作精确单键删除投影；不得以synthetic binding冒真实来源。
+
+最终七请求链NOT_RERUN必须明示。旧WIP生产结果含零字段，最终verify_job会期望新表示，不能据纯JSON投影宣称已迁移旧DB、兼容旧结果或最终版实际owner/artifact通过。计划四GET仍可证明其原执行源的只读入口；Source旧v1 owner内容可按原最新版本门失效。
+
+本报告是修复方案有条件同意，不将尚未实现/执行的定向测试标PASS，不提前关闭P2。未执行产品、测试、DB或网络，未修改仓库；review目录保持未封存。

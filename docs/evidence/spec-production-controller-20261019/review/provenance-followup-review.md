@@ -1,0 +1,8 @@
+# capture provenance追加静审
+
+生产Capture重算现已将_production参数传到完整body和EMPTY两条_derive路径，修复原比较遗漏本身。但当前还有两项需要修复的静态问题，见[完整记录](provenance-followup-findings.json)：
+
+1. **P2旧独立synthetic历史回归。** _captured要求Core Attempt存在，旧sender/source的合法policy-only身份并无Core Attempt（旧prepare仅identity_for(new_id)）。应保留旧无Attempt历史；生产Capture则必须原LIVE Run及exact生产Attempt/version，不可凭改provenance或删除marker降为synthetic。
+2. **P1生产Worker可进入旧公开offline路径。** _binding已允许生产Worker，但_dispatch仅_business非空才走production；dispatch_offline可提供caller SourceResult进入旧reserve/marker而绕固定resolver和_qualified。普通token不匹配只是偶然send阻挡：设置为原synthetic字面token时旧header检查也通过，transport=None可触真实HTTP。应在任何source/journal/adapter前拒生产Worker走两个公开offline入口；只有验过的私有business continuation才能进入生产。此为静态调用路径，未执行真实请求。
+
+父级已独立发现第一项，拟待当前batch闭合后修正，原失败保留。本人未读第二批在途输出，未运行产品/测试/DB/模型/网络；本报告不改签任何运行结果，目录未封存。

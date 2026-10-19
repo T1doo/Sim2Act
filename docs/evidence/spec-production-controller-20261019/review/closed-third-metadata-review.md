@@ -1,0 +1,11 @@
+第三轮与最终计量表示的有限原件桥核验
+
+纯文件/AST核对通过，未见新增阻断。当前pa_spec_apps相对第三轮输入只变_bound/result_ref；严格分别去除唯一run_mode=contract.mode与唯一mock条件后整模块AST相等，verify_job与_advance_local原函数AST全同，其余包源hash全同。P2静态修复闭合；最终metadata定向节点尚在途，本次未读，不提前签该运行结果。
+
+独立解析本轮闭合55表JSON，重算80条delivery_graph_requests请求/快照指纹、7组capture双锚的完整identity与实际请求/响应字节SHA、known usage对应、16条自然BodyArchive字节SHA。实际Generate3为PARTIAL，Source2/COLD2均SUCCEEDED，结果v1/v2；6个reservation间隔均至少60秒。原Mock响应与LIVE-shaped标记只证明隔离软件分支，不证明真实权益/生产来源/网络。
+
+Source/Cold两条实际result JSON对最终projection逐字段核验：只删除real_model_requests=0，其余字段和model_requests=2全保留。作者当前bound/receipts重新验证与其55表无写结论属于作者执行观察；本独审仅重算已导出事实和代码，不执行bound、读取DB或宣称旧数据迁移。最终七请求NOT_RERUN，旧WIP表示迁移NOT_SUPPORTED_OR_TESTED。
+
+四条owner/artifact原GET观察均200，55表before/after全量JSON独立相等；两个artifact文本SHA均符合资源hash且rid/iid/release/resultversion对应原Run。Source v1 owner为metadata-only/VERSION_CONFLICT，Cold v2 owner内容可见/PENDING；没有人工PREPARE或DECIDE。四GET证明原第三轮执行源读取入口，不冒称最终表示实际GET资格。
+
+原件为closed-third-metadata-observer.py、closed-third-metadata-verification.json与空stderr；观察器退出0。没有产品/测试/DB/网络执行、没有仓库修改；目录仍未封存，等metadata-final闭合。

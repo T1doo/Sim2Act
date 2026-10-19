@@ -1,5 +1,7 @@
 # F2 并行工程 Plan：权威当前状态
 
+2026-10-19 从`a343c60a8446d697b684d47862d9a9f1c61d7182`接续[SPEC默认关闭生产控制器接线](SpecProductionController20261019.md)：独立P-A生产binding复用原七槽/Run/Attempt/Guard/journal，固定账户resolver仍缺源拒绝，未安装真实权益或软件准入。第三轮5PASS/156输入零漂移，实际3+2+2到Source/v1与Cold/v2 SUCCEEDED；最终仅结果metadata去除LIVE误报零字段，另2PASS/151输入零漂移和两Run实际bound/receipts投影、AST桥，最终格式七请求NOT_RERUN。共7唯一最新PASS，15执行13P2F，原失败与初始缺raw stdout边界保留。最终类型检查FAIL8条与HEAD旧诊断相同；Windows/PG/真实/CI/发布未验，不签整个F2或真实LIVE。无远端/auth探测或推送。
+
 2026-10-19 从`2deea01b4ca879a84dbbbeab65102fc4ecfb6976`接续原F05/F2-T04/T06的[显式表格条形图v1](ExplicitTableChart20261019.md)：已有严格表格中由用户明确选原类别列/单数值系列，单位未指定，点击重新鉴权原Run与历史Release后显示；改选择仅清图，不执行Run/模型。3唯一场景最新均PASS，五次保存执行3P2F：首批display/原text-table PASS，guard先超时、再fixture空POST400，记录/夹具修正后完整guard PASS；原失败与缺失观察文件边界保留，已PASS两节点未重跑。最终189输入、同一141文件安装包，112个Python文件未变；真实模型0。9份通过图形为JSDOM DOM快照，不是独立SVG导出或原生视觉验收。Windows/PG/CI/真实语义/人工/正式发布未提升，无远端/auth探测或推送；14原本地提交保留。[原件](../evidence/explicit-table-chart-20261019/README.md)。
 
 2026-10-18 从`c861d92dbb91dfd8d3b9b7ed56015340758a9565`接续[安装包空白合成工程入口](BlankSyntheticWorkspace20261018.md)：先核原F2-T07，已有CSV列/Goal/材料、有限接线/自然依赖修改不再换字段加片；宽编辑依赖合同未冻结，转补原F1-T02/F3复现交付的有限代码入口。新console命令复用普通API/Worker和原页面，从空目录自行建项目/CSV/完整Goal/候选/内部版本/实例，实际结果30/v1，清停并同库新进程冷开。最终边界8PASS，新建页13检查/102请求，冷页9检查/46全GET；54非心跳表相等。保留首轮JSDOM加载FAIL和第二轮外层错ID FAIL，纯解析纠正+同库冷开PASS，修正fresh完整runner NOT_RERUN。wheel安装显式共享既有锁定依赖；真实模型0，另有1个被拒绝MOCK Attempt/unknown usage。这里只是Linux合成工程、同进程Worker线程，不关闭Win/native/独立进程/PG/语义/CI或原缺证门；[原件与有限独审](../evidence/blank-synthetic-workspace-20261018/README.md)。不做Git远端/auth重试或推送。

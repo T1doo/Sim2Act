@@ -68,8 +68,33 @@ class PATrialBinding:
         budget.scope_for(self.contract, self.approval_key)
 
 
+def _journal_binding(value):
+    from .spec_production import ProductionTrialBinding
+    return type(value) in (JournalTrialBinding, ProductionTrialBinding)
+
+
+def _production_binding(value):
+    from .spec_production import ProductionTrialBinding
+    return type(value) is ProductionTrialBinding
+
+
+def _binding_mode(value):
+    return "LIVE" if _production_binding(value) else "MOCK"
+
+
+
 def _binding(worker):
     binding = worker.pa_trial
+    if _production_binding(binding):
+        from .spec_production import environment
+        environment(worker.store, worker.s, worker.goal_planner_transport)
+        gate.require(worker.store is worker._journal_trial_store
+            and binding is worker._journal_trial_binding and not worker._journal_trial_drift
+            and worker.s.quota_subject == binding.contract.quota_subject
+            and worker.s.max_output_tokens == binding.contract.caps.max_output_tokens
+            and worker.s.lease_seconds == binding.contract.caps.lease_seconds
+            and fingerprint(binding.contract.model_dump()) == binding.contract_fingerprint)
+        return binding
     if type(binding) is JournalTrialBinding:
         from .config import Settings
         from .db import Store
@@ -120,10 +145,13 @@ def _admission(worker):
             and key == b.approval_key
             and user == b.contract.principal_id
         )
-        if type(b) is JournalTrialBinding:
+        if _journal_binding(b):
             from . import production_trial_policy as policy
             context = policy.check_run(store, c, user, contract, key, stage, rid, version, fence, worker.id)
-            _journal_source(store, c, b)
+            current_source = _journal_source(store, c, b)
+            if _production_binding(b):
+                gate.require(time.time() < min(context.deadline, current_source.expires_at),
+                             "Production admission expired during verification")
             return context
         _, result = production._account_admit(store, c, user, contract, key, stage,
             rid, version, fence, b.registry, worker.id)
@@ -141,7 +169,7 @@ def _admission(worker):
 
 
 def _account(worker, b):
-    if type(b) is JournalTrialBinding:
+    if _journal_binding(b):
         with worker.store.tx() as c:
             return _journal_source(worker.store, c, b)
     account = production._resolve(worker.store, b.contract.principal_id, b.contract, b.registry)
@@ -169,7 +197,7 @@ def check_commit(worker, c, run):
         and run["project_id"] == b.contract.project_id
     )
     gate._approved(worker.store, c, b.contract.principal_id, b.contract, b.approval_key)
-    if type(b) is JournalTrialBinding:
+    if _journal_binding(b):
         _admission(worker)(worker.store, c, run["principal_id"], b.contract, b.approval_key,
             _stage(b, run), run["id"], run["version"], run["fence"])
         return
@@ -181,7 +209,7 @@ def check_commit(worker, c, run):
 def _journal_reads(worker, c):
     """Share complete proofs only in this original controller read segment."""
     from contextlib import nullcontext
-    if type(getattr(worker, "pa_trial", None)) is not JournalTrialBinding:
+    if not _journal_binding(getattr(worker, "pa_trial", None)):
         return nullcontext()
     _binding(worker)
     gate.require(c.engine is worker.store.engine and c.in_transaction())
@@ -192,7 +220,7 @@ def _journal_reads(worker, c):
 def check_terminal_commit(worker, c, run, state):
     """Original terminal transaction continuation; never a send/Run admission."""
     b = _binding(worker)
-    if type(b) is not JournalTrialBinding:
+    if not _journal_binding(b):
         return check_commit(worker, c, run)
     stage = _stage(b, run)
     gate.require(state == ("PARTIAL" if stage == "generate" else "SUCCEEDED"))
@@ -209,7 +237,7 @@ def check_terminal_commit(worker, c, run, state):
         and time.time() < min(run["lease_until"], b.contract.expires_at,
                               run["created_at"] + b.contract.caps.run_seconds))
     gate._approved(worker.store, c, run["principal_id"], b.contract, b.approval_key)
-    _journal_source(worker.store, c, b)
+    terminal_source = _journal_source(worker.store, c, b)
     if stage == "generate":
         gate._generation_context(worker.store, c, run, b.contract)
     else:
@@ -222,6 +250,10 @@ def check_terminal_commit(worker, c, run, state):
     journal_stage_accounted(worker.store, c, run["principal_id"], b.contract,
                             b.approval_key, run["id"], stage)
     _binding(worker)
+    if _production_binding(b):
+        gate.require(not worker.stop.is_set() and time.time() < min(run["lease_until"],
+            b.contract.expires_at, run["created_at"] + b.contract.caps.run_seconds,
+            terminal_source.expires_at), "Production terminal proof expired")
 
 
 def _pb_source(worker, c, b):
@@ -341,7 +373,7 @@ def preflight(worker, c, run, *, generation, natural):
 def wait_unreserved(worker, run_id):
     """Wait only for a not-yet-reserved slot; original heartbeat and deadlines remain."""
     b = _binding(worker)
-    if type(b) is JournalTrialBinding:
+    if _journal_binding(b):
         return _journal_wait(worker, b, run_id)
     scope = budget.scope_for(b.contract, b.approval_key)
     with worker.store.tx() as c:
@@ -390,7 +422,7 @@ def _request(b, run, aid, wire):
 
 def _identity(worker, c, run, aid):
     b = _binding(worker)
-    if type(b) is JournalTrialBinding:
+    if _journal_binding(b):
         _journal_owner(c, b, run, aid)
         return b
     header = (
@@ -437,7 +469,7 @@ def _archive(worker, c, run, aid, wire, payload, complete, kind):
 
 def _archive_bound(store, c, b, run, aid, wire, payload, complete, kind):
     scope = budget.scope_for(b.contract, b.approval_key)
-    new = type(b) is JournalTrialBinding
+    new = _journal_binding(b)
     slot = None if new else next(
         (s for s in budget._ledger(c, scope)["slots"] if s["reservation"]["request_key"] == aid),
         None,
@@ -543,7 +575,7 @@ def _body_event(aid, kind, item):
 
 def reserved(worker, c, run, aid, wire):
     b = _binding(worker)
-    if type(b) is JournalTrialBinding:
+    if _journal_binding(b):
         gate.require("pa_trial_reserving_attempt" not in c.info)
         c.info["pa_trial_reserving_attempt"] = aid
         try:
@@ -658,12 +690,11 @@ def _sent(worker, run, aid, wire):
 
 def request_captured(worker, run, aid, wire, original_guard, provider, *, _heartbeat_state=None):
     """Existing Intern adapter only; receipt facts precede original business acceptance."""
-    gate.require(
-        type(provider) is InternModel
-        and type(provider.transport) is httpx.MockTransport
+    gate.require(type(provider) is InternModel
         and provider.transport is worker.goal_planner_transport
-    )
-    if type(_binding(worker)) is JournalTrialBinding:
+        and (provider.transport is None if _production_binding(_binding(worker))
+             else type(provider.transport) is httpx.MockTransport))
+    if _journal_binding(_binding(worker)):
         return _journal_exchange(worker, run, aid, wire, original_guard, provider, _heartbeat_state)
 
     def guard(request):
@@ -910,7 +941,7 @@ def _settlement(worker, c, run, aid, raw, *, verified=False):
 
 def settle_verified(worker, c, run, aid, raw):
     b = _identity(worker, c, run, aid)
-    if type(b) is JournalTrialBinding:
+    if _journal_binding(b):
         check_commit(worker, c, run)
         _journal_chain(worker.store, c, b, run, aid, raw)
         return
@@ -932,7 +963,7 @@ def settle_verified(worker, c, run, aid, raw):
 
 def reject(worker, c, run, aid, raw):
     """Evidence-only monotonic failure accounting; no synthetic re-admission."""
-    if type(getattr(worker, "_journal_trial_binding", None)) is JournalTrialBinding:
+    if _journal_binding(getattr(worker, "_journal_trial_binding", None)):
         # Receive already committed immutable accounting. No current binding,
         # duplicate settle or missing response may mint authority/refund here.
         b = worker._journal_trial_binding
@@ -968,6 +999,9 @@ def _journal_source(store, c, b):
     from .production_trial_policy import check_source, evidence
     from .production_trial_source import load_offline
 
+    if _production_binding(b):
+        from .spec_production import source
+        return source(store, c, b)
     loaded = load_offline(store, c, b.contract.principal_id, b.contract,
                           b.approval_key, b.account_id)
     return check_source(evidence.requirements_for(b.contract.principal_id, b.contract,
@@ -977,7 +1011,7 @@ def _journal_source(store, c, b):
 def check_journal_claim(store, c, run, b):
     """Fixed original generic P-A queue, explicitly excluding qualified associations."""
     from .natural_trial_runs import associated_sql
-    gate.require(type(b) is JournalTrialBinding and store.test_only and store.sqlite
+    gate.require(_journal_binding(b) and (_production_binding(b) or store.test_only and store.sqlite)
         and run["principal_id"] == b.contract.principal_id
         and run["project_id"] == b.contract.project_id
         and run["status"] == "QUEUED" and not run["cancel_intent"]
@@ -1005,7 +1039,8 @@ def check_journal_claim(store, c, run, b):
 def _journal_state(store, c, b):
     from . import production_trial_journal as journal
 
-    gate.require(store.test_only and store.sqlite and c.engine is store.engine)
+    gate.require((_production_binding(b) or store.test_only and store.sqlite)
+                 and c.engine is store.engine)
     _, scope, request, quota_request, entity = journal._context(
         store, c, b.contract.principal_id, b.contract, b.approval_key, b.account_id)
     # Backend mixing cannot acquire history/send authority.
@@ -1044,8 +1079,8 @@ def _journal_owner(c, b, run, aid):
         attempts.c.parameters["pa_trial_binding"]["fence"].as_integer().label("fence"))
         .select_from(runs).join(attempts, attempts.c.run_id == runs.c.id)
         .where(runs.c.id == run["id"], attempts.c.id == aid)).mappings().first()
-    gate.require(header is not None and header["mode"] == "MOCK"
-        and header["version"] == JOURNAL_VERSION
+    gate.require(header is not None and header["mode"] == _binding_mode(b)
+        and header["version"] == b.version
         and header["trial_fingerprint"] == b.contract_fingerprint
         and header["approval_key"] == b.approval_key and header["account_id"] == b.account_id
         and header["principal_id"] == b.contract.principal_id
@@ -1156,7 +1191,7 @@ def _journal_chain(store, c, b, run, aid, raw=None):
     actual = c.execute(select(attempts).where(attempts.c.run_id == run["id"],
                                                attempts.c.id == aid)).mappings().one()
     params = actual["parameters"]
-    gate.require(actual["request_model"] == b.contract.model and actual["mode"] == "MOCK"
+    gate.require(actual["request_model"] == b.contract.model and actual["mode"] == _binding_mode(b)
         and actual["reserved_tokens"] == len(wire) + params["max_tokens"]
         and params["max_tokens"] == strict_json(wire, 32768)["max_tokens"]
         and params["max_tokens"] <= b.contract.caps.max_output_tokens
@@ -1205,9 +1240,13 @@ def journal_stage_accounted(store, c, user, contract, key, rid, stage):
                        .order_by(attempts.c.created_at, attempts.c.id)).mappings().all()
     gate.require(len(actual) == (3 if stage == "generate" else 2))
     markers = [a["parameters"].get("pa_trial_binding", {}) for a in actual]
-    gate.require(all(m.get("version") == JOURNAL_VERSION for m in markers)
+    from .spec_production import VERSION as PRODUCTION_VERSION
+    from .spec_production import ProductionTrialBinding
+    gate.require(markers[0].get("version") in (JOURNAL_VERSION, PRODUCTION_VERSION)
+        and all(m.get("version") == markers[0].get("version") for m in markers)
         and len({m.get("account_id") for m in markers}) == 1)
-    b = JournalTrialBinding(contract, key, markers[0].get("account_id"))
+    binding_type = ProductionTrialBinding if markers[0].get("version") == PRODUCTION_VERSION else JournalTrialBinding
+    b = binding_type(contract, key, markers[0].get("account_id"))
     gate.require(user == contract.principal_id)
     run = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
     state, _, _ = _journal_state(store, c, b)

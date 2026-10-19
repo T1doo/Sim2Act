@@ -334,6 +334,8 @@ def enqueue(
             FrozenRunContract.model_validate(contract)
             goal = source_goal["snapshot"]["content"]["goal"]
         if pa_spec_apps.is_candidate(draft["candidate"]):
+            from .spec_production import generation_mode
+            contract["mode"] = generation_mode(c, draft)
             source_goal = correction_value["context"]["source_goal"] if human_correction is not None else use_goal.model_dump() if use_goal is not None else logic_goal if logic_goal is not None else pa_spec_apps.verify_origin(store, c, user, draft, limits)[3]
             snapshot["spec_goal"] = source_goal
             content = source_goal["snapshot"]["content"]

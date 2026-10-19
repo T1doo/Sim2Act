@@ -166,6 +166,7 @@ def source_scope_gate(store, c, rid):
 def _journal_scope_anchor(store, c, rid, *, expected=None):
     """Owned scalar anchors, only after a completed scope proof or its exact hit."""
     from .pa_trial_dispatch import JOURNAL_VERSION
+    from .spec_production import VERSION as PRODUCTION_VERSION
     owner = c.execute(select(runs.c.principal_id, runs.c.project_id,
         runs.c.runtime_id).where(runs.c.id == rid)).mappings().first()
     if owner is None or expected is not None and dict(owner) != expected:
@@ -194,7 +195,7 @@ def _journal_scope_anchor(store, c, rid, *, expected=None):
     if (hints is None or hints["kind"] != "goal-natural-spec-application.v1"
             or hints["aid"] is not None or len(accepted) != 1
             or accepted[0]["kind"] != hints["kind"] or accepted[0]["aid"] is not None
-            or versions != [JOURNAL_VERSION] * 3):
+            or versions not in ([JOURNAL_VERSION] * 3, [PRODUCTION_VERSION] * 3)):
         return None
     return dict(owner=dict(owner), refs=refs, hints=dict(hints),
                 accepted=[dict(row) for row in accepted], versions=versions)
@@ -665,9 +666,10 @@ def verified_candidate(store, c, run, limits):
     # server-created journal trial Attempts opt in; legacy proofs stay unchanged.
     source_scope_gate(store, c, run["id"])
     from .pa_trial_dispatch import JOURNAL_VERSION
+    from .spec_production import VERSION as PRODUCTION_VERSION
     versions = c.execute(select(attempts.c.parameters["pa_trial_binding"]["version"].as_string())
                          .where(attempts.c.run_id == run["id"])).scalars().all()
-    if versions != [JOURNAL_VERSION] * 3:
+    if versions not in ([JOURNAL_VERSION] * 3, [PRODUCTION_VERSION] * 3):
         return _verified_candidate(store, c, run, limits)
     key = ("journal-trial-complete-generation", run["principal_id"], run["project_id"],
            run["id"], fingerprint(dict(run)),
@@ -734,6 +736,12 @@ def check_provider(worker, c, run, contract, attempt_id=None):
         or worker.s.goal_planner_provider != "intern-s2"):
         raise DomainError("RESOURCE_UNAVAILABLE", "Explicit Intern generation provider required")
     activation = contract.application_generation.activation
+    from .pa_trial_dispatch import _production_binding, check_commit
+    if contract.application_generation.version in SPEC_GENERATIONS and _production_binding(worker.pa_trial):
+        if activation is not None or contract.mode != "live":
+            raise DomainError("PERMISSION_DENIED", "Production SPEC needs its original trial, not a literal activation")
+        check_commit(worker, c, run)
+        return
     if contract.application_generation.version in SPEC_GENERATIONS and activation is not None:
         raise DomainError("PERMISSION_DENIED", "Spec checklist generation is offline only")
     if activation is not None:

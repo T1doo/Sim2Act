@@ -103,12 +103,18 @@ def production_preflight(store, user, contract, approval_key, request):
     with store.tx() as c:
         # Authorize exact identity/contract before reporting unavailable LIVE.
         gate._approved(store, c, user, contract, approval_key)
-        production_evidence.resolve_account(user, contract, approval_key)
-        # Retained downstream gates. Missing source stops before these checks;
-        # it never establishes software qualification or a dispatch permit.
+        from . import production_trial_policy as policy
+        supplied = production_evidence.resolve_account(user, contract, approval_key)
+        policy.check_source(production_evidence.requirements_for(user, contract, approval_key),
+                            supplied, now=time.time())
         _qualified()
-        return gate.admit(store, c, user, contract, approval_key, request.stage,
-                          request.run_id, request.expected_version, request.fence)
+        worker_id = c.execute(select(runs.c.worker_id).where(runs.c.id == request.run_id)).scalar()
+        context = policy.check_run(store, c, user, contract, approval_key, request.stage,
+            request.run_id, request.expected_version, request.fence, worker_id)
+        # A preflight observation is not a reusable dispatch permit. The bound
+        # controller repeats source/current Run checks at claim/send/commit.
+        return dict(status="SPEC_PRODUCTION_PREFLIGHT_CHECKED", context=context.model_dump(),
+                    live_allowed=False, dispatch_authorized=False)
 
 
 def _resolve(store, user, contract, registry):

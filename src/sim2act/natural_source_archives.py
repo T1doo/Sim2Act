@@ -46,7 +46,7 @@ class BodyArchive(Strict):
     project_id: str = Field(min_length=1, max_length=100)
     runtime_id: str = Field(min_length=1, max_length=100)
     phase: Literal["RESERVED_REQUEST", "RECEIVED_DECODED_BODY"]
-    provenance: Literal["OFFLINE_MOCKTRANSPORT"] = "OFFLINE_MOCKTRANSPORT"
+    provenance: Literal["OFFLINE_MOCKTRANSPORT", "SPEC_PRODUCTION_CONTROLLER"] = "OFFLINE_MOCKTRANSPORT"
     byte_count: int = Field(strict=True, ge=0)
     sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     received_complete: bool
@@ -56,12 +56,13 @@ class BodyArchive(Strict):
     canonical_sha256: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
 
-def _body(job, aid, payload, complete, canonical_sha256, kind):
+def _body(job, aid, payload, complete, canonical_sha256, kind, *, _production=False):
     omission: Literal["NONE", "OVERSIZE", "EMPTY"] = (
         "EMPTY" if not payload else "OVERSIZE" if len(payload) > MAX_BODY_BYTES else "NONE")
     return BodyArchive(run_id=job["id"], attempt_id=aid,
         principal_id=job["principal_id"], project_id=job["project_id"], runtime_id=job["runtime_id"],
         phase="RESERVED_REQUEST" if kind == REQUEST else "RECEIVED_DECODED_BODY",
+        provenance="SPEC_PRODUCTION_CONTROLLER" if _production else "OFFLINE_MOCKTRANSPORT",
         byte_count=len(payload), sha256=hashlib.sha256(payload).hexdigest(),
         received_complete=complete, extent="COMPLETE_BODY" if complete else "RECEIVED_PREFIX",
         omission=omission,
@@ -70,6 +71,7 @@ def _body(job, aid, payload, complete, canonical_sha256, kind):
 
 
 def receipt_owner(c, job, aid, request_body, *, reserved=False):
+    from .spec_production import evidence_mode
     # Scalar ownership and the original reserved wire precede any append. Late
     # receipt facts need no live lease, but may not follow a moved Run/Attempt.
     query = (select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id,
@@ -87,20 +89,23 @@ def receipt_owner(c, job, aid, request_body, *, reserved=False):
     identity = c.execute(query).mappings().first()
     require(identity is not None and identity["principal_id"] == job["principal_id"]
             and identity["project_id"] == job["project_id"]
-            and identity["runtime_id"] == job["runtime_id"] and identity["mode"] == "MOCK"
+            and identity["runtime_id"] == job["runtime_id"] and identity["mode"] == evidence_mode(c, job)
             and identity["wire_sha256"] == hashlib.sha256(request_body).hexdigest()
             and identity["wire_bytes"] == len(request_body), "Body receipt owner or reserved wire changed")
     return identity
 
 
 def _write(store, c, job, aid, payload, complete, canonical_sha256, kind, request_body):
-    require(store.test_only and store.sqlite and type(payload) is bytes
+    from .spec_production import evidence_mode
+    require((store.test_only and store.sqlite or evidence_mode(c, job) == "LIVE") and type(payload) is bytes
             and type(request_body) is bytes and type(complete) is bool,
             "Body capture requires isolated offline SQLite")
     identity = receipt_owner(c, job, aid, request_body, reserved=kind == REQUEST)
-    body = _body(job, aid, payload, complete, canonical_sha256, kind)
+    production = identity["mode"] == "LIVE"
+    body = _body(job, aid, payload, complete, canonical_sha256, kind, _production=production)
     if kind == RESPONSE:
-        request = _body(job, aid, request_body, True, None, REQUEST).model_dump()
+        request = _body(job, aid, request_body, True, None, REQUEST,
+                        _production=production).model_dump()
         headers = c.execute(select(delivery_graph_requests.c.kind,
             delivery_graph_requests.c.request_fingerprint, delivery_graph_requests.c.fingerprint).where(
             delivery_graph_requests.c.app_id == job["id"],
@@ -147,6 +152,7 @@ def record_response(store, c, job, aid, payload, complete, canonical_sha256=None
 
 
 def _read(c, user, job, aid, kind):
+    from .spec_production import evidence_mode
     # This helper is private and reached only after full current source gates.
     exists = c.execute(select(delivery_graph_requests.c.request_key).where(
         delivery_graph_requests.c.app_id == job["id"],
@@ -159,6 +165,8 @@ def _read(c, user, job, aid, kind):
     require(saved == body.model_dump() and body.run_id == job["id"] and body.attempt_id == aid
             and body.principal_id == user == job["principal_id"]
             and body.project_id == job["project_id"] and body.runtime_id == job["runtime_id"]
+            and body.provenance == ("SPEC_PRODUCTION_CONTROLLER" if evidence_mode(c, job) == "LIVE"
+                                    else "OFFLINE_MOCKTRANSPORT")
             and body.phase == ("RESERVED_REQUEST" if kind == REQUEST else "RECEIVED_DECODED_BODY"))
     anchors = c.execute(select(events.c.data).where(events.c.run_id == job["id"],
         events.c.kind == ("NS_WIRE_ARCHIVED" if kind == REQUEST else "NS_BODY_ARCHIVED"),

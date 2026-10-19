@@ -54,8 +54,8 @@ class Worker:
         self.goal_planner_transport = goal_planner_transport
         self.pa_trial = pa_trial
         if pa_trial is not None:
-            from .pa_trial_dispatch import JournalTrialBinding, validate
-            if type(pa_trial) is JournalTrialBinding:
+            from .pa_trial_dispatch import _journal_binding, validate
+            if _journal_binding(pa_trial):
                 self._journal_trial_store = store
                 self._journal_trial_binding = pa_trial
                 self._journal_trial_drift = False
@@ -779,9 +779,20 @@ class Worker:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--once", action="store_true")
+    for field in ("user", "project", "trial", "approval", "account"):
+        parser.add_argument("--spec-production-" + field)
     args = parser.parse_args()
     s = Settings.from_env()
-    w = Worker(Store(s.database_url), s)
+    selected = [getattr(args, "spec_production_" + field)
+                for field in ("user", "project", "trial", "approval", "account")]
+    if any(selected):
+        if not all(selected):
+            parser.error("SPEC production selection needs user, project, trial, approval and account")
+        from .spec_production import install
+        w = install(Store(s.database_url), s, user=selected[0], project_id=selected[1],
+                    trial_key=selected[2], approval_key=selected[3], account_id=selected[4])
+    else:
+        w = Worker(Store(s.database_url), s)
     signal.signal(signal.SIGINT, lambda *_: w.stop.set())
     signal.signal(signal.SIGTERM, lambda *_: w.stop.set())
     while not w.stop.is_set():

@@ -384,6 +384,7 @@ def _stage_current(store, c, user, contract, stage, run_id):
     from . import pa_spec_apps
     from .pa_trial_dispatch import JOURNAL_VERSION
     from .pb_natural_specs import _source_reads
+    from .spec_production import VERSION as PRODUCTION_VERSION
 
     if store.test_only and store.sqlite and type(contract) in (TrialContract, TrialContractV2):
         versions = c.execute(select(attempts.c.parameters["pa_trial_binding"]["version"].as_string())
@@ -391,7 +392,7 @@ def _stage_current(store, c, user, contract, stage, run_id):
             .where(runs.c.principal_id == user, runs.c.project_id == contract.project_id,
                 runs.c.runtime_id == contract.runtime_id,
                 runs.c.request_key == contract.stage_keys.generate)).scalars().all()
-        if versions == [JOURNAL_VERSION] * 3:
+        if versions in ([JOURNAL_VERSION] * 3, [PRODUCTION_VERSION] * 3):
             with _source_reads(store, c):
                 return _stage_current_read(store, c, user, contract, stage, run_id, pa_spec_apps,
                                            _journal=True)
@@ -607,13 +608,14 @@ def _pb_origin(store, c, user, contract, approval_key, bound):
 
 def _generation_accounted(store, c, user, contract, approval_key, gen_id):
     from .pa_trial_dispatch import JOURNAL_VERSION, journal_stage_accounted
+    from .spec_production import VERSION as PRODUCTION_VERSION
     versions = c.execute(select(attempts.c.parameters["pa_trial_binding"]["version"].as_string())
                          .where(attempts.c.run_id == gen_id)).scalars().all()
     if any(v != "pa-trial-dispatch.v1" for v in versions):
-        require(versions == [JOURNAL_VERSION] * 3,
+        require(versions in ([JOURNAL_VERSION] * 3, [PRODUCTION_VERSION] * 3),
                 "Mixed or unknown actual trial backends cannot prove a stage")
         journal_stage_accounted(store, c, user, contract, approval_key, gen_id, "generate")
-        return JOURNAL_VERSION
+        return versions[0]
     # No caller boolean or cached public pointer can stand in for the paired
     # original trial ledger and independently verified actual provider Attempts.
     try:

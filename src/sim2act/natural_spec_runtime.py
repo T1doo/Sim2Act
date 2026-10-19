@@ -43,6 +43,9 @@ def require(value, message="Natural model evidence changed"):
 
 
 def enabled(worker):
+    from .spec_production import active
+    if active(worker):
+        return
     if (
         not worker.store.test_only
         or worker.s.mode != "mock"
@@ -107,6 +110,7 @@ def anchor(c, rid, kind, aid):
 
 
 def counters(c, job, manifest):
+    from .spec_production import evidence_mode
     rows = (
         c.execute(
             select(attempts)
@@ -159,7 +163,7 @@ def counters(c, job, manifest):
     require(
         sorted(reserved_events, key=lambda x: x["attempt_id"])
         == sorted(
-            [dict(attempt_id=r["id"], mode="mock") for r in rows], key=lambda x: x["attempt_id"]
+            [dict(attempt_id=r["id"], mode=r["mode"].lower()) for r in rows], key=lambda x: x["attempt_id"]
         )
     )
     for kind in ("NS_RESERVED", "NS_RECEIVED", "NS_SETTLED", "NS_REJECTED"):
@@ -186,7 +190,7 @@ def counters(c, job, manifest):
         require(
             isinstance(meta, dict)
             and row["status"] in {"STARTED", "RECEIVED", "VERIFIED", "REJECTED_KNOWN"}
-            and row["mode"] == "MOCK"
+            and row["mode"] == evidence_mode(c, job)
             and row["request_model"] == "intern-s2"
             and type(meta.get("ordinal")) is int
             and meta["ordinal"] not in ordinals
@@ -749,7 +753,8 @@ def advance_model(worker, run, *, _heartbeat_state=None):
             request.content == wire
             and str(request.url) == InternModel.ENDPOINT
             and request.method == "POST"
-            and request.headers.get("Authorization") == "Bearer synthetic-offline-natural-spec"
+            and request.headers.get("Authorization") == "Bearer " + (
+                worker.s.token if worker.s.mode == "live" else "synthetic-offline-natural-spec")
         )
         with store.tx() as c, _journal_reads(worker, c):
             current = lock_live(store, c, run)
@@ -801,7 +806,7 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                 worker.s,
                 **node_limits.model_dump(),
                 live_enabled=True,
-                token="synthetic-offline-natural-spec",
+                token=worker.s.token if worker.s.mode == "live" else "synthetic-offline-natural-spec",
             ),
             transport=worker.goal_planner_transport,
         )

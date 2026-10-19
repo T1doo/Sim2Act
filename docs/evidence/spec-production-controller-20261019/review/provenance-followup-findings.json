@@ -1,0 +1,35 @@
+{
+  "verdict": "PROVENANCE_FIX_HAS_COMPATIBILITY_AND_OFFLINE_ENTRY_BLOCKERS_STATIC",
+  "basis": "Readonly current diff/source; no qualified-second in-flight outputs read and no product/test executed.",
+  "production_derive_fix": "Current _receive passes _production, and both body/EMPTY _captured re-derivations pass production determined from scalar Attempt. This fixes the production-provenance comparison omission itself.",
+  "findings": [
+    {
+      "id": "P2_STANDALONE_SYNTHETIC_HISTORY_NOW_REQUIRES_CORE_ATTEMPT",
+      "severity": "P2",
+      "cause": "_captured unconditionally requires an actual Attempt marker. Existing standalone synthetic sender creates policy ReservationIdentity with a new attempt ID but no Core Attempt row.",
+      "anchors": [
+        "tests/test_production_trial_sender.py:113–128",
+        "tests/test_production_trial_source.py:13",
+        "production_trial_sender.py:149–157"
+      ],
+      "trigger": "Original standalone dispatch completes, then original-key duplicate/history reads saved Capture.",
+      "result": "VERSION_CONFLICT despite valid original paired journal/capture; first capture write itself may still succeed.",
+      "minimal_fix": "Keep original synthetic policy-only no-Core-Attempt history; production requires original LIVE Run mode and exact production Core Attempt/version. Existing production marker or LIVE original Run must never downgrade through a synthetic provenance fallback."
+    },
+    {
+      "id": "P1_PRODUCTION_WORKER_CAN_ENTER_PUBLIC_OFFLINE_SOURCE_PATH",
+      "severity": "P1",
+      "cause": "Generic sender._binding now accepts a ProductionTrialBinding Worker, but _dispatch labels production only when _business is nonNone. Public dispatch_offline supplies caller SourceVerificationResult and has no _business; fixed production resolver/_qualified are skipped.",
+      "trigger": "Call existing dispatch_offline with exact configured production Worker, valid owned policy identity and arbitrary internally supplied ALLOW. Before adapter, reserve/record_attempt can mutate journal without fixed resolver. If its configured token equals the old synthetic-offline-planner string, the old header comparison also passes, and InternModel with transportNone can issue real HTTP. Valid credentials are not necessary merely to issue a request.",
+      "runtime_reproduction": false,
+      "minimal_fix": "Reject a ProductionTrialBinding Worker at both public offline entrypoints, and/or require at _dispatch entry that any production-bound Worker has the exact validated private _business continuation, before journal/source/provider work. Token mismatch must not be the only barrier."
+    }
+  ],
+  "parent_proposed_compatibility_fix": "Parent independently noticed the missing Attempt compatibility and plans preservation after current batch closes; no in-flight source mutation requested by reviewer.",
+  "qualification": "No runtime or actual network proof; pure static reachable branches. Preserve first reported batch failure; do not rewrite its result.",
+  "observed_sender": {
+    "bytes": 25284,
+    "sha256": "18539809c3c76000224f6f1193e7f75021973a918bb206e5853b276e60a80103"
+  },
+  "review_not_sealed": true
+}

@@ -1,0 +1,93 @@
+{
+  "status": "WIP_STATIC_REVIEW_NOT_RUNTIME_QUALIFICATION",
+  "basis": "Readonly current source and allowed git diff; author actively editing, hashes are observation only, not freeze.",
+  "findings": [
+    {
+      "id": "P1_PRODUCTION_PROVIDER_REJECTED_AS_MOCK",
+      "severity": "P1",
+      "observation": "Original _dispatch selected settings.token, then unconditionally replaced it in every _business branch with synthetic token and required params.mode==mock. Production always has _business and live settings, after record_attempt.",
+      "original_excerpt_provenance": "Visible source tool-output excerpt, not a retrospectively captured whole-file copy",
+      "original_excerpt": "token = settings.token if production else \"synthetic-offline-planner\"\nif _business is not None:\n    params = provider.settings\n    token = (\"synthetic-offline-planner\" if item.stage == \"generate\" else \"synthetic-offline-natural-spec\")\n    _require(params.mode == \"mock\" and params.live_enabled is True and params.token == token ...)",
+      "effect": "No production adapter call despite otherwise valid admission; irreversible attempted slot may already be allocated.",
+      "latest_observed": "Current sender branches token and mode by production, retains model/quota/wire/output/Run bounds. Static token contradiction removed; not executed."
+    },
+    {
+      "id": "P2_ADMISSION_EXPIRY_DURING_LATE_PROOF",
+      "severity": "P2",
+      "observation": "source checked expiry before _qualified and returned; _admission checked Run before source; terminal helper checked lease before source/phase/full history then ended with _binding only.",
+      "effect": "A source/Run deadline crossing during qualification or full proofs could escape a final commit-time check.",
+      "latest_observed": "source now rechecks expiry/check_source after _qualified; _admission now checks context.deadline/source expiry at return. Last observed terminal helper still ended with _binding only; final original lease/contract/source deadline and stop tail check remains to confirm."
+    }
+  ],
+  "positive_static_observations": [
+    "New exact production binding is separate from Journal/PATrial and environment requires non-test PG/live/exactSettings/default no transport; old synthetic exact branch remains.",
+    "Fixed source resolver still unconditionally raises SOURCE_MISSING; no input callback/source registry or real evidence installed.",
+    "Original journal/account/CAS and capture same receive transaction reused; receive_source DENY preserves observed facts after fresh source rejection, original slot/owner checked separately.",
+    "GA/NS/Attempt evidence mode, marker and source lineage have explicit new production branches; original ledger claims remain pure, not dispatch permits.",
+    "Actual _loaded lock order is project/account/ledger then Run, not reverse; no new definite deadlock found in bounded source read."
+  ],
+  "limits": [
+    "No tests/product/Node/Worker/model/DB/network executed",
+    "No freeze yet; current edits need later closed-source/tests review",
+    "No software qualification/pin/PG concurrency/LIVE acceptance inferred",
+    "Original synthetic isolation and no true source remain essential"
+  ],
+  "current_observation_hashes": {
+    "src/sim2act/spec_production.py": {
+      "bytes": 5746,
+      "sha256": "329f547baa58a40a8d01018943f5fd8a88d524e4508ae0ca9f21ba83368944b4"
+    },
+    "src/sim2act/production_trial_sender.py": {
+      "bytes": 24406,
+      "sha256": "d073040cc899ec3d85468b5f4acfa4a7ce026285fe9edb6f9555e50821f83552"
+    },
+    "src/sim2act/pa_trial_dispatch.py": {
+      "bytes": 57157,
+      "sha256": "764bae22d06194b57e46b112ef6df2f6ca1780d78b3f830bbc2639b8c99431ce"
+    },
+    "src/sim2act/natural_spec_runtime.py": {
+      "bytes": 43032,
+      "sha256": "3703ac831ab5508104d52adac42154ff4393a188b20ef8a7f8192a6cf206e6d5"
+    },
+    "src/sim2act/natural_source_archives.py": {
+      "bytes": 20384,
+      "sha256": "649b7bea18f33217d8ac2e38b8b49024bf5de29ecf1bc6e398503c87f3f26959"
+    },
+    "src/sim2act/natural_live_admission.py": {
+      "bytes": 51825,
+      "sha256": "c60ff0b8fdd052f771f07675f8b4593039537ff4e92faf1bf229fb774ad3e4a5"
+    },
+    "src/sim2act/goal_applications.py": {
+      "bytes": 63366,
+      "sha256": "edbff39104c9f4e937cc7e2ab3a3a07b8f77432cd0d17448e2cb9bae2db4a718"
+    },
+    "src/sim2act/worker.py": {
+      "bytes": 40904,
+      "sha256": "4707baa9b7fec6e8cd050696c9a28a34dc1f3394ca682404e0d302f10a64083d"
+    },
+    "src/sim2act/db.py": {
+      "bytes": 91562,
+      "sha256": "6fd052bdaf46d872c4b929af92f766d46f533ea9ce19be26864266c144b56bd6"
+    },
+    "src/sim2act/app_jobs.py": {
+      "bytes": 64534,
+      "sha256": "7e2054afc0a97a7ae2bf5d0d1df4e85552d08637855fdb62ee3cdc078b874199"
+    },
+    "src/sim2act/api.py": {
+      "bytes": 53716,
+      "sha256": "405a80e4eeea7b800da6661030b321ffbfc01b9b37d6bfe779a94a32291e6102"
+    },
+    "src/sim2act/pa_spec_apps.py": {
+      "bytes": 97520,
+      "sha256": "bbcec02ba895869738f4f0e81bd10fa904341f9d11458cb2b27374bbc738a83d"
+    },
+    "src/sim2act/production_trial_admission.py": {
+      "bytes": 15610,
+      "sha256": "efe92f8dbd97cba94ff19dd6faaad0a43c1613625494b118d493b120dee01b7a"
+    },
+    "src/sim2act/production_evidence.py": {
+      "bytes": 9566,
+      "sha256": "18d31d67f47fc3946bb2d846deca2ec653d9d5b786ac7fc71307061a5c3f4258"
+    }
+  }
+}

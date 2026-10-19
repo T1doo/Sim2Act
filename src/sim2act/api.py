@@ -564,7 +564,9 @@ def create_app(store=None, settings=None):
         rid = db.submit(user, pid, "", [], body.request_key, policy={
             "limits": {**limits.model_dump(), "max_requests": min(3, s.max_requests, limits.max_requests),
                        "max_tools": min(2 if body.family else 1, limits.max_tools), "max_repairs": min(1, s.max_repairs, limits.max_repairs)},
-            "mode": "live" if scope and scope.mode == "LIVE" else "mock", "request_model": "intern-s2", "application_generation": selected,
+            "mode": "live" if (scope and scope.mode == "LIVE" or body.family == "natural_spec"
+                and s.mode == "live" and s.live_enabled and s.application_generation_activation_enabled)
+                else "mock", "request_model": "intern-s2", "application_generation": selected,
         }, goal_source={"card_id": cid, "version": body.expected_version,
                         "fingerprint": body.expected_fingerprint})
         return {**acceptance(db, user, rid), "generation_policy": selected}

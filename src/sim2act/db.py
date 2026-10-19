@@ -1269,12 +1269,12 @@ class Store:
 
                 from .natural_live_admission import PHASE, TrialContractV2, entity
                 from .natural_trial_runs import MARKER
-                from .pa_trial_dispatch import JournalTrialBinding, PATrialBinding
+                from .pa_trial_dispatch import PATrialBinding, _journal_binding, _production_binding
 
-                journal_trial = type(trial_binding) is JournalTrialBinding
+                journal_trial = _journal_binding(trial_binding)
                 if type(trial_binding) is not PATrialBinding and not journal_trial:
                     raise DomainError("PERMISSION_DENIED")
-                if journal_trial and (not self.test_only or not self.sqlite):
+                if journal_trial and not _production_binding(trial_binding) and (not self.test_only or not self.sqlite):
                     raise DomainError("PERMISSION_DENIED")
                 phase = delivery_graph_requests.alias("trial_phase")
                 phase_ready = exists(select(phase.c.app_id).where(

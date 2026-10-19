@@ -185,7 +185,7 @@ def validate_candidate(requirements, candidate, *, now=None) -> CandidateDiagnos
                                candidate_fingerprint=fingerprint(supplied.model_dump()))
 
 
-def resolve_account(user, contract, approval_key) -> NoReturn:
+def resolve_account(user, contract, approval_key) -> object:
     """Unregistered production boundary; accepts no source/record/callback override.
 
     Call only after original _approved. Candidate diagnostics cannot supply

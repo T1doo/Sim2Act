@@ -819,6 +819,7 @@ def _bound(store, c, user, job, limits, *, validate_input=True, _source_origin=F
             manifest, report, source, goal = verify_origin(store, c, user, draft, limits)
     # load_binding/correction.bound proved current scope; this call chain only reads.
     contract = store._frozen_contract_after_scope(c, job)
+    from .spec_production import generation_mode
     content = goal["snapshot"]["content"]
     require(contract.source_goal_card is None and contract.goal.goal_id == goal["card_id"]
         and contract.goal.goal == content["goal"] and contract.goal.constraints == content["constraints"]
@@ -829,7 +830,7 @@ def _bound(store, c, user, job, limits, *, validate_input=True, _source_origin=F
         and contract.goal.resource_refs == job["resource_refs"] == [source["resource_id"]]
         and len(contract.resources) == 1 and contract.resources[0].content_hash == source["hash"]
         and contract.resources[0].resource_id == source["resource_id"] and contract.resources[0].format == source["format"]
-        and contract.mode == "mock" and contract.application_generation is None and contract.natural_planning is None
+        and contract.mode == generation_mode(c, draft) and contract.application_generation is None and contract.natural_planning is None
         and job["context"].get("spec_family") == draft["candidate"]["namespace"])
     if natural.is_candidate(draft["candidate"]):
         from .natural_spec_runtime import counters
@@ -851,7 +852,7 @@ def _bound(store, c, user, job, limits, *, validate_input=True, _source_origin=F
     plan = dict(definition=draft["candidate"], input=snapshot["input"],
         plan_fingerprint=fingerprint(draft["candidate"]), source_hash=source["hash"])
     value = dict(snapshot=snapshot, app_run=app_run, release=release, draft=draft,
-        source=source, goal=goal, plan=plan, report=report,
+        source=source, goal=goal, plan=plan, report=report, run_mode=contract.mode,
         audit_fingerprint=audit_fingerprint(store, c, user, draft, _logic_out=logic_out, _release=release))
     if "human_correction" in snapshot:
         value["human_correction"] = natural_spec_corrections.feedback(store,c,user,job,snapshot,_logic_out=logic_out,_release=release)
@@ -1028,7 +1029,7 @@ def result_ref(binding, proved, version):
                 target_goal_id=binding["goal"]["card_id"], target_resource_id=binding["source"]["resource_id"])
            if "pa_use" in s else {}),
         receipt_refs=[p["operation_id"] for p in proved],
-        model_requests=sum(a["executor"]["ref"] in natural.MODEL_KINDS for a in binding["draft"]["candidate"]["actions"]), **({"real_model_requests": 0} if natural.is_candidate(binding["draft"]["candidate"]) else {}), citation_status="PASS", semantic_status="UNKNOWN", semantic_goal_acceptance="NOT_RUN",
+        model_requests=sum(a["executor"]["ref"] in natural.MODEL_KINDS for a in binding["draft"]["candidate"]["actions"]), **({"real_model_requests": 0} if natural.is_candidate(binding["draft"]["candidate"]) and binding["run_mode"] == "mock" else {}), citation_status="PASS", semantic_status="UNKNOWN", semantic_goal_acceptance="NOT_RUN",
         formal_publication_enabled=False)
 
 
@@ -1143,7 +1144,8 @@ def commit_guard(worker, c, run, b, delta=0):
     if natural.is_candidate(b["draft"]["candidate"]):
         require(job["created_at"] == run["created_at"] and job["fingerprint"] == run["fingerprint"],
             "Original accepted Run metadata changed")
-    if worker.s.mode != "mock" or worker.s.live_enabled:
+    from .spec_production import active as production_active
+    if (worker.s.mode != "mock" or worker.s.live_enabled) and not production_active(worker):
         raise DomainError("PERMISSION_DENIED", "Spec family is offline only")
     require(job["status"] == "RUNNING" and not job["cancel_intent"] and not worker.stop.is_set())
     limits = Limits(**{k: getattr(worker.s, k) for k in Limits.model_fields})
@@ -1312,7 +1314,8 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
             and owner["status"] == "RUNNING" and not owner["cancel_intent"]
             and not worker.stop.is_set() and time.time() < owner["lease_until"],
             "Terminal write ownership interval changed")
-        if worker.s.mode != "mock" or worker.s.live_enabled:
+        from .spec_production import active as production_active
+        if (worker.s.mode != "mock" or worker.s.live_enabled) and not production_active(worker):
             raise DomainError("PERMISSION_DENIED", "Spec family is offline only")
         terminal_limits = Limits(**{k: getattr(worker.s, k) for k in Limits.model_fields})
         declared_limits = plan["definition"]["manifest"]["runtime_limits"]
