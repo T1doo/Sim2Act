@@ -8,7 +8,6 @@ from test_spec_production_controller import no_real_http as no_real_http
 
 from sim2act import app_jobs
 from sim2act import pa_spec_apps as spec
-from sim2act import pb_natural_specs as pb
 from sim2act.contracts import Limits
 from sim2act.db import attempts, fingerprint, grants
 from sim2act.errors import DomainError
@@ -38,14 +37,17 @@ def test_running_original_source_reuses_only_exact_read_release_origin(env, tmp_
     # Full original fallback uses the same immutable inputs and Limits. No
     # binding or authority survives this earlier transaction.
     origins.clear()
+    load = app_jobs.load_binding
+
+    def without_local_origin(*args, **kwargs):
+        return load(*args, **{k: v for k, v in kwargs.items() if k != "_origin_out"})
+
     with monkeypatch.context() as patch:
-        patch.setattr(pb, "_source_transaction", lambda *args: None)
+        patch.setattr(app_jobs, "load_binding", without_local_origin)
         with store.tx() as c:
             complete = spec.bound(store, c, user, job, limits)
     assert len(origins) > optimized_count and fingerprint(complete) == fingerprint(optimized)
     fallback_count = len(origins)
-
-    load = app_jobs.load_binding
 
     def revoke_after_full_release(*args, **kwargs):
         value = load(*args, **kwargs)
