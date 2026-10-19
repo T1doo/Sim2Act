@@ -208,7 +208,7 @@ def _ledger(value):
     _require(ledger.scope.quota_subject == canonical_quota_subject(ledger.account_id))
     identities = [slot.identity for slot in ledger.slots]
     _require(len(identities) <= 7 and len({i.attempt_id for i in identities}) == len(identities))
-    stage_runs = {}
+    stage_runs: dict[gate.Stage, str] = {}
     previous = 0.0
     for index, slot in enumerate(ledger.slots):
         item = slot.identity
@@ -284,7 +284,8 @@ def record_attempt(store, c, user, contract, key, ledger, quota, identity, wire,
     """Irreversible policy marker only. It never authorizes a sender call."""
     original, state, cursor, item = _bound(store, c, user, contract, key, ledger, quota, identity, wire)
     slot = next((s for s in state.slots if s.identity == item), None)
-    _require(slot is not None)
+    if slot is None:
+        raise DomainError("VERSION_CONFLICT", "Uninstalled production policy boundary")
     _require(not state.halted and not slot.attempted and slot.settlement is None, "OUTCOME_UNKNOWN")
     _fresh(store, c, user, original, key, state, item, source)
     updated = tuple(s.model_copy(update=dict(attempted=True)) if s == slot else s for s in state.slots)
@@ -302,7 +303,8 @@ def settle(store, c, user, contract, key, ledger, quota, identity, wire, source,
     original, state, cursor, item = _bound(store, c, user, contract, key, ledger, quota, identity, wire)
     received = _typed(outcome, Outcome)
     slot = next((s for s in state.slots if s.identity == item), None)
-    _require(slot is not None)
+    if slot is None:
+        raise DomainError("VERSION_CONFLICT", "Uninstalled production policy boundary")
     if slot.settlement is not None:
         _require(slot.settlement == received)
         return Transition(ledger=state, quota=cursor, duplicate=True)

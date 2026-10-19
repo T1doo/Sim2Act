@@ -2,8 +2,15 @@
 
 import json
 from pathlib import Path
+from typing import TypedDict
 
 import httpx
+
+
+class _ProcessStatus(TypedDict):
+    pid: int | None
+    alive: bool | None
+    identity: str
 
 
 def unavailable_health(reason, http_status=None):
@@ -69,7 +76,9 @@ def _valid_records(records):
         pid, created = record.get("pid"), record.get("created_at")
         if type(pid) is not int or not 0 < pid <= 2**31 - 1:
             return False
-        if type(created) not in (int, float) or not 0 < created < 1e12:
+        if type(created) is not int and type(created) is not float:
+            return False
+        if not 0 < created < 1e12:
             return False
         command = record.get("command")
         if command is not None and (
@@ -100,23 +109,24 @@ def collect_status(state: Path, observe_process, get_health):
         state_status = "INVALID_JSON"
     except OSError:
         state_status = "UNREADABLE"
-    output = {
+    processes: dict[str, _ProcessStatus] = {
         kind: {"pid": None, "alive": None, "identity": "NOT_RECORDED"}
         for kind in ("api", "worker")
     }
-    output["process_state"] = state_status
     if state_status == "VALID":
         for record in records:
-            result = {"pid": record["pid"], "alive": None, "identity": "UNVERIFIABLE"}
+            result: _ProcessStatus = {"pid": record["pid"], "alive": None, "identity": "UNVERIFIABLE"}
             try:
                 result["alive"] = observe_process(record) is not None
                 result["identity"] = "VERIFIED" if result["alive"] else "NOT_VERIFIED"
             except (RuntimeError, OSError):
                 pass
-            output[record["kind"]] = result
+            processes[record["kind"]] = result
     elif state_status != "MISSING":
         for kind in ("api", "worker"):
-            output[kind]["identity"] = "UNVERIFIABLE"
+            processes[kind]["identity"] = "UNVERIFIABLE"
+    output: dict[str, object] = dict(processes)
+    output["process_state"] = state_status
     try:
         output.update(parse_health(get_health()))
     except httpx.HTTPError:

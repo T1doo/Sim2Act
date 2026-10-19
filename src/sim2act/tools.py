@@ -93,9 +93,9 @@ def dispatch(store, run_id, fence, call, *, crash_before_commit=False,
             store.lock_project(c, source["principal_id"], source["project_id"])
         run = store.guard(c, run_id, fence)
         if csv_report:
-            from .ordinary_csv import dispatch_gate
+            from .ordinary_csv import dispatch_gate as csv_dispatch_gate
 
-            dispatch_gate(store, c, run, call, ordinary_csv_settings)
+            csv_dispatch_gate(store, c, run, call, ordinary_csv_settings)
         if activated:
             from .goal_planner import verified_plan, verify_confirmation
             from .natural_activations import validate_run
@@ -139,9 +139,9 @@ def dispatch(store, run_id, fence, call, *, crash_before_commit=False,
                 return old["receipt"]
             raise DomainError("OUTCOME_UNKNOWN")
         if md_delivery:
-            from .ordinary_artifacts import dispatch_gate
+            from .ordinary_artifacts import dispatch_gate as md_dispatch_gate
 
-            dispatch_gate(store, c, run, name)
+            md_dispatch_gate(store, c, run, name)
         ctx = dict(run["context"])
         if ctx["tools"] >= store.frozen_contract(c, run).limits.max_tools:
             raise DomainError("BUDGET_EXHAUSTED")
@@ -198,7 +198,7 @@ def dispatch(store, run_id, fence, call, *, crash_before_commit=False,
         if csv_report:
             # Same transaction: deadline/lease/permission changes roll back this effect.
             current = store.guard(c, run_id, fence)
-            dispatch_gate(store, c, current, call, ordinary_csv_settings)
+            csv_dispatch_gate(store, c, current, call, ordinary_csv_settings)
         return receipt
 
 
@@ -226,7 +226,7 @@ def _validated_csv_rows(content):
     names = reader.fieldnames
     if not names or "" in names or len(names) != len(set(names)):
         raise ValueError("CSV 表头为空或重复，请保存修正后的材料并重建草案。")
-    rows = []
+    rows: list[dict[str, str]] = []
     for row in reader:
         if len(rows) >= 1000:
             raise ValueError("CSV 超过 1000 条记录，请缩小材料范围。")
@@ -280,7 +280,7 @@ def csv_column_options(content):
     try:
         names, rows = _validated_csv_rows(content)
         valid = dict.fromkeys(names, True)
-        values = {name: [] for name in names}
+        values: dict[str, list[Decimal]] = {name: [] for name in names}
         for row in rows:
             for name in names:
                 try:

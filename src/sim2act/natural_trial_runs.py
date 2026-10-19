@@ -21,7 +21,7 @@ from .errors import DomainError
 from .pa_trial_dispatch import PATrialBinding
 from .pb_natural_uses import PACommitInput
 
-ASSOCIATION = "natural-trial-run.v1"
+ASSOCIATION: Literal["natural-trial-run.v1"] = "natural-trial-run.v1"
 MARKER = "natural_trial_run"
 
 

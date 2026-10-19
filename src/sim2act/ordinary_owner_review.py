@@ -5,7 +5,7 @@ This ledger is the sole declaration state; Run.result and automatic verdicts sta
 """
 
 import time
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import Depends
 from fastapi.responses import JSONResponse
@@ -30,7 +30,7 @@ from .errors import DomainError
 from .goals import GoalCardInput
 from .tools import reconcile_readback
 
-VERSION = "owner.ordinary-goal.v1"
+VERSION: Literal["owner.ordinary-goal.v1"] = "owner.ordinary-goal.v1"
 MD_VERSION = "owner.ordinary-goal-md.v2"
 POLICY = OrdinaryHumanReview(version=VERSION, declarant="current-project-and-run-owner",
     automatic_goal_acceptance="NOT_RUN").model_dump()

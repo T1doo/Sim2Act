@@ -474,9 +474,9 @@ def _archive_bound(store, c, b, run, aid, wire, payload, complete, kind):
         (s for s in budget._ledger(c, scope)["slots"] if s["reservation"]["request_key"] == aid),
         None,
     )
-    if not new and slot is None:
-        raise DomainError("VERSION_CONFLICT", "Original trial slot missing")
     if not new:
+        if slot is None:
+            raise DomainError("VERSION_CONFLICT", "Original trial slot missing")
         gate.require(slot["reservation"] == _request(b, run, aid, wire).model_dump())
     else:
         _journal_owner(c, b, run, aid)
@@ -1095,7 +1095,8 @@ def _journal_slot(store, c, b, run, aid, wire):
     header = _journal_owner(c, b, run, aid)
     state, cursor, _ = _journal_state(store, c, b)
     slot = next((s for s in state.slots if s.identity.attempt_id == aid), None)
-    gate.require(slot is not None)
+    if slot is None:
+        raise DomainError("VERSION_CONFLICT", "Exact natural trial changed")
     item = slot.identity
     policy._bound(store, c, run["principal_id"], b.contract, b.approval_key,
                   state, cursor, item, wire)
@@ -1167,7 +1168,8 @@ def _journal_chain(store, c, b, run, aid, raw=None):
         gate.require(saved["request"] == dict(trial=scope.model_dump(), attempt_id=aid,
             family=kind, wire_sha256=meta["wire_sha256"]))
         body = BodyArchive.model_validate(saved["response"])
-        gate.require(body.body_b64 is not None)
+        if body.body_b64 is None:
+            raise DomainError("VERSION_CONFLICT", "Exact natural trial changed")
         payload = base64.b64decode(body.body_b64, validate=True)
         gate.require(_body(run, aid, payload, True, body.canonical_sha256,
             "natural_source_request_body.v1" if kind == REQUEST

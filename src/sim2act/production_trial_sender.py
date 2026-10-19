@@ -276,7 +276,9 @@ def _derive(payload, complete, received, *, _generation=False, _production=False
         else len(payload),
         **{key: usage.get(key) for key in ("prompt_tokens", "completion_tokens", "total_tokens")},
     )
-    omission = "EMPTY" if not payload else "OVERSIZE" if len(payload) > 32768 else "NONE"
+    omission: Literal["NONE", "EMPTY", "OVERSIZE"] = (
+        "EMPTY" if not payload else "OVERSIZE" if len(payload) > 32768 else "NONE"
+    )
     return Capture(
         provenance="SPEC_PRODUCTION_CONTROLLER" if _production else "UNINSTALLED_SYNTHETIC_ADAPTER",
         raw_sha256=outcome.response_sha256,

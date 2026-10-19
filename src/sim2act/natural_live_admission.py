@@ -110,8 +110,8 @@ class StageKeys(Strict):
         return self
 
 
-class TrialContract(Strict):
-    namespace: Literal["natural-live-trial.v1"] = VERSION
+class _TrialContractFields(Strict):
+    namespace: Literal["natural-live-trial.v1", "natural-live-trial.v2"]
     trial_key: str = Field(pattern=KEY)
     project_id: str = Field(pattern=r"^proj_[a-f0-9]{32}$")
     principal_id: str = Field(pattern=r"^user_[a-f0-9]{32}$")
@@ -138,7 +138,11 @@ class TrialContract(Strict):
         return self
 
 
-class TrialContractV2(TrialContract):
+class TrialContract(_TrialContractFields):
+    namespace: Literal["natural-live-trial.v1"] = VERSION
+
+
+class TrialContractV2(_TrialContractFields):
     """New exact consent only. V1 is never inferred, migrated or extended."""
 
     namespace: Literal["natural-live-trial.v2"] = "natural-live-trial.v2"
@@ -232,7 +236,7 @@ class FeeProof(Strict):
 
 
 class FeeAuthority(Protocol):
-    def verify(self, contract: TrialContract) -> FeeProof: ...
+    def verify(self, contract: TrialContract | TrialContractV2) -> FeeProof: ...
 
 
 @dataclass(frozen=True)
@@ -242,7 +246,7 @@ class SyntheticOnlyFeeAuthority:
     contract_fingerprint: str
     quota_subject: str
 
-    def verify(self, contract: TrialContract) -> FeeProof:
+    def verify(self, contract: TrialContract | TrialContractV2) -> FeeProof:
         require(self.contract_fingerprint == fingerprint(contract.model_dump())
                 and self.quota_subject == contract.quota_subject)
         return FeeProof(scope="SYNTHETIC_ONLY", contract_fingerprint=self.contract_fingerprint,
@@ -653,7 +657,7 @@ def _generation_accounted(store, c, user, contract, approval_key, gen_id):
 
 
 @controlled
-def stage_review(store, user, contract: TrialContract, approval_key: str,
+def stage_review(store, user, contract: TrialContract | TrialContractV2, approval_key: str,
                  stage: Literal["source", "cold"], run_id: str):
     with store.tx() as c:
         _approved(store, c, user, contract, approval_key)
@@ -664,7 +668,7 @@ def stage_review(store, user, contract: TrialContract, approval_key: str,
 
 
 @controlled
-def approve_stage(store, user, contract: TrialContract, body: StageApproveInput):
+def approve_stage(store, user, contract: TrialContract | TrialContractV2, body: StageApproveInput):
     with store.tx() as c:
         _approved(store, c, user, contract, body.approval_key)
         require(isinstance(body.authority, StageAuthorityV2) == isinstance(contract, TrialContractV2))
@@ -694,7 +698,7 @@ def approve_stage(store, user, contract: TrialContract, body: StageApproveInput)
 
 
 @controlled
-def recover_stage(store, user, contract: TrialContract, approval_key: str,
+def recover_stage(store, user, contract: TrialContract | TrialContractV2, approval_key: str,
                   stage: Literal["source", "cold"], request_key: str):
     """Original consent receipt only, including after Run start or completion.
 
@@ -825,7 +829,7 @@ def _approved(store, c, user, contract, approval_key, *, active=True):
 
 
 @controlled
-def approve(store, user, contract: TrialContract, body: ApproveInput):
+def approve(store, user, contract: TrialContract | TrialContractV2, body: ApproveInput):
     with store.tx() as c:
         if user != contract.principal_id:
             raise DomainError("PERMISSION_DENIED")
@@ -862,7 +866,7 @@ def _receipt(approval):
 
 
 @controlled
-def recover(store, user, contract: TrialContract, approval_key: str):
+def recover(store, user, contract: TrialContract | TrialContractV2, approval_key: str):
     with store.tx() as c:
         approval = _approved(store, c, user, contract, approval_key, active=False)
         receipt = _receipt(approval)
@@ -872,7 +876,7 @@ def recover(store, user, contract: TrialContract, approval_key: str):
 
 
 @controlled
-def revoke(store, user, contract: TrialContract, body: RevokeInput):
+def revoke(store, user, contract: TrialContract | TrialContractV2, body: RevokeInput):
     if user != contract.principal_id:
         raise DomainError("PERMISSION_DENIED")
     return revoke_exact(store, user, contract.project_id, entity(contract),
@@ -949,7 +953,7 @@ def _generation_context(store, c, run, contract):
 
 
 @controlled
-def admit(store, c, user, contract: TrialContract, approval_key: str, stage: Stage,
+def admit(store, c, user, contract: TrialContract | TrialContractV2, approval_key: str, stage: Stage,
           run_id: str, expected_version: int, fence: int, fee_authority: FeeAuthority | None = None):
     """Original synthetic admission; shared context checks do not issue authority."""
     approval, phase, run, at = _run_context(

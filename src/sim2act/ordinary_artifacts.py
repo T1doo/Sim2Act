@@ -1,6 +1,7 @@
 """Explicit one-MD requirement on an ordinary Goal; reuse original tool and receipts."""
 
 import hashlib
+from typing import Literal
 
 from sqlalchemy import select
 
@@ -8,7 +9,7 @@ from .contracts import OrdinaryArtifactDelivery
 from .db import fingerprint, local_effects, operations, resources
 from .errors import DomainError
 
-VERSION = "ordinary-goal-md.v1"
+VERSION: Literal["ordinary-goal-md.v1"] = "ordinary-goal-md.v1"
 HUMAN_VERSION = "owner.ordinary-goal-md.v2"
 
 

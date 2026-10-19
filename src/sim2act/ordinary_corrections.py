@@ -1,10 +1,17 @@
 """One explicit new ordinary Run from an exact rejected result; never auto repair."""
 
+from typing import Literal
+
 from fastapi import Depends
 from sqlalchemy import insert, select
 
 from . import ordinary_owner_review as human
-from .contracts import OrdinaryCorrection, OrdinaryCorrectionFeedback, OrdinaryCorrectionRequest
+from .contracts import (
+    OrdinaryCorrection,
+    OrdinaryCorrectionFeedback,
+    OrdinaryCorrectionIssue,
+    OrdinaryCorrectionRequest,
+)
 from .db import (
     events,
     fingerprint,
@@ -16,7 +23,7 @@ from .db import (
 )
 from .errors import DomainError
 
-VERSION = "ordinary-goal-correction.v1"
+VERSION: Literal["ordinary-goal-correction.v1"] = "ordinary-goal-correction.v1"
 CONSENT = "RUN_NEW_CORRECTION_KEEP_GOAL_CRITERIA_AND_HISTORY"
 
 
@@ -217,8 +224,10 @@ def feedback(store, c, user, rid, *, admission):
     fresh = human.context(store, c, user, rid, _lock_project=admission)
     rows = human.ledger(c, user, rid)
     last = rows[-1] if rows else None
+    if last is None:
+        raise DomainError("VERSION_CONFLICT", "The latest declaration must be an explicit rejection")
     require(
-        last is not None and last["kind"] == "DECIDE" and last["status"] == "REJECTED",
+        last["kind"] == "DECIDE" and last["status"] == "REJECTED",
         "The latest declaration must be an explicit rejection",
     )
     value = human.payload(c, last)
@@ -230,7 +239,7 @@ def feedback(store, c, user, rid, *, admission):
     choices = value["choices"]
     require([v["item_id"] for v in choices] == [v["id"] for v in fresh["items"]])
     issues = [
-        dict(item_id=item["id"], criterion=item["text"], reason=choice["reason"])
+        OrdinaryCorrectionIssue(item_id=item["id"], criterion=item["text"], reason=choice["reason"])
         for item, choice in zip(fresh["items"], choices, strict=True)
         if choice["decision"] == "REJECT"
     ]
@@ -388,7 +397,7 @@ def scoped_request_run(store, c, user, pid, parent, key):
 def submit(store, user, parent, body, limits):
     from .app_jobs import submission_tx
 
-    guard = {}
+    guard: dict[str, dict[str, str]] = {}
     with submission_tx(store, guard) as c:
         pid = human.scope(store, c, user, parent)
         old = scoped_request_run(store, c, user, pid, parent, body["request_key"])
