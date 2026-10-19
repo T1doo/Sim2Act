@@ -209,9 +209,13 @@ def check_commit(worker, c, run):
 def _journal_reads(worker, c):
     """Share complete proofs only in this original controller read segment."""
     from contextlib import nullcontext
-    if not _journal_binding(getattr(worker, "pa_trial", None)):
+    binding = getattr(worker, "pa_trial", None)
+    ordinary = (binding is None and worker.store.test_only and worker.store.sqlite
+        and worker.s.mode == "mock" and worker.s.live_enabled is False)
+    if not ordinary and not _journal_binding(binding):
         return nullcontext()
-    _binding(worker)
+    if not ordinary:
+        _binding(worker)
     gate.require(c.engine is worker.store.engine and c.in_transaction())
     from .pb_natural_specs import _source_reads
     return _source_reads(worker.store, c)

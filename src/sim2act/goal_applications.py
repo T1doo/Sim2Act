@@ -163,6 +163,25 @@ def source_scope_gate(store, c, rid):
         token.inflight.discard(key)
 
 
+def _ordinary_generation_reads(store, c, rid):
+    """Eligibility for existing read reuse, never generation or send authority."""
+    if not store.test_only or not store.sqlite:
+        return False
+    frozen = c.execute(select(run_contracts.c.snapshot["mode"].as_string().label("mode"),
+        run_contracts.c.snapshot["application_generation"]["version"].as_string().label("kind"),
+        run_contracts.c.snapshot["application_generation"]["activation"].label("activation"))
+        .where(run_contracts.c.run_id == rid)).mappings().first()
+    if (frozen is None or frozen["mode"] != "mock"
+            or frozen["kind"] != "goal-natural-spec-application.v1"
+            or frozen["activation"] is not None):
+        return False
+    actual = c.execute(select(attempts.c.mode, attempts.c.parameters)
+        .where(attempts.c.run_id == rid)).mappings().all()
+    return len(actual) == 3 and all(row["mode"] == "MOCK"
+        and type(row["parameters"]) is dict and "pa_trial_binding" not in row["parameters"]
+        for row in actual)
+
+
 def _journal_scope_anchor(store, c, rid, *, expected=None):
     """Owned scalar anchors, only after a completed scope proof or its exact hit."""
     from .pa_trial_dispatch import JOURNAL_VERSION
@@ -195,7 +214,8 @@ def _journal_scope_anchor(store, c, rid, *, expected=None):
     if (hints is None or hints["kind"] != "goal-natural-spec-application.v1"
             or hints["aid"] is not None or len(accepted) != 1
             or accepted[0]["kind"] != hints["kind"] or accepted[0]["aid"] is not None
-            or versions not in ([JOURNAL_VERSION] * 3, [PRODUCTION_VERSION] * 3, ["pa-trial-dispatch.v1"] * 3)):
+            or (versions not in ([JOURNAL_VERSION] * 3, [PRODUCTION_VERSION] * 3, ["pa-trial-dispatch.v1"] * 3)
+                and not (versions == [None] * 3 and _ordinary_generation_reads(store, c, rid)))):
         return None
     return dict(owner=dict(owner), refs=refs, hints=dict(hints),
                 accepted=[dict(row) for row in accepted], versions=versions)
@@ -669,7 +689,8 @@ def verified_candidate(store, c, run, limits):
     from .spec_production import VERSION as PRODUCTION_VERSION
     versions = c.execute(select(attempts.c.parameters["pa_trial_binding"]["version"].as_string())
                          .where(attempts.c.run_id == run["id"])).scalars().all()
-    if versions not in ([JOURNAL_VERSION] * 3, [PRODUCTION_VERSION] * 3, ["pa-trial-dispatch.v1"] * 3):
+    if (versions not in ([JOURNAL_VERSION] * 3, [PRODUCTION_VERSION] * 3, ["pa-trial-dispatch.v1"] * 3)
+            and not (versions == [None] * 3 and _ordinary_generation_reads(store, c, run["id"]))):
         return _verified_candidate(store, c, run, limits)
     key = ("journal-trial-complete-generation", run["principal_id"], run["project_id"],
            run["id"], fingerprint(dict(run)),
