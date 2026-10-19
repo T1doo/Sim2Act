@@ -238,6 +238,16 @@ def _bound(store, c, user, contract, key, ledger, quota, identity, wire):
     _require(c.in_transaction(), "PERMISSION_DENIED")
     original, expected = _requirements(user, contract, key)
     state, cursor, item = _ledger(ledger), _typed(quota, AccountQuotaCursor), _typed(identity, ReservationIdentity)
+    return _bound_from_checked_facts(store, c, user, original, expected, state, cursor, item, wire)
+
+
+def _bound_from_checked_facts(store, c, user, original, expected, state, cursor, item, wire):
+    """Bind already checked policy inputs; no ledger parsing or source/Run permit.
+
+    The caller supplies this call's complete _requirements/_ledger/_typed results.
+    Project locking and the original scope/wire/cursor predicates still run here;
+    reserve/record/settle retain their distinct subsequent freshness semantics.
+    """
     _require(user == state.scope.principal_id and expected == state.scope, "PERMISSION_DENIED")
     project = store.lock_project(c, user, state.scope.project_id)
     _require(project["runtime_id"] == state.scope.runtime_id, "PERMISSION_DENIED")

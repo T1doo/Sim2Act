@@ -131,11 +131,10 @@ def verify_origin(store, c, user, draft, limits):
 
         validate_registered_candidate(store, c, user, draft, limits)
         return
-    from pydantic import ValidationError
     from sqlalchemy import select
 
     from .db import events, goal_application_candidates, runs
-    from .goal_applications import ConfirmInput, verified_candidate
+    from .goal_applications import verified_candidate
 
     marker = (
         c.execute(
@@ -150,19 +149,8 @@ def verify_origin(store, c, user, draft, limits):
         raise DomainError("VERSION_CONFLICT", "Independent goal generation marker required")
     run = c.execute(select(runs).where(runs.c.id == marker["run_id"])).mappings().one()
     raw = verified_candidate(store, c, run, limits)
-    try:
-        confirmation = ConfirmInput.model_validate(marker["confirmation"])
-    except (ValidationError, ValueError, TypeError) as exc:
-        raise DomainError("VERSION_CONFLICT", "Exact candidate confirmation missing") from exc
-    accepted = {
-        "app_id": draft["id"],
-        "run_id": run["id"],
-        "principal_id": user,
-        "project_id": draft["project_id"],
-        "runtime_id": draft["runtime_id"],
-        "candidate_fingerprint": fingerprint(raw),
-        "confirmation": confirmation.model_dump(exclude_none=True),
-    }
+    confirmation = _goal_confirmation(marker)
+    accepted = _goal_acceptance_from_facts(user, draft, run, raw, confirmation)
     sealed = (
         c.execute(
             select(events.c.data).where(
@@ -172,6 +160,42 @@ def verify_origin(store, c, user, draft, limits):
         .scalars()
         .all()
     )
+    _verify_goal_origin_from_facts(user, draft, marker, run, raw, confirmation, accepted, sealed)
+
+
+def _goal_confirmation(marker):
+    """Decode only after the public route has verified the generated candidate."""
+    from pydantic import ValidationError
+
+    from .goal_applications import ConfirmInput
+
+    try:
+        confirmation = ConfirmInput.model_validate(marker["confirmation"])
+    except (ValidationError, ValueError, TypeError) as exc:
+        raise DomainError("VERSION_CONFLICT", "Exact candidate confirmation missing") from exc
+    return confirmation
+
+
+def _goal_acceptance_from_facts(user, draft, run, raw, confirmation):
+    """Build the original accepted record before reading confirmation anchors."""
+    return {
+        "app_id": draft["id"],
+        "run_id": run["id"],
+        "principal_id": user,
+        "project_id": draft["project_id"],
+        "runtime_id": draft["runtime_id"],
+        "candidate_fingerprint": fingerprint(raw),
+        "confirmation": confirmation.model_dump(exclude_none=True),
+    }
+
+
+def _verify_goal_origin_from_facts(user, draft, marker, run, raw, confirmation, accepted, sealed):
+    """Original Goal confirmation predicates over complete, already checked facts.
+
+    No generation verifier, IO, authority cache or alternative route is invoked.
+    The caller must perform owner gating and candidate validation first, and
+    supply the complete GA_APP_CONFIRMED list at its original check position.
+    """
     if (
         sealed != [accepted]
         or confirmation.candidate_fingerprint != fingerprint(raw)

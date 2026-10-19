@@ -813,15 +813,9 @@ def verified_candidate(store, c, run, limits):
 def _verified_candidate(store, c, run, limits):
     contract, _ = source(store, c, run)
     _, rows = history(store, c, run)
-    if len(rows) not in {2, 3}:
-        raise DomainError("VERIFICATION_FAILED", "Candidate lacks read/feedback/generation history")
-    spec = contract.application_generation.version in SPEC_GENERATIONS
-    if (spec and len(rows) != 3) or (not spec and len(rows) == 3 and rows[1]["parameters"].get("generation_diagnostic") is None):
-        raise DomainError("VERSION_CONFLICT", "Unapproved repair request")
-    if rows[-1]["parameters"].get("generation_diagnostic") is not None:
-        raise DomainError("VERIFICATION_FAILED", "Last candidate was rejected")
-    value = parse_candidate(store, c, run, rows[-1]["response"], limits or contract.limits)
-    seal = {"attempt_id": rows[-1]["id"], "candidate_fingerprint": fingerprint(value)}
+    last = _candidate_attempt_from_history(contract, rows)
+    value = parse_candidate(store, c, run, last["response"], limits or contract.limits)
+    seal = _candidate_validation_seal(rows[-1], value)
     recorded = (
         c.execute(
             select(events.c.data).where(
@@ -831,6 +825,33 @@ def _verified_candidate(store, c, run, limits):
         .scalars()
         .all()
     )
+    return _candidate_from_checked_facts(value, seal, recorded)
+
+
+def _candidate_attempt_from_history(contract, rows):
+    """Select from a complete checked history, never a projected final Attempt.
+
+    History uses the frozen generation contract. Candidate compilation remains a
+    separate check under the caller's full Limits (or the original None fallback).
+    This leaf neither loads history nor establishes its authority/currentness.
+    """
+    if len(rows) not in {2, 3}:
+        raise DomainError("VERIFICATION_FAILED", "Candidate lacks read/feedback/generation history")
+    spec = contract.application_generation.version in SPEC_GENERATIONS
+    if (spec and len(rows) != 3) or (not spec and len(rows) == 3 and rows[1]["parameters"].get("generation_diagnostic") is None):
+        raise DomainError("VERSION_CONFLICT", "Unapproved repair request")
+    if rows[-1]["parameters"].get("generation_diagnostic") is not None:
+        raise DomainError("VERIFICATION_FAILED", "Last candidate was rejected")
+    return rows[-1]
+
+
+def _candidate_validation_seal(last, value):
+    """Build the original seal before the public wrapper reads its anchors."""
+    return {"attempt_id": last["id"], "candidate_fingerprint": fingerprint(value)}
+
+
+def _candidate_from_checked_facts(value, seal, recorded):
+    """Check the complete anchor list after role-specific candidate validation."""
     if recorded != [seal]:
         raise DomainError("VERSION_CONFLICT", "Candidate validation anchor missing or changed")
     return value
@@ -1338,6 +1359,15 @@ def check_counters(store, c, run, rows):
     limits = contract.limits
     spec = contract.application_generation.version in SPEC_GENERATIONS
     ctx = run["context"]
+    _check_counter_rows(rows)
+    count_tools = (
+        c.execute(select(operations).where(operations.c.run_id == run["id"])).mappings().all()
+    )
+    _check_counters_from_facts(ctx, limits, spec, rows, count_tools)
+
+
+def _check_counter_rows(rows):
+    """Original typed-row gate, before the public wrapper reads Operations."""
     if any(
         not isinstance(a["parameters"], dict)
         or type(a["reserved_tokens"]) is not int
@@ -1345,9 +1375,14 @@ def check_counters(store, c, run, rows):
         for a in rows
     ):
         raise DomainError("VERSION_CONFLICT", "Invalid typed generation counters")
-    count_tools = (
-        c.execute(select(operations).where(operations.c.run_id == run["id"])).mappings().all()
-    )
+
+
+def _check_counters_from_facts(ctx, limits, spec, rows, count_tools):
+    """Use all checked rows/Operations and the full frozen generation Limits.
+
+    _check_counter_rows must precede this leaf. No DB read, history projection,
+    Limits widening or reusable authorization is performed here.
+    """
     expected = {
         "requests": len(rows),
         "reserved_tokens": sum(a["reserved_tokens"] for a in rows),
