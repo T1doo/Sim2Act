@@ -11,7 +11,7 @@ import time
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import event, select
 from test_foundation import enqueue
 
 from sim2act import natural_spec_runtime as natural
@@ -172,3 +172,38 @@ def test_wrong_request_family_rejected_before_wait_or_database(env, monkeypatch)
     monkeypatch.setattr(natural_trial_runs, "check_worker", forbidden)
     with pytest.raises(DomainError, match="Natural heartbeat has the wrong request family"):
         worker.reserve("wrong-run", 1, {}, _natural_heartbeat_state={})
+
+
+def test_original_reservation_observer_accepts_writer_boundary(env, monkeypatch, tmp_path):
+    from test_pb_spec_production_controller import observe_reservation_reads
+
+    from sim2act.natural_live_admission import PBTrialContract
+
+    worker, run, state, meta = setup_reservation(env, monkeypatch)
+    # Unit-only eligibility/binding and recipe/journal stubs select the read
+    # segment. The original observer, SourceReads, guard and writer are real.
+    binding = SimpleNamespace(contract=PBTrialContract.model_construct(),
+        contract_fingerprint="unit-journal", approval_key="unit-approval")
+    worker.pa_trial = binding
+    monkeypatch.setattr(trial, "_production_binding", lambda value: value is binding)
+    monkeypatch.setattr(trial, "_journal_binding", lambda value: value is binding)
+    monkeypatch.setattr(trial, "_binding", lambda worker: worker.pa_trial)
+    monkeypatch.setattr(trial, "wait_unreserved", lambda *_, **__: None)
+    monkeypatch.setattr(trial, "preflight", lambda *_, **__: None)
+    monkeypatch.setattr(trial, "reserved", lambda *_: None)
+    reports, before_sql = observe_reservation_reads(monkeypatch)
+    event.listen(worker.store.engine, "before_cursor_execute", before_sql)
+    try:
+        aid = worker.reserve(run["id"], run["fence"], copy.deepcopy(run["context"]),
+            request_tools=[], natural_spec_request=meta, _natural_heartbeat_state=state)
+    finally:
+        event.remove(worker.store.engine, "before_cursor_execute", before_sql)
+    assert len(reports) == 1 and reports[0]["cleared"] and reports[0]["writes"] > 0
+    with worker.store.tx() as c:
+        assert c.execute(select(attempts.c.id).where(
+            attempts.c.run_id == run["id"])).scalars().all() == [aid]
+    (tmp_path / "original-reservation-observer-proof.json").write_text(json.dumps(dict(
+        classification="UNIT_COMBINATION_NOT_PRODUCTION_PHASE_PROOF",
+        unit_stubs=["binding/classification eligibility", "recipe/journal hooks", "quota wait"],
+        original_observer_assertions_unchanged=True, reservation_read_segments=reports,
+        actual_attempt=aid, real_model_calls=0), indent=2))
