@@ -1,0 +1,43 @@
+# 最终原完整 P-B 终态独审
+
+**FINAL_RUNTIME_TERMINAL_REVIEW — FAIL_NOT_ACCEPTED。** 最后一次约定的有界原完整链未通过。Source与提取/目录/显式Cold提交的有限合成前缀已证实；Cold首次模型响应结算失败，完整P-B功能不能签收。本轮停止编码、微优化和重跑。
+
+## 执行身份与终态
+
+源/测试HEAD为2b3846d0802ef2875d9665acc1280b949d1a4131；phase anchor-readback-full-pb。实际2026-10-19 19:12:22.213064Z至19:25:29.869363Z，外层787.656746184秒，子进程return1；JUnit标准pytest1测试/1失败/0error/0skip，suite773.477秒。原始runner具有1800秒上界，本次正常返回失败，没有timeout/skip冒充通过。已结束执行的returncode、JUnit及结束导出相互吻合，owned_execution_terminal_verified=true；不主张观察器所有background wrapper均有join/静止证明。
+
+2118个所选路径before/after完全相等，且等于v25独立逐blob核过的2b输入：719 tracked blob、1399依赖hash-only路径。不是整个Python/主机密封，外部13个预启动support哈希此时也全相同。原完整test函数AST与684一致，SHA256 51ef6e4c9157985a75189b724fb7ac7021461a06d3079c11fbe1e931ecd7444e；original_test_assertions_unchanged=true，original_full_assertions_passed=false。
+
+静态ACK确实先于launch，v25正式seal随后单独落盘；不倒填成启动前已封存。407596c460c611cdba6efea66130926410e650c9ce92602b31d8613cfed6b1c5观察器保持pass-through。所有6交换均标记SYNTHETIC_MOCK_TRANSPORT_NOT_REAL_HTTP且HTTP200，真实模型/真实账号IO为0。持久Attempt mode=LIVE是生产分支协议字段，不能把有限Mock升级为真实live资格。原默认账户resolver/完整软件资格边界没有由这条合成成功前缀获得生产认可。
+
+## 实际已完成与未完成
+
+结束行JSON中Generate run_f290f79b20954c2b9918c499a059606c为PARTIAL，3 RECEIVED Attempt、2 VERIFIED操作。Source run_a5492d323be841d4bc9963d846653fd3为SUCCEEDED，2 VERIFIED Attempt、6 VERIFIED操作。Cold run_dc0aa608b5684471b1f6ed4523372b0d为RUNNING/version1/fence1/result与error均null，1 REJECTED_KNOWN Attempt，resource.read VERIFIED、model.spec.requirements REJECTED_KNOWN；没有第二个Cold模型请求。
+
+JUnit失败停在原test第371行Cold状态SUCCEEDED断言。按此前已越过的原断言，可确认Source完整合成结果、原始请求/响应与canonical hash接线、提取幂等不新增发送、四归档拒绝副本、Release/Instance、目录NATURAL_PB、Cold新client读取真实draft指纹、显式material+Goal review/提交与同key防重复。不能确认第371行后的Cold人工验收入口断言、7槽全部接受、4个reservation read_reports、22归档、完整Cold结果；不能拼接历史前缀补齐这些断言。
+
+Cold首个本地read确实成功使用一次有效写后continuation：1792437809.726732 stamp_present=true，到7809.8324695 consumed=true/output_cleared=true，实际tail authority8项；其中仅_journal_source嵌套，未出现完整check_commit fallback。随后local_return和原TX commit均存在。这是初始本地read的单次实际运行证据，并非模型响应结算复用或Cold整体通过。
+
+## 首个失败与精确时间边界
+
+唯一failure-observations记录为VERSION_CONFLICT: Production admission expired during verification。堆栈为natural_spec_runtime.advance_model:1025→settle_verified→check_commit→_admission:163最终时间检查。Source/Cold探针本轮均没有original_run_predicate_failure；不得沿用旧链将它说成_run_context首败。
+
+Cold模型响应结算TX139968843753600于1792437887.7868092取得writer，到7918.1254194结束body并回滚：30.338610172秒、主线程CPU30.233703059秒，33334总SQL=33329 SELECT+5写入全部回滚。入口实际lease还余29.993279秒。最后提交lease为1792437917.7800884；原Run predicate在7916.5787017仍合法，余1.201386690秒。随后的完整_pb_source从7916.5797975到7918.0804036，退出已晚lease0.300315142秒；最终require时刻未直接采集，只能界定在此退出与TX body_end之间。不能把7918.0804或body_end伪作精确拒绝时刻。
+
+production policy的context.deadline=min(actuallease,run.created_at+300,contract.expires_at)。本Cold的Run300截止为1792438059.9574308、合同截止1792438958.2204585，因此此处实际lease先约束；不是Run300或合同TTL已经结束。期间三次后台SQLITE_BUSY被记录，没有能在writer占用期间提交新的Run lease。
+
+原接收事务的响应/known usage（100/900/1000）与归档保留；失败VERIFIED写组回滚，随后另事务持久化REJECTED_KNOWN，未自动重发。最终Run仍RUNNING/resultnull，不能说它已成功、已终结或已恢复。
+
+## 下一最小待定位点与停止边界
+
+这一个TX内观察到Cold完整bound入口6次、嵌套Source bound4次、_pb_source4次、commit_guard3次；最终settle_verified再作完整admission后因时钟拒绝。epoch99→104跨过5次写入，旧读证明不可跨write挪用，写后完整首证和权限/时钟检查必须保留。这些计数证明结构重复存在，尚未逐调用证明每次都可安全省略。
+
+下一最小根因定位范围只应是同一Cold模型响应结算的完整绑定/admission、写后证明及后续读回/settle链；本轮未实施该方向，不再加入通用缓存、延lease/Run300/TTL、跳source门或外围恢复矩阵。不把局部SQL减少、初读continuation单次成功、早先静态无P1/P2或历史单个通过替代完整交付。原活运行CPU/heap/时延波动的深层原因仍未全部解释，观察I/O/栈/CPU采集有调度开销，不能断言移除观察即可通过。
+
+## 原件与交付边界
+
+只读结束导出SHA256 439e8301da3cd70aa3e654c19c7273e11218bc723a4de9ffde2984fe2a659358；其记载原DB831e5047760e9d134f3d3dd03e4154f7c6923612f9e32297db3564f5d75a02de导出前后不变。独审没有打开或查询DB，只读JSON、JUnit、日志和不可变源码；未执行产品/测试/模型/网络/信号，没有修改仓库、作者原件或旧seal。
+
+v25结构/边界/Ruff1/mypy113与更早有限门继续按各自SHA有效，不抹去所有历史FAIL、原观察器组合漏审及更正、首版setup/脚本/输入漂移证据。旧满盘独审缺件仍缺，不补签。Windows、PG、原生浏览器、远端CI、真实语义/人审/模型或生产资格未执行。
+
+最终README草稿的FAIL、6Mock、Source/Cold边界与时刻区间已核，未发现阻塞性事实误报。v9packager SHA256 78c23f660699fed3d0f72f8dabab3ea80d181c93c1f6399bbcaf4da7e6742660此前仅静读/AST；本报告允许以真实FAIL_NOT_ACCEPTED封包，不声明包已生成、逐成员校验已通过或后续docs提交已推送。封包、普通分支推送、远端及未提交/未推送差异须由父线程以实际回执另报。

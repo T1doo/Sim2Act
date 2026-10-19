@@ -48,3 +48,9 @@ Cold claim、发送准入和最终提交均重核原来源与提取链。现有�
 为避免重复五槽，在本次结束DB只读backup上重核原合同/expiry/权限/软件/五accepted账本/Source/缓存提取后，仅执行原Cold段；外230.645秒、2113输入稳定、0新Mock/Cold0Attempt。显式材料Goal review/提交/同key cached重放和阶段批准通过，但首个本地读取的最终commit_guard被原finite-lease综合谓词拒绝，Cold Run `run_4ed4f78b22df49edbf752dac24b40b3d` 仍RUNNING、无steps/结果；未到Cold结果、同Run owner合同、七槽/22归档最终断言。原前缀DB哈希未变，未调整期限或补账本。Standalone无事务耗时/SQL/CPU及精确比较时刻，不补用旧观察器证明。
 
 完整 P-B 仍为 **NOT_ACCEPTED**；剩余是Cold本地读取证明的工程lease边界问题，不是访问审批阻塞。原固定真实账户来源及实际软件资格继续关闭，真实模型/账户探测均0；Windows、PG、原生浏览器、真实语义/人工签收和远端CI未执行或未核验。所有失败、15版源码、外部脚本和独审见[本轮原始证据](../evidence/pb-lease-cause-20261019/README.md)，旧c545及旧满盘独审缺口不覆盖。
+
+## 2026-10-19 最后有界接续：FAIL_NOT_ACCEPTED
+
+最后执行源候选 `2b3846d0802ef2875d9665acc1280b949d1a4131`，原完整 P-B 标准pytest实际1 FAIL/0 skip，19:12:22至19:25:29 UTC，6次有限Mock（Gen3+Source2+Cold1），真实模型与账号IO为0。Source成功，并完成提取、NATURAL_PB目录、显式Cold材料/Goal提交及同key去重；Cold初次本地读取实际提交，首次模型响应结算的完整证明事务跨过原30秒lease，结算写组回滚，Attempt持久化REJECTED_KNOWN，Run仍RUNNING/result null。完整Cold及最终结果/人工验收断言未通过。
+
+最终v26独审为FAIL_NOT_ACCEPTED；按最新收敛边界，本轮停止源码修改及完整链重跑。下一最小待定位点为同一Cold响应结算内完整绑定/admission核查、写后证明与读回/settle_verified链；不得跨写复用旧证明或延长租期。定向结构/边界门和Ruff/mypy通过的实际范围、各历史FAIL、不可回写原始包及最终独审见[最后接续证据](../evidence/pb-cold-local-read-cause-20261019/README.md)。此前Cold本地读取阻塞记录保留，本次进展不覆盖旧失败或旧满盘独审缺口。
