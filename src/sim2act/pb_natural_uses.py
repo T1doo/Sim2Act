@@ -85,7 +85,7 @@ _HINT_BINDINGS = {family.field: select(internal_run_bindings.c.snapshot[family.f
     for family in FAMILIES}
 _HINT_RESPONSE = select(delivery_graph_requests.c.app_id).where(
     delivery_graph_requests.c.kind == bindparam("hint_kind", type_=delivery_graph_requests.c.kind.type),
-    delivery_graph_requests.c.snapshot["response"]["run_id"].as_string() == bindparam("hint_run_id"))
+    delivery_graph_requests.c.snapshot["response"]["run_id"].as_string() == bindparam("hint_run_id", type_=internal_run_bindings.c.run_id.type))
 
 
 def saved_family(candidate):
@@ -117,7 +117,14 @@ def use_hint(c, rid, family=None):
         hint_kinds=[family.meta, family.meta + "_seal"])).first()
     # Independent scalar identifiers prevent deleting both dedicated seals from
     # downgrading a per-use Run to its saved default target's authorization.
-    hinted = hinted or c.execute(_HINT_BINDINGS[family.field], {"hint_run_id": rid}).scalar_one_or_none()
+    if not hinted:
+        binding = _HINT_BINDINGS.get(family.field)
+        if binding is None:
+            # Keep the original dynamic lookup for internal callers with a
+            # different Family; only the two established families are fixed.
+            binding = select(internal_run_bindings.c.snapshot[family.field]["review"]["resource_id"].as_string()).where(
+                internal_run_bindings.c.run_id == bindparam("hint_run_id", type_=internal_run_bindings.c.run_id.type))
+        hinted = c.execute(binding, {"hint_run_id": rid}).scalar_one_or_none()
     hinted = hinted or c.execute(_HINT_RESPONSE, dict(hint_kind=family.use, hint_run_id=rid)).first()
     return bool(hinted)
 
