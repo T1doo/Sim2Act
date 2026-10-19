@@ -92,6 +92,11 @@ def base_audit(store, c, user, base, family):
     return (pb.audit_fingerprint if family == PB else spec.audit_fingerprint)(store, c, user, base)
 
 
+def _bound_fingerprint(value):
+    draft, manifest, report, material, goal = value
+    return fingerprint([draft, manifest.model_dump(), report, material, goal])
+
+
 def use_hint(c, rid, family=None):
     if family is None:
         return any(use_hint(c, rid, f) for f in FAMILIES)
@@ -392,7 +397,7 @@ def seal(c, user, base, snapshot, body, checked, *, family=PB):
 
 
 @controlled
-def bound(store, c, user, job, snapshot, release, limits, *, family=PB, _logic_out=None):
+def bound(store, c, user, job, snapshot, release, limits, *, family=PB, _logic_out=None, _read_out=None):
     from .db import internal_instances
     body, frozen = pair(c, user, snapshot["instance_id"], family.use, snapshot[family.field]["review"]["request_key"], family.body_type)
     require(body.model_dump() == snapshot[family.field] and frozen["run_id"] == job["id"]
@@ -412,11 +417,18 @@ def bound(store, c, user, job, snapshot, release, limits, *, family=PB, _logic_o
     draft = {**copy.deepcopy(release["snapshot"]["draft"]), "candidate": checked["effective_candidate"],
         "fingerprint": checked["effective_fingerprint"], family.field + "_run_id": job["id"]}
     manifest, _, report = natural.compile_candidate(draft["candidate"], limits)
+    if (_read_out is not None and family == PB and "natural_logic_source" not in release["snapshot"]
+            and pb._source_reads_current(store, c, c.info.get("pb_source_reads"))):
+        _read_out.update(principal_id=user, job_fingerprint=fingerprint(dict(job)),
+            snapshot_fingerprint=fingerprint(snapshot), release_id=release["id"],
+            release_fingerprint=release["fingerprint"], base=copy.deepcopy(release["snapshot"]["draft"]),
+            platform_limits=limits.model_dump(), limits_ref=limits,
+            token=c.info["pb_source_reads"], base_audit=checked["source_audit_fingerprint"])
     return draft, manifest, report, material, goal.model_dump()
 
 
 @controlled
-def audit(store, c, user, draft, *, family=PB, _logic_out=None, _release=None):
+def audit(store, c, user, draft, *, family=PB, _logic_out=None, _release=None, _use_proof=None):
     rid = draft[family.field + "_run_id"]
     header = c.execute(select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id).where(runs.c.id == rid)).mappings().one()
     require(scope_gate(store, c, user, rid, header))
@@ -458,7 +470,27 @@ def audit(store, c, user, draft, *, family=PB, _logic_out=None, _release=None):
         require(frozen["reviewed"]["saved_logic_source"] == dict(
             origin=release["snapshot"]["natural_logic_source"],effective_fingerprint=fingerprint(saved),
             recipe_fingerprint=fingerprint(saved["spec_recipe"])), "Current logic source proof changed")
-    return fingerprint(dict(base=base_audit(store, c, user, base, family), meta=meta.model_dump(),
+    base_digest = None
+    def same_read():
+        return (_use_proof is not None and family == PB
+            and _use_proof.get("principal_id") == user and _use_proof.get("base") == dict(base)
+            and _use_proof.get("bound_fingerprint") == _bound_fingerprint(_use_proof["bound"])
+            and _use_proof["bound"][0] == draft
+            and _use_proof.get("release_id") == meta.release_id
+            and _use_proof.get("release_fingerprint") == snapshot["expected_release_fp"]
+            and _use_proof.get("snapshot_fingerprint") == fingerprint(snapshot)
+            and _use_proof["limits_ref"].model_dump() == _use_proof["platform_limits"]
+            and _use_proof.get("base_audit") == frozen["reviewed"]["source_audit_fingerprint"]
+            and pb._source_reads_current(store, c, _use_proof.get("token")))
+    if same_read():
+        # This bound call already completed the exact base audit in its first
+        # per-use review. Keep the live per-use scope and paired reads above.
+        store.recheck_proof_authorities(c, _use_proof)
+        if same_read():
+            base_digest = _use_proof["base_audit"]
+    if base_digest is None:
+        base_digest = base_audit(store, c, user, base, family)
+    return fingerprint(dict(base=base_digest, meta=meta.model_dump(),
         scope_seal=seal_meta, request=body.model_dump(), frozen=frozen))
 
 

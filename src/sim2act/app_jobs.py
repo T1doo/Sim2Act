@@ -466,7 +466,7 @@ def enqueue(
         }
 
 
-def load_binding(store, c, user, job, limits, *, authorize=True, archival_software=None, return_release=False, _logic_out=None, _origin_out=None):
+def load_binding(store, c, user, job, limits, *, authorize=True, archival_software=None, return_release=False, _logic_out=None, _origin_out=None, _use_out=None):
     from .local_record_apps import reject_legacy as reject_record_legacy
     reject_record_legacy(c, rid=job["id"])
     if return_release and not authorize:
@@ -594,7 +594,16 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
         elif "pb_use" in s or "pa_use" in s:
             from . import pb_natural_uses
             use_family = pb_natural_uses.PA if "pa_use" in s else pb_natural_uses.PB
-            _, _, _, use_source, _ = pb_natural_uses.bound(store, c, user, job, s, r, limits, family=use_family,_logic_out=logic_source)
+            plain_use_out = (_use_out if use_family == pb_natural_uses.PB
+                and "natural_logic_source" not in r["snapshot"]
+                and not {"human_correction", "logic_check", "project_check", "offline_replay"}.intersection(s)
+                else None)
+            use_value = pb_natural_uses.bound(store, c, user, job, s, r, limits, family=use_family,_logic_out=logic_source,
+                **({"_read_out": plain_use_out} if plain_use_out is not None else {}))
+            _, _, _, use_source, _ = use_value
+            if plain_use_out is not None:
+                plain_use_out["bound"] = copy.deepcopy(use_value)
+                plain_use_out["bound_fingerprint"] = pb_natural_uses._bound_fingerprint(use_value)
             expected_resource = use_source["resource_id"]
         if (
             r["fingerprint"] != s["expected_release_fp"]

@@ -758,10 +758,12 @@ def _bound(store, c, user, job, limits, *, validate_input=True, _source_origin=F
 
     from . import app_jobs
     from .db import attempts
-    from .pb_natural_specs import _source_transaction
+    from .pb_natural_specs import _source_reads_current, _source_transaction
 
     logic_out: dict[str, Any] = {}
     origin_out: dict[str, Any] = {}
+    use_out: dict[str, Any] = {}
+    use_proof = None
     source_origin = (_source_origin is True and store.test_only and store.sqlite
         and job["status"] == "SUCCEEDED" and job["context"].get("spec_family") == natural.VERSION)
     runtime_origin = (store.test_only and store.sqlite and job["status"] in {"QUEUED", "RUNNING", "SUCCEEDED"}
@@ -773,7 +775,7 @@ def _bound(store, c, user, job, limits, *, validate_input=True, _source_origin=F
     with (store.proof_authorities(c) if local_origin else nullcontext(set())) as authorities:
         snapshot, app_run, release = app_jobs.load_binding(store, c, user, job, limits,
             return_release=True, _logic_out=logic_out,
-            **({"_origin_out": origin_out} if local_origin else {}))
+            **({"_origin_out": origin_out, "_use_out": use_out} if local_origin else {}))
     accepted = c.execute(select(events.c.data).where(events.c.run_id == job["id"], events.c.kind == "ACCEPTED")).scalars().all()
     require(fingerprint(accepted) == fingerprint([dict(namespace=app_jobs.KIND, app_run_id=snapshot["app_run_id"],
         instance_id=snapshot["instance_id"], release_id=snapshot["release_id"], input_fingerprint=snapshot["request_fingerprint"])]))
@@ -792,8 +794,32 @@ def _bound(store, c, user, job, limits, *, validate_input=True, _source_origin=F
             draft,manifest,report,source,goal = logic.effective_bound(release,logic_out["value"],limits,original=False)
     elif "pb_use" in snapshot or "pa_use" in snapshot:
         from . import pb_natural_uses
-        draft, manifest, report, source, goal = pb_natural_uses.bound(store, c, user, job, snapshot, release, limits,
-            family=pb_natural_uses.PA if "pa_use" in snapshot else pb_natural_uses.PB,_logic_out=logic_out)
+        def same_use_read():
+            return (local_origin and segment is not None and "pb_use" in snapshot
+                and "pa_use" not in snapshot and "natural_logic_source" not in release["snapshot"]
+                and not {"human_correction", "logic_check", "project_check", "offline_replay"}.intersection(snapshot)
+                and "saved_logic_source" not in use_out
+                and "bound" in use_out and use_out.get("principal_id") == user
+                and use_out.get("bound_fingerprint") == pb_natural_uses._bound_fingerprint(use_out["bound"])
+                and use_out.get("job_fingerprint") == fingerprint(dict(job))
+                and use_out.get("snapshot_fingerprint") == fingerprint(snapshot)
+                and use_out.get("release_id") == release["id"]
+                and use_out.get("release_fingerprint") == release["fingerprint"]
+                and use_out.get("base") == release["snapshot"]["draft"]
+                and use_out.get("platform_limits") == original_limits == limits.model_dump()
+                and segment == _source_transaction(store, c)
+                and epoch == c.info.get("source_proof_write_epoch", 0) and thread == get_ident()
+                and _source_reads_current(store, c, use_out.get("token")))
+        if same_use_read():
+            store.recheck_proof_authorities(c, {"_call_authorities": tuple(sorted(authorities))})
+        if same_use_read():
+            use_out["_call_authorities"] = tuple(sorted(authorities))
+            draft, manifest, report, source, goal = use_out["bound"]
+            use_proof = use_out
+        else:
+            use_out.clear()
+            draft, manifest, report, source, goal = pb_natural_uses.bound(store, c, user, job, snapshot, release, limits,
+                family=pb_natural_uses.PA if "pa_use" in snapshot else pb_natural_uses.PB,_logic_out=logic_out)
     else:
         # The real read_release above just completed this exact origin proof.
         # The local out stays within this bound call and its original Limits;
@@ -856,13 +882,14 @@ def _bound(store, c, user, job, limits, *, validate_input=True, _source_origin=F
         plan_fingerprint=fingerprint(draft["candidate"]), source_hash=source["hash"])
     value = dict(snapshot=snapshot, app_run=app_run, release=release, draft=draft,
         source=source, goal=goal, plan=plan, report=report, run_mode=contract.mode,
-        audit_fingerprint=audit_fingerprint(store, c, user, draft, _logic_out=logic_out, _release=release))
+        audit_fingerprint=audit_fingerprint(store, c, user, draft, _logic_out=logic_out, _release=release,
+            **({"_use_proof": use_proof} if use_proof is not None else {})))
     if "human_correction" in snapshot:
         value["human_correction"] = natural_spec_corrections.feedback(store,c,user,job,snapshot,_logic_out=logic_out,_release=release)
     return value
 
 
-def audit_fingerprint(store, c, user, draft, *, _logic_out=None, _release=None, _correction_scope_checked=False):
+def audit_fingerprint(store, c, user, draft, *, _logic_out=None, _release=None, _correction_scope_checked=False, _use_proof=None):
     """Exact transaction-local evidence digest after live audit scope authorization.
 
     No cross-transaction cache. Full model history is verified at step entry and
@@ -895,7 +922,7 @@ def audit_fingerprint(store, c, user, draft, *, _logic_out=None, _release=None, 
     if "pb_use_run_id" in draft or "pa_use_run_id" in draft:
         from .pb_natural_uses import PA, PB, audit
         return audit(store, c, user, draft, family=PA if "pa_use_run_id" in draft else PB,
-            _logic_out=_logic_out, _release=_release)
+            _logic_out=_logic_out, _release=_release, **({"_use_proof": _use_proof} if _use_proof is not None else {}))
     if "spec_task" in draft["candidate"]:
         from .pb_natural_specs import audit_fingerprint as pb_audit
         return pb_audit(store, c, user, draft)
