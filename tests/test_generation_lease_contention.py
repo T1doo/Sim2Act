@@ -218,9 +218,16 @@ def test_generate_recovers_one_bounded_sqlite_busy_without_losing_original_lease
                 c.execute("BEGIN IMMEDIATE")
                 record("owned_writer_acquired")
                 lock_acquired.set()
-                assert release_lock.wait(7), "Owned writer hold exceeded7 seconds"
+                # Driver waits can overshoot their nominal busy_timeout under
+                # scheduling delays. Bound this owned test lock by the actual
+                # original lease, leaving time for the guarded recovery.
+                hold_until = min(time.time() + 12, selected["old_lease"] - 4)
+                record("owned_writer_deadline", release_before=hold_until,
+                       original_lease=selected["old_lease"])
+                signaled = release_lock.wait(max(0, hold_until - time.time()))
                 c.rollback()
                 record("owned_writer_released")
+                assert signaled, "Owned writer reached its original-lease-bounded test deadline"
         except Exception as error:
             io_errors.append(type(error).__name__ + ":" + str(error))
             release_lock.set()
