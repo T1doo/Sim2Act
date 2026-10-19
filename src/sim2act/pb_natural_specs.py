@@ -14,13 +14,14 @@ from typing import Literal
 
 from fastapi import Depends
 from pydantic import Field
-from sqlalchemy import insert, select
+from sqlalchemy import bindparam, insert, select
 
 from . import natural_specs as natural
 from .contracts import Limits, Strict
 from .db import (
     app_drafts,
     attempts,
+    delivery_graph_requests,
     events,
     fingerprint,
     grants,
@@ -50,6 +51,35 @@ META, EXTRACT = "pb_natural_spec_metadata", "pb_natural_spec_extract"
 CONSENT = "EXTRACT_THIS_SUCCESSFUL_NATURAL_SPEC_RUN_WITH_THIS_REVIEW_AND_TARGET"
 MAX = 64
 
+# Immutable SQL shapes only. Each execution still reads the current rows in
+# the original order, with fresh parameters and all original authority gates.
+_GATE_RUN = bindparam("pb_gate_run", type_=runs.c.id.type)
+_GATE_APP = bindparam("pb_gate_app", type_=app_drafts.c.id.type)
+_GATE_INSTANCE = bindparam("pb_gate_instance", type_=internal_instances.c.id.type)
+_GATE_HEADER = select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id).where(runs.c.id == _GATE_RUN)
+_GATE_APPS = select(app_drafts.c.id,
+    app_drafts.c.candidate["namespace"].as_string().label("family"),
+    app_drafts.c.candidate["manifest"]["origin"].as_string().label("origin"),
+    app_drafts.c.candidate["spec_task"]["kind"].as_string().label("task")).where(
+        app_drafts.c.runtime_id == bindparam("pb_gate_runtime", type_=app_drafts.c.runtime_id.type),
+        app_drafts.c.project_id == bindparam("pb_gate_project", type_=app_drafts.c.project_id.type))
+_GATE_KIND = select(task_extractions.c.snapshot["kind"].as_string()).where(task_extractions.c.app_id == _GATE_APP)
+_GATE_STATUS = select(runs.c.status).where(runs.c.id == _GATE_RUN)
+_GATE_SAVED = select(local_effects.c.resource_id).join(operations,
+    operations.c.id == local_effects.c.operation_id).where(operations.c.run_id == _GATE_RUN,
+        operations.c.tool_ref == natural.SAVE, operations.c.status == "VERIFIED")
+_GATE_COMMITTED = select(events.c.data["artifact_resource"].as_string()).where(
+    events.c.run_id == _GATE_RUN, events.c.kind == "SPEC_COMMITTED")
+_GATE_OUTPUT = select(internal_app_runs.c.output["resource_id"].as_string()).where(
+    internal_app_runs.c.id == bindparam("pb_gate_app_run", type_=internal_app_runs.c.id.type),
+    internal_app_runs.c.instance_id == _GATE_INSTANCE)
+_GATE_TYPED = select(internal_instance_data.c.data["result"]["resource_id"].as_string()).where(
+    internal_instance_data.c.run_id == bindparam("pb_gate_app_run", type_=internal_instance_data.c.run_id.type),
+    internal_instance_data.c.instance_id == _GATE_INSTANCE)
+_GATE_LEDGER = select(delivery_graph_requests.c.app_id).where(
+    delivery_graph_requests.c.app_id == _GATE_APP,
+    delivery_graph_requests.c.kind.in_([META, META + "_seal", EXTRACT, EXTRACT + "_seal"]))
+
 
 class ReviewInput(Strict):
     source_run_id: str = Field(pattern=r"^run_[a-f0-9]{32}$")
@@ -76,48 +106,34 @@ class ExtractInput(Strict):
 def source_gate(store, c, user, pid, rid):
     """Scalar classification bounds lineage depth before any protected Run body."""
     from . import pa_spec_apps as spec
-    from .db import delivery_graph_requests
     from .text_workflows import RunScopeInput
 
     store.own_project(c, user, pid)
-    header = c.execute(select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id)
-                       .where(runs.c.id == rid)).mappings().first()
+    parameters = {"pb_gate_run": rid}
+    header = c.execute(_GATE_HEADER, parameters).mappings().first()
     if header is None or header["principal_id"] != user or header["project_id"] != pid:
         raise DomainError("PERMISSION_DENIED")
-    apps = c.execute(select(app_drafts.c.id,
-        app_drafts.c.candidate["namespace"].as_string().label("family"),
-        app_drafts.c.candidate["manifest"]["origin"].as_string().label("origin"),
-        app_drafts.c.candidate["spec_task"]["kind"].as_string().label("task"))
-        .where(app_drafts.c.runtime_id == header["runtime_id"],
-               app_drafts.c.project_id == pid)).mappings().all()
+    apps = c.execute(_GATE_APPS, {"pb_gate_runtime": header["runtime_id"],
+        "pb_gate_project": pid}).mappings().all()
     require(len(apps) == 1 and apps[0]["family"] == natural.VERSION
             and apps[0]["origin"] == "goal" and apps[0]["task"] is None,
             "Only an original natural-spec successful task may be extracted; no extraction chains")
     aid = apps[0]["id"]
-    kind = c.execute(select(task_extractions.c.snapshot["kind"].as_string())
-                     .where(task_extractions.c.app_id == aid)).scalar()
+    app_parameters = {"pb_gate_app": aid}
+    kind = c.execute(_GATE_KIND, app_parameters).scalar()
     require(kind in {None, spec.KIND})
-    require(c.execute(select(delivery_graph_requests.c.app_id).where(
-        delivery_graph_requests.c.app_id == aid,
-        delivery_graph_requests.c.kind.in_([META, META + "_seal", EXTRACT, EXTRACT + "_seal"])
-    )).first() is None, "P-B lineage cannot be disguised as P-A")
+    require(c.execute(_GATE_LEDGER, app_parameters).first() is None, "P-B lineage cannot be disguised as P-A")
     require(spec.job_scope_gate(store, c, user, rid))
-    require(c.execute(select(runs.c.status).where(runs.c.id == rid)).scalar_one() == "SUCCEEDED",
+    require(c.execute(_GATE_STATUS, parameters).scalar_one() == "SUCCEEDED",
             "Only a completed successful task is a P-B source")
     # Independent committed metadata must agree before any source Run/receipt body.
     scope, seal = pair(c, user, rid, spec.RUN_META, "accepted", RunScopeInput)
     require(fingerprint(scope.model_dump()) == fingerprint(seal))
-    saved = c.execute(select(local_effects.c.resource_id).join(operations,
-        operations.c.id == local_effects.c.operation_id).where(operations.c.run_id == rid,
-        operations.c.tool_ref == natural.SAVE, operations.c.status == "VERIFIED")).scalars().all()
-    committed = c.execute(select(events.c.data["artifact_resource"].as_string()).where(
-        events.c.run_id == rid, events.c.kind == "SPEC_COMMITTED")).scalars().all()
-    output = c.execute(select(internal_app_runs.c.output["resource_id"].as_string()).where(
-        internal_app_runs.c.id == scope.app_run_id,
-        internal_app_runs.c.instance_id == scope.instance_id)).scalars().all()
-    typed = c.execute(select(internal_instance_data.c.data["result"]["resource_id"].as_string()).where(
-        internal_instance_data.c.run_id == scope.app_run_id,
-        internal_instance_data.c.instance_id == scope.instance_id)).scalars().all()
+    saved = c.execute(_GATE_SAVED, parameters).scalars().all()
+    committed = c.execute(_GATE_COMMITTED, parameters).scalars().all()
+    pointer_parameters = {"pb_gate_app_run": scope.app_run_id, "pb_gate_instance": scope.instance_id}
+    output = c.execute(_GATE_OUTPUT, pointer_parameters).scalars().all()
+    typed = c.execute(_GATE_TYPED, pointer_parameters).scalars().all()
     require(len(saved) == 1 and saved == committed == output == typed and saved[0],
             "Independent committed source artifact pointers differ")
     store.authorize(c, user, header["runtime_id"], pid, saved[0], natural.READ)
