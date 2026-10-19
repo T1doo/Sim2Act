@@ -4,7 +4,7 @@ import json
 import signal
 import threading
 import time
-from contextlib import nullcontext
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import replace
 
 from sqlalchemy import insert, select, update
@@ -132,7 +132,7 @@ class Worker:
                 "characters": len(serialized.decode("utf-8")),
             }
             envelope = len(serialized) + s.max_output_tokens
-        reservation_writer = nullcontext()
+        reservation_writer: AbstractContextManager[None] = nullcontext()
         if _natural_heartbeat_state is not None:
             from .text_workflows import natural_reservation_writer
             reservation_writer = natural_reservation_writer(self,
