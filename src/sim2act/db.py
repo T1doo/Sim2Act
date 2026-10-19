@@ -75,6 +75,23 @@ grants = Table(
     Column("revision", Integer, default=1),
     Column("revoked", Boolean, default=False),
 )
+# Only immutable SQL trees are shared. Authorization still executes each query
+# with current identities and reads/locks the current rows on every call.
+_AUTHORIZED_RESOURCE_QUERY = select(resources.c.id).where(
+    resources.c.id == bindparam("authorized_resource_id", type_=resources.c.id.type),
+    resources.c.project_id == bindparam("authorized_resource_project", type_=resources.c.project_id.type),
+)
+_AUTHORITY_GRANTS_QUERY = (
+    select(grants)
+    .where(
+        grants.c.principal_id == bindparam("authority_identity", type_=grants.c.principal_id.type),
+        grants.c.project_id == bindparam("authority_project", type_=grants.c.project_id.type),
+        grants.c.resource_id == bindparam("authority_resource", type_=grants.c.resource_id.type),
+        grants.c.tool_ref == bindparam("authority_tool", type_=grants.c.tool_ref.type),
+    )
+    .order_by(grants.c.id)
+    .with_for_update()
+)
 runs = Table(
     "runs",
     meta,
@@ -856,23 +873,16 @@ class Store:
             if tool != "artifact.save_text":
                 raise DomainError("PERMISSION_DENIED")
         elif not c.execute(
-            select(resources.c.id).where(
-                resources.c.id == rid, resources.c.project_id == project_id
-            )
+            _AUTHORIZED_RESOURCE_QUERY,
+            {"authorized_resource_id": rid, "authorized_resource_project": project_id},
         ).first():
             raise DomainError("PERMISSION_DENIED")
         for identity in [principal, runtime]:
             g = (
                 c.execute(
-                    select(grants)
-                    .where(
-                        grants.c.principal_id == identity,
-                        grants.c.project_id == project_id,
-                        grants.c.resource_id == rid,
-                        grants.c.tool_ref == tool,
-                    )
-                    .order_by(grants.c.id)
-                    .with_for_update()
+                    _AUTHORITY_GRANTS_QUERY,
+                    {"authority_identity": identity, "authority_project": project_id,
+                     "authority_resource": rid, "authority_tool": tool},
                 )
                 .mappings()
                 .all()
