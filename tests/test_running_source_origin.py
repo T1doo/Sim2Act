@@ -1,5 +1,6 @@
 """Same-call origin proof reuse retains the original authorization boundaries."""
 import json
+from collections.abc import Mapping
 
 import pytest
 import test_natural_spec_apps as apps
@@ -13,6 +14,16 @@ from sim2act.db import attempts, fingerprint, grants
 from sim2act.errors import DomainError
 
 
+def plain(value):
+    if isinstance(value, Mapping):
+        return {k: plain(v) for k, v in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [plain(v) for v in value]
+    if hasattr(value, "model_dump"):
+        return plain(value.model_dump())
+    return value
+
+
 def test_running_original_source_reuses_only_exact_read_release_origin(env, tmp_path, monkeypatch):
     data = apps.setup(env)
     _, _, release, instance, generated = apps.ready(data, style="ordered")
@@ -21,6 +32,14 @@ def test_running_original_source_reuses_only_exact_read_release_origin(env, tmp_
     job = store.claim("original-source-binding-regression", 30)
     assert job["id"] == source
     limits = Limits(**{k: getattr(data[1], k) for k in Limits.model_fields})
+    assert len(generated) == 3
+    check_running_source_origin(store, user, project, resource, job, limits, tmp_path, monkeypatch)
+    client.close()
+
+
+def check_running_source_origin(store, user, project, resource, job, limits, tmp_path, monkeypatch):
+    """Structural binding check; never sends or supplies live Run authority."""
+    source = job["id"]
     original, origins = spec.verify_origin, []
 
     def verified(*args, **kwargs):
@@ -46,13 +65,14 @@ def test_running_original_source_reuses_only_exact_read_release_origin(env, tmp_
         patch.setattr(app_jobs, "load_binding", without_local_origin)
         with store.tx() as c:
             complete = spec.bound(store, c, user, job, limits)
-    assert len(origins) > optimized_count and fingerprint(complete) == fingerprint(optimized)
+    assert len(origins) > optimized_count and plain(complete) == plain(optimized)
     fallback_count = len(origins)
 
     def revoke_after_full_release(*args, **kwargs):
         value = load(*args, **kwargs)
-        args[1].execute(update(grants).where(grants.c.principal_id == user,
+        changed = args[1].execute(update(grants).where(grants.c.principal_id == user,
             grants.c.project_id == project, grants.c.resource_id == resource).values(revoked=True))
+        assert changed.rowcount > 0
         return value
 
     monkeypatch.setattr(app_jobs, "load_binding", revoke_after_full_release)
@@ -65,11 +85,10 @@ def test_running_original_source_reuses_only_exact_read_release_origin(env, tmp_
             grants.c.principal_id == user, grants.c.project_id == project,
             grants.c.resource_id == resource)).scalars())
         assert not c.execute(select(attempts.c.id).where(attempts.c.run_id == source)).first()
-    assert len(generated) == 3
     (tmp_path / "same-call-origin-proof.json").write_text(json.dumps(dict(
-        real_models=0, generation_mock_exchanges=3, source_mock_exchanges=0,
+        scope="STRUCTURAL_SOURCE_BINDING_NOT_RUN_OWNERSHIP_OR_PB_ACCEPTANCE",
+        real_models=0, new_mock_exchanges=0,
         optimized_full_origins=optimized_count, fallback_full_origins=fallback_count,
-        binding_fingerprint=fingerprint(optimized), full_fallback_identical=True,
+        binding_fingerprint=fingerprint(plain(optimized)), full_fallback_identical=True,
         actual_midcall_grant_revoke_refused=denied.value.code,
         revoked_transaction_rolled_back=True, source_attempts=0), indent=2))
-    client.close()
