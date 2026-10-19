@@ -36,21 +36,25 @@ from sim2act.worker import Worker
 @pytest.fixture(autouse=True)
 def observe_original_lease_failures(monkeypatch, tmp_path):
     heartbeat, guard = Store.heartbeat, Store.guard
+    observation_failures = []
 
     def record(kind, **fields):
-        with (tmp_path / "lease-observations.jsonl").open("a") as stream:
-            stream.write(json.dumps(dict(at=time.time(), kind=kind, **fields)) + "\n")
+        try:
+            with (tmp_path / "lease-observations.jsonl").open("a") as stream:
+                stream.write(json.dumps(dict(at=time.time(), kind=kind, **fields)) + "\n")
+        except (OSError, ValueError, TypeError) as error:
+            observation_failures.append(type(error).__name__)
 
     def observed_heartbeat(*args, **kwargs):
         try:
             result = heartbeat(*args, **kwargs)
-            record("original_heartbeat_return", returned=result)
-            return result
         except Exception as error:
             record("original_heartbeat_error", type=type(error).__name__,
                 sqlite_errorcode=getattr(getattr(error, "orig", None), "sqlite_errorcode", None),
                 trace=failure_trace(error))
             raise
+        record("original_heartbeat_return", run_id=args[2] if len(args) > 2 else None, returned=result)
+        return result
 
     def observed_guard(*args, **kwargs):
         try:
@@ -61,6 +65,8 @@ def observe_original_lease_failures(monkeypatch, tmp_path):
 
     monkeypatch.setattr(Store, "heartbeat", observed_heartbeat)
     monkeypatch.setattr(Store, "guard", observed_guard)
+    yield
+    assert observation_failures == [], "Passive observer IO failed independently of the original heartbeat"
 
 
 def prepare_pb(env, out):
@@ -96,6 +102,23 @@ def test_pb_production_default_source_and_exact_software_stay_closed(env, tmp_pa
     (tmp_path / "default-boundaries.json").write_text(json.dumps(dict(
         missing_source="LIVE_BLOCKED", software="VERSION_CONFLICT", changed_tables=0,
         real_models=0, live_authorized=False), indent=2))
+    data[2].close()
+
+
+def test_pb_production_account_checks_reuse_the_extraction_transaction(env, tmp_path, monkeypatch):
+    data, binding, fixture, factory = configured(env, tmp_path, monkeypatch, prepare_case=prepare_pb)
+    worker = factory(data[0], data[1], goal_planner_transport=httpx.MockTransport(
+        lambda request: pytest.fail("Account checks must not send")))
+    before = snapshot(data[0])
+    with data[0].tx() as c:
+        def deny_nested_transaction(*args, **kwargs):
+            raise AssertionError("Account verification must use the original extraction connection")
+        with monkeypatch.context() as patch:
+            patch.setattr(data[0], "tx", deny_nested_transaction)
+            first = trial._account(worker, binding, connection=c)
+            second = trial._account(worker, binding, connection=c)
+            assert first.account_id == second.account_id == binding.account_id
+    assert fixture["sends"] == [] and snapshot(data[0]) == before
     data[2].close()
 
 

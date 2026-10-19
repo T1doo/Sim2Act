@@ -178,8 +178,11 @@ def _admission(worker):
     return admitted
 
 
-def _account(worker, b):
+def _account(worker, b, *, connection=None):
     if _journal_binding(b):
+        if connection is not None:
+            gate.require(connection.engine is worker.store.engine and connection.in_transaction())
+            return _journal_source(worker.store, connection, b)
         with worker.store.tx() as c:
             return _journal_source(worker.store, c, b)
     account = production._resolve(worker.store, b.contract.principal_id, b.contract, b.registry)
@@ -422,7 +425,7 @@ def extract_pb(worker, user, source_id, body):
         and review.expected_source_hash == cold.source_hash)
     with worker.store.tx() as c, worker.store.proof_authorities(c) as authorities:
         worker.store.lock_project(c, user, b.contract.project_id)
-        _account(worker, _binding(worker))
+        _account(worker, _binding(worker), connection=c)
         resolved = archive._resolve_source_before_extraction(worker.store, c, user,
             b.contract, b.approval_key)
         gate.require(resolved.public_receipt["source_run_id"] == source_id)
@@ -430,7 +433,7 @@ def extract_pb(worker, user, source_id, body):
         result = pb._extract(worker.store, c, user, b.contract.project_id, source_id,
             body, gate._limits(b.contract))
         _pb_source(worker, c, b)
-        _account(worker, _binding(worker))
+        _account(worker, _binding(worker), connection=c)
         gate._approved(worker.store, c, user, b.contract, b.approval_key)
         worker.store.recheck_proof_authorities(c,
             {"_call_authorities": tuple(sorted(authorities))})
