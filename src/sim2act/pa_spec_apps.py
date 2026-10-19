@@ -12,7 +12,7 @@ import time
 from typing import Any, Literal
 
 from pydantic import Field
-from sqlalchemy import insert, select, update
+from sqlalchemy import bindparam, insert, select, update
 
 from . import natural_specs as natural
 from . import spec_checklists as oracle
@@ -21,6 +21,7 @@ from .contracts import ActionSpec, AppManifest, FieldSource, Limits, Strict, val
 from .csv_dag import resolve
 from .db import (
     app_drafts,
+    delivery_graph_requests,
     events,
     fingerprint,
     goal_application_candidates,
@@ -54,6 +55,29 @@ RULES, JSON_TOOL, FUSED = "text.spec_rules", "text.spec_json", "text.spec_checkl
 SAVE = "artifact.save_text"
 CONSENT = "ALLOW_ONLY_THIS_APP_TO_SAVE_VALIDATED_CHECKLIST_JSON_IN_THIS_PROJECT"
 KINDS = ["resource.read", RULES, JSON_TOOL, FUSED, SAVE]
+
+# Only SQL structures are shared. Every invocation supplies fresh identifiers
+# and still executes the original ordered reads before its current authorities.
+_SCOPE_LOCATION = select(app_drafts.c.project_id, app_drafts.c.runtime_id,
+    app_drafts.c.candidate["namespace"].as_string().label("family"),
+    app_drafts.c.candidate["spec_binding"]["kind"].as_string().label("binding"),
+    app_drafts.c.candidate["spec_task"]["kind"].as_string().label("task"),
+    app_drafts.c.candidate["manifest"]["data_bindings"][0]["resource_ref"].as_string().label("resource"))
+_SCOPE_LOCATION = _SCOPE_LOCATION.where(app_drafts.c.id == bindparam("scope_app_id", type_=app_drafts.c.id.type))
+_SCOPE_KIND = select(task_extractions.c.snapshot["kind"].as_string()).where(
+    task_extractions.c.app_id == bindparam("scope_app_id", type_=task_extractions.c.app_id.type))
+_SCOPE_LEDGER = select(delivery_graph_requests.c.app_id).where(
+    delivery_graph_requests.c.app_id == bindparam("scope_app_id", type_=delivery_graph_requests.c.app_id.type),
+    delivery_graph_requests.c.kind.in_(bindparam("scope_kinds", expanding=True, type_=delivery_graph_requests.c.kind.type)))
+_SCOPE_CONFIRMED = select(goal_application_candidates.c.app_id).where(
+    goal_application_candidates.c.app_id == bindparam("scope_app_id", type_=goal_application_candidates.c.app_id.type))
+_SCOPE_GENERATION = select(run_contracts.c.snapshot["application_generation"]["version"].as_string())
+_SCOPE_GENERATION = _SCOPE_GENERATION.join(goal_application_candidates,
+    goal_application_candidates.c.run_id == run_contracts.c.run_id).where(
+    goal_application_candidates.c.app_id == bindparam("scope_app_id", type_=goal_application_candidates.c.app_id.type))
+_SCOPE_ORIGIN = select(goal_application_candidates.c.run_id).where(
+    goal_application_candidates.c.app_id == bindparam("scope_app_id", type_=goal_application_candidates.c.app_id.type),
+    goal_application_candidates.c.principal_id == bindparam("scope_principal", type_=goal_application_candidates.c.principal_id.type))
 
 
 class Step(Strict):
@@ -421,21 +445,13 @@ class BindInput(Strict):
 @controlled
 def scope_gate(store, c, user, aid):
     from . import pb_natural_specs as pb
-    location = c.execute(select(app_drafts.c.project_id, app_drafts.c.runtime_id,
-        app_drafts.c.candidate["namespace"].as_string().label("family"),
-        app_drafts.c.candidate["spec_binding"]["kind"].as_string().label("binding"),
-        app_drafts.c.candidate["spec_task"]["kind"].as_string().label("task"),
-        app_drafts.c.candidate["manifest"]["data_bindings"][0]["resource_ref"].as_string().label("resource"))
-        .where(app_drafts.c.id == aid)).mappings().first()
-    kind = c.execute(select(task_extractions.c.snapshot["kind"].as_string())
-        .where(task_extractions.c.app_id == aid)).scalar()
-    from .db import delivery_graph_requests
-    ledger = c.execute(select(delivery_graph_requests.c.app_id).where(delivery_graph_requests.c.app_id == aid,
-        delivery_graph_requests.c.kind.in_([META, META + "_seal", BIND, BIND + "_seal",
-            pb.META, pb.META + "_seal", pb.EXTRACT, pb.EXTRACT + "_seal"]))).first()
-    pb_ledger = c.execute(select(delivery_graph_requests.c.app_id).where(delivery_graph_requests.c.app_id == aid,
-        delivery_graph_requests.c.kind.in_([pb.META, pb.META + "_seal", pb.EXTRACT, pb.EXTRACT + "_seal"]))).first()
-    confirmed = c.execute(select(goal_application_candidates.c.app_id).where(goal_application_candidates.c.app_id == aid)).first()
+    location = c.execute(_SCOPE_LOCATION, {"scope_app_id": aid}).mappings().first()
+    kind = c.execute(_SCOPE_KIND, {"scope_app_id": aid}).scalar()
+    ledger = c.execute(_SCOPE_LEDGER, dict(scope_app_id=aid, scope_kinds=[META, META + "_seal", BIND, BIND + "_seal",
+            pb.META, pb.META + "_seal", pb.EXTRACT, pb.EXTRACT + "_seal"])).first()
+    pb_ledger = c.execute(_SCOPE_LEDGER, dict(scope_app_id=aid,
+        scope_kinds=[pb.META, pb.META + "_seal", pb.EXTRACT, pb.EXTRACT + "_seal"])).first()
+    confirmed = c.execute(_SCOPE_CONFIRMED, {"scope_app_id": aid}).first()
     hinted = bool((location and (location["family"] in FAMILIES or location["binding"] == KIND or location["task"] == pb.KIND)) or kind in {KIND, pb.KIND} or ledger is not None or confirmed is not None)
     if hinted:
         require(location is not None)
@@ -444,9 +460,7 @@ def scope_gate(store, c, user, aid):
     if kind == pb.KIND or (location and location["task"] == pb.KIND) or pb_ledger is not None:
         require(location is not None)
         return pb.scope_gate(store, c, user, aid, location)
-    gen = c.execute(select(run_contracts.c.snapshot["application_generation"]["version"].as_string())
-        .join(goal_application_candidates, goal_application_candidates.c.run_id == run_contracts.c.run_id)
-        .where(goal_application_candidates.c.app_id == aid)).scalar()
+    gen = c.execute(_SCOPE_GENERATION, {"scope_app_id": aid}).scalar()
     if not ((location and (location["family"] in FAMILIES or location["binding"] == KIND)) or kind == KIND or gen in GENERATIONS or ledger is not None):
         return False
     require(location is not None)
@@ -463,8 +477,7 @@ def scope_gate(store, c, user, aid):
             and meta.resource_id == location["resource"])
     else:
         require(gen in GENERATIONS, "Independent model generation marker required")
-        origin = c.execute(select(goal_application_candidates.c.run_id).where(
-            goal_application_candidates.c.app_id == aid, goal_application_candidates.c.principal_id == user)).scalar()
+        origin = c.execute(_SCOPE_ORIGIN, {"scope_app_id": aid, "scope_principal": user}).scalar()
         require(origin is not None)
         from .goal_applications import source_scope_gate
         source_scope_gate(store, c, origin)

@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from fastapi import Depends
 from pydantic import Field
-from sqlalchemy import insert, select
+from sqlalchemy import bindparam, insert, select
 
 from . import natural_specs as natural
 from . import pa_spec_apps as spec
@@ -76,6 +76,17 @@ PA = Family("pa_use", "pa-natural-per-run.v1", "pa_natural_use", "pa_natural_use
     PA_CONSENT, PACommitInput, "pa-use")
 FAMILIES = (PB, PA)
 
+# Reuse immutable SQL syntax, never query results or per-use authorities.
+_HINT_LEDGER = select(delivery_graph_requests.c.app_id).where(
+    delivery_graph_requests.c.app_id == bindparam("hint_run_id", type_=delivery_graph_requests.c.app_id.type),
+    delivery_graph_requests.c.kind.in_(bindparam("hint_kinds", expanding=True, type_=delivery_graph_requests.c.kind.type)))
+_HINT_BINDINGS = {family.field: select(internal_run_bindings.c.snapshot[family.field]["review"]["resource_id"].as_string())
+    .where(internal_run_bindings.c.run_id == bindparam("hint_run_id", type_=internal_run_bindings.c.run_id.type))
+    for family in FAMILIES}
+_HINT_RESPONSE = select(delivery_graph_requests.c.app_id).where(
+    delivery_graph_requests.c.kind == bindparam("hint_kind", type_=delivery_graph_requests.c.kind.type),
+    delivery_graph_requests.c.snapshot["response"]["run_id"].as_string() == bindparam("hint_run_id"))
+
 
 def saved_family(candidate):
     if not natural.is_candidate(candidate):
@@ -102,16 +113,12 @@ def _bound_fingerprint(value):
 def use_hint(c, rid, family=None):
     if family is None:
         return any(use_hint(c, rid, f) for f in FAMILIES)
-    hinted = c.execute(select(delivery_graph_requests.c.app_id).where(
-        delivery_graph_requests.c.app_id == rid,
-        delivery_graph_requests.c.kind.in_([family.meta, family.meta + "_seal"]))).first()
+    hinted = c.execute(_HINT_LEDGER, dict(hint_run_id=rid,
+        hint_kinds=[family.meta, family.meta + "_seal"])).first()
     # Independent scalar identifiers prevent deleting both dedicated seals from
     # downgrading a per-use Run to its saved default target's authorization.
-    hinted = hinted or c.execute(select(internal_run_bindings.c.snapshot[family.field]["review"]["resource_id"].as_string())
-        .where(internal_run_bindings.c.run_id == rid)).scalar_one_or_none()
-    hinted = hinted or c.execute(select(delivery_graph_requests.c.app_id).where(
-        delivery_graph_requests.c.kind == family.use,
-        delivery_graph_requests.c.snapshot["response"]["run_id"].as_string() == rid)).first()
+    hinted = hinted or c.execute(_HINT_BINDINGS[family.field], {"hint_run_id": rid}).scalar_one_or_none()
+    hinted = hinted or c.execute(_HINT_RESPONSE, dict(hint_kind=family.use, hint_run_id=rid)).first()
     return bool(hinted)
 
 
