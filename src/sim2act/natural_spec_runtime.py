@@ -11,6 +11,7 @@ import copy
 import hashlib
 import json
 import time
+from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from sqlite3 import Connection as SQLiteConnection
@@ -709,10 +710,23 @@ def fail_owned(worker, run, error):
         store.event(c, header["id"], "STATE", dict(status=state, error=error.public()))
 
 
+def _model_value(value):
+    """Retain every field of actual SQL row mappings and exact Limits."""
+    if type(value) is Limits:
+        return _model_value(value.model_dump())
+    if isinstance(value, Mapping):
+        require(all(isinstance(k, str) for k in value), "Model proof mapping keys changed")
+        return {k: _model_value(v) for k, v in value.items()}
+    if type(value) in (list, tuple):
+        return [_model_value(v) for v in value]
+    if type(value) is bytes:
+        return dict(sha256=hashlib.sha256(value).hexdigest(), bytes=len(value))
+    require(type(value) in (str, int, float, bool, type(None)), "Unsupported model proof value")
+    return value
+
+
 def _model_inputs(values):
-    return fingerprint({k: (v.model_dump() if type(v) is Limits else
-        dict(sha256=hashlib.sha256(v).hexdigest(), bytes=len(v)) if type(v) is bytes else v)
-        for k, v in values.items()})
+    return fingerprint(_model_value(values))
 
 
 @dataclass
@@ -837,7 +851,7 @@ class _ModelSettlementRead:
             actual = c.execute(select(runs).where(runs.c.id == self.inputs["fresh"]["id"])
                                .with_for_update()).mappings().one()
             self.check()
-            require(fingerprint(dict(actual)) == fingerprint(self.inputs["fresh"])
+            require(_model_inputs(actual) == _model_inputs(self.inputs["fresh"])
                 and actual["worker_id"] == w.id and not w.stop.is_set())
             at = time.time()
             gate._require_run_context_row(b.contract.principal_id, b.contract, "cold", actual,
@@ -860,7 +874,7 @@ class _ModelSettlementRead:
             self.state = "SETTLE_BUSY"
             self.check()
             require(worker is self.worker and c is self.connection
-                and fingerprint(dict(run)) == fingerprint(self.inputs["fresh"])
+                and _model_inputs(run) == _model_inputs(self.inputs["fresh"])
                 and aid == self.inputs["aid"] and raw is self.inputs["raw"])
             from .pa_trial_dispatch import _identity
             require(_identity(worker, c, run, aid) is self.binding)
@@ -878,8 +892,8 @@ class _ModelSettlementRead:
             self.state = "TAIL_BUSY"
             self.check()
             require(worker is self.worker and c is self.connection
-                and fingerprint(dict(run)) == fingerprint(self.inputs["call_run"])
-                and fingerprint(binding) == fingerprint(self.inputs["post_binding"]))
+                and _model_inputs(run) == _model_inputs(self.inputs["call_run"])
+                and _model_inputs(binding) == _model_inputs(self.inputs["post_binding"]))
             self.live()
             with self.store.proof_authorities(c) as authorities:
                 yield
@@ -894,8 +908,8 @@ class _ModelSettlementRead:
     def tail_row(self, worker, c, run, binding):
         self.check()
         require(self.state == "TAIL_BUSY" and worker is self.worker and c is self.connection
-            and fingerprint(dict(run)) == fingerprint(self.inputs["fresh"])
-            and fingerprint(binding) == fingerprint(self.inputs["post_binding"]))
+            and _model_inputs(run) == _model_inputs(self.inputs["fresh"])
+            and _model_inputs(binding) == _model_inputs(self.inputs["post_binding"]))
 
     def invalidate(self):
         self.active, self.state = False, "INVALID"

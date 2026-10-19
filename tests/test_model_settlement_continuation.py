@@ -51,6 +51,7 @@ from sim2act.model import CapturedResponse, InternModel, normalize_usage
     "success", "source_revoke", "grant_expiry", "raw_pair", "first_proof",
     "reject_owner", "limits_platform", "limits_node", "tail_reentry",
     "output_drift", "failed_write",
+    "tail_extra_expiry", "row_mapping_drift",
 ])
 def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, monkeypatch, case):
     def forbidden(*_, **__):
@@ -64,7 +65,7 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
     contract = selected.contract
     binding = production.ProductionTrialBinding(contract, selected.approval_key, selected.account_id)
     clock = [time.time()]
-    if case == "grant_expiry":
+    if case in {"grant_expiry", "tail_extra_expiry"}:
         monkeypatch.setattr(time, "time", lambda: clock[0])
     rid, aid, app_id = new_id("run"), new_id("attempt"), new_id("apprun")
     target = contract.bindings[1]
@@ -96,6 +97,9 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
             consent="BIND_ONLY_THIS_ACCEPTED_STAGE_RUN_APP_RELEASE_AND_COMPLETE_GOAL_TO_ORIGINAL_TRIAL"))
         if case == "grant_expiry":
             c.execute(update(grants).where(grants.c.resource_id == target.resource_id)
+                      .values(expires_at=clock[0] + 10))
+        if case == "tail_extra_expiry":
+            c.execute(update(grants).where(grants.c.resource_id == env[6])
                       .values(expires_at=clock[0] + 10))
         run = dict(c.execute(select(runs).where(runs.c.id == rid)).mappings().one())
     limits = Limits(**{k: getattr(settings, k) for k in Limits.model_fields})
@@ -136,7 +140,12 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
     def bound_stub(s, c, *args):
         if state["post"]:
             trace.append("post_binding")
-        return copy.deepcopy(bound)
+        value = copy.deepcopy(bound)
+        value["app_run"] = c.execute(select(internal_app_runs).where(
+            internal_app_runs.c.id == app_id)).mappings().one()
+        assert runtime._model_inputs(dict(value=value["app_run"])) == fingerprint(
+            dict(value=dict(value["app_run"])))
+        return value
     monkeypatch.setattr(spec, "bound", bound_stub)
 
     def receipts_stub(s, c, current, b, **kwargs):
@@ -149,6 +158,8 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
                 events.c.kind == "SPEC_STEP_VERIFIED")).first()
             if case == "output_drift":
                 b["audit_fingerprint"] = "0" * 64
+            if case == "row_mapping_drift":
+                b["app_run"]["input"]["nested_drift"] = True
         return {}, []
     monkeypatch.setattr(spec, "receipts", receipts_stub)
 
@@ -173,6 +184,11 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
         if _model_after is not None:
             assert _model_after.state == "TAIL_BUSY"
             trace.append("tail_body")
+            if case == "tail_extra_expiry":
+                extra = (user, contract.runtime_id, pid, env[6], "resource.read")
+                assert extra not in _model_after.authorities
+                store.authorize(c, *extra)
+                state["armed"] = True
             if case == "tail_reentry":
                 trial.settle_verified(w, c, current, aid, raw, _model_after=_model_after)
             _model_after.tail_row(w, c, current, b)
@@ -191,7 +207,7 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
                 assert connection[0].execute(update(grants).where(grants.c.resource_id == target.resource_id,
                     grants.c.principal_id == user, grants.c.tool_ref == "resource.read")
                     .values(revoked=True)).rowcount == 1
-            elif case in {"grant_expiry", "reject_owner"}:
+            elif case in {"grant_expiry", "reject_owner", "tail_extra_expiry"}:
                 clock[0] += 11
             elif case == "failed_write":
                 with pytest.raises(OperationalError):
@@ -211,11 +227,12 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
 
     def reserve(run_id, fence, ctx, *, request_tools, natural_spec_request):
         wire = runtime.body(ctx["messages"], [], node.max_output_tokens)
+        state["wire"] = wire
         with store.tx() as c:
             c.execute(insert(attempts).values(id=aid, run_id=rid, status="STARTED", mode="LIVE",
                 created_at=time.time(), request_model="intern-s2", reserved_tokens=len(wire)+1024,
                 parameters=dict(natural_spec=natural_spec_request, natural_spec_wire=dict(
-                    sha256=hashlib.sha256(wire).hexdigest(), bytes=len(wire))), response=None))
+                    sha256=hashlib.sha256(wire).hexdigest(), bytes=len(wire)))))
             c.execute(insert(reservations).values(id=aid, run_id=rid, subject=settings.quota_subject,
                                                  created_at=time.time()))
             c.execute(insert(operations).values(id=natural_spec_request["operation_id"], run_id=rid,
@@ -232,8 +249,7 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
 
     def identity(w, c, current, attempt):
         assert attempt == aid and current["id"] == rid
-        archive.receipt_owner(c, current, attempt, archive._read(c, user, current, attempt,
-                                                              archive.REQUEST)[1])
+        archive.receipt_owner(c, current, attempt, state["wire"])
         return binding
     monkeypatch.setattr(trial, "_identity", identity)
 
@@ -323,7 +339,7 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
             assert op["status"] == ("DISPATCHED" if case == "reject_owner" else "REJECTED_KNOWN")
             assert ("NS_REJECTED" in kinds) == (case != "reject_owner")
             assert state["post_admission"] == 1  # no fallback admission after failure
-            if case == "grant_expiry":
+            if case in {"grant_expiry", "tail_extra_expiry"}:
                 assert error["code"] == "GRANT_REVOKED"
         (tmp_path / "model-settlement-boundary.json").write_text(json.dumps(dict(case=case,
             error=error, trace=trace, post_full_admission=state["post_admission"],
@@ -332,7 +348,8 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
             events=kinds, sql=sql, real_models=0, mock_exchanges=0,
             actual_advance_model_five_writes=True,
             unit_stubs=["recipe/phase ancestry", "sender", "journal ledger", "non-trial guard",
-                        "model parse", "renew", "software eligibility"]), indent=2)+"\n")
+                        "model parse", "renew", "software eligibility", "trial reject accounting"]),
+            indent=2)+"\n")
     finally:
         event.remove(store.engine, "before_cursor_execute", statement)
         client.close()
