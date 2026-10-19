@@ -62,6 +62,15 @@ def test_quota_wait_allows_renewal_and_reservation_excludes_own_background_write
             self.lock.release()
 
     state["renewal_lock"] = ObservedLock()
+    original_heartbeat = store.heartbeat
+
+    def heartbeat(*args, **kwargs):
+        assert threading.current_thread() is not threading.main_thread(), (
+            "guarded renewal must stay outside the reservation proof observer"
+        )
+        return original_heartbeat(*args, **kwargs)
+
+    monkeypatch.setattr(store, "heartbeat", heartbeat)
 
     def quota_wait(*_, **__):
         # The actual guarded heartbeat must commit while quota waiting is open.

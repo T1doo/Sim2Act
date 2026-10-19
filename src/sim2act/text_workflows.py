@@ -937,15 +937,24 @@ def renew_sync(worker, run, state, *, deadline=None, lease_seconds=None):
 
 @contextmanager
 def natural_reservation_writer(worker, run, state, *, deadline):
-    """Keep the original post-quota renewal and reservation writer together.
+    """Serialize the reservation writer after quota waiting has finished.
 
-    The caller has finished quota waiting and has not opened its reservation
-    transaction. Background renewal remains available throughout that wait.
+    Original guarded renewals remain at the caller's existing boundaries.
+    Background renewal remains available throughout quota waiting; after lock
+    acquisition, reject stale numeric bounds before the full reservation gates.
     """
     with state["lock"]:
         renewal_lock = state.setdefault("renewal_lock", threading.Lock())
     with renewal_lock:
-        _renew_sync_locked(worker, run, state, deadline=deadline)
+        with state["lock"]:
+            fatal = state.get("fatal_heartbeat")
+            bounds = [state["lease_until"], run["created_at"] + worker.s.run_seconds, deadline]
+            if state["deadline"] is not None:
+                bounds.append(state["deadline"])
+        if fatal is not None:
+            raise fatal
+        if worker.stop.is_set() or time.time() >= min(bounds):
+            raise DomainError("BUDGET_EXHAUSTED", "Original heartbeat interval ended")
         yield
 
 
