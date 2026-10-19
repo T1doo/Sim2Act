@@ -893,7 +893,7 @@ def process(worker, run, contract):
         selected = _binding(worker).contract
         deadline = min(deadline, selected.expires_at, run["created_at"] + selected.caps.run_seconds)
     heartbeat_state = dict(lock=threading.Lock(), lease_until=run["lease_until"],
-        deadline=deadline, failure=None, generation_heartbeat=True)
+        deadline=deadline, run_created_at=run["created_at"], failure=None, generation_heartbeat=True)
 
     def beat():
         try:

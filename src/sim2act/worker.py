@@ -83,6 +83,14 @@ class Worker:
         if self.pa_trial is not None:
             from .pa_trial_dispatch import wait_unreserved
             wait_unreserved(self, run_id, _heartbeat_state=_generation_heartbeat_state)
+            if _generation_heartbeat_state is not None:
+                from .goal_applications import _renew_committed_lease
+                # Quota waiting is outside the transaction and can consume
+                # most of the last committed interval. Start the original
+                # guarded renewal before opening the reservation writer.
+                _renew_committed_lease(self, dict(id=run_id, fence=fence,
+                    created_at=_generation_heartbeat_state["run_created_at"]),
+                    _generation_heartbeat_state)
         s = self.s
         if natural_spec_request is not None:
             from .natural_spec_runtime import reservation_settings

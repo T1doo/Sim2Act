@@ -339,3 +339,42 @@ def test_generation_true_revocation_latches_and_stops_unreserved_progress(env, t
         real_models=0, mock_exchanges=0, actual_grant_revoked=True, error=revoked.value.code,
         same_error_latched=True, subsequent_renewals=0, durable_business_changes=0), indent=2))
     data[2].close()
+
+
+def test_generation_revoked_after_quota_wait_stops_before_reservation(env, tmp_path, monkeypatch):
+    """A fresh post-wait heartbeat rejects an actual intervening Grant change."""
+    data, binding, fixture, factory = configured(env, tmp_path, monkeypatch, prepare_case=prepare_pb)
+    worker = factory(data[0], data[1], goal_planner_transport=apps.generation_transport(data, "ordered", False)[1])
+    made = data[2].post(f"/api/projects/{data[4]}/goal-cards/{data[6]['id']}/application-runs",
+        json=dict(expected_version=data[6]["version"], expected_fingerprint=data[6]["fingerprint"],
+                  request_key=binding.contract.stage_keys.generate, family="natural_spec"))
+    assert made.status_code == 202, made.text
+    run = data[0].claim(worker.id, data[1].lease_seconds, trial_binding=binding)
+    assert run is not None and run["id"] == made.json()["run_id"]
+    state = dict(lock=threading.Lock(), lease_until=run["lease_until"], failure=None,
+                 run_created_at=run["created_at"],
+                 deadline=min(run["created_at"] + data[1].run_seconds, binding.contract.expires_at))
+    wait, observed = trial.wait_unreserved, {}
+
+    def revoked_after_wait(*args, **kwargs):
+        wait(*args, **kwargs)
+        with data[0].tx() as c:
+            changed = c.execute(update(grants).where(grants.c.principal_id == data[3],
+                grants.c.project_id == data[4], grants.c.resource_id == data[5],
+                grants.c.revoked.is_(False)).values(revoked=True))
+            assert changed.rowcount > 0
+        observed["after_wait"] = snapshot(data[0])
+
+    monkeypatch.setattr(trial, "wait_unreserved", revoked_after_wait)
+    with pytest.raises(DomainError) as denied:
+        worker.reserve(run["id"], run["fence"], run["context"], generation_request=True,
+                       _generation_heartbeat_state=state)
+    assert denied.value.code == "GRANT_REVOKED" and state["failure"] is denied.value
+    assert snapshot(data[0]) == observed["after_wait"] and fixture["sends"] == []
+    with data[0].tx() as c:
+        assert not c.execute(select(attempts.c.id).where(attempts.c.run_id == run["id"])).first()
+    (tmp_path / "post-wait-grant-proof.json").write_text(json.dumps(dict(
+        real_models=0, mock_exchanges=0, actual_grant_revoked_after_original_wait=True,
+        original_heartbeat_refused=denied.value.code, same_error_latched=True,
+        no_reservation_or_business_changes=True), indent=2))
+    data[2].close()
