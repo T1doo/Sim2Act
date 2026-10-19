@@ -31,7 +31,8 @@ from sim2act.errors import DomainError
     "continue_once", "missing_stamp", "no_scope", "settings_changed",
     "successful_write", "failed_write", "source_callback_write", "authority_revoke",
     "fixed_source_missing", "fixed_source_deny", "fixed_source_expired", "qualification_deny",
-    "run_cancelled", "phase_seal_changed", "first_full_failure",
+    "run_cancelled", "phase_seal_changed", "first_full_failure", "settings_during_full",
+    "controller_during_full",
 ])
 def test_postwrite_commit_readback_boundary(env, tmp_path, monkeypatch, case):
     http_calls = []
@@ -70,12 +71,14 @@ def test_postwrite_commit_readback_boundary(env, tmp_path, monkeypatch, case):
             consent="BIND_ONLY_THIS_ACCEPTED_STAGE_RUN_APP_RELEASE_AND_COMPLETE_GOAL_TO_ORIGINAL_TRIAL")
         gate._save(c, user, gate.entity(contract), gate.PHASE, "cold", phase)
     worker = SimpleNamespace(store=store, s=settings, pa_trial=binding, id="boundary-worker",
-        stop=threading.Event(), goal_planner_transport=None)
+        stop=threading.Event(), goal_planner_transport=None,
+        _journal_trial_store=store, _journal_trial_binding=binding, _journal_trial_drift=False)
     calls = dict(full=0, binding=0, source=0, qualification=0, callback_rows=0)
     original_resolver = evidence.resolve_account
     def current_binding(w):
         calls["binding"] += 1
         assert w is worker and w.pa_trial is binding
+        gate.require(not w._journal_trial_drift, "Controller binding drifted")
         return binding
     monkeypatch.setattr(trial, "_binding", current_binding)
     monkeypatch.setattr(trial, "_stage", lambda b, run: "cold")
@@ -88,6 +91,10 @@ def test_postwrite_commit_readback_boundary(env, tmp_path, monkeypatch, case):
         actual = c.execute(select(runs).where(runs.c.id == run_id)).mappings().one()
         gate._require_run_context_row(user, contract, stage, actual, version, fence,
             approval, authority, time.time())
+        if case == "settings_during_full" and calls["full"] == 1:
+            worker.s = replace(settings, max_tools=settings.max_tools - 1)
+        elif case == "controller_during_full" and calls["full"] == 1:
+            worker._journal_trial_drift = True
         return SimpleNamespace(stage="cold", approval_fingerprint=fingerprint(approval.model_dump()),
             stage_fingerprint=fingerprint(authority.model_dump()))
     monkeypatch.setattr(trial, "_admission", lambda w: complete_phase_stub)
@@ -123,6 +130,17 @@ def test_postwrite_commit_readback_boundary(env, tmp_path, monkeypatch, case):
                 with pytest.raises(DomainError):
                     trial.check_commit(worker, c, run, _read_out=out)
                 assert out == {}
+            elif case == "settings_during_full":
+                trial.check_commit(worker, c, run, _read_out=out)
+                assert out == {}
+                trial.check_commit_after_readback(worker, c, run, out)
+                assert calls["full"] == 2
+            elif case == "controller_during_full":
+                trial.check_commit(worker, c, run, _read_out=out)
+                assert out == {}
+                with pytest.raises(DomainError, match="Controller binding drifted"):
+                    trial.check_commit_after_readback(worker, c, run, out)
+                assert calls["full"] == 1
             else:
                 trial.check_commit(worker, c, run, _read_out=out)
                 stamp = out.get("stamp")

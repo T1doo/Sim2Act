@@ -208,6 +208,7 @@ def check_commit(worker, c, run, *, _read_out=None):
         previous = _read_out.pop("stamp", None)
         if type(previous) is _CommitReadback:
             previous.consumed = True
+    read_entry = _commit_readback_entry(worker, c, run) if _read_out is not None else None
     b = _binding(worker)
     gate.require(
         run["principal_id"] == b.contract.principal_id
@@ -218,22 +219,21 @@ def check_commit(worker, c, run, *, _read_out=None):
             gate._approved(worker.store, c, b.contract.principal_id, b.contract, b.approval_key)
             context = _admission(worker)(worker.store, c, run["principal_id"], b.contract, b.approval_key,
                 _stage(b, run), run["id"], run["version"], run["fence"])
-        if _read_out is not None:
+        if read_entry is not None:
             from .pb_natural_specs import _source_reads_current
             token = c.info.get("pb_source_reads")
             if (_production_binding(b) and type(b.contract) is gate.PBTrialContract
                     and context.stage == "cold" and _source_reads_current(worker.store, c, token)):
                 from .natural_trial_runs import associated_sql
                 actual = c.execute(select(runs).where(runs.c.id == run["id"])).mappings().one()
-                if (fingerprint(dict(actual)) == fingerprint(dict(run))
+                stamp = _CommitReadback(**read_entry,
+                    approval_fingerprint=context.approval_fingerprint,
+                    phase_fingerprint=context.stage_fingerprint, authorities=tuple(sorted(authorities)))
+                if (stamp.binding is b and _commit_readback_unchanged(worker, c, run, stamp)
+                        and fingerprint(dict(actual)) == stamp.run_fingerprint
                         and c.execute(select(runs.c.id).where(runs.c.id == run["id"], associated_sql())).first() is None
-                        and _source_reads_current(worker.store, c, token)):
-                    _read_out["stamp"] = _CommitReadback(worker, worker.store, c, token, b,
-                        worker.s, dict(vars(worker.s)), worker.stop, worker.goal_planner_transport,
-                        worker.id, fingerprint(dict(actual)), context.approval_fingerprint,
-                        context.stage_fingerprint, tuple(sorted(authorities)),
-                        fingerprint(dict(contract=b.contract.model_dump(), key=b.approval_key,
-                            account=b.account_id, version=b.version, fingerprint=b.contract_fingerprint)))
+                        and _commit_readback_unchanged(worker, c, run, stamp)):
+                    _read_out["stamp"] = stamp
         return
     gate._approved(worker.store, c, b.contract.principal_id, b.contract, b.approval_key)
     if type(b.contract) is gate.PBTrialContract and _stage(b, run) == "cold":
@@ -262,6 +262,40 @@ class _CommitReadback:
     consumed: bool = False
 
 
+def _commit_readback_entry(worker, c, run):
+    from .pb_natural_specs import _source_reads_current
+    b, token = worker.pa_trial, c.info.get("pb_source_reads")
+    if (not _production_binding(b) or type(b.contract) is not gate.PBTrialContract
+            or getattr(worker, "_journal_trial_store", None) is not worker.store
+            or getattr(worker, "_journal_trial_binding", None) is not b
+            or getattr(worker, "_journal_trial_drift", None) is not False
+            or not _source_reads_current(worker.store, c, token)):
+        return None
+    return dict(worker=worker, store=worker.store, connection=c, token=token, binding=b,
+        settings=worker.s, settings_values=dict(vars(worker.s)), stop=worker.stop,
+        transport=worker.goal_planner_transport, worker_id=worker.id,
+        run_fingerprint=fingerprint(dict(run)), binding_fingerprint=fingerprint(dict(
+            contract=b.contract.model_dump(), key=b.approval_key, account=b.account_id,
+            version=b.version, fingerprint=b.contract_fingerprint)))
+
+
+def _commit_readback_unchanged(worker, c, run, stamp):
+    from .pb_natural_specs import _source_reads_current
+    return (worker is stamp.worker and worker.store is stamp.store
+        and c is stamp.connection and worker.pa_trial is stamp.binding
+        and getattr(worker, "_journal_trial_store", None) is stamp.store
+        and getattr(worker, "_journal_trial_binding", None) is stamp.binding
+        and getattr(worker, "_journal_trial_drift", None) is False
+        and worker.s is stamp.settings and vars(worker.s) == stamp.settings_values
+        and worker.stop is stamp.stop and worker.goal_planner_transport is stamp.transport
+        and worker.id == stamp.worker_id
+        and fingerprint(dict(contract=worker.pa_trial.contract.model_dump(),
+            key=worker.pa_trial.approval_key, account=worker.pa_trial.account_id,
+            version=worker.pa_trial.version, fingerprint=worker.pa_trial.contract_fingerprint)) == stamp.binding_fingerprint
+        and fingerprint(dict(run)) == stamp.run_fingerprint
+        and _source_reads_current(worker.store, c, stamp.token))
+
+
 def check_commit_after_readback(worker, c, run, read_out):
     """Continue only this exact postwrite SQLite proof; otherwise reprove it all.
 
@@ -270,23 +304,13 @@ def check_commit_after_readback(worker, c, run, read_out):
     from this readback. Current consent, fixed source and actual authorities are
     still checked here; PostgreSQL and all other controllers use the full path.
     """
-    from .pb_natural_specs import _source_reads_current
     stamp = read_out.pop("stamp", None)
     if type(stamp) is not _CommitReadback or stamp.consumed:
         return check_commit(worker, c, run)
     stamp.consumed = True
 
     def unchanged():
-        return (worker is stamp.worker and worker.store is stamp.store
-            and c is stamp.connection and worker.pa_trial is stamp.binding
-            and worker.s is stamp.settings and vars(worker.s) == stamp.settings_values
-            and worker.stop is stamp.stop and worker.goal_planner_transport is stamp.transport
-            and worker.id == stamp.worker_id
-            and fingerprint(dict(contract=worker.pa_trial.contract.model_dump(),
-                key=worker.pa_trial.approval_key, account=worker.pa_trial.account_id,
-                version=worker.pa_trial.version, fingerprint=worker.pa_trial.contract_fingerprint)) == stamp.binding_fingerprint
-            and fingerprint(dict(run)) == stamp.run_fingerprint
-            and _source_reads_current(worker.store, c, stamp.token))
+        return _commit_readback_unchanged(worker, c, run, stamp)
 
     if not unchanged():
         return check_commit(worker, c, run)
