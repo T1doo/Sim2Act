@@ -20,7 +20,7 @@ def test_join_preserves_exact_event_and_attempt_cardinality(env):
             goal=dict(owner_id=user, project_id=project_id, resource_refs=[resource_id]),
             resources=[dict(resource_id=resource_id)],
             source_goal_card=dict(snapshot=dict(content=dict(resource_refs=[resource_id]))))
-        c.execute(insert(runs).values(id=run_id, **owner, resource_refs=[resource_id]))
+        c.execute(insert(runs).values(id=run_id, **owner, resource_refs=[resource_id], status="QUEUED"))
         c.execute(insert(run_contracts).values(run_id=run_id, snapshot=saved, fingerprint=fingerprint(saved)))
         c.execute(insert(events).values(id="accepted-1", run_id=run_id, kind="ACCEPTED",
             data=dict(application_generation=policy)))
