@@ -296,7 +296,7 @@ def _commit_readback_unchanged(worker, c, run, stamp):
         and _source_reads_current(worker.store, c, stamp.token))
 
 
-def check_commit_after_readback(worker, c, run, read_out):
+def check_commit_after_readback(worker, c, run, read_out, *, _tail_authorities=()):
     """Continue only this exact postwrite SQLite proof; otherwise reprove it all.
 
     The first check_commit has already proved the complete phase and source
@@ -333,7 +333,8 @@ def check_commit_after_readback(worker, c, run, read_out):
     source = _journal_source(worker.store, c, b)
     if not unchanged():
         return check_commit(worker, c, run)
-    worker.store.recheck_proof_authorities(c, {"_call_authorities": stamp.authorities})
+    worker.store.recheck_proof_authorities(c, {"_call_authorities":
+        tuple(sorted(set(stamp.authorities).union(_tail_authorities)))})
     if not unchanged():
         return check_commit(worker, c, run)
     actual = c.execute(select(runs).where(runs.c.id == run["id"]).with_for_update()).mappings().one()

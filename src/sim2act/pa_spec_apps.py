@@ -1430,7 +1430,8 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
         check_worker_tx(worker, c, job["id"])
         if getattr(worker, "pa_trial", None) is not None:
             from .pa_trial_dispatch import check_commit_after_readback
-            check_commit_after_readback(worker, c, final, commit_readback)
+            check_commit_after_readback(worker, c, final, commit_readback,
+                _tail_authorities=tuple(sorted(authorities)))
         require(not worker.stop.is_set() and time.time() < final["lease_until"]
             and time.time() < job["created_at"] + min(worker.s.run_seconds,
                 plan["definition"]["manifest"]["runtime_limits"]["run_seconds"], s["limits"]["run_seconds"]),

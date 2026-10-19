@@ -34,6 +34,7 @@ from sim2act.errors import DomainError
     "run_cancelled", "phase_seal_changed", "first_full_failure", "settings_during_full",
     "controller_during_full",
     "source_callback_controller_drift",
+    "tail_authority_revoke",
 ])
 def test_postwrite_commit_readback_boundary(env, tmp_path, monkeypatch, case):
     http_calls = []
@@ -151,6 +152,12 @@ def test_postwrite_commit_readback_boundary(env, tmp_path, monkeypatch, case):
                 stamp = out.get("stamp")
                 assert type(stamp) is trial._CommitReadback and not stamp.consumed
                 assert not any(isinstance(v, gate.StageAuthority) for v in vars(stamp).values())
+                tail_authorities = ()
+                if case == "tail_authority_revoke":
+                    with store.proof_authorities(c) as tail:
+                        store.authorize(c, user, contract.runtime_id, pid, env[6], "resource.read")
+                    tail_authorities = tuple(sorted(tail))
+                    assert len(tail_authorities) == 1 and not set(tail_authorities).intersection(stamp.authorities)
                 if case == "missing_stamp":
                     out.clear()
                 elif case == "no_scope":
@@ -163,12 +170,12 @@ def test_postwrite_commit_readback_boundary(env, tmp_path, monkeypatch, case):
                 elif case == "failed_write":
                     with pytest.raises(OperationalError):
                         c.exec_driver_sql("UPDATE definitely_missing_readback_table SET value=1")
-                elif case == "authority_revoke":
+                elif case in {"authority_revoke", "tail_authority_revoke"}:
                     original_recheck = store.recheck_proof_authorities
                     def revoke(connection, proof):
                         calls["callback_rows"] = connection.execute(update(grants).where(
                             grants.c.principal_id == user, grants.c.project_id == pid,
-                            grants.c.resource_id == contract.bindings[1].resource_id,
+                            grants.c.resource_id == (env[6] if case == "tail_authority_revoke" else contract.bindings[1].resource_id),
                             grants.c.tool_ref == "resource.read").values(revoked=True)).rowcount
                         return original_recheck(connection, proof)
                     monkeypatch.setattr(store, "recheck_proof_authorities", revoke)
@@ -179,9 +186,9 @@ def test_postwrite_commit_readback_boundary(env, tmp_path, monkeypatch, case):
                         delivery_graph_requests.c.kind == gate.PHASE + "_seal").values(request_fingerprint="0" * 64)).rowcount
                 rejected = case in {"authority_revoke", "fixed_source_missing", "fixed_source_deny",
                     "fixed_source_expired", "qualification_deny", "run_cancelled", "phase_seal_changed",
-                    "source_callback_controller_drift"}
+                    "source_callback_controller_drift", "tail_authority_revoke"}
                 try:
-                    trial.check_commit_after_readback(worker, c, run, out)
+                    trial.check_commit_after_readback(worker, c, run, out, _tail_authorities=tail_authorities)
                 except DomainError as caught:
                     assert rejected
                     error = caught.public()
@@ -196,11 +203,11 @@ def test_postwrite_commit_readback_boundary(env, tmp_path, monkeypatch, case):
                     assert calls["full"] == 2
                 elif case in {"missing_stamp", "no_scope", "settings_changed", "successful_write", "failed_write", "source_callback_write"}:
                     assert calls["full"] == 2
-                elif case in {"fixed_source_missing", "fixed_source_deny", "fixed_source_expired", "qualification_deny", "authority_revoke", "source_callback_controller_drift"}:
+                elif case in {"fixed_source_missing", "fixed_source_deny", "fixed_source_expired", "qualification_deny", "authority_revoke", "source_callback_controller_drift", "tail_authority_revoke"}:
                     assert calls["full"] == 1  # No retry can replace a current rejection.
                 if rejected:
                     assert error is not None
-                if case in {"successful_write", "source_callback_write", "authority_revoke", "run_cancelled", "phase_seal_changed"}:
+                if case in {"successful_write", "source_callback_write", "authority_revoke", "run_cancelled", "phase_seal_changed", "tail_authority_revoke"}:
                     assert calls["callback_rows"] == 1
     assert not http_calls
     (tmp_path / "boundary-result.json").write_text(json.dumps(dict(case=case, calls=calls,
