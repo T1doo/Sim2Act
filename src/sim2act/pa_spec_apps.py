@@ -1407,7 +1407,7 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
     from .pa_trial_dispatch import _journal_reads
     with _journal_reads(worker, c):
         # No protected effect occurs between it and the transaction return.
-        commit_readback = {}
+        commit_readback: dict[str, object] = {}
         with store.proof_authorities(c) as authorities:
             final = commit_guard(worker, c, run, b, _commit_out=commit_readback)
             owner_fields = ("id", "principal_id", "project_id", "runtime_id", "worker_id",
