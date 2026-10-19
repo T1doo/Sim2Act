@@ -88,7 +88,9 @@ def saved_family(candidate):
     return None
 
 
-def base_audit(store, c, user, base, family):
+def base_audit(store, c, user, base, family, *, _audit_out=None):
+    if family == PB and _audit_out is not None:
+        return pb.audit_fingerprint(store, c, user, base, _audit_out=_audit_out)
     return (pb.audit_fingerprint if family == PB else spec.audit_fingerprint)(store, c, user, base)
 
 
@@ -285,7 +287,7 @@ def control_scope(store, c, user, rid, *, iid=None, lock=False):
 
 
 @controlled
-def review(store, c, user, instance, release, body, limits, *, runtime=None, approved_grants=None, family=PB, _logic_out=None):
+def review(store, c, user, instance, release, body, limits, *, runtime=None, approved_grants=None, family=PB, _logic_out=None, _audit_out=None):
     base = release["snapshot"]["draft"]
     saved = base["candidate"]
     logic_origin = release["snapshot"].get("natural_logic_source")
@@ -341,7 +343,8 @@ def review(store, c, user, instance, release, body, limits, *, runtime=None, app
         release_id=release["id"], release_fingerprint=release["fingerprint"],
         saved_app_fingerprint=base["fingerprint"], recipe_fingerprint=body.expected_recipe_fingerprint,
         source_run_id=base["candidate"]["manifest"]["source_run_ref"],
-        source_audit_fingerprint=base_audit(store, c, user, base, family),
+        source_audit_fingerprint=base_audit(store, c, user, base, family,
+            **({"_audit_out": _audit_out} if _audit_out is not None else {})),
         request=body.model_dump(), target_goal=goal.model_dump(),
         variable_bindings=dict(resource_id=material["resource_id"], source_hash=material["hash"],
             format=material["format"], goal_id=goal.card_id, goal_version=goal.version),
@@ -410,7 +413,9 @@ def bound(store, c, user, job, snapshot, release, limits, *, family=PB, _logic_o
                          "runtime_id": snapshot["runtime_id"], "source_app_id": release["snapshot"]["draft"]["id"]}
     if family == PA:
         accepted_instance["data_version"] = snapshot["pa_base_data_version"]
-    checked, material, goal = review(store, c, user, accepted_instance, release, body.review, limits, runtime=job["runtime_id"], approved_grants=frozen["reviewed"]["approved_grant_state"], family=family,_logic_out=_logic_out)
+    audit_out: dict[str, Any] = {}
+    checked, material, goal = review(store, c, user, accepted_instance, release, body.review, limits, runtime=job["runtime_id"], approved_grants=frozen["reviewed"]["approved_grant_state"], family=family,_logic_out=_logic_out,
+        **({"_audit_out": audit_out} if _read_out is not None and family == PB else {}))
     require(body.expected_review_fingerprint == checked["review_fingerprint"]
         and frozen["reviewed"] == checked and frozen["request_fingerprint"] == fingerprint(body.model_dump())
         and snapshot["pb_effective_fingerprint" if family == PB else "pa_effective_fingerprint"] == checked["effective_fingerprint"])
@@ -418,12 +423,14 @@ def bound(store, c, user, job, snapshot, release, limits, *, family=PB, _logic_o
         "fingerprint": checked["effective_fingerprint"], family.field + "_run_id": job["id"]}
     manifest, _, report = natural.compile_candidate(draft["candidate"], limits)
     if (_read_out is not None and family == PB and "natural_logic_source" not in release["snapshot"]
+            and audit_out.get("digest") == checked["source_audit_fingerprint"]
             and pb._source_reads_current(store, c, c.info.get("pb_source_reads"))):
         _read_out.update(principal_id=user, job_fingerprint=fingerprint(dict(job)),
             snapshot_fingerprint=fingerprint(snapshot), release_id=release["id"],
             release_fingerprint=release["fingerprint"], base=copy.deepcopy(release["snapshot"]["draft"]),
             platform_limits=limits.model_dump(), limits_ref=limits,
-            token=c.info["pb_source_reads"], base_audit=checked["source_audit_fingerprint"])
+            token=c.info["pb_source_reads"], base_audit=checked["source_audit_fingerprint"],
+            audit_base=audit_out.get("base"))
     return draft, manifest, report, material, goal.model_dump()
 
 
@@ -473,7 +480,7 @@ def audit(store, c, user, draft, *, family=PB, _logic_out=None, _release=None, _
     base_digest = None
     def same_read():
         return (_use_proof is not None and family == PB
-            and _use_proof.get("principal_id") == user and _use_proof.get("base") == dict(base)
+            and _use_proof.get("principal_id") == user and _use_proof.get("audit_base") == dict(base)
             and _use_proof.get("bound_fingerprint") == _bound_fingerprint(_use_proof["bound"])
             and _use_proof["bound"][0] == draft
             and _use_proof.get("release_id") == meta.release_id

@@ -443,7 +443,7 @@ def verify(store, c, user, draft, limits):
     return manifest, report, material, goal.model_dump()
 
 
-def audit_fingerprint(store, c, user, draft):
+def audit_fingerprint(store, c, user, draft, *, _audit_out=None):
     from . import pa_spec_apps as spec
 
     require(spec.scope_gate(store, c, user, draft["id"]))
@@ -452,9 +452,12 @@ def audit_fingerprint(store, c, user, draft):
     body, frozen = pair(c, user, draft["id"], EXTRACT, marker["request_key"], ExtractInput)
     actual = c.execute(select(app_drafts).where(app_drafts.c.id == draft["id"],
         app_drafts.c.project_id == draft["project_id"], app_drafts.c.runtime_id == draft["runtime_id"])).mappings().one()
-    return fingerprint(dict(source_audit=source_audit(store, c, user, draft["project_id"], meta.source_run_id),
+    digest = fingerprint(dict(source_audit=source_audit(store, c, user, draft["project_id"], meta.source_run_id),
         metadata=meta.model_dump(), metadata_seal=meta_seal,
         marker=dict(marker), request=body.model_dump(), frozen=frozen, draft=dict(actual)))
+    if _audit_out is not None:
+        _audit_out.update(base=copy.deepcopy(dict(actual)), digest=digest)
+    return digest
 
 
 def receipt(body, checked, frozen):
