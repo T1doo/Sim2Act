@@ -564,7 +564,6 @@ def _source_stage_current(store, c, user, contract, source_id):
 
 
 def _pb_origin(store, c, user, contract, approval_key, bound):
-    from . import natural_trial_budget as budget
     from . import pb_natural_specs as pb
 
     draft, snapshot, release = bound["draft"], bound["snapshot"], bound["release"]
@@ -578,8 +577,16 @@ def _pb_origin(store, c, user, contract, approval_key, bound):
         pb.verify(store, c, user, draft, _limits(contract))
     body, _ = pair(c, user, draft["id"], pb.EXTRACT,
                    contract.extraction_request_key, pb.ExtractInput)
-    ledger = budget.audit(store, c, user, budget.scope_for(contract, approval_key))["ledger"]
-    source_id = ledger["stage_runs"].get("source")
+    from .pa_trial_dispatch import _pb_accounting, journal_stage_accounted
+    backend, ledger, source_id = _pb_accounting(store, c, user, contract, approval_key)
+    if backend is not None:
+        require(source_id is not None
+            and body.review.source_run_id == source_id
+            and body.review.request_key == contract.extraction_request_key
+            and body.review.recipe == contract.extraction_recipe,
+            "P-B requires this original trial's successful source and exact extraction")
+        journal_stage_accounted(store, c, user, contract, approval_key, source_id, "source")
+        return
     slots = [s for s in ledger["slots"] if s["reservation"]["stage"] == "source"]
     actual = c.execute(select(attempts).where(attempts.c.run_id == source_id)).mappings().all()
     require(not ledger["halted"] and source_id is not None

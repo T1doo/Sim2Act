@@ -1,4 +1,4 @@
-"""Bounded private execution bodies and original-trial OFFLINE source reads.
+"""Bounded private execution bodies and exact original-trial source reads.
 
 These archives record the actual serializer/adapter boundaries. They never
 establish real provider provenance, account entitlement or LIVE permission.
@@ -196,29 +196,49 @@ class ResolvedSourceArchive:
 
 def _source_prefix(store, c, user, contract, approval_key):
     from . import natural_live_admission as gate
-    from . import natural_trial_budget as budget
+    from .pa_trial_dispatch import _pb_accounting, journal_stage_accounted
 
     approval = gate._approved(store, c, user, contract, approval_key)
-    ledger = budget.audit(store, c, user, budget.scope_for(contract, approval_key))["ledger"]
-    source_id = ledger["stage_runs"].get("source")
-    require(not ledger["halted"] and source_id is not None)
+    backend, ledger, source_id = _pb_accounting(store, c, user, contract, approval_key)
+    require(source_id is not None)
+    if backend is None:
+        require(not ledger["halted"])
     require(gate._keys(c, user, gate.entity(contract), gate.PHASE) <= {"source", "cold"})
     current, job, source_proof = gate._source_stage_current(store, c, user, contract, source_id)
     accepted = gate._saved(c, user, gate.entity(contract), gate.PHASE, "source", gate.StageApproveInput)
     require(accepted.approval_key == approval_key and accepted.authority == current
             and accepted.expected_authority_fingerprint == fingerprint(current.model_dump())
             and job["status"] == "SUCCEEDED" and not job["cancel_intent"])
+    if backend is not None:
+        journal_stage_accounted(store, c, user, contract, approval_key, source_id, "source")
     return approval, ledger, current, job, source_proof
+
+
+def _source_verification(ledger):
+    from .production_trial_policy import Ledger
+    return ("SPEC_PRODUCTION_CONTROLLER_ARCHIVE" if type(ledger) is Ledger
+            else "ACTUAL_MOCK_ARCHIVE_NOT_LIVE_VERIFIED")
 
 
 def _source_bodies(c, user, contract, job, ledger):
     from . import natural_live_admission as gate
     from .goal_applications import response_archive
     from .model import normalize_usage
+    from .production_trial_policy import Ledger
+    from .spec_production import evidence_mode
 
     source_id = job["id"]
     rows = c.execute(select(attempts).where(attempts.c.run_id == source_id)).mappings().all()
-    slots = [s for s in ledger["slots"] if s["reservation"]["stage"] == "source"]
+    production = type(ledger) is Ledger
+    require(evidence_mode(c, job) == ("LIVE" if production else "MOCK"))
+    if production:
+        # Preserve the journal's raw-body hash; never relabel it canonical.
+        slots = [dict(reservation=dict(request_key=s.identity.attempt_id,
+            wire_sha256=s.identity.wire_sha256, wire_bytes=s.identity.wire_bytes),
+            accepted=s.accepted, settlement=None if s.settlement is None else s.settlement.model_dump())
+            for s in ledger.slots if s.identity.stage == "source"]
+    else:
+        slots = [s for s in ledger["slots"] if s["reservation"]["stage"] == "source"]
     require(len(rows) == len(slots) == 2
             and {r["id"] for r in rows} == {s["reservation"]["request_key"] for s in slots})
     expected_ids = {r["id"] for r in rows}
@@ -231,7 +251,7 @@ def _source_bodies(c, user, contract, job, ledger):
     requests, responses, public = [], [], []
     for slot in slots:
         row = by_id[slot["reservation"]["request_key"]]
-        require(row["mode"] == "MOCK" and row["status"] == "VERIFIED"
+        require(row["mode"] == ("LIVE" if production else "MOCK") and row["status"] == "VERIFIED"
                 and row["request_model"] == row["response_model"] == contract.model
                 and slot["accepted"] is True and slot["settlement"] is not None)
         request, wire = _read(c, user, job, row["id"], REQUEST)
@@ -252,7 +272,8 @@ def _source_bodies(c, user, contract, job, ledger):
                     raw_evidence=canonical)
                 and response.canonical_sha256 == canonical["sha256"]
                 and usage == row["usage"] and usage["status"] == "known"
-                and slot["settlement"]["response_sha256"] == canonical["sha256"]
+                and slot["settlement"]["response_sha256"] == (response.sha256 if production
+                                                            else canonical["sha256"])
                 and slot["settlement"]["response_ascii_bytes"] == canonical["bytes"]
                 and all(slot["settlement"][k] == usage["tokens"][k] for k in
                     ("prompt_tokens", "completion_tokens", "total_tokens")))
@@ -271,7 +292,7 @@ def _resolve_source_before_extraction(store, c, user, contract, approval_key):
     from . import natural_live_admission as gate
     from . import pa_spec_apps as spec
 
-    require(store.test_only and store.sqlite and c.in_transaction())
+    require(c.in_transaction() and c.engine is store.engine)
     require(type(contract) is gate.PBTrialContract
             and gate.PBTrialContract.model_validate(contract.model_dump()) == contract)
     with store.proof_authorities(c) as authorities:
@@ -281,7 +302,7 @@ def _resolve_source_before_extraction(store, c, user, contract, approval_key):
         require(spec.job_scope_gate(store, c, user, job["id"]))
         store.recheck_proof_authorities(c, {"_call_authorities": tuple(sorted(authorities))})
         require(time.time() < contract.expires_at)
-        receipt = dict(verification="ACTUAL_MOCK_ARCHIVE_NOT_LIVE_VERIFIED",
+        receipt = dict(verification=_source_verification(ledger),
             trial_fingerprint=fingerprint(contract.model_dump()),
             source_run_id=job["id"], source_app_id=current.app_id,
             source_proof_fingerprint=fingerprint(proof),
@@ -295,7 +316,6 @@ def _resolve_source_before_extraction(store, c, user, contract, approval_key):
 def resolve_trial_source(store, user, contract, approval_key):
     from . import natural_live_admission as gate
 
-    require(store.test_only and store.sqlite, "Only offline source archive verification is implemented")
     require(type(contract) is gate.PBTrialContract)
     require(gate.PBTrialContract.model_validate(contract.model_dump()) == contract)
     with store.tx() as c:
@@ -308,11 +328,11 @@ def _resolve_trial_source(store, c, user, contract, approval_key):
     from . import pa_spec_apps as spec
     from . import pb_natural_specs as pb
 
-    require(store.test_only and store.sqlite, "Only offline source archive verification is implemented")
     require(type(contract) is gate.PBTrialContract)
     exact = gate.PBTrialContract.model_validate(contract.model_dump())
     require(exact == contract)
-    require(c.in_transaction(), "Original source proof requires the caller transaction")
+    require(c.in_transaction() and c.engine is store.engine,
+            "Original source proof requires the caller transaction")
     with store.proof_authorities(c) as authorities:
         # Active original approval, both current material/Goals and all identities
         # precede any private source or archive body. No caller evidence resolver.
@@ -343,7 +363,7 @@ def _resolve_trial_source(store, c, user, contract, approval_key):
                     fingerprint=cold.goal_fingerprint, snapshot=cold.goal_snapshot.model_dump()))
         requests, responses, public = _source_bodies(c, user, contract, job, ledger)
 
-        receipt = dict(version=VERSION, verification="ACTUAL_MOCK_ARCHIVE_NOT_LIVE_VERIFIED",
+        receipt = dict(version=VERSION, verification=_source_verification(ledger),
             trial_fingerprint=fingerprint(contract.model_dump()),
             approval_fingerprint=fingerprint(approval.model_dump()), source_run_id=source_id,
             source_app_id=current.app_id, extraction_app_id=draft["id"],

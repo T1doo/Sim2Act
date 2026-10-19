@@ -19,19 +19,19 @@ VERSION = "spec-production-controller.v1"
 
 @dataclass(frozen=True)
 class ProductionTrialBinding:
-    contract: gate.TrialContract | gate.TrialContractV2
+    contract: gate.TrialContract | gate.TrialContractV2 | gate.PBTrialContract
     approval_key: str
     account_id: str
     contract_fingerprint: str = field(init=False)
     version: str = field(default=VERSION, init=False)
 
     def __post_init__(self):
-        from .pa_trial_dispatch import JournalTrialBinding
+        from .pa_trial_dispatch import _checked_trial_contract
 
         # Reuse the original closed contract and account/slot validation.
-        checked = JournalTrialBinding(self.contract, self.approval_key, self.account_id)
-        object.__setattr__(self, "contract", checked.contract)
-        object.__setattr__(self, "contract_fingerprint", checked.contract_fingerprint)
+        checked = _checked_trial_contract(self.contract, self.approval_key, self.account_id)
+        object.__setattr__(self, "contract", checked)
+        object.__setattr__(self, "contract_fingerprint", fingerprint(evidence._contract_data(checked)))
 
 
 def environment(store, settings, transport):
@@ -115,6 +115,10 @@ def generation_mode(c, draft):
 
     from .db import run_contracts
     origin = draft["candidate"].get("goal_application")
+    task = draft["candidate"].get("spec_task")
+    if task is not None:
+        gate.require(not origin and task.get("kind") == "pb_natural_spec_task.v1")
+        origin = dict(run_id=task["source_run_id"])
     if not origin:
         return "mock"
     mode = c.execute(select(run_contracts.c.snapshot["mode"].as_string())

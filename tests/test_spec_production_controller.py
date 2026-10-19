@@ -7,6 +7,7 @@ real HTTP transport methods raise; only a finite MockTransport receives bodies.
 
 import base64
 import json
+import time
 import traceback
 from dataclasses import replace
 
@@ -58,8 +59,8 @@ def test_default_closed_and_missing_fixed_source_before_claim(env, tmp_path, mon
     assert snapshot(data[0]) == before
 
 
-def configured(env, tmp_path, monkeypatch, *, revoke_received=False):
-    data, old = prepare(env, tmp_path)
+def configured(env, tmp_path, monkeypatch, *, revoke_received=False, prepare_case=prepare):
+    data, old = prepare_case(env, tmp_path)
     settings = replace(data[1], mode="live", live_enabled=True,
         application_generation_activation_enabled=True, token="isolated-noncredential-placeholder")
     client = TestClient(create_app(data[0], settings))
@@ -84,7 +85,8 @@ def configured(env, tmp_path, monkeypatch, *, revoke_received=False):
             decision="DENY" if fixture["revoked"] else "ALLOW",
             legal_free_entitlement=not fixture["revoked"],
             enforced_non_chargeable=not fixture["revoked"], revoked=fixture["revoked"],
-            observed_at=contract.prepared_at, expires_at=contract.expires_at)
+            observed_at=getattr(contract, "prepared_at", time.time()),
+            expires_at=contract.expires_at)
 
     monkeypatch.setattr(controller, "environment", environment)
     monkeypatch.setattr(evidence, "resolve_account", source)

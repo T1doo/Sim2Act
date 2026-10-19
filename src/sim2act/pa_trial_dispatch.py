@@ -30,6 +30,17 @@ SENT = "pa_trial_dispatched.v1"
 JOURNAL_VERSION = "UNINSTALLED-pa-journal-trial.v1"
 
 
+def _checked_trial_contract(contract, approval_key, account_id):
+    from .production_evidence import _contract_data, requirements_for
+
+    gate.require(type(contract) in (gate.TrialContractV2, gate.TrialContract, gate.PBTrialContract))
+    original = gate.parse_contract(_contract_data(contract))
+    requirements_for(original.principal_id, original, approval_key)
+    gate.require(original.quota_subject == production.canonical_quota_subject(account_id))
+    budget.scope_for(original, approval_key)
+    return original
+
+
 @dataclass(frozen=True)
 class JournalTrialBinding:
     """Explicit P-A offline controller fixture; never installed by an API."""
@@ -41,15 +52,12 @@ class JournalTrialBinding:
     version: str = field(default=JOURNAL_VERSION, init=False)
 
     def __post_init__(self):
-        from .production_evidence import _contract_data, requirements_for
+        from .production_evidence import _contract_data
 
         gate.require(type(self.contract) in (gate.TrialContractV2, gate.TrialContract))
-        original = gate.parse_contract(_contract_data(self.contract))
-        requirements_for(original.principal_id, original, self.approval_key)
+        original = _checked_trial_contract(self.contract, self.approval_key, self.account_id)
         object.__setattr__(self, "contract", original)
-        gate.require(self.contract.quota_subject == production.canonical_quota_subject(self.account_id))
         object.__setattr__(self, "contract_fingerprint", fingerprint(_contract_data(original)))
-        budget.scope_for(self.contract, self.approval_key)
 
 
 @dataclass(frozen=True)
@@ -148,6 +156,8 @@ def _admission(worker):
         if _journal_binding(b):
             from . import production_trial_policy as policy
             context = policy.check_run(store, c, user, contract, key, stage, rid, version, fence, worker.id)
+            if type(contract) is gate.PBTrialContract and stage == "cold":
+                _pb_source(worker, c, b)
             current_source = _journal_source(store, c, b)
             if _production_binding(b):
                 gate.require(time.time() < min(context.deadline, current_source.expires_at),
@@ -253,6 +263,8 @@ def check_terminal_commit(worker, c, run, state):
             and fingerprint(phase.model_dump()) == consent.expected_authority_fingerprint)
     journal_stage_accounted(worker.store, c, run["principal_id"], b.contract,
                             b.approval_key, run["id"], stage)
+    if type(b.contract) is gate.PBTrialContract and stage == "cold":
+        _pb_source(worker, c, b)
     _binding(worker)
     if _production_binding(b):
         gate.require(not worker.stop.is_set() and time.time() < min(run["lease_until"],
@@ -267,6 +279,8 @@ def _pb_source(worker, c, b):
     complete Goals/Recipe and current authorities remain mandatory at every
     admission/commit. Its read-only receipt never becomes reusable authority.
     """
+    if _production_binding(b):
+        return _pb_source_bound(worker.store, c, b)
     from . import natural_source_archives as archive
     from .pb_natural_specs import _source_reads
 
@@ -276,9 +290,87 @@ def _pb_source(worker, c, b):
         _pb_archive_chain(worker, c, b, resolved)
 
 
+def _pb_source_bound(store, c, b):
+    from . import natural_source_archives as archive
+    from .pb_natural_specs import _source_reads
+
+    gate.require(_production_binding(b))
+    with _source_reads(store, c):
+        resolved = archive._resolve_trial_source(store, c, b.contract.principal_id,
+            b.contract, b.approval_key)
+        _pb_journal_archive_chain(store, c, b, resolved)
+
+
+def _pb_accounting(store, c, user, contract, key):
+    """Select original accounting from scalar markers, then reprove its authority.
+
+    A marker selects a verifier only. Neither it nor this read returns a permit.
+    Production has no fallback to the historical synthetic budget.
+    """
+    from .db import delivery_graph_requests
+    from .production_trial_journal import KIND
+    from .spec_production import VERSION, ProductionTrialBinding
+
+    gate.require(type(contract) is gate.PBTrialContract and c.in_transaction())
+    gate._approved(store, c, user, contract, key)
+    generation = c.execute(select(runs.c.id).where(runs.c.principal_id == user,
+        runs.c.project_id == contract.project_id, runs.c.runtime_id == contract.runtime_id,
+        runs.c.request_key == contract.stage_keys.generate)).scalar_one_or_none()
+    gate.require(generation is not None)
+    fields = ("version", "trial_fingerprint", "approval_key", "account_id")
+    markers = c.execute(select(*[attempts.c.parameters["pa_trial_binding"][k]
+        .as_string().label(k) for k in fields]).where(attempts.c.run_id == generation)).mappings().all()
+    if any(m["version"] == VERSION for m in markers):
+        gate.require(len(markers) == 3 and all(m["version"] == VERSION
+            and m["trial_fingerprint"] == fingerprint(contract.model_dump())
+            and m["approval_key"] == key for m in markers)
+            and len({m["account_id"] for m in markers}) == 1)
+        binding = ProductionTrialBinding(contract, key, markers[0]["account_id"])
+        _journal_source(store, c, binding)
+        state, _, _ = _journal_state(store, c, binding)
+        first = [s for s in state.slots if s.identity.stage in ("generate", "source")]
+        source_ids = {s.identity.run_id for s in first if s.identity.stage == "source"}
+        gate.require(not state.halted and len(first) == 5 and all(s.accepted for s in first)
+            and len(source_ids) == 1)
+        return binding, state, next(iter(source_ids))
+    # A lost/mixed production marker cannot reinterpret its journal as MOCK.
+    gate.require(store.test_only and store.sqlite and c.execute(select(delivery_graph_requests.c.kind)
+        .where(delivery_graph_requests.c.principal_id == user,
+            delivery_graph_requests.c.app_id == contract.project_id,
+            delivery_graph_requests.c.request_key == contract.trial_key,
+            delivery_graph_requests.c.kind.in_([KIND, KIND + "_seal"]))).first() is None)
+    ledger = budget.audit(store, c, user, budget.scope_for(contract, key))["ledger"]
+    return None, ledger, ledger["stage_runs"].get("source")
+
+
+@controlled
+def _pb_journal_archive_chain(store, c, b, resolved):
+    """Join production NS bytes to the exact original journal/capture chain."""
+    receipt = resolved.public_receipt
+    gate.require(_production_binding(b))
+    state, _, _ = _journal_state(store, c, b)
+    slots = [s for s in state.slots if s.identity.stage == "source"]
+    gate.require(not state.halted and len(slots) == len(receipt["attempts"]) == 2
+            and receipt["verification"] == "SPEC_PRODUCTION_CONTROLLER_ARCHIVE"
+            and receipt["live_allowed"] is False)
+    source = c.execute(select(runs).where(runs.c.id == receipt["source_run_id"])).mappings().one()
+    for slot, proof in zip(slots, receipt["attempts"], strict=True):
+        gate.require(slot.identity.run_id == source["id"]
+                and slot.identity.attempt_id == proof["attempt_id"])
+        _, capture, _, _ = _journal_chain(store, c, b, source, proof["attempt_id"])
+        gate.require(slot.identity.wire_sha256 == proof["request_sha256"]
+                and slot.identity.wire_bytes == proof["request_bytes"]
+                and capture.raw_sha256 == proof["decoded_body_sha256"]
+                and capture.raw_bytes == proof["decoded_body_bytes"]
+                and capture.canonical_sha256 == proof["canonical_ascii_sha256"]
+                and capture.canonical_ascii_bytes == proof["canonical_ascii_bytes"])
+
+
 @controlled
 def _pb_archive_chain(worker, c, b, resolved):
     """Join the existing actual NS archives to this controller's immutable sends."""
+    if _production_binding(b):
+        return _pb_journal_archive_chain(worker.store, c, b, resolved)
     receipt = resolved.public_receipt
     scope = budget.scope_for(b.contract, b.approval_key)
     ledger = budget._ledger(c, scope)
@@ -516,6 +608,7 @@ def _archive_bound(store, c, b, run, aid, wire, payload, complete, kind):
         complete,
         canonical,
         "natural_source_request_body.v1" if kind == REQUEST else "natural_source_response_body.v1",
+        _production=_production_binding(b),
     )
     key = dict(
         trial=scope.model_dump(),
@@ -1033,6 +1126,8 @@ def check_journal_claim(store, c, run, b):
         gate.require(current == accepted.authority and accepted.approval_key == b.approval_key
             and fingerprint(current.model_dump()) == accepted.expected_authority_fingerprint)
         gate._stage_review_window(current)
+        if type(b.contract) is gate.PBTrialContract and stage == "cold":
+            _pb_source_bound(store, c, b)
     frozen_seconds = store.frozen_contract(c, run).limits.run_seconds
     deadline = min(run["created_at"] + min(b.contract.caps.run_seconds, frozen_seconds),
                    b.contract.expires_at)
@@ -1177,7 +1272,7 @@ def _journal_chain(store, c, b, run, aid, raw=None):
         payload = base64.b64decode(body.body_b64, validate=True)
         gate.require(_body(run, aid, payload, True, body.canonical_sha256,
             "natural_source_request_body.v1" if kind == REQUEST
-            else "natural_source_response_body.v1") == body)
+            else "natural_source_response_body.v1", _production=_production_binding(b)) == body)
         gate.require(meta["sha256"] == hashlib.sha256(payload).hexdigest())
         payloads.append(payload)
     wire, payload = payloads
