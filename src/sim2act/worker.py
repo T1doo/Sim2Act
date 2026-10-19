@@ -71,12 +71,18 @@ class Worker:
         self._project_cancel_scan = {}
 
     def reserve(self, run_id, fence, context, *, request_tools=None, verify_goal_source=False,
-                planner_request=False, generation_request=False, natural_spec_request=None):
+                planner_request=False, generation_request=False, natural_spec_request=None,
+                _generation_heartbeat_state=None):
         from .natural_trial_runs import check_worker
         check_worker(self, run_id)
+        if _generation_heartbeat_state is not None:
+            from .goal_applications import _check_heartbeat
+            if not generation_request:
+                raise DomainError("PERMISSION_DENIED", "Generation heartbeat has the wrong request family")
+            _check_heartbeat(_generation_heartbeat_state)
         if self.pa_trial is not None:
             from .pa_trial_dispatch import wait_unreserved
-            wait_unreserved(self, run_id)
+            wait_unreserved(self, run_id, _heartbeat_state=_generation_heartbeat_state)
         s = self.s
         if natural_spec_request is not None:
             from .natural_spec_runtime import reservation_settings
@@ -446,7 +452,7 @@ class Worker:
                     if current["status"] != state or current["cancel_intent"] or current["fence"] != fence or current["version"] != run["version"] + 1:
                         raise DomainError("VERSION_CONFLICT", "Spec generation terminal ownership changed")
 
-    def _heartbeat_lease(self, run, stopped, committed=None):
+    def _heartbeat_lease(self, run, stopped, committed=None, *, deadline=None, running_only=False):
         from .text_workflows import _sqlite_heartbeat_contention
 
         store, worker_id = self.store, self.id
@@ -461,7 +467,8 @@ class Worker:
                 committed["failure"] = error
             return committed["failure"]
 
-        deadline = run["created_at"] + self.s.run_seconds
+        deadline = min(run["created_at"] + self.s.run_seconds,
+                       run["created_at"] + self.s.run_seconds if deadline is None else deadline)
         while not stopped.is_set() and not self.stop.is_set():
             with committed["lock"]:
                 if committed.get("failure") is not None:
@@ -494,6 +501,8 @@ class Worker:
                             dict(_deadline=cutoff, _wait_seconds=min(5.0, remaining))
                             if store.sqlite else {}
                         )
+                        if running_only:
+                            options["_running_only"] = True
                         renewed = store.heartbeat(worker_id, run["id"], run["fence"],
                                                   lease_seconds, **options)
                         if renewed is None:

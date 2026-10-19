@@ -469,11 +469,14 @@ def preflight(worker, c, run, *, generation, natural):
     )
 
 
-def wait_unreserved(worker, run_id):
+def wait_unreserved(worker, run_id, *, _heartbeat_state=None):
     """Wait only for a not-yet-reserved slot; original heartbeat and deadlines remain."""
     b = _binding(worker)
+    if _heartbeat_state is not None:
+        from .goal_applications import _check_heartbeat
+        _check_heartbeat(_heartbeat_state)
     if _journal_binding(b):
-        return _journal_wait(worker, b, run_id)
+        return _journal_wait(worker, b, run_id, _heartbeat_state=_heartbeat_state)
     scope = budget.scope_for(b.contract, b.approval_key)
     with worker.store.tx() as c:
         budget._context(worker.store, c, scope.principal_id, scope)
@@ -502,9 +505,13 @@ def wait_unreserved(worker, run_id):
         b.contract.expires_at,
     )
     while last is not None and time.time() < last + 60:
+        if _heartbeat_state is not None:
+            _check_heartbeat(_heartbeat_state)
         if worker.stop.is_set() or time.time() >= deadline:
             raise DomainError("BUDGET_EXHAUSTED", "Original trial waiting interval ended")
         worker.stop.wait(min(0.25, max(0, min(last + 60, deadline) - time.time())))
+    if _heartbeat_state is not None:
+        _check_heartbeat(_heartbeat_state)
 
 
 def _request(b, run, aid, wire):
@@ -1153,7 +1160,7 @@ def _journal_state(store, c, b):
     return state, cursor, revision
 
 
-def _journal_wait(worker, b, rid):
+def _journal_wait(worker, b, rid, *, _heartbeat_state=None):
     with worker.store.tx() as c:
         state, cursor, _ = _journal_state(worker.store, c, b)
         gate.require(not state.halted and all(s.accepted for s in state.slots))
@@ -1164,11 +1171,19 @@ def _journal_wait(worker, b, rid):
     deadline = min(header["created_at"] + min(worker.s.run_seconds, b.contract.caps.run_seconds),
                    b.contract.expires_at)
     last = cursor.last_reserved_at
+    if _heartbeat_state is not None:
+        from .goal_applications import _check_heartbeat
+        _check_heartbeat(_heartbeat_state)
     while last is not None and time.time() < last + 60:
         _binding(worker)
+        if _heartbeat_state is not None:
+            from .goal_applications import _check_heartbeat
+            _check_heartbeat(_heartbeat_state)
         if worker.stop.is_set() or time.time() >= deadline:
             raise DomainError("BUDGET_EXHAUSTED", "Original trial waiting interval ended")
         worker.stop.wait(min(0.25, max(0, min(last + 60, deadline) - time.time())))
+    if _heartbeat_state is not None:
+        _check_heartbeat(_heartbeat_state)
 
 
 def _journal_owner(c, b, run, aid):

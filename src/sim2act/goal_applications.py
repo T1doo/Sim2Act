@@ -834,21 +834,83 @@ def check_sender(worker, c, run, messages, tools):
         raise DomainError("VERSION_CONFLICT", "Generation stage differs from anchored feedback")
 
 
+def _raise_heartbeat_failure(error):
+    if error is not None:
+        if isinstance(error, DomainError):
+            raise error
+        raise DomainError("RESOURCE_UNAVAILABLE", "Generation heartbeat renewal failed") from error
+
+
+def _check_heartbeat(state):
+    """A failure stops progress; this state never supplies Run authority."""
+    with state["lock"]:
+        error = state["failure"]
+    _raise_heartbeat_failure(error)
+
+
+def _renew_committed_lease(worker, run, state, *, deadline=None):
+    """Original guarded metadata transaction, outside all business writers."""
+    from .text_workflows import _sqlite_heartbeat_contention
+
+    with state["lock"]:
+        _raise_heartbeat_failure(state["failure"])
+        cutoff = min(state["lease_until"], state["deadline"],
+                     run["created_at"] + worker.s.run_seconds,
+                     state["deadline"] if deadline is None else deadline)
+        remaining = cutoff - time.time()
+        if worker.stop.is_set() or remaining <= 0:
+            state["failure"] = DomainError("BUDGET_EXHAUSTED", "Original generation heartbeat interval ended")
+            _raise_heartbeat_failure(state["failure"])
+        retry_end = time.monotonic() + remaining
+        for attempt in range(16):
+            remaining = min(cutoff - time.time(), retry_end - time.monotonic())
+            if worker.stop.is_set() or remaining <= 0:
+                state["failure"] = DomainError("BUDGET_EXHAUSTED", "Original generation heartbeat interval ended")
+                _raise_heartbeat_failure(state["failure"])
+            try:
+                renewed = worker.store.heartbeat(worker.id, run["id"], run["fence"],
+                    worker.s.lease_seconds, _deadline=cutoff,
+                    _wait_seconds=min(5.0, remaining), _running_only=True)
+                if renewed is None:
+                    raise DomainError("VERSION_CONFLICT", "Missing committed generation heartbeat")
+            except Exception as error:
+                if (_sqlite_heartbeat_contention(worker.store, error) and attempt < 15
+                        and time.time() < cutoff and time.monotonic() < retry_end):
+                    continue
+                state["failure"] = error
+                _raise_heartbeat_failure(error)
+            state["lease_until"] = renewed
+            return
+
+
 def process(worker, run, contract):
     rid, fence = run["id"], run["fence"]
     stopped = threading.Event()
+    deadline = min(run["created_at"] + worker.s.run_seconds,
+                   run["created_at"] + contract.limits.run_seconds)
+    if getattr(worker, "pa_trial", None) is not None:
+        from .pa_trial_dispatch import _binding
+        selected = _binding(worker).contract
+        deadline = min(deadline, selected.expires_at, run["created_at"] + selected.caps.run_seconds)
+    heartbeat_state = dict(lock=threading.Lock(), lease_until=run["lease_until"],
+        deadline=deadline, failure=None, generation_heartbeat=True)
 
     def beat():
-        while not stopped.wait(worker.s.lease_seconds / 3):
-            try:
-                worker.store.heartbeat(worker.id, rid, fence, worker.s.lease_seconds)
-            except Exception:
-                stopped.set()
+        try:
+            error = worker._heartbeat_lease(run, stopped, heartbeat_state,
+                deadline=deadline, running_only=True)
+        except Exception as unexpected:
+            error = unexpected
+        if error is not None:
+            with heartbeat_state["lock"]:
+                if heartbeat_state["failure"] is None:
+                    heartbeat_state["failure"] = error
 
     thread = threading.Thread(target=beat, daemon=True)
     thread.start()
     try:
         while True:
+            _renew_committed_lease(worker, run, heartbeat_state)
             with worker.store.tx() as c:
                 current = locked(worker, c, rid, fence)
                 messages, prior = history(worker.store, c, current)
@@ -858,6 +920,7 @@ def process(worker, run, contract):
                 tools = stage_tools(contract.application_generation, len(prior))
                 check_sender(worker, c, current, messages, tools)
                 ctx["messages"] = messages
+            _renew_committed_lease(worker, run, heartbeat_state)
             wire = body(messages, tools, worker.s.max_output_tokens)
             if len(wire) > 32768:
                 raise DomainError("BUDGET_EXHAUSTED", "Complete generation wire exceeds geometry")
@@ -869,6 +932,7 @@ def process(worker, run, contract):
                     request_tools=tools,
                     verify_goal_source=True,
                     generation_request=True,
+                    _generation_heartbeat_state=heartbeat_state,
                 )
             except DomainError as limited:
                 if limited.code != "RATE_LIMITED" or contract.application_generation.activation is None:
@@ -918,12 +982,13 @@ def process(worker, run, contract):
             raw = None
             started = time.monotonic()
             try:
+                _renew_committed_lease(worker, run, heartbeat_state)
                 if getattr(worker, "pa_trial", None) is None:
                     raw = configured_provider(worker).request_serialized(wire, guard)
                 else:
                     from .pa_trial_dispatch import request_captured
                     raw = request_captured(worker, run, aid, wire, guard,
-                                           configured_provider(worker)).parsed
+                        configured_provider(worker), _heartbeat_state=heartbeat_state).parsed
                 original, raw_metadata = response_archive(raw)
                 if original is None:
                     raise DomainError(
@@ -974,6 +1039,7 @@ def process(worker, run, contract):
                         },
                     )
                 if not prior:
+                    _renew_committed_lease(worker, run, heartbeat_state)
                     if (
                         len(calls) != 1
                         or calls[0]["function"]["name"] != "resource.read"
@@ -984,6 +1050,7 @@ def process(worker, run, contract):
                         )
                     call = {**calls[0], "id": "ga_read"}
                     dispatch(worker.store, rid, fence, call)
+                    _renew_committed_lease(worker, run, heartbeat_state)
                     settle_generation(worker, contract, rid, aid, raw, fence)
                     continue
                 if calls:
@@ -1054,6 +1121,7 @@ def process(worker, run, contract):
                         from .pa_trial_dispatch import settle_verified
                         settle_verified(worker, c, current, aid, raw)
                         check_active(worker, c, locked(worker, c, rid, fence), aid)
+                _renew_committed_lease(worker, run, heartbeat_state)
                 worker.finish(
                     rid,
                     fence,

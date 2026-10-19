@@ -501,15 +501,22 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
         ), supplied
 
     def renew_controller():
-        if _business is None or item.stage == "generate":
+        if _business is None:
             return
         from .text_workflows import renew_sync
         same_binding()
         run, state, adapter = _business[1], _business[4], _business[3]
-        _require(type(state) is dict and state.get("sync_contention_recovery") is True)
         deadline = min(run["created_at"] + adapter.settings.run_seconds,
                        run["created_at"] + original.caps.run_seconds, original.expires_at)
         _require(not worker.stop.is_set() and time.time() < deadline, "BUDGET_EXHAUSTED")
+        if item.stage == "generate":
+            from .goal_applications import _renew_committed_lease
+            _require(type(state) is dict and state.get("generation_heartbeat") is True)
+            _renew_committed_lease(worker, run, state, deadline=deadline)
+            same_binding()
+            _require(not worker.stop.is_set() and time.time() < deadline, "BUDGET_EXHAUSTED")
+            return
+        _require(type(state) is dict and state.get("sync_contention_recovery") is True)
         # Original guarded heartbeat, at a transaction boundary only. It
         # cannot revive an expired owner, renew a stop, or enlarge the deadline.
         if store.sqlite:

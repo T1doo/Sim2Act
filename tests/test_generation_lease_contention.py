@@ -14,15 +14,18 @@ import time
 from contextlib import contextmanager
 from types import CodeType
 
+import pytest
 import test_natural_spec_apps as apps
-from sqlalchemy import select
+from sqlalchemy import select, update
 from test_pb_spec_production_controller import prepare_pb
+from test_spec_app_operations import snapshot
 from test_spec_production_controller import configured
 from test_spec_production_controller import no_real_http as no_real_http
 
 from sim2act import db
 from sim2act import goal_applications as generation
-from sim2act.db import Store, attempts, runs
+from sim2act import pa_trial_dispatch as trial
+from sim2act.db import Store, attempts, grants, runs
 from sim2act.errors import DomainError
 from sim2act.worker import Worker
 
@@ -238,3 +241,42 @@ def test_generate_recovers_one_bounded_sqlite_busy_without_losing_original_lease
     assert len(sent) == len(fixture["sends"]) == 1 and len(reserve_calls) == 2
     assert counters["requests"] == counters["attempts"] == 1 and counters["status"] == "RUNNING"
     assert recovered.is_set() and guard_error is None, "A single bounded BUSY permanently stopped the original Generate heartbeat"
+
+
+def test_generation_true_revocation_latches_and_stops_unreserved_progress(env, tmp_path, monkeypatch):
+    """A real synthetic Grant revocation is never classified as transient BUSY."""
+    data, binding, fixture, factory = configured(env, tmp_path, monkeypatch, prepare_case=prepare_pb)
+    worker = factory(data[0], data[1], goal_planner_transport=apps.generation_transport(data, "ordered", False)[1])
+    made = data[2].post(f"/api/projects/{data[4]}/goal-cards/{data[6]['id']}/application-runs",
+        json=dict(expected_version=data[6]["version"], expected_fingerprint=data[6]["fingerprint"],
+                  request_key=binding.contract.stage_keys.generate, family="natural_spec"))
+    assert made.status_code == 202, made.text
+    run = data[0].claim(worker.id, data[1].lease_seconds, trial_binding=binding)
+    assert run is not None and run["id"] == made.json()["run_id"]
+    state = dict(lock=threading.Lock(), lease_until=run["lease_until"], failure=None,
+                 deadline=min(run["created_at"] + data[1].run_seconds, binding.contract.expires_at))
+    with data[0].tx() as c:
+        changed = c.execute(update(grants).where(grants.c.principal_id == data[3],
+            grants.c.runtime_id == run["runtime_id"], grants.c.project_id == data[4],
+            grants.c.resource_id == data[5], grants.c.revoked.is_(False)).values(revoked=True))
+        assert changed.rowcount > 0
+    before = snapshot(data[0])
+    with pytest.raises(DomainError) as revoked:
+        generation._renew_committed_lease(worker, run, state)
+    assert revoked.value.code == "GRANT_REVOKED" and state["failure"] is revoked.value
+    assert snapshot(data[0]) == before and fixture["sends"] == []
+
+    def unexpected_heartbeat(*args, **kwargs):
+        pytest.fail("Latched permanent failure cannot try a new renewal")
+
+    monkeypatch.setattr(data[0], "heartbeat", unexpected_heartbeat)
+    for call in (lambda: generation._renew_committed_lease(worker, run, state),
+                 lambda: trial.wait_unreserved(worker, run["id"], _heartbeat_state=state)):
+        with pytest.raises(DomainError) as denied:
+            call()
+        assert denied.value is revoked.value
+    assert snapshot(data[0]) == before and fixture["sends"] == []
+    (tmp_path / "permanent-revocation-proof.json").write_text(json.dumps(dict(
+        real_models=0, mock_exchanges=0, actual_grant_revoked=True, error=revoked.value.code,
+        same_error_latched=True, subsequent_renewals=0, durable_business_changes=0), indent=2))
+    data[2].close()
