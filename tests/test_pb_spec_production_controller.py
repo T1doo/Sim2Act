@@ -177,7 +177,7 @@ def refused_archive_copies(data, binding, root):
 def observe_reservation_reads(monkeypatch):
     """Passively inspect real checks and ensure their scope exits before writes."""
     local, reports, tokens = threading.local(), [], []
-    reserve, preflight = Worker.reserve, trial.preflight
+    reserve, preflight, guard = Worker.reserve, trial.preflight, Store.guard
     reservation_check, journal_reads = runtime.reservation_check, trial._journal_reads
 
     def check_token(worker, c, name):
@@ -190,7 +190,28 @@ def observe_reservation_reads(monkeypatch):
 
     def observed_preflight(worker, c, run, **kwargs):
         check_token(worker, c, "preflight")
+        record = getattr(local, "record", None)
+        if record is not None:
+            assert record["guard_entered"] == record["guard_returned"] >= 1
+            assert record["guard_depth"] == 0
         return preflight(worker, c, run, **kwargs)
+
+    def observed_guard(store, c, *args, **kwargs):
+        record = getattr(local, "record", None)
+        if record is not None:
+            token = c.info.get("pb_source_reads")
+            assert pb._source_reads_current(store, c, token) and token is record["token"]
+            record["guard_entered"] += 1
+            record["guard_depth"] += 1
+        try:
+            value = guard(store, c, *args, **kwargs)
+        finally:
+            if record is not None:
+                record["guard_depth"] -= 1
+        if record is not None:
+            assert pb._source_reads_current(store, c, token)
+            record["guard_returned"] += 1
+        return value
 
     def observed_check(worker, c, *args):
         check_token(worker, c, "reservation_check")
@@ -222,11 +243,14 @@ def observe_reservation_reads(monkeypatch):
     def observed_reserve(worker, run_id, *args, **kwargs):
         if kwargs.get("natural_spec_request") is None:
             return reserve(worker, run_id, *args, **kwargs)
-        record = dict(run_id=run_id, depth=0, checks=[], writes=0, cleared=False)
+        record = dict(run_id=run_id, depth=0, checks=[], writes=0, cleared=False,
+                      guard_entered=0, guard_returned=0, guard_depth=0)
         local.record = record
         try:
             result = reserve(worker, run_id, *args, **kwargs)
             assert record["checks"] == ["preflight", "reservation_check", "reservation_check_return"]
+            assert record["guard_entered"] == record["guard_returned"] >= 1
+            assert record["guard_depth"] == 0
             assert record["cleared"] and record["depth"] == 0 and record["writes"] > 0
             reports.append({k: v for k, v in record.items() if k != "token"})
             return result
@@ -240,6 +264,7 @@ def observe_reservation_reads(monkeypatch):
             record["writes"] += 1
 
     monkeypatch.setattr(Worker, "reserve", observed_reserve)
+    monkeypatch.setattr(Store, "guard", observed_guard)
     monkeypatch.setattr(trial, "preflight", observed_preflight)
     monkeypatch.setattr(runtime, "reservation_check", observed_check)
     monkeypatch.setattr(trial, "_journal_reads", observed_reads)

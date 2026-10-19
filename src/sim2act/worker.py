@@ -139,11 +139,6 @@ class Worker:
                     .one()
                 )
                 self.store.lock_project(c, owner["principal_id"], owner["project_id"])
-            run = self.store.guard(c, run_id, fence)
-            from .natural_trial_runs import check_worker_tx
-            check_worker_tx(self, c, run_id)
-            if self.store.frozen_contract(c, run).ordinary_csv_report is not None:
-                raise DomainError("PERMISSION_DENIED", "事前CSV完整报告合同禁止模型请求或预留")
             from .natural_live_admission import PBTrialContract
             from .pa_trial_dispatch import _journal_reads, _production_binding
             # The original P-B production natural checks share complete proofs
@@ -154,6 +149,11 @@ class Worker:
                 and _production_binding(self.pa_trial)
                 and type(self.pa_trial.contract) is PBTrialContract else nullcontext())
             with proof_reads:
+                run = self.store.guard(c, run_id, fence)
+                from .natural_trial_runs import check_worker_tx
+                check_worker_tx(self, c, run_id)
+                if self.store.frozen_contract(c, run).ordinary_csv_report is not None:
+                    raise DomainError("PERMISSION_DENIED", "事前CSV完整报告合同禁止模型请求或预留")
                 if self.pa_trial is not None:
                     from .pa_trial_dispatch import preflight
                     preflight(self, c, run, generation=generation_request,
