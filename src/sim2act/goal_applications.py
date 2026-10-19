@@ -12,7 +12,7 @@ from typing import Literal
 
 import httpx
 from pydantic import Field
-from sqlalchemy import insert, select, update
+from sqlalchemy import and_, insert, select, update
 
 from .contracts import (
     ActionSpec,
@@ -191,8 +191,11 @@ def _journal_scope_anchor(store, c, rid, *, expected=None):
     if owner is None or expected is not None and dict(owner) != expected:
         return None
     store.own_project(c, owner["principal_id"], owner["project_id"])
-    refs = c.execute(select(runs.c.resource_refs).where(runs.c.id == rid)).scalar_one()
-    hints = c.execute(select(run_contracts.c.fingerprint,
+    # Keep the original owned scalar gate above, then project the same fields
+    # in one read. LEFT joins retain missing rows; each event/Attempt keeps its
+    # own identity so the join cannot turn one ACCEPTED into three events.
+    rows = c.execute(select(runs.c.resource_refs.label("run_refs"),
+        run_contracts.c.run_id.label("contract_run_id"), run_contracts.c.fingerprint,
         run_contracts.c.snapshot["application_generation"]["version"].as_string().label("kind"),
         run_contracts.c.snapshot["application_generation"]["app_id"].as_string().label("app_id"),
         run_contracts.c.snapshot["application_generation"]["activation"]["approval_id"].as_string().label("aid"),
@@ -201,23 +204,35 @@ def _journal_scope_anchor(store, c, rid, *, expected=None):
         run_contracts.c.snapshot["goal"]["project_id"].as_string().label("project"),
         run_contracts.c.snapshot["goal"]["resource_refs"].label("refs"),
         run_contracts.c.snapshot["resources"][0]["resource_id"].as_string().label("resource"),
-        run_contracts.c.snapshot["source_goal_card"]["snapshot"]["content"]["resource_refs"].label("goal_refs"))
-        .where(run_contracts.c.run_id == rid)).mappings().first()
-    accepted = c.execute(select(events.c.id,
-        events.c.data["application_generation"]["version"].as_string().label("kind"),
-        events.c.data["application_generation"]["activation"]["approval_id"].as_string().label("aid"),
-        events.c.data["application_generation"]["app_id"].as_string().label("app_id"))
-        .where(events.c.run_id == rid, events.c.kind == "ACCEPTED")
-        .order_by(events.c.id)).mappings().all()
-    versions = c.execute(select(attempts.c.parameters["pa_trial_binding"]["version"].as_string())
-        .where(attempts.c.run_id == rid)).scalars().all()
-    if (hints is None or hints["kind"] != "goal-natural-spec-application.v1"
+        run_contracts.c.snapshot["source_goal_card"]["snapshot"]["content"]["resource_refs"].label("goal_refs"),
+        events.c.id.label("event_id"),
+        events.c.data["application_generation"]["version"].as_string().label("event_kind"),
+        events.c.data["application_generation"]["activation"]["approval_id"].as_string().label("event_aid"),
+        events.c.data["application_generation"]["app_id"].as_string().label("event_app_id"),
+        attempts.c.id.label("attempt_id"),
+        attempts.c.parameters["pa_trial_binding"]["version"].as_string().label("version"))
+        .select_from(runs).outerjoin(run_contracts, run_contracts.c.run_id == runs.c.id)
+        .outerjoin(events, and_(events.c.run_id == runs.c.id, events.c.kind == "ACCEPTED"))
+        .outerjoin(attempts, attempts.c.run_id == runs.c.id)
+        .where(runs.c.id == rid).order_by(events.c.id, attempts.c.id).limit(4)).mappings().all()
+    # Exactly one ACCEPTED and three Attempts is the only eligible product.
+    # The fourth projected row already disproves it; never expand bad history.
+    if not rows or len(rows) > 3 or rows[0]["contract_run_id"] is None:
+        return None
+    first = rows[0]
+    hints = {key: first[key] for key in ("fingerprint", "kind", "app_id", "aid", "runtime",
+        "owner", "project", "refs", "resource", "goal_refs")}
+    accepted_by_id = {r["event_id"]: dict(id=r["event_id"], kind=r["event_kind"],
+        aid=r["event_aid"], app_id=r["event_app_id"]) for r in rows if r["event_id"] is not None}
+    accepted = list(accepted_by_id.values())
+    versions = list({r["attempt_id"]: r["version"] for r in rows if r["attempt_id"] is not None}.values())
+    if (hints["kind"] != "goal-natural-spec-application.v1"
             or hints["aid"] is not None or len(accepted) != 1
             or accepted[0]["kind"] != hints["kind"] or accepted[0]["aid"] is not None
             or (versions not in ([JOURNAL_VERSION] * 3, [PRODUCTION_VERSION] * 3, ["pa-trial-dispatch.v1"] * 3)
                 and not (versions == [None] * 3 and _ordinary_generation_reads(store, c, rid)))):
         return None
-    return dict(owner=dict(owner), refs=refs, hints=dict(hints),
+    return dict(owner=dict(owner), refs=first["run_refs"], hints=hints,
                 accepted=[dict(row) for row in accepted], versions=versions)
 
 
