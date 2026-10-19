@@ -765,6 +765,23 @@ def bound(store, c, user, job, limits, *, validate_input=True, _source_origin=Fa
                       _source_origin=_source_origin)
 
 
+def _bound_clock_from_facts(clock, job, contract, manifest):
+    """Pure original predicates; caller retains all preceding scope/IO gates."""
+    require(isinstance(clock, dict) and set(clock) == {"created_at", "deadline"}
+        and type(clock["created_at"]) is float and type(clock["deadline"]) is float
+        and math.isfinite(clock["created_at"]) and math.isfinite(clock["deadline"])
+        and 0 < clock["created_at"] < clock["deadline"]
+        and clock["created_at"] == job["created_at"]
+        and clock["deadline"] == job["created_at"] + min(contract.limits.run_seconds, manifest.runtime_limits.run_seconds))
+
+
+def _bound_plan_from_facts(draft, snapshot, source):
+    """Pure original predicates; caller retains all preceding scope/IO gates."""
+    plan = dict(definition=draft["candidate"], input=snapshot["input"],
+        plan_fingerprint=fingerprint(draft["candidate"]), source_hash=source["hash"])
+    return plan
+
+
 def _bound(store, c, user, job, limits, *, validate_input=True, _source_origin=False):
     from contextlib import nullcontext
     from threading import get_ident
@@ -877,12 +894,7 @@ def _bound(store, c, user, job, limits, *, validate_input=True, _source_origin=F
     if natural.is_candidate(draft["candidate"]):
         from .natural_spec_runtime import counters
         clock = snapshot.get("natural_spec_clock")
-        require(isinstance(clock, dict) and set(clock) == {"created_at", "deadline"}
-            and type(clock["created_at"]) is float and type(clock["deadline"]) is float
-            and math.isfinite(clock["created_at"]) and math.isfinite(clock["deadline"])
-            and 0 < clock["created_at"] < clock["deadline"]
-            and clock["created_at"] == job["created_at"]
-            and clock["deadline"] == job["created_at"] + min(contract.limits.run_seconds, manifest.runtime_limits.run_seconds))
+        _bound_clock_from_facts(clock, job, contract, manifest)
         counters(c, job, manifest)
     else:
         require(all(type(job["context"].get(k)) is int and job["context"][k] == 0
@@ -891,8 +903,7 @@ def _bound(store, c, user, job, limits, *, validate_input=True, _source_origin=F
         require(c.execute(select(attempts.c.id).where(attempts.c.run_id == job["id"])).first() is None)
     if validate_input:
         validate_value(manifest.input_schema, snapshot["input"])
-    plan = dict(definition=draft["candidate"], input=snapshot["input"],
-        plan_fingerprint=fingerprint(draft["candidate"]), source_hash=source["hash"])
+    plan = _bound_plan_from_facts(draft, snapshot, source)
     value = dict(snapshot=snapshot, app_run=app_run, release=release, draft=draft,
         source=source, goal=goal, plan=plan, report=report, run_mode=contract.mode,
         audit_fingerprint=audit_fingerprint(store, c, user, draft, _logic_out=logic_out, _release=release,

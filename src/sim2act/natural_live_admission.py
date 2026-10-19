@@ -417,6 +417,41 @@ def _stage_current_read(store, c, user, contract, stage, run_id, pa_spec_apps, *
                                 _journal=_journal)
 
 
+def _stage_target_from_facts(bound, target):
+    """Pure original predicates; caller retains all preceding scope/IO gates."""
+    require(bound["source"]["resource_id"] == target.resource_id
+            and bound["source"]["hash"] == target.source_hash
+            and bound["source"]["content"] == target.content
+            and bound["goal"] == dict(card_id=target.card_id, version=target.goal_version,
+                fingerprint=target.goal_fingerprint, snapshot=target.goal_snapshot.model_dump()))
+
+
+def _stage_generate_from_facts(contract, approval, gen, frozen):
+    """Pure original predicates; caller retains all preceding scope/IO gates."""
+    first = contract.bindings[0]
+    require(type(gen["created_at"]) in (float, int) and math.isfinite(gen["created_at"])
+            and approval.approved_at <= gen["created_at"] < contract.expires_at
+            and frozen.source_goal_card is not None
+            and frozen.source_goal_card.model_dump() == dict(card_id=first.card_id,
+                version=first.goal_version, fingerprint=first.goal_fingerprint,
+                snapshot=first.goal_snapshot.model_dump())
+            and frozen.application_generation is not None
+            and frozen.application_generation.version == "goal-natural-spec-application.v1"
+            and frozen.request_model == contract.model,
+            "Original Generate must be accepted under this precise trial approval")
+
+
+def _stage_authority_fields_from_facts(contract, stage, timing, job, bound, inst, draft, release, gen_id, raw, target):
+    """Partial fields only; never a complete StageAuthority or a permission."""
+    return dict(**timing, contract_fingerprint=fingerprint(contract.model_dump()),
+        stage=stage, run_id=job["id"], accepted_fingerprint=job["fingerprint"],
+        app_run_id=bound["app_run"]["id"], instance_id=inst["id"], instance_revision=inst["revision"],
+        runtime_id=job["runtime_id"], app_id=draft["id"], candidate_fingerprint=draft["fingerprint"],
+        recipe_fingerprint=fingerprint(draft["candidate"]["spec_recipe"]),
+        release_id=release["id"], release_fingerprint=release["fingerprint"], generation_run_id=gen_id,
+        generation_candidate_fingerprint=fingerprint(raw), target_goal_fingerprint=target.goal_fingerprint,)
+
+
 def _stage_current_bound(store, c, user, contract, stage, job, bound, epoch, *, _journal=False):
     """Continuation of a complete binding proof in this synchronous read call."""
     from . import natural_specs, pa_spec_apps
@@ -450,11 +485,7 @@ def _stage_current_bound(store, c, user, contract, stage, job, bound, epoch, *, 
             and current_release["fingerprint"] == release["fingerprint"]
             and bound["app_run"]["request_key"] == getattr(contract.stage_keys, stage))
     target = contract.bindings[1 if stage == "cold" else 0]
-    require(bound["source"]["resource_id"] == target.resource_id
-            and bound["source"]["hash"] == target.source_hash
-            and bound["source"]["content"] == target.content
-            and bound["goal"] == dict(card_id=target.card_id, version=target.goal_version,
-                fingerprint=target.goal_fingerprint, snapshot=target.goal_snapshot.model_dump()))
+    _stage_target_from_facts(bound, target)
     # Match the original generation by its frozen future key, not a supplied ID.
     gen_id = c.execute(select(runs.c.id).where(runs.c.principal_id == user,
         runs.c.project_id == contract.project_id,
@@ -467,17 +498,7 @@ def _stage_current_bound(store, c, user, contract, stage, job, bound, epoch, *, 
     approval = _saved(c, user, entity(contract), APPROVE, "approve", Approval)
     gen = c.execute(select(runs).where(runs.c.id == gen_id)).mappings().one()
     frozen = store.frozen_contract(c, gen)
-    first = contract.bindings[0]
-    require(type(gen["created_at"]) in (float, int) and math.isfinite(gen["created_at"])
-            and approval.approved_at <= gen["created_at"] < contract.expires_at
-            and frozen.source_goal_card is not None
-            and frozen.source_goal_card.model_dump() == dict(card_id=first.card_id,
-                version=first.goal_version, fingerprint=first.goal_fingerprint,
-                snapshot=first.goal_snapshot.model_dump())
-            and frozen.application_generation is not None
-            and frozen.application_generation.version == "goal-natural-spec-application.v1"
-            and frozen.request_model == contract.model,
-            "Original Generate must be accepted under this precise trial approval")
+    _stage_generate_from_facts(contract, approval, gen, frozen)
     original = draft["candidate"]
     if pb_cold:
         _pb_origin(store, c, user, contract, approval.request.request_key, bound)
@@ -507,14 +528,8 @@ def _stage_current_bound(store, c, user, contract, stage, job, bound, epoch, *, 
                                 source.authority.run_id, "source")
     timing = _stage_deadlines(c, user, contract, stage, gen_id)
     authority_model = StageAuthorityV2 if isinstance(contract, TrialContractV2) else StageAuthority
-    authority = authority_model(**timing, contract_fingerprint=fingerprint(contract.model_dump()),
-        stage=stage, run_id=job["id"], accepted_fingerprint=job["fingerprint"],
-        app_run_id=bound["app_run"]["id"], instance_id=inst["id"], instance_revision=inst["revision"],
-        runtime_id=job["runtime_id"], app_id=draft["id"], candidate_fingerprint=draft["fingerprint"],
-        recipe_fingerprint=fingerprint(draft["candidate"]["spec_recipe"]),
-        release_id=release["id"], release_fingerprint=release["fingerprint"], generation_run_id=gen_id,
-        generation_candidate_fingerprint=fingerprint(raw), target_goal_fingerprint=target.goal_fingerprint,
-        authorization_fingerprint=authorization_fingerprint(c, user, contract.project_id,
+    fields = _stage_authority_fields_from_facts(contract, stage, timing, job, bound, inst, draft, release, gen_id, raw, target)
+    authority = authority_model(**fields, authorization_fingerprint=authorization_fingerprint(c, user, contract.project_id,
             job["runtime_id"], [b.resource_id for b in contract.bindings]))
     return authority, job
 

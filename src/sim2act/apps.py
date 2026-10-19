@@ -3,11 +3,15 @@
 import copy
 import json
 import time
+from contextlib import contextmanager
+from sqlite3 import Connection as SQLiteConnection
+from threading import get_ident
 
 from sqlalchemy import insert, select, update
 
-from .contracts import Limits, validate_action, validate_action_input, validate_value
+from .contracts import AppManifest, Limits, validate_action, validate_action_input, validate_value
 from .db import (
+    Store,
     app_drafts,
     app_previews,
     fingerprint,
@@ -23,6 +27,115 @@ from .errors import DomainError
 from .goals import validate_card_version
 from .preflight import preflight
 from .tools import authorized_read, csv_column_options, validate_call
+
+
+class _ColdGraphOriginFacts:
+    """Inactive outside its local producer scope; checked facts, never authority.
+
+    The future graph producer must finish the complete role's origin proof before
+    creating this value. No production caller creates it in this batch.
+    """
+
+    def __init__(self, worker, c, inputs, scope, role, role_limits, user, draft, limits, origin):
+        from .config import Settings
+        from .natural_live_admission import PBTrialContract
+        from .pa_spec_apps import require
+        from .spec_production import ProductionTrialBinding
+        from .worker import Worker
+
+        require(type(worker) is Worker and type(worker.store) is Store and type(worker.s) is Settings
+            and type(worker.pa_trial) is ProductionTrialBinding
+            and type(worker.pa_trial.contract) is PBTrialContract
+            and role in {"source", "generate", "cold"}
+            and type(inputs) is dict and bool(inputs)
+            and type(role_limits) is dict
+            and set(role_limits) == {"source", "generate", "platform", "trial", "per_use"}
+            and all(value is None or type(value) is Limits for value in role_limits.values())
+            and type(limits) is Limits and type(origin) is tuple and len(origin) == 4
+            and type(origin[0]) is AppManifest and all(type(value) is dict for value in origin[1:]),
+            "Strict origin requires complete local producer facts")
+        self.worker, self.store, self.settings = worker, worker.store, worker.s
+        self.engine = worker.store.engine
+        self.settings_values = dict(vars(worker.s))
+        self.binding, self.stop = worker.pa_trial, worker.stop
+        self.transport, self.worker_id = worker.goal_planner_transport, worker.id
+        self.connection, self.transaction = c, c.get_transaction()
+        require(isinstance(c.connection.driver_connection, SQLiteConnection))
+        self.driver = c.connection.driver_connection
+        self.changes, self.thread = self.driver.total_changes, get_ident()
+        self.token, self.epoch = c.info.get("pb_source_reads"), c.info.get("source_proof_write_epoch", 0)
+        self.scope, self.nonce = scope, scope[0]
+        self.role, self.role_limits, self.inputs = role, role_limits, inputs
+        self.user, self.draft, self.limits, self.origin = user, draft, limits, origin
+        self.active, self.busy = True, False
+        self.key = self.input_key()
+        self.check(self.store, c, user, draft, limits)
+
+    def input_key(self):
+        from .natural_spec_runtime import _model_inputs
+
+        b = self.binding
+        manifest, report, source, goal = self.origin
+        return _model_inputs(dict(inputs=self.inputs, role=self.role, role_limits=self.role_limits,
+            principal=self.user, draft=self.draft, limits=self.limits,
+            origin=[manifest.model_dump(), report, source, goal],
+            binding=dict(contract=b.contract.model_dump(), key=b.approval_key,
+                account=b.account_id, version=b.version, fingerprint=b.contract_fingerprint)))
+
+    def check(self, store, c, user, draft, limits):
+        try:
+            self._check(store, c, user, draft, limits)
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def _check(self, store, c, user, draft, limits):
+        from .pa_spec_apps import require
+        from .pb_natural_specs import _source_reads_current
+
+        w = self.worker
+        require(type(self.inputs) is dict and bool(self.inputs)
+            and self.role in {"source", "generate", "cold"}
+            and type(self.role_limits) is dict
+            and set(self.role_limits) == {"source", "generate", "platform", "trial", "per_use"}
+            and all(value is None or type(value) is Limits for value in self.role_limits.values())
+            and type(limits) is Limits and type(self.origin) is tuple and len(self.origin) == 4
+            and type(self.origin[0]) is AppManifest and all(type(value) is dict for value in self.origin[1:]),
+            "Strict origin fact shapes changed")
+        require(self.active and len(self.scope) == 1 and self.scope[0] is self.nonce
+            and self.store is store and w.store is store and c is self.connection
+            and c.engine is self.engine and store.engine is self.engine and w.s is self.settings
+            and vars(w.s) == self.settings_values and w.pa_trial is self.binding
+            and w.stop is self.stop and w.goal_planner_transport is self.transport
+            and w.id == self.worker_id and getattr(w, "_journal_trial_store", None) is store
+            and getattr(w, "_journal_trial_binding", None) is self.binding
+            and getattr(w, "_journal_trial_drift", None) is False
+            and not c.closed and c.get_transaction() is self.transaction
+            and c.connection.driver_connection is self.driver
+            and self.driver.total_changes == self.changes and self.thread == get_ident()
+            and self.epoch == c.info.get("source_proof_write_epoch", 0)
+            and _source_reads_current(store, c, self.token)
+            and user == self.user and draft is self.draft and limits is self.limits
+            and self.input_key() == self.key,
+            "Strict origin read segment or complete inputs changed")
+
+    def invalidate(self):
+        self.active = False
+
+
+@contextmanager
+def _cold_graph_origin_facts(worker, c, inputs, role, role_limits, user, draft, limits, origin):
+    """Explicit future producer handoff; performs no IO, grants or origin proof."""
+    scope = [object()]
+    facts = None
+    try:
+        facts = _ColdGraphOriginFacts(worker, c, inputs, scope, role, role_limits, user, draft, limits, origin)
+        yield facts
+        facts.check(worker.store, c, user, draft, limits)
+    finally:
+        scope.clear()
+        if facts is not None:
+            facts.invalidate()
 
 
 def object_schema(properties):
@@ -404,19 +517,55 @@ def validate_source_family(c, user, draft):
 
 def validate_frozen_candidate(store, c, user, draft, platform_limits, *, _origin_out=None, _reuse_origin=None):
     """Revalidate exact frozen specs and current grants without reading mutable draft content."""
+    if type(_reuse_origin) is _ColdGraphOriginFacts:
+        strict = _reuse_origin
+        try:
+            strict.check(store, c, user, draft, platform_limits)
+            from .pa_spec_apps import require
+            require(not strict.busy, "Strict origin handoff reentered")
+            strict.busy = True
+            return _validate_frozen_candidate(store, c, user, draft, platform_limits,
+                _origin_out=_origin_out, _strict_origin=strict)
+        except BaseException:
+            strict.invalidate()
+            raise
+        finally:
+            strict.busy = False
+    return _validate_frozen_candidate(store, c, user, draft, platform_limits,
+        _origin_out=_origin_out, _reuse_origin=_reuse_origin)
+
+
+def _validate_frozen_candidate(store, c, user, draft, platform_limits, *, _origin_out=None, _reuse_origin=None, _strict_origin=None):
     aid = draft["id"]
     from .text_continuations import draft_gate
 
     draft_gate(store, c, user, aid)
+    if _strict_origin is not None:
+        _strict_origin.check(store, c, user, draft, platform_limits)
     project = store.own_project(c, user, draft["project_id"])
+    if _strict_origin is not None:
+        _strict_origin.check(store, c, user, draft, platform_limits)
     candidate = draft["candidate"]
     if fingerprint(candidate) != draft["fingerprint"]:
         raise DomainError("VERSION_CONFLICT", "草案指纹已变化")
     validate_source_family(c, user, draft)
+    if _strict_origin is not None:
+        _strict_origin.check(store, c, user, draft, platform_limits)
     manifest, action, report = compile_preview(candidate, platform_limits)
+    if _strict_origin is not None:
+        _strict_origin.check(store, c, user, draft, platform_limits)
     from . import pa_spec_apps
-    if pa_spec_apps.is_candidate(candidate):
-        if (_reuse_origin is not None and _reuse_origin.get("_call_connection") is c
+    if _strict_origin is not None:
+        spec_candidate = pa_spec_apps.is_candidate(candidate)
+        _strict_origin.check(store, c, user, draft, platform_limits)
+        pa_spec_apps.require(spec_candidate, "Strict origin family changed")
+    else:
+        spec_candidate = pa_spec_apps.is_candidate(candidate)
+    if spec_candidate:
+        if _strict_origin is not None:
+            _strict_origin.check(store, c, user, draft, platform_limits)
+            origin = _strict_origin.origin
+        elif (_reuse_origin is not None and _reuse_origin.get("_call_connection") is c
                 and _reuse_origin.get("_call_transaction") is c.get_transaction()
                 and c.get_transaction() is not None and _reuse_origin.get("principal_id") == user
                 and _reuse_origin.get("platform_limits") == platform_limits.model_dump()
@@ -428,6 +577,8 @@ def validate_frozen_candidate(store, c, user, draft, platform_limits, *, _origin
             _origin_out.update(draft=copy.deepcopy(dict(draft)),manifest=manifest,action=action,report=report,origin=origin,
                 principal_id=user,platform_limits=platform_limits.model_dump(),
                 _call_connection=c,_call_transaction=c.get_transaction())
+        if _strict_origin is not None:
+            _strict_origin.check(store, c, user, draft, platform_limits)
         return draft, manifest, action, report
     from . import text_workflows
 

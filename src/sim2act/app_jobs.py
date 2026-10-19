@@ -466,6 +466,57 @@ def enqueue(
         }
 
 
+def _binding_queue_from_facts(job, user, b):
+    """Pure original predicates; caller retains all preceding scope/IO gates."""
+    if not b or job["principal_id"] != user:
+        raise DomainError("PERMISSION_DENIED")
+    s = b["snapshot"]
+    if (fingerprint(s) != b["fingerprint"] or job["fingerprint"] != b["fingerprint"]
+            or s.get("principal_id") != user or s.get("project_id") != job["project_id"]
+            or s.get("runtime_id") != job["runtime_id"] or s.get("run_id") != job["id"]):
+        raise DomainError("VERSION_CONFLICT", "Accepted queue identity changed before private AppRun read")
+    return s
+
+
+def _binding_app_run_from_facts(job, b, s, a):
+    """Pure original predicates; caller retains all preceding scope/IO gates."""
+    if not a or fingerprint(s) != b["fingerprint"] or job["fingerprint"] != b["fingerprint"]:
+        raise DomainError("VERSION_CONFLICT", "Queue binding fingerprint changed")
+
+
+def _binding_request_from_facts(job, user, s, a, request):
+    """Pure original predicates; caller retains all preceding scope/IO gates."""
+    if (
+        s["namespace"] != KIND
+        or job["context"].get("kind") != KIND
+        or s["model_requests"] != 0
+        or s["run_id"] != job["id"]
+        or s["app_run_id"] != a["id"]
+        or s["principal_id"] != user
+        or s["project_id"] != job["project_id"]
+        or s["runtime_id"] != job["runtime_id"]
+        or a["instance_id"] != s["instance_id"]
+        or a["release_id"] != s["release_id"]
+        or a["principal_id"] != user
+        or fingerprint(a["input"]) != fingerprint(s["input"])
+        or a["fingerprint"] != s["request_fingerprint"]
+        or fingerprint(request) != s["request_fingerprint"]
+    ):
+        raise DomainError("VERSION_CONFLICT", "AppRun no longer matches accepted queue binding")
+
+
+def _binding_release_from_facts(job, s, r, expected_resource):
+    """Pure original predicates; caller retains all preceding scope/IO gates."""
+    if (
+        r["fingerprint"] != s["expected_release_fp"]
+        or r["project_id"] != s["project_id"]
+        or r["snapshot"]["draft"]["runtime_id"] != s["runtime_id"]
+        or job["resource_refs"]
+        != [expected_resource]
+    ):
+        raise DomainError("VERSION_CONFLICT")
+
+
 def load_binding(store, c, user, job, limits, *, authorize=True, archival_software=None, return_release=False, _logic_out=None, _origin_out=None, _use_out=None):
     from .local_record_apps import reject_legacy as reject_record_legacy
     reject_record_legacy(c, rid=job["id"])
@@ -489,13 +540,7 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
         .mappings()
         .first()
     )
-    if not b or job["principal_id"] != user:
-        raise DomainError("PERMISSION_DENIED")
-    s = b["snapshot"]
-    if (fingerprint(s) != b["fingerprint"] or job["fingerprint"] != b["fingerprint"]
-            or s.get("principal_id") != user or s.get("project_id") != job["project_id"]
-            or s.get("runtime_id") != job["runtime_id"] or s.get("run_id") != job["id"]):
-        raise DomainError("VERSION_CONFLICT", "Accepted queue identity changed before private AppRun read")
+    s = _binding_queue_from_facts(job, user, b)
     a = (
         c.execute(select(internal_app_runs).where(internal_app_runs.c.id == b["app_run_id"],
             internal_app_runs.c.principal_id == user, internal_app_runs.c.instance_id == s.get("instance_id"),
@@ -503,8 +548,7 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
         .mappings()
         .first()
     )
-    if not a or fingerprint(s) != b["fingerprint"] or job["fingerprint"] != b["fingerprint"]:
-        raise DomainError("VERSION_CONFLICT", "Queue binding fingerprint changed")
+    _binding_app_run_from_facts(job, b, s, a)
     request = {
         k: s[k] for k in ["instance_id", "expected_revision", "expected_release_fp", "input"]
     }
@@ -533,23 +577,7 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
         request[csv_revision.MARKER] = s[csv_revision.MARKER]
     if "owner_goal_binding_fingerprint" in s:
         request["owner_goal_binding_fingerprint"] = s["owner_goal_binding_fingerprint"]
-    if (
-        s["namespace"] != KIND
-        or job["context"].get("kind") != KIND
-        or s["model_requests"] != 0
-        or s["run_id"] != job["id"]
-        or s["app_run_id"] != a["id"]
-        or s["principal_id"] != user
-        or s["project_id"] != job["project_id"]
-        or s["runtime_id"] != job["runtime_id"]
-        or a["instance_id"] != s["instance_id"]
-        or a["release_id"] != s["release_id"]
-        or a["principal_id"] != user
-        or fingerprint(a["input"]) != fingerprint(s["input"])
-        or a["fingerprint"] != s["request_fingerprint"]
-        or fingerprint(request) != s["request_fingerprint"]
-    ):
-        raise DomainError("VERSION_CONFLICT", "AppRun no longer matches accepted queue binding")
+    _binding_request_from_facts(job, user, s, a, request)
     store.own_project(c, user, s["project_id"])
     if authorize:
         contract = (store._frozen_contract_after_scope(c,job) if scope is not None
@@ -605,14 +633,7 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
                 plain_use_out["bound"] = copy.deepcopy(use_value)
                 plain_use_out["bound_fingerprint"] = pb_natural_uses._bound_fingerprint(use_value)
             expected_resource = use_source["resource_id"]
-        if (
-            r["fingerprint"] != s["expected_release_fp"]
-            or r["project_id"] != s["project_id"]
-            or r["snapshot"]["draft"]["runtime_id"] != s["runtime_id"]
-            or job["resource_refs"]
-            != [expected_resource]
-        ):
-            raise DomainError("VERSION_CONFLICT")
+        _binding_release_from_facts(job, s, r, expected_resource)
     return (s, a, r) if return_release else (s, a)
 
 

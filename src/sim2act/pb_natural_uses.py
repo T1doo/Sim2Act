@@ -300,6 +300,33 @@ def control_scope(store, c, user, rid, *, iid=None, lock=False):
     return dict(header), dict(app_run)
 
 
+def _review_identity_from_facts(instance, release, body, base, saved, family):
+    """Pure original predicates; caller retains all preceding scope/IO gates."""
+    require(saved_family(base["candidate"]) == family
+        and instance["source_app_id"] == base["id"] and instance["runtime_id"] == base["runtime_id"]
+        and instance["revision"] == body.expected_revision
+        and release["fingerprint"] == body.expected_release_fingerprint
+        and base["fingerprint"] == body.expected_app_fingerprint
+        and fingerprint(saved["spec_recipe"]) == body.expected_recipe_fingerprint)
+
+
+def _bound_review_from_facts(job, snapshot, release, limits, family, body, frozen, checked):
+    """Pure original predicates; caller retains all preceding scope/IO gates."""
+    require(body.expected_review_fingerprint == checked["review_fingerprint"]
+        and frozen["reviewed"] == checked and frozen["request_fingerprint"] == fingerprint(body.model_dump())
+        and snapshot["pb_effective_fingerprint" if family == PB else "pa_effective_fingerprint"] == checked["effective_fingerprint"])
+    draft = {**copy.deepcopy(release["snapshot"]["draft"]), "candidate": checked["effective_candidate"],
+        "fingerprint": checked["effective_fingerprint"], family.field + "_run_id": job["id"]}
+    manifest, _, report = natural.compile_candidate(draft["candidate"], limits)
+    return draft, manifest, report
+
+
+def _audit_from_facts(base_digest, meta, seal_meta, body, frozen):
+    """Digest complete paired facts, after the original current scope/base audit."""
+    return fingerprint(dict(base=base_digest, meta=meta.model_dump(),
+        scope_seal=seal_meta, request=body.model_dump(), frozen=frozen))
+
+
 @controlled
 def review(store, c, user, instance, release, body, limits, *, runtime=None, approved_grants=None, family=PB, _logic_out=None, _audit_out=None):
     base = release["snapshot"]["draft"]
@@ -316,12 +343,7 @@ def review(store, c, user, instance, release, body, limits, *, runtime=None, app
             saved = _logic_out["value"]["effective_candidate"]
         else:
             saved = release_bound(store,c,user,release,limits)[0]["candidate"]
-    require(saved_family(base["candidate"]) == family
-        and instance["source_app_id"] == base["id"] and instance["runtime_id"] == base["runtime_id"]
-        and instance["revision"] == body.expected_revision
-        and release["fingerprint"] == body.expected_release_fingerprint
-        and base["fingerprint"] == body.expected_app_fingerprint
-        and fingerprint(saved["spec_recipe"]) == body.expected_recipe_fingerprint)
+    _review_identity_from_facts(instance, release, body, base, saved, family)
     material, goal = spec.target(store, c, user, instance["project_id"], body.card_id,
         body.expected_goal_version, body.expected_goal_fingerprint, runtime, family=natural.VERSION)
     require(material["hash"] == body.expected_source_hash and material["resource_id"] == body.resource_id)
@@ -430,12 +452,7 @@ def bound(store, c, user, job, snapshot, release, limits, *, family=PB, _logic_o
     audit_out: dict[str, Any] = {}
     checked, material, goal = review(store, c, user, accepted_instance, release, body.review, limits, runtime=job["runtime_id"], approved_grants=frozen["reviewed"]["approved_grant_state"], family=family,_logic_out=_logic_out,
         **({"_audit_out": audit_out} if _read_out is not None and family == PB else {}))
-    require(body.expected_review_fingerprint == checked["review_fingerprint"]
-        and frozen["reviewed"] == checked and frozen["request_fingerprint"] == fingerprint(body.model_dump())
-        and snapshot["pb_effective_fingerprint" if family == PB else "pa_effective_fingerprint"] == checked["effective_fingerprint"])
-    draft = {**copy.deepcopy(release["snapshot"]["draft"]), "candidate": checked["effective_candidate"],
-        "fingerprint": checked["effective_fingerprint"], family.field + "_run_id": job["id"]}
-    manifest, _, report = natural.compile_candidate(draft["candidate"], limits)
+    draft, manifest, report = _bound_review_from_facts(job, snapshot, release, limits, family, body, frozen, checked)
     if (_read_out is not None and family == PB and "natural_logic_source" not in release["snapshot"]
             and audit_out.get("digest") == checked["source_audit_fingerprint"]
             and pb._source_reads_current(store, c, c.info.get("pb_source_reads"))):
@@ -511,8 +528,7 @@ def audit(store, c, user, draft, *, family=PB, _logic_out=None, _release=None, _
             base_digest = _use_proof["base_audit"]
     if base_digest is None:
         base_digest = base_audit(store, c, user, base, family)
-    return fingerprint(dict(base=base_digest, meta=meta.model_dump(),
-        scope_seal=seal_meta, request=body.model_dump(), frozen=frozen))
+    return _audit_from_facts(base_digest, meta, seal_meta, body, frozen)
 
 
 def mount(app, store, limits, identity, *, family=PB):
