@@ -138,6 +138,7 @@ def test_actual_seven_slot_v2_worker_fixed_clock(env,monkeypatch,tmp_path):
     """
     import hashlib
     import threading
+    from contextlib import ExitStack
     from dataclasses import replace
     import httpx
     from sqlalchemy import select
@@ -213,9 +214,15 @@ def test_actual_seven_slot_v2_worker_fixed_clock(env,monkeypatch,tmp_path):
     monkeypatch.setattr(text_workflows,'process_job',observe_process)
     def advance(target):
         while True:
-            with clock_lock:
-                if at[0]>=target:break
-                at[0]=min(target,at[0]+10)
+            # A synthetic time jump must not overtake an in-flight metadata
+            # transaction using the preceding real committed lease interval.
+            with ExitStack() as stack:
+                for _,state in tuple(active_heartbeats.values()):
+                    if state is not None:
+                        stack.enter_context(state['renewal_lock'])
+                with clock_lock:
+                    if at[0]>=target:break
+                    at[0]=min(target,at[0]+10)
             for worker in tuple(workers):refresh(worker)
             with store.tx() as conn:
                 active=conn.execute(select(runs).where(runs.c.status=='RUNNING',runs.c.project_id==pid)).mappings().all()

@@ -11,6 +11,7 @@ import logging
 import sqlite3
 import threading
 import time
+from contextlib import nullcontext
 from typing import Literal
 
 from pydantic import Field
@@ -900,6 +901,35 @@ def publish_sync_renewal(worker, run, state, renewed):
             run_id=run["id"], fence=run["fence"], lease_until=renewed)
 
 
+def renew_sync(worker, run, state, *, deadline=None, lease_seconds=None):
+    """Serialize metadata renewals through their actual commit and publication.
+
+    The separate lock is never acquired by a business transaction. The short
+    state lock remains safe for validation that already holds a DB transaction.
+    """
+    with state["lock"]:
+        renewal_lock = state.setdefault("renewal_lock", threading.Lock())
+    with renewal_lock:
+        with state["lock"]:
+            fatal = state.get("fatal_heartbeat")
+            bounds = [state["lease_until"], run["created_at"] + worker.s.run_seconds]
+            if state["deadline"] is not None:
+                bounds.append(state["deadline"])
+        if fatal is not None:
+            raise fatal
+        if deadline is not None:
+            bounds.append(deadline)
+        cutoff = min(bounds)
+        remaining = cutoff - time.time()
+        if worker.stop.is_set() or remaining <= 0:
+            raise DomainError("BUDGET_EXHAUSTED", "Original heartbeat interval ended")
+        renewed = worker.store.heartbeat(worker.id, run["id"], run["fence"],
+            worker.s.lease_seconds if lease_seconds is None else lease_seconds,
+            _deadline=cutoff, _wait_seconds=min(5.0, remaining), _running_only=True)
+        publish_sync_renewal(worker, run, state, renewed)
+        return renewed
+
+
 def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
     from .app_jobs import fail_job
     stopped = threading.Event()
@@ -908,67 +938,72 @@ def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
     failure_sequence = [0]
     state = _heartbeat_state or dict(lock=threading.Lock(),
         lease_until=run["lease_until"], deadline=None)
+    state.setdefault("renewal_lock", threading.Lock())
+    atomic_metadata = worker.store.sqlite and state.get("sync_contention_recovery") is True
 
     def beat():
         while not stopped.wait(worker.s.lease_seconds / 3):
             for attempt in range(3):
                 if stopped.is_set() or worker.stop.is_set():
                     return
-                with state["lock"]:
-                    deadline = state["deadline"]
-                    cutoff = min(state["lease_until"], deadline) if deadline is not None else None
-                try:
-                    options = {}
-                    if cutoff is not None:
-                        remaining = cutoff - time.time()
-                        if remaining <= 0:
-                            raise DomainError("BUDGET_EXHAUSTED", "Original heartbeat interval ended")
-                        options = dict(_deadline=cutoff, _wait_seconds=min(5.0, remaining),
-                            _running_only=True)
-                    renewed = worker.store.heartbeat(worker.id, run["id"], run["fence"],
-                        worker.s.lease_seconds, **options)
-                except Exception as exc:
-                    # Re-read only numeric bounds after an identified lock
-                    # error: validation or a committed sync renewal may have
-                    # progressed while the driver was waiting.
-                    contention = _sqlite_heartbeat_contention(worker.store, exc)
-                    retry_cutoff = None
-                    if contention:
-                        with state["lock"]:
-                            latest_deadline = state["deadline"]
-                            latest_lease = state["lease_until"]
-                        if latest_deadline is not None:
-                            if deadline is not None:
-                                latest_deadline = min(deadline, latest_deadline)
-                            retry_cutoff = min(latest_lease, latest_deadline)
-                    if retry_cutoff is not None and time.time() + 0.1 < retry_cutoff:
-                        if attempt < 2:
-                            if stopped.wait(0.1):
-                                return
-                            continue
-                        if latest_lease > run["lease_until"]:
-                            # This batch still failed. Already guarded sync
-                            # progress in this invocation keeps the owner live;
-                            # it need not coincide with this retry batch. Wait the original
-                            # cadence before a new bounded batch, never fabricate
-                            # heartbeat success or extend the interval locally.
-                            logging.getLogger(__name__).info("heartbeat_contention_deferred", extra=dict(
-                                run_id=run["id"], fence=run["fence"], attempts=3,
-                                heartbeat_lease_until=latest_lease,
-                                heartbeat_deadline=latest_deadline))
-                            break
-                    logging.getLogger(__name__).info("heartbeat_background_halted", extra=dict(
-                        run_id=run["id"], fence=run["fence"], error_type=type(exc).__name__))
+                with state["renewal_lock"] if atomic_metadata else nullcontext():
                     with state["lock"]:
-                        failure_sequence[0] = state.get("sync_renewal", {}).get("sequence", 0)
-                        failure.append(exc)
-                        failed.set()
-                    return
-                else:
-                    if renewed is not None:
+                        deadline = state["deadline"]
+                        cutoff = min(state["lease_until"], deadline) if deadline is not None else None
+                    try:
+                        options = {}
+                        if cutoff is not None:
+                            remaining = cutoff - time.time()
+                            if remaining <= 0:
+                                raise DomainError("BUDGET_EXHAUSTED", "Original heartbeat interval ended")
+                            options = dict(_deadline=cutoff, _wait_seconds=min(5.0, remaining),
+                                _running_only=True)
+                        renewed = worker.store.heartbeat(worker.id, run["id"], run["fence"],
+                            worker.s.lease_seconds, **options)
+                    except Exception as exc:
+                        # Re-read only numeric bounds after an identified lock
+                        # error: validation or a committed sync renewal may have
+                        # progressed while the driver was waiting.
+                        contention = _sqlite_heartbeat_contention(worker.store, exc)
+                        retry_cutoff = None
+                        if contention:
+                            with state["lock"]:
+                                latest_deadline = state["deadline"]
+                                latest_lease = state["lease_until"]
+                            if latest_deadline is not None:
+                                if deadline is not None:
+                                    latest_deadline = min(deadline, latest_deadline)
+                                retry_cutoff = min(latest_lease, latest_deadline)
+                        if retry_cutoff is not None and time.time() + 0.1 < retry_cutoff:
+                            if attempt < 2:
+                                if stopped.wait(0.1):
+                                    return
+                                continue
+                            if latest_lease > run["lease_until"]:
+                                # This batch still failed. Already guarded sync
+                                # progress in this invocation keeps the owner live;
+                                # it need not coincide with this retry batch. Wait the original
+                                # cadence before a new bounded batch, never fabricate
+                                # heartbeat success or extend the interval locally.
+                                logging.getLogger(__name__).info("heartbeat_contention_deferred", extra=dict(
+                                    run_id=run["id"], fence=run["fence"], attempts=3,
+                                    heartbeat_lease_until=latest_lease,
+                                    heartbeat_deadline=latest_deadline))
+                                break
+                        logging.getLogger(__name__).info("heartbeat_background_halted", extra=dict(
+                            run_id=run["id"], fence=run["fence"], error_type=type(exc).__name__))
                         with state["lock"]:
-                            state["lease_until"] = max(state["lease_until"], renewed)
-                    break
+                            if atomic_metadata and not contention:
+                                state["fatal_heartbeat"] = exc
+                            failure_sequence[0] = state.get("sync_renewal", {}).get("sequence", 0)
+                            failure.append(exc)
+                            failed.set()
+                        return
+                    else:
+                        if renewed is not None:
+                            with state["lock"]:
+                                state["lease_until"] = max(state["lease_until"], renewed)
+                        break
 
     thread = threading.Thread(target=beat, daemon=True)
     thread.start()

@@ -503,7 +503,7 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
     def renew_controller():
         if _business is None or item.stage == "generate":
             return
-        from .text_workflows import publish_sync_renewal
+        from .text_workflows import renew_sync
         same_binding()
         run, state, adapter = _business[1], _business[4], _business[3]
         _require(type(state) is dict and state.get("sync_contention_recovery") is True)
@@ -512,10 +512,15 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
         _require(not worker.stop.is_set() and time.time() < deadline, "BUDGET_EXHAUSTED")
         # Original guarded heartbeat, at a transaction boundary only. It
         # cannot revive an expired owner, renew a stop, or enlarge the deadline.
-        renewed = store.heartbeat(worker_id, item.run_id, item.fence,
-            original.caps.lease_seconds, _deadline=deadline,
-            _wait_seconds=min(5.0, max(0.001, deadline - time.time())), _running_only=True)
-        publish_sync_renewal(worker, run, state, renewed)
+        if store.sqlite:
+            renew_sync(worker, run, state, deadline=deadline,
+                       lease_seconds=original.caps.lease_seconds)
+        else:
+            from .text_workflows import publish_sync_renewal
+            renewed = store.heartbeat(worker_id, item.run_id, item.fence,
+                original.caps.lease_seconds, _deadline=deadline,
+                _wait_seconds=min(5.0, max(0.001, deadline - time.time())), _running_only=True)
+            publish_sync_renewal(worker, run, state, renewed)
         same_binding()
         _require(not worker.stop.is_set() and time.time() < deadline, "BUDGET_EXHAUSTED")
 

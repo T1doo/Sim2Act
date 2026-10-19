@@ -1401,18 +1401,23 @@ def is_job(store, job):
 
 def process_job(worker, run):
     from .text_workflows import process_job as process
-    from .text_workflows import publish_sync_renewal
+    from .text_workflows import renew_sync
     if run["context"].get("spec_family") == natural.VERSION:
         import threading
-        heartbeat_state = dict(lock=threading.Lock(), lease_until=run["lease_until"], deadline=None,
+        heartbeat_state = dict(lock=threading.Lock(), lease_until=run["lease_until"],
+                               deadline=run["created_at"] + worker.s.run_seconds if worker.store.sqlite else None,
                                sync_contention_recovery=True)
         def advance_and_renew(worker, current):
             again = advance(worker, current, _heartbeat_state=heartbeat_state)
             if again:
                 # Existing lease guard at a transaction boundary prevents SQLite
                 # writer starvation; it cannot renew an expired lease or deadline.
-                renewed = worker.store.heartbeat(worker.id, current["id"], current["fence"], worker.s.lease_seconds)
-                publish_sync_renewal(worker, current, heartbeat_state, renewed)
+                if worker.store.sqlite:
+                    renew_sync(worker, current, heartbeat_state)
+                else:
+                    from .text_workflows import publish_sync_renewal
+                    renewed = worker.store.heartbeat(worker.id, current["id"], current["fence"], worker.s.lease_seconds)
+                    publish_sync_renewal(worker, current, heartbeat_state, renewed)
             return again
         return process(worker, run, advance_fn=advance_and_renew, _heartbeat_state=heartbeat_state)
     return process(worker, run, advance_fn=advance)
