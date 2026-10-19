@@ -85,6 +85,83 @@ def cloned(prefix, tmp_path):
         store.engine.dispose()
 
 
+@pytest.mark.parametrize("change", ["same", "write", "failed_write", "recheck_write", "revoke", "recursion"])
+def test_source_audit_digest_read_segment(prefix, cloned, monkeypatch, change):
+    """Full first audit, same digest, real write/revocation and failed-write invalidation."""
+    from sqlalchemy import insert
+    from sqlalchemy.exc import IntegrityError
+
+    from sim2act.db import grants
+
+    store, user, pid = cloned[0], cloned[3], cloned[4]
+    original, calls, rechecks, gates = pb._source_audit, [], [], []
+    actual_recheck = store.recheck_proof_authorities
+    actual_gate = pb.source_gate
+
+    def source_gate(*args):
+        gates.append(True)
+        return actual_gate(*args)
+
+    def counted(*args):
+        calls.append(True)
+        return original(*args)
+
+    def recheck(c, proof):
+        rechecks.append(proof["_call_authorities"])
+        if change == "recheck_write":
+            c.execute(update(runs).where(runs.c.id == prefix.source_id)
+                .values(error={"synthetic_audit_probe": "changed"}))
+        elif change == "revoke":
+            check = proof["_call_authorities"][0]
+            principal, runtime, project, resource, tool = check
+            rows = c.execute(select(grants.c.id).where(grants.c.principal_id == principal,
+                grants.c.project_id == project, grants.c.resource_id == resource,
+                grants.c.tool_ref == tool, grants.c.revoked.is_(False))).scalars().all()
+            assert runtime and rows and c.execute(update(grants).where(grants.c.id.in_(rows))
+                .values(revoked=True, revision=grants.c.revision + 1)).rowcount == len(rows)
+        return actual_recheck(c, proof)
+
+    monkeypatch.setattr(pb, "_source_audit", counted)
+    monkeypatch.setattr(store, "recheck_proof_authorities", recheck)
+    monkeypatch.setattr(pb, "source_gate", source_gate)
+    with store.tx() as c:
+        expected = original(store, c, user, pid, prefix.source_id)
+        gates.clear()
+        with pb._source_reads(store, c):
+            token = c.info["pb_source_reads"]
+            first = pb.source_audit(store, c, user, pid, prefix.source_id)
+            assert first == expected and len(calls) == 1
+            if change == "write":
+                c.execute(update(runs).where(runs.c.id == prefix.source_id)
+                    .values(error={"synthetic_audit_probe": "changed"}))
+                assert not pb._source_reads_current(store, c, token)
+            elif change == "failed_write":
+                with pytest.raises(IntegrityError):
+                    c.execute(insert(runs).from_select([col.name for col in runs.c],
+                        select(runs).where(runs.c.id == prefix.source_id)))
+                assert not pb._source_reads_current(store, c, token)
+            elif change == "recursion":
+                token.results.clear()
+                monkeypatch.setattr(pb, "_source_audit", pb.source_audit)
+                with pytest.raises(DomainError, match="Recursive source audit"):
+                    pb.source_audit(store, c, user, pid, prefix.source_id)
+                assert not token.results and not token.inflight
+                return
+            if change == "revoke":
+                with pytest.raises(DomainError) as denied:
+                    pb.source_audit(store, c, user, pid, prefix.source_id)
+                assert denied.value.code == "GRANT_REVOKED" and len(calls) == 1
+                assert rechecks and rechecks[0] and not token.results
+            else:
+                second = pb.source_audit(store, c, user, pid, prefix.source_id)
+                assert (second != first) == (change in {"write", "recheck_write"})
+                assert len(calls) == (1 if change == "same" else 2)
+                assert len(gates) >= 2, "Every audit still executes the complete original source gate"
+                if change in {"same", "recheck_write"}:
+                    assert rechecks and rechecks[0]
+        assert not token.results and not token.inflight and "pb_source_reads" not in c.info
+
+
 @pytest.mark.parametrize("change", ["nested_copy", "write", "failed_write", "limits", "store", "authority", "recursion", "exit", "exception", "user", "project", "source", "thread", "limits_mutation"])
 def test_source_read_segment_complete_proof_and_invalidation(prefix, cloned, monkeypatch, change):
     from sqlalchemy import insert

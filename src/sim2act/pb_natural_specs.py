@@ -125,11 +125,45 @@ def source_gate(store, c, user, pid, rid):
 
 
 def source_audit(store, c, user, pid, rid):
-    """Fresh scope-qualified bytes, no replay cache or cross-transaction reuse.
+    """Complete audit once per original read segment, with fresh authorities.
 
-    Full source replay precedes entry and follows final writes. Each intervening
-    commit guard still authorizes before reading and compares every source byte.
+    This immutable digest never supplies a binding or stage permit. The first
+    audit after every write still reads the complete original source evidence.
     """
+    token = c.info.get("pb_source_reads")
+    if not _source_reads_current(store, c, token):
+        return _source_audit(store, c, user, pid, rid)
+    key = ("source_audit", user, pid, rid)
+    require(key not in token.inflight, "Recursive source audit cannot reuse an incomplete result")
+    if key in token.results:
+        value, authorities = token.results[key]
+        try:
+            # Retain the original lineage/status/committed-pointer gate on
+            # every call, including a hit, before returning an audit digest.
+            source_gate(store, c, user, pid, rid)
+            store.recheck_proof_authorities(c, {"_call_authorities": authorities})
+        except BaseException:
+            token.results.clear()
+            raise
+        if _source_reads_current(store, c, token):
+            return value
+        return _source_audit(store, c, user, pid, rid)
+    token.inflight.add(key)
+    try:
+        with store.proof_authorities(c) as authorities:
+            value = _source_audit(store, c, user, pid, rid)
+        if _source_reads_current(store, c, token):
+            token.results[key] = (value, tuple(sorted(authorities)))
+        return value
+    except BaseException:
+        token.results.clear()
+        raise
+    finally:
+        token.inflight.discard(key)
+
+
+def _source_audit(store, c, user, pid, rid):
+    """Original complete current source scope and audit bytes, never a permit."""
     from . import pa_spec_apps as spec
     from .db import delivery_graph_requests, goal_card_versions, goal_cards
     from .text_workflows import RunScopeInput
