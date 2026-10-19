@@ -134,9 +134,7 @@ def source_scope_gate(store, c, rid):
             current = _journal_scope_anchor(store, c, rid, expected=anchor["owner"])
             if current != anchor:
                 raise DomainError("VERSION_CONFLICT", "Generation scope anchors changed")
-            if (not _source_reads_current(store, c, token)
-                    or _journal_scope_anchor(store, c, rid, expected=anchor["owner"]) != anchor
-                    or not _source_reads_current(store, c, token)):
+            if not _source_reads_current(store, c, token):
                 raise DomainError("VERSION_CONFLICT", "Generation scope read segment changed")
             return True
         except BaseException:
