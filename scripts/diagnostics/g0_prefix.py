@@ -18,6 +18,7 @@ def run_prefix(root, patch, files, notify, healthy):
         G0Stop,
         MockBudget,
         StopBoundary,
+        exception_chain,
         install_mock_counter,
         install_network_denials,
     )
@@ -63,7 +64,22 @@ def run_prefix(root, patch, files, notify, healthy):
     iterator = env.__wrapped__(root)
     fixture = None
     diagnostic = {"classification": "UNKNOWN", "g0": "NOT_REACHED"}
+
+    def phase(name):
+        import time
+
+        notify(
+            dict(
+                event="phase",
+                phase=name,
+                at=time.monotonic(),
+                mock_exchanges=mocks.exchanges,
+                mock_methods=mocks.methods,
+            )
+        )
+
     try:
+        phase("fixture_start")
         original_env = next(iterator)
         stores.append(original_env[0])
         data, binding, fixture, factory = configured(
@@ -72,6 +88,7 @@ def run_prefix(root, patch, files, notify, healthy):
         normal = apps.transport([], apps.SOURCE)
         install_mock_counter(patch, httpx, mocks, fixture, normal)
         generation, _, release, source_instance, generated = apps.ready(data, style="ordered")
+        phase("generate_complete")
         if len(generated) != 3 or mocks.exchanges != 3:
             raise Boundary("Generate prefix not exactly three")
         mocks.stage = "source"
@@ -93,6 +110,7 @@ def run_prefix(root, patch, files, notify, healthy):
         ).once():
             raise Boundary("Source worker did not claim")
         result = apps.inspect(data, source_instance, source_id)
+        phase("source_returned")
         if (
             result.status_code != 200
             or result.json()["status"] != "SUCCEEDED"
@@ -146,6 +164,7 @@ def run_prefix(root, patch, files, notify, healthy):
         ):
             raise Boundary("Source raw provenance differs")
         release, instance = apps.instance(data, made["id"])
+        phase("extraction_release_complete")
         cold_store = Store(data[1].database_url, test_only=True)
         stores.append(cold_store)
         cold_client = TestClient(create_app(cold_store, data[1]))
@@ -228,6 +247,7 @@ def run_prefix(root, patch, files, notify, healthy):
         mocks.stage = "cold"
         worker = factory(cold_store, data[1], goal_planner_transport=apps.transport([], apps.COLD))
         boundary.bind(worker, cold_id)
+        phase("cold_first_worker_start")
         try:
             worker.once()
         except G0Stop as stop:
@@ -239,18 +259,54 @@ def run_prefix(root, patch, files, notify, healthy):
             )
         else:
             raise Boundary("Cold returned without exact G0 stop")
+    except BaseException as error:
+        partial = (
+            "NOT_REACHED"
+            if boundary.instance is None
+            else dict(
+                stages=boundary.instance.stages,
+                run_context=boundary.instance.run_context,
+                incomplete=boundary.instance.incomplete,
+            )
+        )
+        files.writer("diagnostic.json").json(
+            dict(
+                event="failure_before_cleanup",
+                classification="UNKNOWN",
+                error_chain=exception_chain(error),
+                partial=partial,
+                g0_entered=boundary.entered,
+                mock_exchanges=mocks.exchanges,
+                mock_methods=mocks.methods,
+            )
+        )
+        raise
     finally:
         if fixture is not None:
             for worker in fixture["workers"]:
                 worker.stop.set()
-        for client in reversed(clients):
-            client.close()
-        iterator.close()
-        for store in reversed(stores):
-            store.engine.dispose()
+        cleanup_errors = []
+        for close in [
+            *(client.close for client in reversed(clients)),
+            iterator.close,
+            *(store.engine.dispose for store in reversed(stores)),
+        ]:
+            try:
+                close()
+            except BaseException as error:
+                cleanup_errors.append(error)
         remaining = [t for t in threading.enumerate() if t not in before_threads and t.is_alive()]
         if remaining:
-            raise Boundary("owned fixture threads remain alive")
+            cleanup_errors.append(Boundary("owned fixture threads remain alive"))
+        if cleanup_errors:
+            files.writer("diagnostic.json").json(
+                dict(
+                    event="cleanup_errors",
+                    classification="UNKNOWN",
+                    errors=[exception_chain(error) for error in cleanup_errors],
+                )
+            )
+            raise Boundary("fixture cleanup incomplete") from cleanup_errors[0]
     diagnostic.update(
         mock_exchanges=mocks.exchanges,
         mock_methods=mocks.methods,

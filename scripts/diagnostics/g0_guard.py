@@ -28,6 +28,7 @@ LIMITS = dict(
     term_seconds=5,
     kill_seconds=5,
     directory_bytes=64 * MIB,
+    disk_sample_seconds=0.1,
 )
 FILES = {
     "mock-exchanges.jsonl": 2 * MIB,
@@ -40,7 +41,84 @@ FILES = {
     "receipt.json": MIB,
 }
 DB_FILES = ("fixture.db", "fixture.db-journal", "fixture.db-wal", "fixture.db-shm")
-assert 4 * 12 * MIB + sum(FILES.values()) < LIMITS["directory_bytes"]
+# Output writers retain their byte caps. SQLite files instead use the explicit
+# parent-side sampled budget: this is not an aggregate filesystem hard quota.
+
+
+class DiskMonitor:
+    """Sample all run files, including unknown/native temporary filenames."""
+
+    def __init__(self, root, clock=time.monotonic):
+        self.root, self.clock = Path(root).resolve(strict=True), clock
+        self.samples = self.peak_logical = self.peak_allocated = 0
+        self.last = None
+
+    def sample(self, pid=None):
+        logical = allocated = 0
+        seen = set()
+        for folder, dirs, names in os.walk(self.root, followlinks=False, onerror=self.scan_error):
+            for name in (*dirs, *names):
+                path = Path(folder) / name
+                try:
+                    info = path.lstat()
+                except FileNotFoundError:  # SQLite can remove a journal between samples.
+                    continue
+                if path.is_symlink():
+                    raise Boundary("disk monitor found unexpected symlink")
+                key = (info.st_dev, info.st_ino)
+                if key in seen:
+                    continue
+                seen.add(key)
+                logical += info.st_size
+                allocated += info.st_blocks * 512
+        # Native SQLite can unlink temporary files while keeping an fd open.
+        # Count writable regular fds too, without double-counting visible inodes.
+        if pid is not None:
+            import stat
+
+            fdroot = Path(f"/proc/{pid}/fd")
+            try:
+                descriptors = list(fdroot.iterdir())
+            except FileNotFoundError:
+                descriptors = []
+            for path in descriptors:
+                try:
+                    info = path.stat()
+                    flags = next(
+                        line.split()[1]
+                        for line in Path(f"/proc/{pid}/fdinfo/{path.name}").read_text().splitlines()
+                        if line.startswith("flags:")
+                    )
+                except FileNotFoundError:
+                    continue
+                if not stat.S_ISREG(info.st_mode) or not int(flags, 8) & os.O_ACCMODE:
+                    continue
+                key = (info.st_dev, info.st_ino)
+                if key not in seen:
+                    seen.add(key)
+                    logical += info.st_size
+                    allocated += info.st_blocks * 512
+        self.samples += 1
+        self.peak_logical = max(self.peak_logical, logical)
+        self.peak_allocated = max(self.peak_allocated, allocated)
+        self.last = dict(at=self.clock(), logical_bytes=logical, allocated_bytes=allocated)
+        if max(logical, allocated) > LIMITS["directory_bytes"]:
+            raise Boundary("sampled 64MiB disk budget exceeded; not a hard quota")
+        return self.last
+
+    @staticmethod
+    def scan_error(error):
+        raise Boundary("disk budget scan failed") from error
+
+    def report(self):
+        return dict(
+            mode="SAMPLED_BUDGET_NOT_HARD_QUOTA",
+            interval_seconds=LIMITS["disk_sample_seconds"],
+            samples=self.samples,
+            peak_logical_bytes=self.peak_logical,
+            peak_allocated_bytes=self.peak_allocated,
+            last=self.last,
+        )
 
 
 class Boundary(BaseException):
@@ -134,7 +212,7 @@ class BoundedWriter:
 
 
 class Files:
-    """Fixed native DB slots plus fixed Python outputs, with no reset/reuse."""
+    """Bounded Python outputs; native SQLite disk use is sampled separately."""
 
     def __init__(self, root, names=None):
         self.root = Path(root).resolve(strict=True)

@@ -1,6 +1,6 @@
 """Explicit once-only launcher; --describe is read-only and cannot run a prefix.
 
-Build native dependency separately. Execution additionally requires a grant
+Disk use is sampled, not a hard quota. Execution requires a grant
 matching --describe, a fresh output parent, clean reviewed HEAD, and expires_at.
 No current implementation or unit-test command grants execution permission.
 """
@@ -19,29 +19,20 @@ import sys
 import time
 from pathlib import Path
 
-from g0_guard import DB_FILES, FILES, LIMITS, MIB, Boundary, Budget, Files, same_sqlite_api
+from g0_guard import FILES, LIMITS, MIB, Boundary, Budget, DiskMonitor, Files
 
 REPO = Path(__file__).resolve().parents[2]
-SCOPE = "fresh-synthetic-generate3-source2-cold1-first-g0-no-w5-v1"
+SCOPE = "fresh-synthetic-six-mock-first-g0-sampled-disk-once-20261020-v2"
 PARENT_FILES = {"source-manifest.json", "control.jsonl", "output.log", "receipt.json"}
-
-
-def require_start_qualification():
-    # This frozen delivery has only a BLOCKED construction ACK. A future
-    # runnable branch requires its own code review and validation; creating an
-    # operator grant or changing the interpreter cannot enable this build.
-    raise Boundary("BLOCKED_BUILD_ONLY: runnable branch has no start qualification")
 
 
 def git(*args):
     return subprocess.check_output(["git", "-C", str(REPO), *args], text=True).strip()
 
 
-def describe(library):
+def describe():
     if sys.platform != "linux" or sys.version_info[:2] != (3, 12) or sys.flags.optimize:
         raise Boundary("only reviewed Linux CPython 3.12 without optimization")
-    same_sqlite_api()  # Fail before grant consumption, run directory or product import.
-    require_start_qualification()
     if git("branch", "--show-current") != "dev/production-trial-stages-20261018" or git(
         "status", "--porcelain"
     ):
@@ -64,7 +55,6 @@ def describe(library):
     paths += [REPO / "pyproject.toml"]
     paths += [
         Path(getattr(_sqlite3, "__file__", sys.executable)).resolve(strict=True),
-        Path(library).resolve(strict=True),
         Path(sys.executable).resolve(strict=True),
     ]
     manifest = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
@@ -73,7 +63,7 @@ def describe(library):
         scope=SCOPE,
         head=git("rev-parse", "HEAD"),
         limits=LIMITS,
-        native_library=str(Path(library).resolve(strict=True)),
+        disk_policy="SAMPLED_BUDGET_NOT_HARD_QUOTA",
         source_manifest_sha256=digest,
         sqlite_version=sqlite3.sqlite_version,
         source_manifest=manifest,
@@ -175,9 +165,7 @@ def verify_sources(description):
     return digest
 
 
-def validate_child_parent(root, library, control_fd):
-    same_sqlite_api()  # In the specified environment this blocks, with zero IO allocation.
-    require_start_qualification()
+def validate_child_parent(root, control_fd):
     if os.getsid(0) != os.getpid() or not stat.S_ISFIFO(os.fstat(control_fd).st_mode):
         raise Boundary("child requires launcher's owned session/control pipe")
     command = Path(f"/proc/{os.getppid()}/cmdline").read_bytes().split(b"\0")
@@ -202,29 +190,17 @@ def validate_child_parent(root, library, control_fd):
         raise Boundary("child requires fresh parent-only output set")
     description = json.loads((root / "source-manifest.json").read_text())
     validate_grant(grant, description, time.time())
-    if str(Path(library).resolve(strict=True)) != description["native_library"]:
-        raise Boundary("child native dependency identity")
     return description, verify_sources(description)
 
 
-def child(root, library, control_fd):
-    description, before_digest = validate_child_parent(root, library, control_fd)
-    import resource
+def child(root, control_fd):
+    description, before_digest = validate_child_parent(root, control_fd)
 
     import g0_guard
     import pytest
 
     sys.dont_write_bytecode = True
-    # Only lower child limits. No mount, role, capability, permission or service.
-    soft, hard = resource.getrlimit(resource.RLIMIT_FSIZE)
-    ceiling = 12 * MIB
-    if soft != resource.RLIM_INFINITY:
-        ceiling = min(ceiling, soft)
-    if hard != resource.RLIM_INFINITY:
-        ceiling = min(ceiling, hard)
-    resource.setrlimit(resource.RLIMIT_FSIZE, (ceiling, ceiling))
     files = Files(root, set(FILES) - PARENT_FILES)
-    native, api = g0_guard.install_vfs(library, root / "fixture.db")
     control = g0_guard.BoundedWriter(os.fdopen(control_fd, "wb", buffering=0), MIB // 16)
     result = {"classification": "UNKNOWN", "real_models": 0}
     try:
@@ -232,9 +208,7 @@ def child(root, library, control_fd):
             g0_guard.install_child_io(patch, files, root / "fixture.db")
             from g0_prefix import run_prefix
 
-            result = run_prefix(root, patch, files, control.json, lambda: not native.g0_fault())
-        if native.g0_fault() or native.g0_open_handles():
-            raise Boundary("native VFS boundary or unclosed handles")
+            result = run_prefix(root, patch, files, control.json, lambda: True)
         result["cleanup"] = "THREADS_CLIENTS_CONNECTIONS_CLOSED"
         result["source_digest_before"] = before_digest
         result["source_digest_after"] = verify_sources(description)
@@ -245,8 +219,6 @@ def child(root, library, control_fd):
             "exception_type": type(error).__name__,
             "error_chain": g0_guard.exception_chain(error),
             "boundary": str(error)[:512] if isinstance(error, Boundary) else "unexpected error",
-            "native_fault": native.g0_fault(),
-            "native_handles": native.g0_open_handles(),
             "business_acceptance": "INTERRUPTED",
             "real_models": 0,
         }
@@ -259,8 +231,8 @@ def child(root, library, control_fd):
     return 0 if result["classification"].startswith("G0_") else 2
 
 
-def execute(grant_path, output_parent, library):
-    description = describe(library)
+def execute(grant_path, output_parent):
+    description = describe()
     grant_path = Path(grant_path).resolve(strict=True)
     if grant_path.stat().st_size > 16384:
         raise Boundary("grant too large")
@@ -281,12 +253,15 @@ def execute(grant_path, output_parent, library):
         "LANG": "C.UTF-8",
         "TZ": "UTC",
         "PYTHONDONTWRITEBYTECODE": "1",
+        "TMPDIR": str(root),
+        "SQLITE_TMPDIR": str(root),
         "PYTHONPATH": os.pathsep.join(
             map(str, (REPO / "scripts/diagnostics", REPO / "tests", REPO / "src"))
         ),
     }
     started = time.monotonic()
     budget = Budget(started)
+    disk = DiskMonitor(root)
     process = None
     selector = None
     receipt = {
@@ -297,7 +272,7 @@ def execute(grant_path, output_parent, library):
     }
     try:
         process = subprocess.Popen(
-            [sys.executable, "-B", __file__, "--child", str(root), str(library), str(write_fd)],
+            [sys.executable, "-B", __file__, "--child", str(root), str(write_fd)],
             cwd=REPO,
             env=environment,
             pass_fds=(write_fd,),
@@ -319,6 +294,7 @@ def execute(grant_path, output_parent, library):
         finished = None
         while selector.get_map():
             budget.check()
+            disk.sample(process.pid)
             for key, _ in selector.select(
                 timeout=min(0.05, max(0, budget.deadline - time.monotonic()))
             ):
@@ -336,6 +312,8 @@ def execute(grant_path, output_parent, library):
                         message = json.loads(line)
                         if message.get("event") == "g0_enter" and finished is None:
                             budget.enter_g0(message["at"])
+                        elif message.get("event") == "phase" and finished is None:
+                            pass  # Already retained verbatim in bounded control.jsonl.
                         elif message.get("event") == "finished" and finished is None:
                             finished = message["classification"]
                         else:
@@ -348,6 +326,7 @@ def execute(grant_path, output_parent, library):
         ):
             raise Boundary("child incomplete or unknown")
         receipt["classification"] = finished
+        disk.sample(process.pid)
     except BaseException as error:
         receipt.update(
             classification="UNKNOWN",
@@ -374,28 +353,48 @@ def execute(grant_path, output_parent, library):
                     receipt["classification"] = "UNKNOWN"
         else:
             receipt["cleanup"] = "CHILD_NOT_CREATED"
-        if selector is not None:
-            selector.close()
-        if write_fd is not None:
-            os.close(write_fd)
-        os.close(read_fd)
-        if process is not None and process.stdout is not None:
-            process.stdout.close()
+        finalization_errors = []
+        for name, close in (
+            ("selector", lambda: selector.close() if selector is not None else None),
+            ("write_fd", lambda: os.close(write_fd) if write_fd is not None else None),
+            ("read_fd", lambda: os.close(read_fd)),
+            (
+                "stdout",
+                lambda: (
+                    process.stdout.close()
+                    if process is not None and process.stdout is not None
+                    else None
+                ),
+            ),
+        ):
+            try:
+                close()
+            except BaseException as error:
+                finalization_errors.append(dict(stage=name, type=type(error).__name__))
         evidence = {}
         try:
             receipt["source_digest_after_parent_cleanup"] = verify_sources(description)
         except BaseException as freeze_error:
             receipt.update(classification="UNKNOWN", freeze_error_type=type(freeze_error).__name__)
-        for path in root.iterdir():
-            info = path.lstat()
-            cap = 12 * MIB if path.name in DB_FILES else FILES.get(path.name, -1)
-            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > cap:
-                receipt.update(classification="UNKNOWN", evidence="unexpected file/size/type")
-                continue
-            evidence[path.name] = {
-                "bytes": info.st_size,
-                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-            }
+        try:
+            disk.sample()
+            for path in root.rglob("*"):
+                try:
+                    info = path.lstat()
+                    if stat.S_ISDIR(info.st_mode):
+                        continue
+                    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                        raise Boundary("unexpected evidence file type/link")
+                    evidence[str(path.relative_to(root))] = {
+                        "bytes": info.st_size,
+                        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    }
+                except BaseException as error:
+                    finalization_errors.append(
+                        dict(stage="evidence", file=path.name, type=type(error).__name__)
+                    )
+        except BaseException as error:
+            finalization_errors.append(dict(stage="disk_or_list", type=type(error).__name__))
         # receipt.json was preallocated empty; exclude its self-referential hash.
         evidence.pop("receipt.json", None)
         receipt.update(
@@ -403,30 +402,37 @@ def execute(grant_path, output_parent, library):
             work_wall_seconds=time.monotonic() - started,
             no_resume=True,
             business_acceptance="INTERRUPTED",
+            disk_monitor=disk.report(),
+            finalization_errors=finalization_errors,
         )
+        if finalization_errors:
+            receipt["classification"] = "UNKNOWN"
         if receipt["work_wall_seconds"] >= 610:
             receipt.update(classification="UNKNOWN", budget="WORK_PLUS_CLEANUP_EXCEEDED")
-        files.writer("receipt.json").json(receipt)
-        files.close()
+        try:
+            files.writer("receipt.json").json(receipt)
+        except BaseException as error:
+            receipt.update(classification="UNKNOWN", receipt_error_type=type(error).__name__)
+        finally:
+            files.close()
     print(json.dumps({"root": str(root), "classification": receipt["classification"]}))
     return 0 if receipt["classification"].startswith("G0_") else 2
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--describe", metavar="NATIVE_LIBRARY")
+    parser.add_argument("--describe", action="store_true")
     parser.add_argument("--execute-grant")
     parser.add_argument("--output-parent")
-    parser.add_argument("--native-library")
-    parser.add_argument("--child", nargs=3, help=argparse.SUPPRESS)
+    parser.add_argument("--child", nargs=2, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.child:
-        return child(Path(args.child[0]), args.child[1], int(args.child[2]))
+        return child(Path(args.child[0]), int(args.child[1]))
     if args.describe and not args.execute_grant:
-        print(json.dumps(describe(args.describe), ensure_ascii=False, indent=2))
+        print(json.dumps(describe(), ensure_ascii=False, indent=2))
         return 0
-    if args.execute_grant and args.output_parent and args.native_library and not args.describe:
-        return execute(args.execute_grant, args.output_parent, args.native_library)
+    if args.execute_grant and args.output_parent and not args.describe:
+        return execute(args.execute_grant, args.output_parent)
     parser.error(
         "read-only --describe, or a separately authorized exact --execute-grant is required"
     )

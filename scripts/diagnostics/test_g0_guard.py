@@ -19,11 +19,11 @@ from g0_guard import (
     Boundary,
     BoundedWriter,
     Budget,
+    DiskMonitor,
     G0Stop,
     MockBudget,
     StopBoundary,
     guarded_connection_class,
-    same_sqlite_api,
 )
 
 
@@ -315,7 +315,6 @@ class ProtectionUnits(unittest.TestCase):
                         str(Path(__file__).with_name("g0_bounded.py")),
                         "--child",
                         str(absent),
-                        "/not-a-library.so",
                         "1",
                     ],
                     capture_output=True,
@@ -400,15 +399,32 @@ with tempfile.TemporaryDirectory(prefix="g0-vfs-pure-unit-") as root:
         )
         self.assertEqual(result.returncode, 0, result.stderr.decode())
 
-    def test_frozen_interpreter_vfs_absence_blocks_before_product_or_directory(self):
-        try:
-            same_sqlite_api()
-        except Boundary as error:
-            self.assertIn("native disk closure BLOCKED", str(error))
-            from g0_bounded import describe
+    def test_sampled_disk_counts_unknown_sparse_and_unlinked_writable_files(self):
+        with tempfile.TemporaryDirectory(prefix="g0-disk-pure-unit-") as root:
+            monitor = DiskMonitor(root)
+            unknown = Path(root) / "native-random.tmp"
+            unknown.write_bytes(b"1234")
+            sample = monitor.sample(os.getpid())
+            self.assertGreaterEqual(sample["logical_bytes"], 4)
+            with unknown.open("r+b"):
+                unknown.unlink()
+                sample = monitor.sample(os.getpid())
+                self.assertGreaterEqual(sample["logical_bytes"], 4)
+            huge = Path(root) / "unknown-native-file"
+            with huge.open("wb") as stream:
+                stream.truncate(LIMITS["directory_bytes"] + 1)
+            with self.assertRaisesRegex(Boundary, "not a hard quota"):
+                monitor.sample()
+            self.assertGreater(monitor.report()["peak_logical_bytes"], LIMITS["directory_bytes"])
 
-            with self.assertRaisesRegex(Boundary, "native disk closure BLOCKED"):
-                describe("/nonexistent-native-library-must-not-be-opened.so")
+    def test_disk_monitor_rejects_symlink_and_scan_error(self):
+        with tempfile.TemporaryDirectory(prefix="g0-disk-pure-unit-") as root:
+            monitor = DiskMonitor(root)
+            (Path(root) / "link").symlink_to("/tmp")
+            with self.assertRaises(Boundary):
+                monitor.sample()
+            with self.assertRaises(Boundary):
+                monitor.scan_error(PermissionError("unit"))
 
     def native_unit(self, code):
         library = os.environ.get("G0_UNIT_NATIVE_LIBRARY")
