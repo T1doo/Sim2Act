@@ -9,6 +9,7 @@ import hashlib
 import json
 import math
 import time
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from pydantic import Field
@@ -312,12 +313,26 @@ def check_tools(version=GENERATION):
         parameters=object_schema(dict(candidate=natural.candidate_schema() if version == natural.GENERATION else candidate_schema()))))]
 
 
+def _generation_reader_checkpoint(reader):
+    if reader is None:
+        return
+    from .goal_applications import _GenerationFactsReader
+    require(type(reader) is _GenerationFactsReader, "Exact Generation facts reader required")
+    reader.check()
+
+
 def initial_messages(store, c, run):
     from .goal_applications import source
 
     contract, material = source(store, c, run)
     if contract.application_generation.version == natural.GENERATION:
         return natural.initial_messages(store, c, run)
+    return _initial_messages_from_facts(contract, material)
+
+
+def _initial_messages_from_facts(contract, material):
+    if contract.application_generation.version == natural.GENERATION:
+        return natural._initial_messages_from_facts(contract, material)
     oracle.source_checklist(material)
     value = dict(saved_goal=contract.source_goal_card.model_dump(),
         server_ids=contract.application_generation.model_dump(exclude_none=True),
@@ -337,6 +352,15 @@ def from_response(store, c, run, value):
     contract, material = source(store, c, run)
     if contract.application_generation.version == natural.GENERATION:
         return natural.from_response(store, c, run, value)
+    return _from_response_from_facts(run, contract, material, value)
+
+
+def _from_response_from_facts(run, contract, material, value, *, reader=None):
+    _generation_reader_checkpoint(reader)
+    if contract.application_generation.version == natural.GENERATION:
+        result = natural._from_response_from_facts(run, contract, material, value)
+        _generation_reader_checkpoint(reader)
+        return result
     if not isinstance(value, dict) or set(value) != {"recipe", "sample_checklist", "source_hash", "goal"}:
         raise DomainError("INVALID_MANIFEST", "Complete compact recipe and sample required")
     require(value["source_hash"] == material["hash"]
@@ -345,27 +369,42 @@ def from_response(store, c, run, value):
     selected = contract.application_generation
     require(selected.version == GENERATION and selected.activation is None and selected.app_limits is not None)
     checked = oracle.verify_candidate(material, json.dumps(value["sample_checklist"], ensure_ascii=False))
+    _generation_reader_checkpoint(reader)
     result = expand(value["recipe"], selected.app_id, contract.source_goal_card.card_id,
         run["project_id"], material["hash"], material["resource_id"], value["goal"],
         selected.app_limits, fingerprint(checked))
+    _generation_reader_checkpoint(reader)
     compile_candidate(result, selected.app_limits)
+    _generation_reader_checkpoint(reader)
     preview(material, result, {})
+    _generation_reader_checkpoint(reader)
     return result
 
 
 def check_report(store, c, run, candidate):
-    from .goal_applications import source
+    from .goal_applications import _GenerationFactsReader
+    return _check_report_core(_GenerationFactsReader(store, c, run), candidate)
 
-    contract, material = source(store, c, run)
+
+def _check_report_core(reader, candidate):
+    _generation_reader_checkpoint(reader)
+    store, c, run = reader.store, reader.c, reader.run
+    contract, material = reader.source()
     check = natural.CHECK if contract.application_generation.version == natural.GENERATION else oracle.CHECK
     status, diagnostic = "PASS", None
     try:
-        compiled = from_response(store, c, run, candidate)
+        if reader.guard is None:
+            compiled = from_response(store, c, run, candidate)
+        else:
+            current_contract, current_material = reader.source()
+            compiled = _from_response_from_facts(run, current_contract, current_material, candidate, reader=reader)
+        reader.check()
         plan_hash = fingerprint(compiled["spec_recipe"])
     except DomainError as exc:
         if exc.code not in {"INVALID_INPUT", "INVALID_MANIFEST", "VERIFICATION_FAILED"}:
             raise
         status, diagnostic, plan_hash = "FAIL", exc.public(), None
+    reader.check()
     return dict(version="spec.candidate_check.v1", candidate_fingerprint=fingerprint(candidate),
         source_hash=material["hash"], check=check, status=status,
         recipe_fingerprint=plan_hash, diagnostic=diagnostic,
@@ -384,14 +423,23 @@ def check_call(store, c, run, call):
 
 
 def check_receipt(store, c, run, call):
+    from .goal_applications import _GenerationFactsReader
+    return _check_receipt_core(_GenerationFactsReader(store, c, run), call)
+
+
+def _check_receipt_core(reader, call):
+    _generation_reader_checkpoint(reader)
+    store, c, run = reader.store, reader.c, reader.run
     args = check_call(store, c, run, call)
-    op = c.execute(select(operations).where(operations.c.run_id == run["id"],
-        operations.c.call_id == "ga_spec_check")).mappings().first()
+    reader.check()
+    op = reader.checker_operation()
     if not op:
         raise DomainError("VERSION_CONFLICT", "Actual spec checker receipt required")
-    intent = c.execute(select(operation_intents.c.request).where(operation_intents.c.operation_id == op["id"])).scalar()
+    intent = reader.intent(op)
     expected = dict(tool=CHECK_TOOL, args=args)
-    report = check_report(store, c, run, args["candidate"])
+    report = (check_report(store, c, run, args["candidate"]) if reader.guard is None
+              else _check_report_core(reader, args["candidate"]))
+    reader.check()
     receipt = dict(operation_id=op["id"], status="VERIFIED", data=report,
         artifact_refs=[], receipt_ref=op["id"],
         check_results=[dict(check="receipt.readback.v1", status="PASS"), dict(check=report["check"], status=report["status"])],
@@ -399,8 +447,9 @@ def check_receipt(store, c, run, call):
     require(op["status"] == "VERIFIED" and op["tool_ref"] == CHECK_TOOL
         and fingerprint(intent) == fingerprint(expected) == op["fingerprint"]
         and fingerprint(op["receipt"]) == fingerprint(receipt), "Spec checker evidence changed")
-    anchors = c.execute(select(events.c.data).where(events.c.run_id == run["id"], events.c.kind == "GA_SPEC_CHECKED")).scalars().all()
+    anchors = reader._anchors("GA_SPEC_CHECKED")
     require(anchors == [dict(operation_id=op["id"], report_fingerprint=fingerprint(report))], "Checker anchor changed")
+    reader.check()
     return receipt
 
 
@@ -443,24 +492,171 @@ class BindInput(Strict):
 
 
 @controlled
-def scope_gate(store, c, user, aid):
+def _persisted_scope_metadata(value):
+    """Only the fixed owned Metadata parse inherits the old error mapping."""
+    return Metadata.model_validate(value)
+
+
+@controlled
+def _persisted_run_scope(value):
+    """Only the fixed owned RunScopeInput parse inherits the old mapping."""
+    return RunScopeInput.model_validate(value)
+
+
+def _persisted_snapshot_finite(snapshot):
+    """Map canonical encoding errors in a completely controlled JSON snapshot.
+
+    Unsupported shapes and cycles stay with the original checked protocol.
+    This pure walk neither hashes nor grants permission to use the snapshot.
+    """
+    if type(snapshot) is not dict:
+        return
+    pending: list[tuple[Any, bool]] = [(snapshot, False)]
+    active: set[int] = set()
+    seen: set[int] = set()
+    malformed = False
+    while pending:
+        value, leaving = pending.pop()
+        if leaving:
+            active.remove(id(value))
+            continue
+        kind = type(value)
+        if kind is dict or kind is list:
+            children: Any
+            marker = id(value)
+            if marker in active:
+                return
+            if marker in seen:
+                continue
+            if kind is dict:
+                if any(type(key) is not str for key in value):
+                    return
+                for key in value:
+                    try:
+                        key.encode('utf-8')
+                    except UnicodeError:
+                        malformed = True
+                children = value.values()
+            else:
+                children = value
+            seen.add(marker)
+            active.add(marker)
+            pending.append((value, True))
+            pending.extend((child, False) for child in children)
+        elif kind is float:
+            if not math.isfinite(value):
+                malformed = True
+        elif kind is str:
+            try:
+                value.encode('utf-8')
+            except UnicodeError:
+                malformed = True
+        elif kind is int or kind is bool or kind is type(None):
+            continue
+        else:
+            return
+    if malformed:
+        raise DomainError('VERSION_CONFLICT', 'Malformed persisted DeliveryGraph binding')
+
+
+def _cold_scope_pair(store, c, user, entity, guard, *, run_scope=False):
+    """Fixed app/run scope pairs; IO and guard errors are outside parse mapping."""
+    from . import delivery_graph_apps as graph
+    from .text_logic_reuse import require as pair_require
+
+    try:
+        require(type(run_scope) is bool and guard is not None)
+        kind, key = (RUN_META, 'accepted') if run_scope else (META, 'scope')
+        _bound_checkpoint(store, c, guard)
+        rows = []
+        for saved_kind in (kind, kind + '_seal'):
+            row = graph.lookup(c, user, entity, saved_kind, key)
+            _bound_checkpoint(store, c, guard)
+            rows.append(row)
+        pair_require(all(rows), 'Independent text logic seals missing')
+        values = []
+        for row in rows:
+            _persisted_snapshot_finite(row['snapshot'])
+            value = graph.checked(row)
+            _bound_checkpoint(store, c, guard)
+            values.append(value)
+        left, right = values
+        pair_require(set(left) == {'request', 'response'})
+        left_fp = fingerprint(left)
+        _bound_checkpoint(store, c, guard)
+        right_fp = fingerprint(right)
+        _bound_checkpoint(store, c, guard)
+        pair_require(left_fp == right_fp)
+        # No query, checkpoint or user callback is inside either fixed parser.
+        body = (_persisted_run_scope(left['request']) if run_scope
+            else _persisted_scope_metadata(left['request']))
+        _bound_checkpoint(store, c, guard)
+        for row in rows:
+            request_fp = fingerprint(RunScopeInput.model_dump(body) if run_scope
+                else Metadata.model_dump(body))
+            _bound_checkpoint(store, c, guard)
+            pair_require(row['request_fingerprint'] == request_fp)
+        return body, left['response']
+    except BaseException:
+        from .natural_spec_runtime import _ColdGraphRead
+        if type(guard) is _ColdGraphRead:
+            _ColdGraphRead.invalidate(guard)
+        raise
+
+
+def scope_gate(*args, **kwargs):
+    guard = kwargs.get("_graph_read")
+    if guard is None:
+        return _scope_gate_default(*args, **kwargs)
+    try:
+        return _scope_gate_core(*args, **kwargs)
+    except BaseException:
+        from .natural_spec_runtime import _ColdGraphRead
+        if type(guard) is _ColdGraphRead:
+            _ColdGraphRead.invalidate(guard)
+        raise
+
+
+@controlled
+def _scope_gate_default(*args, **kwargs):
+    return _scope_gate_core(*args, **kwargs)
+
+
+def _scope_gate_core(store, c, user, aid, *, _graph_read=None):
+    def checkpoint():
+        if _graph_read is not None:
+            from .natural_spec_runtime import _cold_read_checkpoint
+            _cold_read_checkpoint(store, c, _graph_read)
+
+    checkpoint()
     from . import pb_natural_specs as pb
     location = c.execute(_SCOPE_LOCATION, {"scope_app_id": aid}).mappings().first()
+    checkpoint()
     kind = c.execute(_SCOPE_KIND, {"scope_app_id": aid}).scalar()
+    checkpoint()
     ledger = c.execute(_SCOPE_LEDGER, dict(scope_app_id=aid, scope_kinds=[META, META + "_seal", BIND, BIND + "_seal",
             pb.META, pb.META + "_seal", pb.EXTRACT, pb.EXTRACT + "_seal"])).first()
+    checkpoint()
     pb_ledger = c.execute(_SCOPE_LEDGER, dict(scope_app_id=aid,
         scope_kinds=[pb.META, pb.META + "_seal", pb.EXTRACT, pb.EXTRACT + "_seal"])).first()
+    checkpoint()
     confirmed = c.execute(_SCOPE_CONFIRMED, {"scope_app_id": aid}).first()
+    checkpoint()
     hinted = bool((location and (location["family"] in FAMILIES or location["binding"] == KIND or location["task"] == pb.KIND)) or kind in {KIND, pb.KIND} or ledger is not None or confirmed is not None)
     if hinted:
         require(location is not None)
         store.own_project(c, user, location["project_id"])
+        checkpoint()
         store.authorize(c, user, location["runtime_id"], location["project_id"], location["resource"], "resource.read")
+        checkpoint()
     if kind == pb.KIND or (location and location["task"] == pb.KIND) or pb_ledger is not None:
         require(location is not None)
-        return pb.scope_gate(store, c, user, aid, location)
+        result = pb.scope_gate(store, c, user, aid, location,
+            **({"_graph_read": _graph_read} if _graph_read is not None else {}))
+        checkpoint()
+        return result
     gen = c.execute(_SCOPE_GENERATION, {"scope_app_id": aid}).scalar()
+    checkpoint()
     if not ((location and (location["family"] in FAMILIES or location["binding"] == KIND)) or kind == KIND or gen in GENERATIONS or ledger is not None):
         return False
     require(location is not None)
@@ -469,8 +665,11 @@ def scope_gate(store, c, user, aid):
     # through; either supported draft family may coexist with a frozen Release.
     require(location["family"] in FAMILIES, "Current spec application family is unsupported")
     store.own_project(c, user, location["project_id"])
+    checkpoint()
     if kind == KIND:
-        meta, sealed = pair(c, user, aid, META, "scope", Metadata)
+        meta, sealed = (pair(c, user, aid, META, "scope", Metadata)
+            if _graph_read is None else _cold_scope_pair(store, c, user, aid, _graph_read))
+        checkpoint()
         require(fingerprint(meta.model_dump()) == fingerprint(sealed)
             and meta.app_id == aid and meta.principal_id == user
             and meta.runtime_id == location["runtime_id"] and meta.project_id == location["project_id"]
@@ -478,22 +677,46 @@ def scope_gate(store, c, user, aid):
     else:
         require(gen in GENERATIONS, "Independent model generation marker required")
         origin = c.execute(_SCOPE_ORIGIN, {"scope_app_id": aid, "scope_principal": user}).scalar()
+        checkpoint()
         require(origin is not None)
         from .goal_applications import source_scope_gate
-        source_scope_gate(store, c, origin)
+        source_scope_gate(store, c, origin,
+            **({"_graph_read": _graph_read} if _graph_read is not None else {}))
+        checkpoint()
     store.authorize(c, user, location["runtime_id"], location["project_id"], location["resource"], "resource.read")
+    checkpoint()
     store.authorize(c, user, location["runtime_id"], location["project_id"], location["project_id"], SAVE)
+    checkpoint()
     return True
 
 
+def job_scope_gate(*args, **kwargs):
+    guard = kwargs.get("_graph_read")
+    if guard is None:
+        return _job_scope_gate_default(*args, **kwargs)
+    try:
+        return _job_scope_gate_with_authorities(*args, **kwargs)
+    except BaseException:
+        from .natural_spec_runtime import _ColdGraphRead
+        if type(guard) is _ColdGraphRead:
+            _ColdGraphRead.invalidate(guard)
+        raise
+
+
 @controlled
-def job_scope_gate(store, c, user, rid):
+def _job_scope_gate_default(*args, **kwargs):
+    return _job_scope_gate_with_authorities(*args, **kwargs)
+
+
+def _job_scope_gate_with_authorities(store, c, user, rid, *, _graph_read=None):
+    _bound_checkpoint(store, c, _graph_read)
     # Capture the ENTIRE scope gate, including material/SAVE and the actual
     # parent artifact authority checked before Release proof validation.
     c.info.pop("correction_scope_segment", None)
     epoch = c.info.get("source_proof_write_epoch",0)
     with store.proof_authorities(c) as authorities:
-        result = _job_scope_gate(store,c,user,rid)
+        result = _job_scope_gate(store,c,user,rid, _graph_read=_graph_read)
+    _bound_checkpoint(store, c, _graph_read)
     token = c.info.get("correction_scope_segment")
     if (result and token and token.get("run_id") == rid
             and token.get("principal_id") == user
@@ -503,35 +726,46 @@ def job_scope_gate(store, c, user, rid):
     return result
 
 
-def _job_scope_gate(store, c, user, rid):
+def _job_scope_gate(store, c, user, rid, *, _graph_read=None):
+    _bound_checkpoint(store, c, _graph_read)
     row = c.execute(select(runs.c.project_id, runs.c.runtime_id, runs.c.principal_id,
         runs.c.request_key).where(runs.c.id == rid)).mappings().first()
+    _bound_checkpoint(store, c, _graph_read)
     if row is None:
         return False
     from . import pb_natural_uses
-    pb_natural_uses.scope_gate(store, c, user, rid, row)
+    pb_natural_uses.scope_gate(store, c, user, rid, row, **({"_graph_read": _graph_read, "_scope_role": "job"} if _graph_read is not None else {}))
+    _bound_checkpoint(store, c, _graph_read)
     ids = set(c.execute(select(app_drafts.c.id).where(app_drafts.c.runtime_id == row["runtime_id"],
         app_drafts.c.project_id == row["project_id"])).scalars())
+    _bound_checkpoint(store, c, _graph_read)
     accepted = c.execute(select(events.c.data["instance_id"].as_string().label("iid"),
         events.c.data["app_run_id"].as_string().label("aid"))
         .where(events.c.run_id == rid, events.c.kind == "ACCEPTED",
             events.c.data["namespace"].as_string() == "INTERNAL_APPRUN")).mappings().all()
+    _bound_checkpoint(store, c, _graph_read)
     for header in accepted:
         aid = c.execute(select(internal_instances.c.source_app_id)
             .where(internal_instances.c.id == header["iid"], internal_instances.c.principal_id == user)).scalar()
+        _bound_checkpoint(store, c, _graph_read)
         if aid:
             ids.add(aid)
     if row["request_key"].startswith("internal:"):
         aid = c.execute(select(internal_instances.c.source_app_id)
             .join(internal_app_runs, internal_app_runs.c.instance_id == internal_instances.c.id)
             .where(internal_app_runs.c.id == row["request_key"][9:], internal_instances.c.principal_id == user)).scalar()
+        _bound_checkpoint(store, c, _graph_read)
         if aid:
             ids.add(aid)
-    family = any(scope_gate(store, c, user, aid) for aid in ids)
+    family = any(scope_gate(store, c, user, aid, **({"_graph_read": _graph_read} if _graph_read is not None else {})) for aid in ids)
+    _bound_checkpoint(store, c, _graph_read)
     from .delivery_graph_apps import lookup
     if not family and not any(lookup(c, user, rid, k, "accepted") for k in (RUN_META, RUN_META + "_seal")):
         return False
-    meta, seal = pair(c, user, rid, RUN_META, "accepted", RunScopeInput)
+    _bound_checkpoint(store, c, _graph_read)
+    meta, seal = (pair(c, user, rid, RUN_META, "accepted", RunScopeInput)
+        if _graph_read is None else _cold_scope_pair(store, c, user, rid, _graph_read, run_scope=True))
+    _bound_checkpoint(store, c, _graph_read)
     require(family and fingerprint(meta.model_dump()) == fingerprint(seal)
         and meta.run_id == rid and meta.principal_id == row["principal_id"] == user
         and meta.runtime_id == row["runtime_id"] and meta.project_id == row["project_id"]
@@ -539,21 +773,29 @@ def _job_scope_gate(store, c, user, rid):
         and len(accepted) == 1 and accepted[0]["iid"] == meta.instance_id
         and accepted[0]["aid"] == meta.app_run_id)
     store.authorize(c, user, meta.runtime_id, meta.project_id, meta.resource_id, "resource.read")
-    require(scope_gate(store, c, user, meta.app_id))
+    _bound_checkpoint(store, c, _graph_read)
+    require(scope_gate(store, c, user, meta.app_id, **({"_graph_read": _graph_read} if _graph_read is not None else {})))
+    _bound_checkpoint(store, c, _graph_read)
     from . import natural_spec_corrections
     natural_spec_corrections.gate(store,c,user,rid)
+    _bound_checkpoint(store, c, _graph_read)
     from . import project_natural_revalidation as project
     from .db import internal_run_bindings
     project_meta = lookup(c,user,rid,project.JOB,"accepted") or lookup(c,user,rid,project.JOB+"_seal","accepted")
+    _bound_checkpoint(store, c, _graph_read)
     project_ref = c.execute(select(internal_run_bindings.c.snapshot["project_check"]).where(internal_run_bindings.c.run_id==rid)).scalar()
+    _bound_checkpoint(store, c, _graph_read)
     from .db import delivery_graph_requests
     project_start = c.execute(select(delivery_graph_requests.c.request_key).where(delivery_graph_requests.c.principal_id==user,
         delivery_graph_requests.c.kind.in_([project.START,project.START+"_seal"]),
         delivery_graph_requests.c.snapshot["response"]["run_id"].as_string()==rid)).first()
+    _bound_checkpoint(store, c, _graph_read)
     if project_meta or project_ref is not None or project_start:
         reference,sealed = pair(c,user,rid,project.JOB,"accepted",project.Reference)
+        _bound_checkpoint(store, c, _graph_read)
         require(reference.model_dump() == sealed == project_ref)
         project.guard(store,c,user,reference.model_dump(),Limits(**c.execute(select(internal_run_bindings.c.snapshot["limits"]).where(internal_run_bindings.c.run_id==rid)).scalar_one()))
+    _bound_checkpoint(store, c, _graph_read)
     return True
 
 
@@ -573,13 +815,107 @@ def model_source(store, c, user, rid, limits, pid):
     return raw, metadata
 
 
+def _cold_original_model_source(store, c, user, run, original, marker, raw, reader, *, _origin_read=None):
+    """Original GA app confirmation using the complete candidate, never public ancestors.
+
+    Root must have loaded the owned marker before Generation at its old position,
+    and separately prove the original draft/platform/source after this confirmation.
+    No rebind/spec_task/logic/correction family is accepted by this private facet.
+    """
+    from .goal_applications import _cold_generation_reader
+    from .text_apps import (
+        _goal_acceptance_from_facts,
+        _goal_confirmation,
+        _verify_goal_origin_from_facts,
+    )
+    try:
+        reader = _cold_generation_reader(store, c, run, reader)
+        if _origin_read is not None:
+            _original_origin_checkpoint(store, c, user, _origin_read)
+        require(any(value is raw for value in reader.candidate_values.values()) and marker is not None
+            and marker["run_id"] == run["id"] and marker["app_id"] == original["id"]
+            and marker["principal_id"] == user == run["principal_id"]
+            and original["project_id"] == run["project_id"]
+            and natural.is_candidate(raw) and natural.is_candidate(original["candidate"])
+            and not {"spec_task", "spec_binding"}.intersection(original["candidate"])
+            and not {"natural_logic_origin", "correction_run_id", "pb_use_run_id", "pa_use_run_id"}.intersection(original),
+            "Exact original GA candidate facts required")
+        reader.check()
+        if _origin_read is not None:
+            _original_origin_checkpoint(store, c, user, _origin_read)
+        confirmation = _goal_confirmation(marker)
+        reader.check()
+        if _origin_read is not None:
+            _original_origin_checkpoint(store, c, user, _origin_read)
+        accepted = _goal_acceptance_from_facts(user, original, run, raw, confirmation)
+        reader.check()
+        if _origin_read is not None:
+            _original_origin_checkpoint(store, c, user, _origin_read)
+        sealed = reader._anchors("GA_APP_CONFIRMED")
+        _verify_goal_origin_from_facts(user, original, marker, run, raw, confirmation, accepted, sealed)
+        reader.check()
+        if _origin_read is not None:
+            _original_origin_checkpoint(store, c, user, _origin_read)
+        # This is a confirmation facet, not full original App/Release authority.
+        return raw, dict(project_id=run["project_id"], principal_id=user,
+                         runtime_id=run["runtime_id"], resource_refs=copy.deepcopy(run["resource_refs"]))
+    except BaseException:
+        from .goal_applications import _GenerationFactsReader
+        if type(reader) is _GenerationFactsReader:
+            reader.invalidate()
+        raise
+
+
+
+def target(*args, **kwargs):
+    # Fixed forwarding only. Strict guards stay outside persisted-data mappers;
+    # default calls retain the original controlled argument/error semantics.
+    if kwargs.get("_graph_read") is None and kwargs.get("_origin_read") is None:
+        return _target_default(*args, **kwargs)
+    return _target_core(*args, **kwargs)
+
+
 @controlled
-def target(store, c, user, pid, cid, version=None, goal_fp=None, runtime=None, *, family=VERSION):
+def _target_default(*args, **kwargs):
+    return _target_core(*args, **kwargs)
+
+
+@controlled
+def _target_runtime(project, runtime):
+    # Owned persisted scalar projection only; no guard or IO in this mapper.
+    return runtime or project["runtime_id"]
+
+
+@controlled
+def _target_source_check(source, family):
+    # The original pure bounded source parser; no guard/authority callback.
+    return source_check(source, family)
+
+
+def _target_core(store, c, user, pid, cid, version=None, goal_fp=None, runtime=None, *, family=VERSION, _graph_read=None, _origin_read=None):
     from .pa_material_bindings import target as read_target
+    if _graph_read is not None:
+        from .natural_spec_runtime import _ColdGraphRead
+        require(type(_graph_read) is _ColdGraphRead)
+    if _origin_read is not None:
+        _original_origin_checkpoint(store, c, user, _origin_read)
+        require(_graph_read is _origin_read.guard)
     project = store.own_project(c, user, pid)
-    store.authorize(c, user, runtime or project["runtime_id"], pid, pid, SAVE)
+    _bound_checkpoint(store, c, _graph_read)
+    if _origin_read is not None:
+        _original_origin_checkpoint(store, c, user, _origin_read)
+    store.authorize(c, user, _target_runtime(project, runtime), pid, pid, SAVE)
+    _bound_checkpoint(store, c, _graph_read)
+    if _origin_read is not None:
+        _original_origin_checkpoint(store, c, user, _origin_read)
     source, goal = read_target(store, c, user, pid, cid, version, goal_fp, runtime)
-    source_check(source, family)
+    _bound_checkpoint(store, c, _graph_read)
+    if _origin_read is not None:
+        _original_origin_checkpoint(store, c, user, _origin_read)
+    _target_source_check(source, family)
+    _bound_checkpoint(store, c, _graph_read)
+    if _origin_read is not None:
+        _original_origin_checkpoint(store, c, user, _origin_read)
     return source, goal
 
 
@@ -600,8 +936,7 @@ def verify_origin(store, c, user, draft, limits):
     if "spec_task" in draft["candidate"]:
         from .pb_natural_specs import verify
         return verify(store, c, user, draft, limits)
-    manifest, _, report = compile_candidate(draft["candidate"], limits)
-    marker = c.execute(select(task_extractions).where(task_extractions.c.app_id == draft["id"])).mappings().first()
+    manifest, report, marker = _original_origin_prefix(store, c, user, draft, limits)
     if marker:
         body, frozen = pair(c, user, draft["id"], BIND, marker["request_key"], BindInput)
         meta, seal = pair(c, user, draft["id"], META, "scope", Metadata)
@@ -622,7 +957,6 @@ def verify_origin(store, c, user, draft, limits):
         wanted = binding_candidate(raw, body, goal, source, draft["id"], draft["project_id"])
         require(fingerprint(wanted) == fingerprint(draft["candidate"]) == draft["fingerprint"])
     else:
-        from .contracts import GoalCardRunSource
         from .text_apps import verify_origin as verify_confirmation
         verify_confirmation(store, c, user, draft, limits)
         row = c.execute(select(goal_application_candidates.c.run_id)
@@ -630,17 +964,175 @@ def verify_origin(store, c, user, draft, limits):
         run = c.execute(select(runs).where(runs.c.id == row)).mappings().one()
         from .goal_applications import source as generation_source
         contract, _ = generation_source(store, c, run)
-        goal = contract.source_goal_card
-        require(isinstance(goal, GoalCardRunSource))
-        confirmation = c.execute(select(goal_application_candidates.c.confirmation)
-            .where(goal_application_candidates.c.app_id == draft["id"])).scalar_one()
-        require(confirmation.get("artifact_write_consent") == CONSENT)
-        source, current = target(store, c, user, draft["project_id"], goal.card_id, goal.version,
-            goal.fingerprint, draft["runtime_id"], family=draft["candidate"]["namespace"])
-        require(fingerprint(current.model_dump()) == fingerprint(goal.model_dump()))
+        source, goal = _original_confirmation_target(store, c, user, draft, contract)
     require(source["hash"] == draft["candidate"]["source_hash"]
         and manifest.data_bindings[0].resource_ref == source["resource_id"])
     return manifest, report, source, goal.model_dump()
+
+
+def _original_origin_prefix(store, c, user, draft, limits, *, _graph_read=None):
+    manifest, _, report = compile_candidate(draft["candidate"], limits)
+    if _graph_read is not None:
+        from .natural_live_admission import _trial_typed_equal
+        require(type(manifest) is AppManifest)
+        manifest_pin = copy.deepcopy(AppManifest.model_dump(manifest))
+    _bound_checkpoint(store, c, _graph_read)
+    if _graph_read is not None:
+        require(_trial_typed_equal(AppManifest.model_dump(manifest), manifest_pin),
+            "Complete typed original Manifest changed at prefix read")
+    marker = c.execute(select(task_extractions).where(task_extractions.c.app_id == draft["id"])).mappings().first()
+    _bound_checkpoint(store, c, _graph_read)
+    if _graph_read is not None:
+        require(_trial_typed_equal(AppManifest.model_dump(manifest), manifest_pin),
+            "Complete typed original Manifest changed at prefix read")
+    return manifest, report, marker
+
+
+def _original_confirmation_target(store, c, user, draft, contract, *, _graph_read=None, _origin_read=None):
+    from .contracts import GoalCardRunSource
+    if _origin_read is not None:
+        _original_origin_checkpoint(store, c, user, _origin_read)
+        require(_graph_read is _origin_read.guard and contract is _origin_read.reader.contract)
+    goal = contract.source_goal_card
+    require(isinstance(goal, GoalCardRunSource))
+    confirmation = c.execute(select(goal_application_candidates.c.confirmation)
+        .where(goal_application_candidates.c.app_id == draft["id"])).scalar_one()
+    _bound_checkpoint(store, c, _graph_read)
+    if _origin_read is not None:
+        _original_origin_checkpoint(store, c, user, _origin_read)
+    require(confirmation.get("artifact_write_consent") == CONSENT)
+    source, current = target(store, c, user, draft["project_id"], goal.card_id, goal.version,
+        goal.fingerprint, draft["runtime_id"], family=draft["candidate"]["namespace"],
+        **({"_graph_read": _graph_read} if _graph_read is not None else {}),
+        **({"_origin_read": _origin_read} if _origin_read is not None else {}))
+    _bound_checkpoint(store, c, _graph_read)
+    if _origin_read is not None:
+        _original_origin_checkpoint(store, c, user, _origin_read)
+    require(fingerprint(current.model_dump()) == fingerprint(goal.model_dump()))
+    return source, goal
+
+
+
+
+@dataclass(frozen=True)
+class _ColdOriginalOriginPrefix:
+    guard: Any
+    user: str
+    draft: Any
+    limits: Limits
+    manifest: Any
+    report: dict
+
+
+@dataclass(frozen=True)
+class _ColdOriginalOriginRead:
+    """Exact lexical original-Manifest/Generation pin, never a callback or authority."""
+    guard: Any
+    prefix: _ColdOriginalOriginPrefix
+    reader: Any
+    key: str
+    pin: dict
+
+    def check(self, store, c, user):
+        from .goal_applications import _cold_generation_reader, _GenerationFactsReader
+        from .natural_live_admission import _trial_typed_equal
+        from .natural_spec_runtime import _ColdGraphRead
+
+        try:
+            require(type(self.guard) is _ColdGraphRead
+                and type(self.prefix) is _ColdOriginalOriginPrefix
+                and type(self.reader) is _GenerationFactsReader)
+            prefix, reader = self.prefix, self.reader
+            require(prefix.guard is self.guard and reader.guard is self.guard
+                and prefix.user == user == reader.run["principal_id"],
+                "Original origin read scope changed")
+            _cold_generation_reader(store, c, reader.run, reader)
+            require(type(prefix.manifest) is AppManifest and type(prefix.limits) is Limits
+                and type(self.pin) is dict and type(self.key) is str)
+            key = "original-origin-prefix:" + prefix.draft["id"] + ":" + fingerprint(Limits.model_dump(prefix.limits))
+            require(self.key == key and self.guard.inputs.get(key) is self.pin
+                and self.pin["draft"] is prefix.draft and self.pin["limits"] is prefix.limits
+                and self.pin["report"] is prefix.report
+                and _trial_typed_equal(AppManifest.model_dump(prefix.manifest), self.pin["manifest"]),
+                "Complete typed original Manifest changed before consumption")
+        except BaseException:
+            if type(self.guard) is _ColdGraphRead:
+                _ColdGraphRead.invalidate(self.guard)
+            if type(self.prefix) is _ColdOriginalOriginPrefix and type(self.prefix.guard) is _ColdGraphRead:
+                _ColdGraphRead.invalidate(self.prefix.guard)
+            if type(self.reader) is _GenerationFactsReader:
+                _GenerationFactsReader.invalidate(self.reader)
+            raise
+
+
+def _original_origin_checkpoint(store, c, user, origin_read):
+    # This is a fixed private object, not a widened _graph_read/callback hook.
+    require(type(origin_read) is _ColdOriginalOriginRead, "Exact original origin read pin required")
+    _ColdOriginalOriginRead.check(origin_read, store, c, user)
+
+
+def _cold_original_origin_prefix(store, c, user, draft, limits, guard):
+    from .natural_spec_runtime import _ColdGraphRead
+    try:
+        require(type(guard) is _ColdGraphRead)
+        _bound_checkpoint(store, c, guard)
+        scope_gate(store, c, user, draft["id"], _graph_read=guard)
+        _bound_checkpoint(store, c, guard)
+        require("spec_task" not in draft["candidate"])
+        manifest, report, marker = _original_origin_prefix(store, c, user, draft, limits, _graph_read=guard)
+        require(marker is None and "spec_binding" not in draft["candidate"], "Cold graph requires original GA Source")
+        key = "original-origin-prefix:" + draft["id"] + ":" + fingerprint(limits.model_dump())
+        require(type(manifest) is AppManifest)
+        guard.add(key, dict(draft=draft, limits=limits, manifest=AppManifest.model_dump(manifest), report=report, marker=marker))
+        return _ColdOriginalOriginPrefix(guard, user, draft, limits, manifest, report)
+    except BaseException:
+        if type(guard) is _ColdGraphRead:
+            guard.invalidate()
+        raise
+
+
+def _cold_original_origin_from_generation(store, c, user, prefix, reader, raw, marker):
+    from .goal_applications import _cold_generation_reader, _GenerationFactsReader
+    from .natural_spec_runtime import _ColdGraphRead
+    try:
+        require(type(prefix) is _ColdOriginalOriginPrefix and type(reader) is _GenerationFactsReader)
+        guard = prefix.guard
+        _bound_checkpoint(store, c, guard)
+        require(reader.guard is guard and prefix.user == user)
+        reader = _cold_generation_reader(store, c, reader.run, reader)
+        key = "original-origin-prefix:" + prefix.draft["id"] + ":" + fingerprint(Limits.model_dump(prefix.limits))
+        origin_read = _ColdOriginalOriginRead(guard, prefix, reader, key, guard.inputs[key])
+        _original_origin_checkpoint(store, c, user, origin_read)
+        _cold_original_model_source(store, c, user, reader.run, prefix.draft, marker, raw, reader, _origin_read=origin_read)
+        _original_origin_checkpoint(store, c, user, origin_read)
+        # Original subsequent source identity reads stay at the confirmation edge.
+        rid = c.execute(select(goal_application_candidates.c.run_id)
+            .where(goal_application_candidates.c.app_id == prefix.draft["id"])).scalar_one()
+        _bound_checkpoint(store, c, guard)
+        _original_origin_checkpoint(store, c, user, origin_read)
+        run = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
+        _bound_checkpoint(store, c, guard)
+        _original_origin_checkpoint(store, c, user, origin_read)
+        require(dict(run) == dict(reader.run))
+        contract, _ = reader.source()
+        _bound_checkpoint(store, c, guard)
+        _original_origin_checkpoint(store, c, user, origin_read)
+        source, goal = _original_confirmation_target(store, c, user, prefix.draft, contract,
+            _graph_read=guard, _origin_read=origin_read)
+        _original_origin_checkpoint(store, c, user, origin_read)
+        require(source["hash"] == prefix.draft["candidate"]["source_hash"]
+            and prefix.manifest.data_bindings[0].resource_ref == source["resource_id"])
+        result = (prefix.manifest, prefix.report, source, goal.model_dump())
+        guard.add("original-origin:" + prefix.draft["id"] + ":" + fingerprint(prefix.limits.model_dump()),
+            dict(manifest=AppManifest.model_dump(prefix.manifest), report=prefix.report, source=source, goal=goal.model_dump()))
+        _original_origin_checkpoint(store, c, user, origin_read)
+        return result
+    except BaseException:
+        if type(prefix) is _ColdOriginalOriginPrefix and type(prefix.guard) is _ColdGraphRead:
+            prefix.guard.invalidate()
+        if type(reader) is _GenerationFactsReader and type(reader.guard) is _ColdGraphRead:
+            reader.guard.invalidate()
+        raise
 
 
 @controlled
@@ -787,7 +1279,6 @@ def _bound(store, c, user, job, limits, *, validate_input=True, _source_origin=F
     from threading import get_ident
 
     from . import app_jobs
-    from .db import attempts
     from .pb_natural_specs import _source_reads_current, _source_transaction
 
     logic_out: dict[str, Any] = {}
@@ -877,7 +1368,26 @@ def _bound(store, c, user, job, limits, *, validate_input=True, _source_origin=F
         else:
             manifest, report, source, goal = verify_origin(store, c, user, draft, limits)
     # load_binding/correction.bound proved current scope; this call chain only reads.
+    contract, plan = _bound_contract_from_facts(store, c, user, job, limits, snapshot,
+        draft, manifest, source, goal, validate_input=validate_input)
+    value = _bound_value_from_facts(snapshot, app_run, release, draft, source, goal, plan, report, contract,
+        audit_fingerprint(store, c, user, draft, _logic_out=logic_out, _release=release,
+            **({"_use_proof": use_proof} if use_proof is not None else {})))
+    if "human_correction" in snapshot:
+        value["human_correction"] = natural_spec_corrections.feedback(store,c,user,job,snapshot,_logic_out=logic_out,_release=release)
+    return value
+
+
+def _bound_checkpoint(store, c, guard):
+    if guard is not None:
+        from .natural_spec_runtime import _cold_read_checkpoint
+        _cold_read_checkpoint(store, c, guard)
+
+
+def _bound_contract_from_facts(store, c, user, job, limits, snapshot, draft, manifest, source, goal, *, validate_input=True, _graph_read=None, _natural_facts=None):
+    from .db import attempts
     contract = store._frozen_contract_after_scope(c, job)
+    _bound_checkpoint(store, c, _graph_read)
     from .spec_production import generation_mode
     content = goal["snapshot"]["content"]
     require(contract.source_goal_card is None and contract.goal.goal_id == goal["card_id"]
@@ -889,13 +1399,21 @@ def _bound(store, c, user, job, limits, *, validate_input=True, _source_origin=F
         and contract.goal.resource_refs == job["resource_refs"] == [source["resource_id"]]
         and len(contract.resources) == 1 and contract.resources[0].content_hash == source["hash"]
         and contract.resources[0].resource_id == source["resource_id"] and contract.resources[0].format == source["format"]
-        and contract.mode == generation_mode(c, draft) and contract.application_generation is None and contract.natural_planning is None
+        )
+    mode = generation_mode(c, draft)
+    _bound_checkpoint(store, c, _graph_read)
+    require(contract.mode == mode and contract.application_generation is None and contract.natural_planning is None
         and job["context"].get("spec_family") == draft["candidate"]["namespace"])
     if natural.is_candidate(draft["candidate"]):
         from .natural_spec_runtime import counters
         clock = snapshot.get("natural_spec_clock")
         _bound_clock_from_facts(clock, job, contract, manifest)
-        counters(c, job, manifest)
+        if _graph_read is None:
+            counters(c, job, manifest)
+        else:
+            from .natural_spec_runtime import _counters_from_facts
+            _counters_from_facts(store, c, job, manifest, _natural_facts)
+        _bound_checkpoint(store, c, _graph_read)
     else:
         require(all(type(job["context"].get(k)) is int and job["context"][k] == 0
             for k in ("requests", "repairs", "reserved_tokens"))
@@ -904,13 +1422,78 @@ def _bound(store, c, user, job, limits, *, validate_input=True, _source_origin=F
     if validate_input:
         validate_value(manifest.input_schema, snapshot["input"])
     plan = _bound_plan_from_facts(draft, snapshot, source)
+    _bound_checkpoint(store, c, _graph_read)
+    return contract, plan
+
+
+def _bound_value_from_facts(snapshot, app_run, release, draft, source, goal, plan, report, contract, audit):
     value = dict(snapshot=snapshot, app_run=app_run, release=release, draft=draft,
         source=source, goal=goal, plan=plan, report=report, run_mode=contract.mode,
-        audit_fingerprint=audit_fingerprint(store, c, user, draft, _logic_out=logic_out, _release=release,
-            **({"_use_proof": use_proof} if use_proof is not None else {})))
-    if "human_correction" in snapshot:
-        value["human_correction"] = natural_spec_corrections.feedback(store,c,user,job,snapshot,_logic_out=logic_out,_release=release)
+        audit_fingerprint=audit)
     return value
+
+
+
+
+@dataclass(frozen=True)
+class _ColdBoundPrefix:
+    guard: Any
+    key: str
+    user: str
+    job: Any
+    limits: Limits
+    value: dict
+
+
+def _cold_bound_prefix(store, c, user, job, limits, binding_prefix, release, origin, use_value, natural_facts, *, validate_input=True):
+    from . import app_jobs
+    from .natural_spec_runtime import _ColdGraphRead
+    try:
+        require(type(binding_prefix) is app_jobs._ColdBindingPrefix)
+        guard = binding_prefix.guard
+        _bound_checkpoint(store, c, guard)
+        require(binding_prefix.user == user and binding_prefix.job is job
+            and binding_prefix.limits is limits,
+            "Cold bound requires the exact role's Run and complete Limits")
+        snapshot, app_run, release = app_jobs._cold_binding_from_use(store, c, user, binding_prefix, release, use_value)
+        accepted = c.execute(select(events.c.data).where(events.c.run_id == job["id"], events.c.kind == "ACCEPTED")).scalars().all()
+        _bound_checkpoint(store, c, guard)
+        require(fingerprint(accepted) == fingerprint([dict(namespace=app_jobs.KIND, app_run_id=snapshot["app_run_id"],
+            instance_id=snapshot["instance_id"], release_id=snapshot["release_id"], input_fingerprint=snapshot["request_fingerprint"])]))
+        draft = release["snapshot"]["draft"]
+        require(is_candidate(draft["candidate"]))
+        if "pb_use" in snapshot:
+            require(binding_prefix.role == "cold" and type(use_value) is tuple and len(use_value) == 5)
+            draft, manifest, report, source, goal = use_value
+        else:
+            require(binding_prefix.role == "source" and type(origin) is tuple and len(origin) == 4)
+            manifest, report, source, goal = origin
+        contract, plan = _bound_contract_from_facts(store, c, user, job, limits, snapshot,
+            draft, manifest, source, goal, validate_input=validate_input, _graph_read=guard, _natural_facts=natural_facts)
+        key = binding_prefix.key + ":bound"
+        value = _bound_value_from_facts(snapshot, app_run, release, draft, source, goal, plan, report, contract, None)
+        guard.add(key, dict(job=dict(job), limits=limits, value=value, accepted=accepted))
+        return _ColdBoundPrefix(guard, key, user, job, limits, value)
+    except BaseException:
+        if type(binding_prefix) is app_jobs._ColdBindingPrefix and type(binding_prefix.guard) is _ColdGraphRead:
+            binding_prefix.guard.invalidate()
+        raise
+
+
+def _cold_bound_from_audit(store, c, user, prefix, audit):
+    from .natural_spec_runtime import _ColdGraphRead, _model_inputs
+    try:
+        require(type(prefix) is _ColdBoundPrefix)
+        _bound_checkpoint(store, c, prefix.guard)
+        require(prefix.user == user and type(audit) is str and len(audit) == 64
+            and _model_inputs(prefix.value) == _model_inputs(prefix.guard.inputs[prefix.key]["value"]))
+        value = {**prefix.value, "audit_fingerprint": audit}
+        prefix.guard.add(prefix.key + ":complete", value)
+        return value
+    except BaseException:
+        if type(prefix) is _ColdBoundPrefix and type(prefix.guard) is _ColdGraphRead:
+            prefix.guard.invalidate()
+        raise
 
 
 def audit_fingerprint(store, c, user, draft, *, _logic_out=None, _release=None, _correction_scope_checked=False, _use_proof=None):
@@ -950,38 +1533,90 @@ def audit_fingerprint(store, c, user, draft, *, _logic_out=None, _release=None, 
     if "spec_task" in draft["candidate"]:
         from .pb_natural_specs import audit_fingerprint as pb_audit
         return pb_audit(store, c, user, draft)
-    from .db import attempts, goal_card_versions, goal_cards
-    from .goal_applications import source_scope_gate
-    marker = c.execute(select(goal_application_candidates).where(goal_application_candidates.c.app_id == draft["id"],
-        goal_application_candidates.c.principal_id == user)).mappings().first()
-    if marker:
-        rid, aid = marker["run_id"], draft["id"]
-    else:
-        meta, _ = pair(c, user, draft["id"], META, "scope", Metadata)
-        rid = meta.source_run_id
-        aid = c.execute(select(goal_application_candidates.c.app_id).where(goal_application_candidates.c.run_id == rid,
-            goal_application_candidates.c.principal_id == user)).scalar()
-        require(aid is not None)
-    require(scope_gate(store, c, user, aid))
-    source_scope_gate(store, c, rid)
-    source_run = c.execute(select(runs).where(runs.c.id == rid, runs.c.project_id == draft["project_id"],
-        runs.c.principal_id == user)).mappings().one()
-    contract = c.execute(select(run_contracts).where(run_contracts.c.run_id == rid)).mappings().one()
-    original = c.execute(select(app_drafts).where(app_drafts.c.id == aid)).mappings().one()
-    goal = contract["snapshot"]["source_goal_card"]
-    rows: dict[str, Any] = dict(run=dict(source_run), contract=dict(contract), original=dict(original))
-    for name, _table, query in [
-        ("attempts", attempts, select(attempts).where(attempts.c.run_id == rid).order_by(attempts.c.id)),
-        ("operations", operations, select(operations).where(operations.c.run_id == rid).order_by(operations.c.id)),
-        ("intents", operation_intents, select(operation_intents).join(operations,
-            operations.c.id == operation_intents.c.operation_id).where(operations.c.run_id == rid).order_by(operation_intents.c.operation_id)),
-        ("events", events, select(events).where(events.c.run_id == rid).order_by(events.c.id)),
-        ("confirmation", goal_application_candidates, select(goal_application_candidates).where(goal_application_candidates.c.app_id == aid)),
-        ("goal_head", goal_cards, select(goal_cards).where(goal_cards.c.id == goal["card_id"])),
-        ("goal_version", goal_card_versions, select(goal_card_versions).where(goal_card_versions.c.card_id == goal["card_id"],
-            goal_card_versions.c.version == goal["version"]))]:
-        rows[name] = [dict(r) for r in c.execute(query).mappings()]
-    return fingerprint(rows)
+    return fingerprint(_native_audit_facts(store, c, user, draft))
+
+
+def _native_audit_facts(store, c, user, draft, *, _graph_read=None, _generation_reader=None):
+    """Original native audit rows; never an Authority or summary substitute."""
+    try:
+        def checkpoint():
+            if _graph_read is not None:
+                from .natural_spec_runtime import _cold_read_checkpoint
+                _cold_read_checkpoint(store, c, _graph_read)
+
+        from .goal_applications import _cold_generation_reader, _GenerationFactsReader
+        if _generation_reader is not None:
+            require(type(_generation_reader) is _GenerationFactsReader
+                and _graph_read is not None and _generation_reader.guard is _graph_read
+                and _generation_reader.store is store and _generation_reader.c is c,
+                "Exact Generation audit reader required")
+            _generation_reader.check()
+        checkpoint()
+        from .db import attempts, goal_card_versions, goal_cards
+        from .goal_applications import source_scope_gate
+        marker = c.execute(select(goal_application_candidates).where(goal_application_candidates.c.app_id == draft["id"],
+            goal_application_candidates.c.principal_id == user)).mappings().first()
+        checkpoint()
+        if marker:
+            rid, aid = marker["run_id"], draft["id"]
+        else:
+            meta, _ = pair(c, user, draft["id"], META, "scope", Metadata)
+            checkpoint()
+            rid = meta.source_run_id
+            aid = c.execute(select(goal_application_candidates.c.app_id).where(goal_application_candidates.c.run_id == rid,
+                goal_application_candidates.c.principal_id == user)).scalar()
+            checkpoint()
+            require(aid is not None)
+        scoped = scope_gate(store, c, user, aid,
+            **({"_graph_read": _graph_read} if _graph_read is not None else {}))
+        checkpoint()
+        require(scoped)
+        source_scope_gate(store, c, rid,
+            **({"_graph_read": _graph_read} if _graph_read is not None else {}))
+        checkpoint()
+        source_run = c.execute(select(runs).where(runs.c.id == rid, runs.c.project_id == draft["project_id"],
+            runs.c.principal_id == user)).mappings().one()
+        checkpoint()
+        if _generation_reader is not None:
+            _cold_generation_reader(store, c, source_run, _generation_reader)
+            require(_generation_reader.history_value is not None, "Complete Generation audit history required")
+        contract = c.execute(select(run_contracts).where(run_contracts.c.run_id == rid)).mappings().one()
+        checkpoint()
+        original = c.execute(select(app_drafts).where(app_drafts.c.id == aid)).mappings().one()
+        checkpoint()
+        goal = contract["snapshot"]["source_goal_card"]
+        rows: dict[str, Any] = dict(run=dict(source_run), contract=dict(contract), original=dict(original))
+        for name, _table, query in [
+            ("attempts", attempts, select(attempts).where(attempts.c.run_id == rid).order_by(attempts.c.id)),
+            ("operations", operations, select(operations).where(operations.c.run_id == rid).order_by(operations.c.id)),
+            ("intents", operation_intents, select(operation_intents).join(operations,
+                operations.c.id == operation_intents.c.operation_id).where(operations.c.run_id == rid).order_by(operation_intents.c.operation_id)),
+            ("events", events, select(events).where(events.c.run_id == rid).order_by(events.c.id)),
+            ("confirmation", goal_application_candidates, select(goal_application_candidates).where(goal_application_candidates.c.app_id == aid)),
+            ("goal_head", goal_cards, select(goal_cards).where(goal_cards.c.id == goal["card_id"])),
+            ("goal_version", goal_card_versions, select(goal_card_versions).where(goal_card_versions.c.card_id == goal["card_id"],
+                goal_card_versions.c.version == goal["version"]))]:
+            if _generation_reader is not None and name in {"attempts", "operations"}:
+                raw_key = _generation_reader._raw_key(
+                    "attempts" if name == "attempts" else "counter-operations")
+                require(_generation_reader._raw_present(raw_key), "Complete audit raw rows were not pinned")
+                loaded = sorted(
+                    (copy.deepcopy(dict(r)) for r in _generation_reader._raw_get(raw_key)),
+                    key=lambda r: r["id"])
+            else:
+                loaded = c.execute(query).mappings().all()
+            checkpoint()
+            rows[name] = [dict(r) for r in loaded]
+        checkpoint()
+        return rows
+    except BaseException:
+        from .goal_applications import _GenerationFactsReader
+        from .natural_spec_runtime import _ColdGraphRead
+        if type(_generation_reader) is _GenerationFactsReader:
+            _generation_reader.invalidate()
+        if type(_graph_read) is _ColdGraphRead:
+            _graph_read.invalidate()
+        raise
 
 
 def intent_for(step, action, plan, outputs, proved):
@@ -1004,8 +1639,49 @@ def receipt_for(oid, step, action, plan, intent, value):
 
 @controlled
 def receipts(store, c, job, binding, *, pending_id=None, allow_pending=False):
+    return _receipts(store, c, job, binding, pending_id=pending_id, allow_pending=allow_pending)
+
+
+@controlled
+def _receipt_data(op):
+    """Original persisted data indexing only; no guard, schema validator or IO."""
+    return op['receipt']['data']
+
+
+@controlled
+def _receipt_output(plan, outputs):
+    """Map only the original pure output-indexing leaf's persisted-data errors."""
+    return output_for(plan, outputs)
+
+
+def _receipt_checkpoint(store, c, job, facts):
+    if facts is not None:
+        from .natural_spec_runtime import _check_run_facts
+        _check_run_facts(store, c, job, facts)
+
+
+def _cold_receipts(store, c, job, binding, facts, *, pending_id=None, allow_pending=False):
+    from .natural_spec_runtime import _check_run_facts, _invalidate_cold_run_facts
+
+    try:
+        _check_run_facts(store, c, job, facts)
+        facts.checked_counters()
+        facts.pin_receipt_binding(binding)
+        result = _receipts(store, c, job, binding, pending_id=pending_id,
+            allow_pending=allow_pending, _facts=facts)
+        _check_run_facts(store, c, job, facts)
+        facts.record_receipts(binding, result[0], result[1], pending_id, allow_pending)
+        return result
+    except BaseException:
+        _invalidate_cold_run_facts(facts)
+        raise
+
+
+def _receipts(store, c, job, binding, *, pending_id=None, allow_pending=False, _facts=None):
+    _receipt_checkpoint(store, c, job, _facts)
     plan, source = binding["plan"], binding["source"]
-    ops = c.execute(select(operations).where(operations.c.run_id == job["id"])).mappings().all()
+    ops = (_facts.receipt_operations() if _facts is not None else
+        c.execute(select(operations).where(operations.c.run_id == job["id"])).mappings().all())
     by_step = {op["call_id"]: op for op in ops}
     steps = plan["definition"]["manifest"]["workflow"]
     ids = [s["step_id"] for s in steps]
@@ -1019,50 +1695,72 @@ def receipts(store, c, job, binding, *, pending_id=None, allow_pending=False):
             break
         op = by_step[sid]
         intent = intent_for(step, action, plan, outputs, proved)
-        stored = c.execute(select(operation_intents.c.request).where(operation_intents.c.operation_id == op["id"])).scalar()
+        _receipt_checkpoint(store, c, job, _facts)
+        stored = (_facts.intent(op["id"]) if _facts is not None else
+            c.execute(select(operation_intents.c.request).where(operation_intents.c.operation_id == op["id"])).scalar())
         require(fingerprint(stored) == fingerprint(intent) == op["fingerprint"] and op["tool_ref"] == intent["tool"])
         if op["status"] != "VERIFIED":
             if allow_pending and natural.is_candidate(plan["definition"]):
-                from .natural_spec_runtime import prove_pending
-                prove_pending(store, c, job, binding, op, intent, action)
+                from .natural_spec_runtime import _prove_pending_from_facts, prove_pending
+                if _facts is not None:
+                    _prove_pending_from_facts(store, c, job, binding, op, intent, action, _facts,
+                        _receipt_phase=copy.deepcopy(dict(pending_id=pending_id,
+                            allow_pending=allow_pending, index=index, outputs=outputs, proved=proved)))
+                else:
+                    prove_pending(store, c, job, binding, op, intent, action)
+                _receipt_checkpoint(store, c, job, _facts)
                 require(not (set(ids[index + 1:]) & set(by_step)))
                 break
             if op["id"] == pending_id:
                 require(not (set(ids[index + 1:]) & set(by_step)))
                 break
             raise DomainError("OUTCOME_UNKNOWN", "Unresolved spec node is never resent")
-        validate_value(action["output_schema"], op["receipt"]["data"])
+        validate_value(action["output_schema"],
+            _receipt_data(op) if _facts is not None else op["receipt"]["data"])
+        _receipt_checkpoint(store, c, job, _facts)
         value = op["receipt"]["data"]
         if action["executor"]["ref"] == SAVE:
-            effect = c.execute(select(local_effects).where(local_effects.c.operation_id == op["id"])).mappings().first()
+            effect = (_facts.effect(op["id"]) if _facts is not None else
+                c.execute(select(local_effects).where(local_effects.c.operation_id == op["id"])).mappings().first())
             require(effect is not None and effect["resource_id"] == value["resource_id"] and effect["content_hash"] == value["hash"])
             actual = authorized_read(store, c, job["principal_id"], job["runtime_id"], job["project_id"],
                 "resource.read", dict(resource_id=value["resource_id"]))
+            _receipt_checkpoint(store, c, job, _facts)
             require(actual["hash"] == value["hash"] and actual["content"] == intent["args"]["text"] and actual["format"] == "json")
             verify_saved(source, actual["content"], plan["definition"])
+            _receipt_checkpoint(store, c, job, _facts)
         else:
             if natural.is_candidate(plan["definition"]):
                 if action["executor"]["ref"] in natural.MODEL_KINDS:
-                    from .natural_spec_runtime import prove_node
-                    expected = prove_node(store, c, job, binding, op, intent, action)
+                    from .natural_spec_runtime import _prove_node_from_facts, prove_node
+                    expected = (_prove_node_from_facts(store, c, job, binding, op, intent, action, _facts,
+                        _receipt_phase=copy.deepcopy(dict(pending_id=pending_id,
+                            allow_pending=allow_pending, index=index, outputs=outputs, proved=proved)))
+                        if _facts is not None else prove_node(store, c, job, binding, op, intent, action))
                 else:
                     expected = natural.pure(action["executor"]["ref"], intent["args"], source, plan["definition"]["goal"])
             else:
                 expected = pure(action["executor"]["ref"], intent["args"], source)
+            _receipt_checkpoint(store, c, job, _facts)
             require(fingerprint(expected) == fingerprint(value), "Spec node readback differs from actual material")
-            require(c.execute(select(local_effects.c.operation_id).where(local_effects.c.operation_id == op["id"])).first() is None)
+            require((not _facts.has_effect(op["id"])) if _facts is not None else
+                c.execute(select(local_effects.c.operation_id).where(local_effects.c.operation_id == op["id"])).first() is None)
         wanted = receipt_for(op["id"], step, action, plan, intent, value)
+        _receipt_checkpoint(store, c, job, _facts)
         require(fingerprint(wanted) == fingerprint(op["receipt"]), "Complete spec receipt changed")
-        anchors = c.execute(select(events.c.data).where(events.c.run_id == job["id"],
-            events.c.kind == "SPEC_STEP_VERIFIED", events.c.data["operation_id"].as_string() == op["id"])).scalars().all()
+        anchors = (_facts.step_anchors(op["id"]) if _facts is not None else
+            c.execute(select(events.c.data).where(events.c.run_id == job["id"],
+                events.c.kind == "SPEC_STEP_VERIFIED", events.c.data["operation_id"].as_string() == op["id"])).scalars().all())
         require(len(anchors) == 1 and set(anchors[0]) == {"step_id", "operation_id", "fence"}
             and anchors[0]["step_id"] == sid and anchors[0]["operation_id"] == op["id"]
             and type(anchors[0]["fence"]) is int and 1 <= anchors[0]["fence"] <= job["fence"]
-            and c.execute(select(events.c.id).where(events.c.run_id == job["id"], events.c.kind == "CLAIMED",
-                events.c.data["fence"].as_integer() == anchors[0]["fence"])).first() is not None)
+            and (_facts.progress_event("CLAIMED", anchors[0]["fence"]) if _facts is not None else
+                c.execute(select(events.c.id).where(events.c.run_id == job["id"], events.c.kind == "CLAIMED",
+                    events.c.data["fence"].as_integer() == anchors[0]["fence"])).first() is not None))
         outputs[sid] = value
         proved.append(wanted)
     require(job["context"]["tools"] == sum(p["step_id"] not in {s["step_id"] for s, a in zip(steps, plan["definition"]["actions"], strict=True) if a["executor"]["ref"] in natural.MODEL_KINDS} for p in proved))
+    _receipt_checkpoint(store, c, job, _facts)
     return outputs, proved
 
 
@@ -1091,40 +1789,79 @@ def result_ref(binding, proved, version):
 def verify_job(store, c, user, job, limits, *, _source_origin=False):
     b = bound(store, c, user, job, limits, validate_input=False, _source_origin=_source_origin)
     outputs, proved = receipts(store, c, job, b, allow_pending=True)
+    return _verify_job_from_receipts(store, c, user, job, limits, b, outputs, proved)
+
+
+def _cold_verify_job_from_receipts(store, c, user, job, limits, binding, outputs, proved, facts):
+    from .natural_spec_runtime import _check_run_facts, _invalidate_cold_run_facts
+
+    try:
+        _check_run_facts(store, c, job, facts)
+        require(user == job["principal_id"])
+        facts.checked_receipts(binding, outputs, proved)
+        return _verify_job_from_receipts(store, c, user, job, limits, binding,
+            outputs, proved, _facts=facts)
+    except BaseException:
+        _invalidate_cold_run_facts(facts)
+        raise
+
+
+def _verify_job_from_receipts(store, c, user, job, limits, b, outputs, proved, *, _facts=None):
+    _receipt_checkpoint(store, c, job, _facts)
     a, s = b["app_run"], b["snapshot"]
-    rows = c.execute(select(internal_instance_data).where(internal_instance_data.c.instance_id == s["instance_id"],
-        internal_instance_data.c.run_id == a["id"])).mappings().all()
+    rows = (_facts.typed_rows(s["instance_id"], a["id"]) if _facts is not None else
+        c.execute(select(internal_instance_data).where(internal_instance_data.c.instance_id == s["instance_id"],
+            internal_instance_data.c.run_id == a["id"])).mappings().all())
     residue = bool(rows or a["output"] is not None or a["result_version"] is not None or job["result"] is not None)
     complete = len(proved) == len(b["plan"]["definition"]["manifest"]["workflow"])
     if residue or job["status"] == "SUCCEEDED" or complete:
         require(complete and job["status"] == a["status"] == "SUCCEEDED" and job["error"] is None
-            and a["error"] is None and not job["cancel_intent"] and not store.has_unknown(c, job["id"]) and len(rows) == 1)
-        output = output_for(b["plan"], outputs)
+            and a["error"] is None and not job["cancel_intent"] and not _receipt_has_unknown(store, c, job, _facts) and len(rows) == 1)
+        output = (_receipt_output(b["plan"], outputs) if _facts is not None
+            else output_for(b["plan"], outputs))
+        _receipt_checkpoint(store, c, job, _facts)
         validate_value(b["draft"]["candidate"]["manifest"]["output_schema"], output)
+        _receipt_checkpoint(store, c, job, _facts)
         data = dict(result=output)
         if "release_ref" in b["release"]["snapshot"]["data_schema"]["properties"]:
             data["release_ref"] = s["release_id"]
         row = rows[0]
         validate_value(b["release"]["snapshot"]["data_schema"], row["data"])
+        _receipt_checkpoint(store, c, job, _facts)
         require(fingerprint(row["data"]) == fingerprint(data) == row["fingerprint"]
             and row["release_id"] == s["release_id"] and row["schema_version"] == b["release"]["snapshot"]["data_schema_version"]
             and row["version"] == a["result_version"] and type(row["version"]) is int
             and fingerprint(a["output"]) == fingerprint(output)
-            and fingerprint(job["result"]) == fingerprint(result_ref(b, proved, row["version"])))
+            and fingerprint(job["result"]) == fingerprint(_receipt_result_ref(store, c, job, b, proved, row["version"], _facts)))
     else:
         require(not rows and a["output"] is None and a["result_version"] is None and job["result"] is None)
-        claimed = c.execute(select(events.c.id).where(events.c.run_id == job["id"], events.c.kind == "CLAIMED",
-            events.c.data["fence"].as_integer() == job["fence"])).first() is not None
-        stepped = c.execute(select(events.c.id).where(events.c.run_id == job["id"], events.c.kind == "SPEC_STEP_VERIFIED",
-            events.c.data["fence"].as_integer() == job["fence"])).first() is not None
+        claimed = (_facts.progress_event("CLAIMED", job["fence"]) if _facts is not None else
+            c.execute(select(events.c.id).where(events.c.run_id == job["id"], events.c.kind == "CLAIMED",
+                events.c.data["fence"].as_integer() == job["fence"])).first() is not None)
+        stepped = (_facts.progress_event("SPEC_STEP_VERIFIED", job["fence"]) if _facts is not None else
+            c.execute(select(events.c.id).where(events.c.run_id == job["id"], events.c.kind == "SPEC_STEP_VERIFIED",
+                events.c.data["fence"].as_integer() == job["fence"])).first() is not None)
         just_claimed = job["status"] == "RUNNING" and a["status"] == "QUEUED" and claimed and not stepped
-        gap = job["status"] in {"QUEUED", "PAUSED", "WAITING_RESOURCE", "RECONCILING"} and a["status"] == "RUNNING" and c.execute(
+        gap = job["status"] in {"QUEUED", "PAUSED", "WAITING_RESOURCE", "RECONCILING"} and a["status"] == "RUNNING" and (_facts.progress_event("WORKER_LOST", job["fence"]) if _facts is not None else c.execute(
             select(events.c.id).where(events.c.run_id == job["id"], events.c.kind == "WORKER_LOST",
-                events.c.data["fence"].as_integer() == job["fence"])).first() is not None
+                events.c.data["fence"].as_integer() == job["fence"])).first() is not None)
         require((a["status"] == job["status"] or just_claimed or gap)
             and fingerprint(a["error"]) == fingerprint(job["error"]), "AppRun progress/error differs from the actual execution")
         require(job["status"] != "FAILED" or isinstance(job["error"], dict))
+    _receipt_checkpoint(store, c, job, _facts)
     return b, outputs, proved
+
+
+def _receipt_has_unknown(store, c, job, facts):
+    value = store.has_unknown(c, job["id"])
+    _receipt_checkpoint(store, c, job, facts)
+    return value
+
+
+def _receipt_result_ref(store, c, job, binding, proved, version, facts):
+    value = result_ref(binding, proved, version)
+    _receipt_checkpoint(store, c, job, facts)
+    return value
 
 
 @controlled
@@ -1206,8 +1943,36 @@ def commit_guard(worker, c, run, b, delta=0, *, _commit_out=None, _model_out=Non
 
 def _commit_guard(worker, c, run, b, delta=0, *, _commit_out=None, _model_out=None,
                   _model_after=None):
+    if _model_after is not None and _model_after.post_graph is not None:
+        # The original same-epoch audit is complete. Keep the entire fresh
+        # nontrial prefix/suffix and the original linear tail consumer checks.
+        _model_after.check()
+        graph = _model_after.post_graph
+        job, limits = _commit_guard_prefix(worker, c, run, b, delta, _graph_read=graph.guard)
+        _model_after.check()
+        require(b["audit_fingerprint"] == graph.trial.binding["audit_fingerprint"])
+        _commit_guard_after_audit(worker, c, run, job, b, limits, delta, _graph_read=graph.guard)
+        _model_after.tail_row(worker, c, job, b)
+        return job
+    job, limits = _commit_guard_prefix(worker, c, run, b, delta)
+    require(audit_fingerprint(worker.store, c, job["principal_id"], b["draft"],
+        _correction_scope_checked=True) == b["audit_fingerprint"])
+    _commit_guard_after_audit(worker, c, run, job, b, limits, delta)
+    if getattr(worker, "pa_trial", None) is not None:
+        from .pa_trial_dispatch import check_commit
+        if _model_after is None:
+            check_commit(worker, c, job,
+                **({"_read_out": _commit_out} if _commit_out is not None else {}),
+                **({"_model_out": _model_out} if _model_out is not None else {}))
+        else:
+            _model_after.tail_row(worker, c, job, b)
+    return job
+
+
+def _commit_guard_prefix(worker, c, run, b, delta=0, *, _graph_read=None):
     from .app_jobs import lock_live
     job = lock_live(worker.store, c, run)
+    _bound_checkpoint(worker.store, c, _graph_read)
     if natural.is_candidate(b["draft"]["candidate"]):
         require(job["created_at"] == run["created_at"] and job["fingerprint"] == run["fingerprint"],
             "Original accepted Run metadata changed")
@@ -1221,38 +1986,87 @@ def _commit_guard(worker, c, run, b, delta=0, *, _commit_out=None, _model_out=No
     # Only reads occur until the frozen contract below; no proof crosses writes.
     stored = c.execute(select(internal_run_bindings).where(internal_run_bindings.c.run_id == job["id"])).mappings().one()
     s = b["snapshot"]
+    _bound_checkpoint(worker.store, c, _graph_read)
     require(fingerprint(stored["snapshot"]) == stored["fingerprint"] == fingerprint(s) == job["fingerprint"])
     release = c.execute(select(internal_releases).where(internal_releases.c.id == s["release_id"],
         internal_releases.c.principal_id == job["principal_id"])).mappings().one()
+    _bound_checkpoint(worker.store, c, _graph_read)
     require(fingerprint(release["snapshot"]) == release["fingerprint"] == b["release"]["fingerprint"])
     current_goal = c.execute(select(goal_cards.c.version, goal_cards.c.fingerprint).where(goal_cards.c.id == b["goal"]["card_id"],
         goal_cards.c.project_id == job["project_id"])).mappings().one()
+    _bound_checkpoint(worker.store, c, _graph_read)
     require(current_goal["version"] == b["goal"]["version"] and current_goal["fingerprint"] == b["goal"]["fingerprint"])
     actual = authorized_read(worker.store, c, job["principal_id"], job["runtime_id"], job["project_id"],
         "resource.read", dict(resource_id=b["source"]["resource_id"]))
+    _bound_checkpoint(worker.store, c, _graph_read)
     require(fingerprint(actual) == fingerprint(b["source"]))
-    require(audit_fingerprint(worker.store, c, job["principal_id"], b["draft"],
-        _correction_scope_checked=True) == b["audit_fingerprint"])
+    return job, limits
+
+
+def _commit_guard_after_audit(worker, c, run, job, b, limits, delta=0, *, _graph_read=None):
+    s = b["snapshot"]
     instance = c.execute(select(internal_instances).where(internal_instances.c.id == s["instance_id"],
         internal_instances.c.principal_id == job["principal_id"])).mappings().one()
+    _bound_checkpoint(worker.store, c, _graph_read)
     require(instance["revision"] == s["expected_revision"] and instance["release_id"] == s["release_id"]
         and instance["runtime_id"] == job["runtime_id"] and instance["project_id"] == job["project_id"]
         and instance["source_app_id"] == b["draft"]["id"])
     declared = Limits(**b["draft"]["candidate"]["manifest"]["runtime_limits"])
-    frozen = worker.store._frozen_contract_after_scope(c, job).limits
+    frozen_contract = worker.store._frozen_contract_after_scope(c, job)
+    _bound_checkpoint(worker.store, c, _graph_read)
+    frozen = frozen_contract.limits
     if time.time() >= job["created_at"] + min(limits.run_seconds, declared.run_seconds, frozen.run_seconds) or job["context"]["tools"] + delta > min(limits.max_tools, declared.max_tools, frozen.max_tools):
         raise DomainError("BUDGET_EXHAUSTED")
     from .natural_trial_runs import check_worker_tx
     check_worker_tx(worker, c, job["id"])
-    if getattr(worker, "pa_trial", None) is not None:
-        from .pa_trial_dispatch import check_commit
-        if _model_after is None:
-            check_commit(worker, c, job,
-                **({"_read_out": _commit_out} if _commit_out is not None else {}),
-                **({"_model_out": _model_out} if _model_out is not None else {}))
-        else:
-            _model_after.tail_row(worker, c, job, b)
+    _bound_checkpoint(worker.store, c, _graph_read)
     return job
+
+
+@dataclass(frozen=True)
+class _ColdCommitPrefix:
+    guard: Any
+    key: str
+    run: Any
+    job: Any
+    binding: dict
+    limits: Limits
+    delta: int
+
+
+def _cold_commit_prefix(worker, c, run, binding, guard, boundary, delta=0):
+    from .natural_spec_runtime import _ColdGraphRead
+    try:
+        require(type(guard) is _ColdGraphRead and boundary in {"first", "second", "post", "tail"})
+        _bound_checkpoint(worker.store, c, guard)
+        key = "commit:" + boundary
+        guard.add(key, dict(run=run, binding=binding, delta=delta))
+        job, limits = _commit_guard_prefix(worker, c, run, binding, delta, _graph_read=guard)
+        guard.add(key + ":current", dict(job=dict(job), limits=limits))
+        return _ColdCommitPrefix(guard, key, run, job, binding, limits, delta)
+    except BaseException:
+        if type(guard) is _ColdGraphRead:
+            guard.invalidate()
+        raise
+
+
+def _cold_commit_from_audit(worker, c, prefix, audit):
+    from .natural_spec_runtime import _ColdGraphRead, _model_inputs
+    try:
+        require(type(prefix) is _ColdCommitPrefix)
+        g = prefix.guard
+        _bound_checkpoint(worker.store, c, g)
+        require(_model_inputs(dict(run=prefix.run, binding=prefix.binding, delta=prefix.delta))
+                == _model_inputs(g.inputs[prefix.key])
+            and audit == prefix.binding["audit_fingerprint"])
+        job = _commit_guard_after_audit(worker, c, prefix.run, prefix.job, prefix.binding,
+            prefix.limits, prefix.delta, _graph_read=g)
+        _bound_checkpoint(worker.store, c, g)
+        return job
+    except BaseException:
+        if type(prefix) is _ColdCommitPrefix and type(prefix.guard) is _ColdGraphRead:
+            prefix.guard.invalidate()
+        raise
 
 
 @controlled

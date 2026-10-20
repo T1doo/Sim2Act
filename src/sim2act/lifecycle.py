@@ -5,12 +5,13 @@ Existing principals/grants only; typed result-ledger data, no arbitrary business
 
 import copy
 import time
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import insert, select, update
 
 from .apps import load_draft, validate_frozen_candidate
-from .contracts import schema_check, validate_action_input, validate_value
+from .contracts import Limits, schema_check, validate_action_input, validate_value
 from .db import (
     fingerprint,
     grants,
@@ -369,27 +370,49 @@ def validate_source_bytes(store, c, user, draft):
     )
 
 
-def owned_release_pointer(store, c, user, rid):
+def owned_release_pointer(store, c, user, rid, *, _graph_read=None, _graph_key=None):
     """Authorize identifiers before reading a Release body; never follow origins."""
+    _checkpoint_release_read(store, c, _graph_read)
     from .local_record_apps import reject_legacy as reject_record_legacy
     reject_record_legacy(c, release_id=rid)
+    _checkpoint_release_read(store, c, _graph_read)
     from .csv_full_report_instances import release_gate as report_gate
     from .text_continuations import release_gate
 
     report_gate(store, c, user, release_id=rid)
+    _checkpoint_release_read(store, c, _graph_read)
     release_gate(store, c, user, rid)
+    _checkpoint_release_read(store, c, _graph_read)
     r = c.execute(select(internal_releases).where(internal_releases.c.id == rid,
         internal_releases.c.principal_id == user)).mappings().first()
+    _checkpoint_release_read(store, c, _graph_read)
     if r is None:
         raise DomainError("PERMISSION_DENIED")
+    if _graph_read is not None:
+        from .natural_spec_runtime import _model_inputs
+        from .pa_spec_apps import require
+        key = _graph_key if _graph_key is not None else "release-pointer:" + user + ":" + rid
+        if key in _graph_read.inputs:
+            require(_model_inputs(dict(r)) == _model_inputs(_graph_read.inputs[key]),
+                "Current owned Release pointer changed")
+        else:
+            _graph_read.add(key, dict(r))
     store.own_project(c, user, r["project_id"])
+    _checkpoint_release_read(store, c, _graph_read)
+    if _graph_read is not None:
+        require(_model_inputs(dict(r)) == _model_inputs(_graph_read.inputs[key]),
+            "Current owned Release body changed during project authorization")
     return r
 
 
-def immutable_release_pointer(c, user, r):
+def immutable_release_pointer(c, user, r, *, _graph_read=None):
+    if _graph_read is not None:
+        _checkpoint_release_read(_graph_read.store, c, _graph_read)
     a = c.execute(select(internal_approvals).where(
         internal_approvals.c.id == r["approval_id"], internal_approvals.c.principal_id == user,
         internal_approvals.c.project_id == r["project_id"], internal_approvals.c.kind == "release")).mappings().first()
+    if _graph_read is not None:
+        _checkpoint_release_read(_graph_read.store, c, _graph_read)
     if (not a or not a["consumed"] or a["kind"] != "release"
             or a["principal_id"] != user or a["project_id"] != r["project_id"]
             or not isinstance(a["payload"], dict) or fingerprint(a["payload"]) != a["fingerprint"]
@@ -603,19 +626,39 @@ def read_release(store, c, user, rid, limits, *, archival_software=None, _origin
     return value
 
 
-def _read_release(store, c, user, rid, limits, *, archival_software=None, _origin_out=None, _logic_out=None, _reuse_origin=None):
-    r = owned_release_pointer(store, c, user, rid)
+def _checkpoint_release_read(store, c, guard):
+    if guard is not None:
+        from .natural_spec_runtime import _cold_read_checkpoint
+        _cold_read_checkpoint(store, c, guard)
+
+
+def _require_default_release(guard, message):
+    if guard is not None:
+        raise DomainError("VERSION_CONFLICT", message)
+
+
+def _read_release_prefix(store, c, user, rid, limits, *, archival_software=None, _graph_read=None, _graph_key=None):
+    _checkpoint_release_read(store, c, _graph_read)
+    r = owned_release_pointer(store, c, user, rid, **(dict(_graph_read=_graph_read, _graph_key=_graph_key) if _graph_read is not None else {}))
+    _checkpoint_release_read(store, c, _graph_read)
     if archival_software is not None:
+        _require_default_release(_graph_read, "Archival release is outside Cold graph")
         from .text_continuations import legacy_release
 
         legacy_release(store, c, user, r, limits, archival_software)
-        return r
-    immutable_release_pointer(c, user, r)
+        return r, False
+    immutable_release_pointer(c, user, r, **(dict(_graph_read=_graph_read) if _graph_read is not None else {}))
+    _checkpoint_release_read(store, c, _graph_read)
     from . import csv_full_report_instances as full_report
-    if full_report.release_gate(store, c, user, release_id=rid) is not None:
-        return full_report.validate_release(store, c, user, r)
+    report_scope = full_report.release_gate(store, c, user, release_id=rid)
+    _checkpoint_release_read(store, c, _graph_read)
+    if report_scope is not None:
+        _require_default_release(_graph_read, "Full report release is outside Cold graph")
+        return full_report.validate_release(store, c, user, r), False
     if "natural_logic_source" in r["snapshot"]:
+        _require_default_release(_graph_read, "Logic release is outside Cold graph")
         trace = logic_release_trace(store, c, user, r)
+        _checkpoint_release_read(store, c, _graph_read)
         if trace["over_limit"]:
             raise DomainError("BUDGET_EXHAUSTED", "Logic source dependency exceeds finite depth")
         if trace["cyclic"]:
@@ -623,16 +666,22 @@ def _read_release(store, c, user, rid, limits, *, archival_software=None, _origi
     s = r["snapshot"]
     draft = s["draft"]
     from .csv_dag_instances import FIXED_REPORT_VERSION, validate_family, validate_snapshot
+    if "execution_source" in s:
+        _require_default_release(_graph_read, "Execution-source release is outside Cold graph")
     fixed_project_source = s.get("execution_source", {}).get("version") == FIXED_REPORT_VERSION
     if fixed_project_source:
         # This family must authorize the current source before protected
         # provenance ledgers, including cold release/peer/instance reads.
         validate_snapshot(store, c, user, s, limits)
+        _checkpoint_release_read(store, c, _graph_read)
     validate_family(c, user, r["approval_id"], s)
+    _checkpoint_release_read(store, c, _graph_read)
     from .natural_logic_patches import validate_family as validate_logic_family
     validate_logic_family(c,user,r["approval_id"],s)
+    _checkpoint_release_read(store, c, _graph_read)
     from . import csv_goal_revisions as csv_revision
     csv_revision.validate_family(c,user,r["approval_id"],s)
+    _checkpoint_release_read(store, c, _graph_read)
     if (
         s["namespace"] != NAMESPACE
         or s["formal_publication_enabled"] is not False
@@ -643,16 +692,27 @@ def _read_release(store, c, user, rid, limits, *, archival_software=None, _origi
     if "execution_source" in s:
         if not fixed_project_source:
             validate_snapshot(store, c, user, s, limits)
-        return r
+        _checkpoint_release_read(store, c, _graph_read)
+        return r, False
     record_schema(draft["candidate"], s["data_schema"])
-    origin: dict[str, Any] = _origin_out if _origin_out is not None else {}
-    validate_frozen_candidate(store, c, user, draft, limits, _origin_out=origin,_reuse_origin=_reuse_origin)
+    _checkpoint_release_read(store, c, _graph_read)
+    return r, True
+
+
+def _read_release_suffix(store, c, user, rid, limits, r, origin, *, _logic_out=None, _graph_read=None):
+    from . import csv_goal_revisions as csv_revision
+
+    _checkpoint_release_read(store, c, _graph_read)
+    s, draft = r["snapshot"], r["snapshot"]["draft"]
     validate_source_bytes(store, c, user, draft)
+    _checkpoint_release_read(store, c, _graph_read)
     if csv_revision.SOURCE in s:
         csv_revision.validate_snapshot(store,c,user,s,limits)
+        _checkpoint_release_read(store, c, _graph_read)
     if "natural_logic_source" in s:
         from .natural_logic_patches import validate_snapshot as validate_logic
         logic_value = validate_logic(store,c,user,s,limits,_verified_origin=origin)
+        _checkpoint_release_read(store, c, _graph_read)
         if _logic_out is not None:
             _logic_out.update(value=logic_value,principal_id=user,platform_limits=limits.model_dump(),
                 release_id=rid,release_fingerprint=r["fingerprint"],
@@ -660,9 +720,151 @@ def _read_release(store, c, user, rid, limits, *, archival_software=None, _origi
                 _call_write_epoch=c.info.get("source_proof_write_epoch",0))
     from . import text_logic_reuse
 
-    if text_logic_reuse.independent(draft):
+    independent = text_logic_reuse.independent(draft)
+    _checkpoint_release_read(store, c, _graph_read)
+    if independent:
         text_logic_reuse.verify_release_index(c, user, r)
+        _checkpoint_release_read(store, c, _graph_read)
+    _checkpoint_release_read(store, c, _graph_read)
     return r
+
+
+def _read_release(store, c, user, rid, limits, *, archival_software=None, _origin_out=None, _logic_out=None, _reuse_origin=None):
+    r, needs_origin = _read_release_prefix(store, c, user, rid, limits, archival_software=archival_software)
+    if not needs_origin:
+        return r
+    draft = r["snapshot"]["draft"]
+    origin: dict[str, Any] = _origin_out if _origin_out is not None else {}
+    validate_frozen_candidate(store, c, user, draft, limits, _origin_out=origin,_reuse_origin=_reuse_origin)
+    return _read_release_suffix(store, c, user, rid, limits, r, origin, _logic_out=_logic_out)
+
+
+@dataclass(frozen=True)
+class _ColdReleasePrefix:
+    """The actual owned Release row; complete origin has not yet been proved."""
+    guard: Any
+    key: str
+    user: str
+    release: Any
+    limits: Limits
+    role: str
+
+
+def _cold_release_prefix(store, c, user, rid, limits, guard, role):
+    from . import natural_specs
+    from .natural_spec_runtime import _ColdGraphRead
+    from .pa_spec_apps import require
+
+    try:
+        require(type(guard) is _ColdGraphRead, "Cold release requires its local read scope")
+        _checkpoint_release_read(store, c, guard)
+        require(role in {"source", "generate", "cold"} and type(limits) is Limits)
+        key = "release-prefix:" + role + ":" + user + ":" + rid + ":" + fingerprint(limits.model_dump())
+        guard.add(key, dict(user=user, role=role, release_id=rid, limits=limits))
+        r, needs_origin = _read_release_prefix(store, c, user, rid, limits,
+            _graph_read=guard, _graph_key=key + ":row")
+        require(needs_origin and r["project_id"] == guard.binding.contract.project_id
+            and user == guard.binding.contract.principal_id
+            and natural_specs.is_candidate(r["snapshot"]["draft"]["candidate"]),
+            "Cold release prefix changed owner, project or natural family")
+        _checkpoint_release_read(store, c, guard)
+        return _ColdReleasePrefix(guard, key, user, r, limits, role)
+    except BaseException:
+        if type(guard) is _ColdGraphRead:
+            guard.invalidate()
+        raise
+
+
+def _cold_release_from_origin(store, c, user, prefix, candidate_prefix, facts, *, _origin_out=None):
+    from . import apps
+    from .natural_spec_runtime import _ColdGraphRead, _model_inputs
+    from .pa_spec_apps import require
+
+    try:
+        require(type(prefix) is _ColdReleasePrefix
+            and type(candidate_prefix) is apps._ColdCandidatePrefix
+            and type(facts) is apps._ColdGraphOriginFacts, "Exact Cold release stages required")
+        _checkpoint_release_read(store, c, prefix.guard)
+        require(prefix.user == user == candidate_prefix.user
+            and prefix.guard is candidate_prefix.guard
+            and prefix.role == candidate_prefix.role
+            and prefix.limits is candidate_prefix.limits
+            and prefix.release["snapshot"]["draft"] is candidate_prefix.draft
+            and _model_inputs(dict(prefix.release)) == _model_inputs(prefix.guard.inputs[prefix.key + ":row"]),
+            "Cold release row, role or actual draft changed")
+        origin: dict[str, Any] = _origin_out if _origin_out is not None else {}
+        apps._cold_candidate_from_origin(store, c, user, candidate_prefix, facts, _origin_out=origin)
+        value = _read_release_suffix(store, c, user, prefix.release["id"], prefix.limits,
+            prefix.release, origin, _graph_read=prefix.guard)
+        facts.check(store, c, user, candidate_prefix.draft, prefix.limits)
+        return value
+    except BaseException:
+        if type(prefix) is _ColdReleasePrefix and type(prefix.guard) is _ColdGraphRead:
+            prefix.guard.invalidate()
+        if type(candidate_prefix) is apps._ColdCandidatePrefix and type(candidate_prefix.guard) is _ColdGraphRead:
+            candidate_prefix.guard.invalidate()
+        if type(facts) is apps._ColdGraphOriginFacts:
+            facts.invalidate()
+        raise
+
+
+@dataclass(frozen=True)
+class _ColdReleaseFacts:
+    prefix: _ColdReleasePrefix
+    candidate_prefix: Any
+    release: Any
+    origin: tuple
+    key: str
+
+
+def _cold_release_complete(store, c, user, prefix, candidate_prefix, origin):
+    from . import apps
+    from .natural_spec_runtime import _ColdGraphRead
+    from .pa_spec_apps import require
+    try:
+        require(type(prefix) is _ColdReleasePrefix and type(candidate_prefix) is apps._ColdCandidatePrefix)
+        guard = prefix.guard
+        _checkpoint_release_read(store, c, guard)
+        with apps._cold_graph_origin_facts(guard.worker, c, guard.inputs, prefix.role, guard.role_limits,
+                user, candidate_prefix.draft, prefix.limits, origin) as facts:
+            release = _cold_release_from_origin(store, c, user, prefix, candidate_prefix, facts)
+        _checkpoint_release_read(store, c, guard)
+        key = prefix.key + ":complete"
+        guard.add(key, dict(release=dict(release), origin=dict(manifest=origin[0].model_dump(),
+            report=origin[1], material=origin[2], goal=origin[3]), limits=prefix.limits, role=prefix.role))
+        return _ColdReleaseFacts(prefix, candidate_prefix, release, origin, key)
+    except BaseException:
+        if type(prefix) is _ColdReleasePrefix and type(prefix.guard) is _ColdGraphRead:
+            prefix.guard.invalidate()
+        if type(candidate_prefix) is apps._ColdCandidatePrefix and type(candidate_prefix.guard) is _ColdGraphRead:
+            candidate_prefix.guard.invalidate()
+        raise
+
+
+def _cold_release_facet_prefix(store, c, user, complete, limits):
+    from . import apps
+    from .natural_spec_runtime import _ColdGraphRead, _model_inputs
+    from .pa_spec_apps import require
+    try:
+        require(type(complete) is _ColdReleaseFacts and type(limits) is Limits)
+        old = complete.prefix
+        guard = old.guard
+        _checkpoint_release_read(store, c, guard)
+        require(old.user == user and complete.release is old.release
+            and "natural_logic_source" not in complete.release["snapshot"]
+            and "execution_source" not in complete.release["snapshot"]
+            and _model_inputs(dict(complete.release)) == _model_inputs(guard.inputs[complete.key]["release"]),
+            "Cold Release facet requires its complete same-epoch original Release")
+        key = "release-prefix:" + old.role + ":" + user + ":" + complete.release["id"] + ":" + fingerprint(limits.model_dump())
+        guard.add(key, dict(user=user, role=old.role, release_id=complete.release["id"], limits=limits))
+        guard.add(key + ":row", dict(complete.release))
+        prefix = _ColdReleasePrefix(guard, key, user, complete.release, limits, old.role)
+        candidate = apps._cold_candidate_prefix(store, c, user, complete.release["snapshot"]["draft"], limits, guard, old.role)
+        return prefix, candidate
+    except BaseException:
+        if type(complete) is _ColdReleaseFacts and type(complete.prefix.guard) is _ColdGraphRead:
+            complete.prefix.guard.invalidate()
+        raise
 
 
 def create_instance(store, user, rid, expected_release_fp, limits, *, request_key=None):

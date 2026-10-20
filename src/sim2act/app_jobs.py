@@ -8,6 +8,7 @@ import copy
 import threading
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import insert, select, update
@@ -517,29 +518,44 @@ def _binding_release_from_facts(job, s, r, expected_resource):
         raise DomainError("VERSION_CONFLICT")
 
 
-def load_binding(store, c, user, job, limits, *, authorize=True, archival_software=None, return_release=False, _logic_out=None, _origin_out=None, _use_out=None):
+def _binding_checkpoint(store, c, guard):
+    if guard is not None:
+        from .natural_spec_runtime import _cold_read_checkpoint
+        _cold_read_checkpoint(store, c, guard)
+
+
+def _load_binding_prefix(store, c, user, job, limits, *, authorize=True, return_release=False, _graph_read=None, _graph_key=None):
     from .local_record_apps import reject_legacy as reject_record_legacy
     reject_record_legacy(c, rid=job["id"])
+    _binding_checkpoint(store, c, _graph_read)
     if return_release and not authorize:
         raise DomainError("PERMISSION_DENIED", "Verified release requires authorization")
     from . import natural_spec_corrections as correction
     scope = correction.scope_segment(store,c,user,job["id"]) if authorize else None
+    _binding_checkpoint(store, c, _graph_read)
     if authorize:
         from .text_continuations import job_gate
 
         reused_scope = scope is not None
         job_gate(store, c, user, job["id"],_spec_scope_checked=reused_scope)
+        _binding_checkpoint(store, c, _graph_read)
         scope = correction.scope_segment(store,c,user,job["id"],_segment=scope)
+        _binding_checkpoint(store, c, _graph_read)
         if reused_scope and scope is None:
             # A write invalidated the pure read segment; authorize again before
             # any binding/AppRun body, never merely at the later contract check.
             job_gate(store,c,user,job["id"])
+            _binding_checkpoint(store, c, _graph_read)
             scope = correction.scope_segment(store,c,user,job["id"])
+            _binding_checkpoint(store, c, _graph_read)
     b = (
         c.execute(select(internal_run_bindings).where(internal_run_bindings.c.run_id == job["id"]))
         .mappings()
         .first()
     )
+    _binding_checkpoint(store, c, _graph_read)
+    if _graph_read is not None:
+        _graph_read.add(_graph_key + ":binding", dict(b) if b is not None else None)
     s = _binding_queue_from_facts(job, user, b)
     a = (
         c.execute(select(internal_app_runs).where(internal_app_runs.c.id == b["app_run_id"],
@@ -548,6 +564,9 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
         .mappings()
         .first()
     )
+    _binding_checkpoint(store, c, _graph_read)
+    if _graph_read is not None:
+        _graph_read.add(_graph_key + ":app-run", dict(a) if a is not None else None)
     _binding_app_run_from_facts(job, b, s, a)
     request = {
         k: s[k] for k in ["instance_id", "expected_revision", "expected_release_fp", "input"]
@@ -560,12 +579,14 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
         request["correction_request"] = s["correction_request"]
     from . import natural_logic_patches as logic
     logic_marker = logic.graph.lookup(c,user,job["id"],logic.JOB,"accepted")
+    _binding_checkpoint(store, c, _graph_read)
     if bool(logic_marker) != ("logic_check" in s):
         raise DomainError("VERSION_CONFLICT", "Local logic check marker cannot be removed")
     if "logic_check" in s:
         request["logic_check"] = s["logic_check"]
     from . import project_natural_revalidation as project
     project.job_gate(store,c,user,job,s,limits)
+    _binding_checkpoint(store, c, _graph_read)
     if "project_check" in s:
         request["project_check"] = s["project_check"]
     if "offline_replay" in s:
@@ -579,18 +600,50 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
         request["owner_goal_binding_fingerprint"] = s["owner_goal_binding_fingerprint"]
     _binding_request_from_facts(job, user, s, a, request)
     store.own_project(c, user, s["project_id"])
+    _binding_checkpoint(store, c, _graph_read)
+    return s, a, scope
+
+
+def _binding_contract_limits(store, c, user, job, limits, s, scope, _logic_out, *, _graph_read=None):
+    contract = (store._frozen_contract_after_scope(c,job) if scope is not None
+        else store.frozen_contract(c, job))
+    _binding_checkpoint(store, c, _graph_read)
+    if contract.limits.model_dump() != s["limits"]:
+        raise DomainError("VERSION_CONFLICT", "Accepted limits no longer match frozen envelope")
+    logic_source: dict[str, Any] = _logic_out if _logic_out is not None else {}
+    scope_limits = limits
+    if "human_correction" in s:
+        from . import natural_spec_corrections
+        ref = s["human_correction"]
+        _, reviewed = natural_spec_corrections.load_review(store,c,user,ref["instance_id"],ref["parent_run_id"],ref["review_key"])
+        scope_limits = natural_spec_corrections.validation_limits(reviewed,limits)
+    _binding_checkpoint(store, c, _graph_read)
+    return contract, logic_source, scope_limits
+
+
+def _binding_release_base(store, c, user, job, limits, s, r, contract, archival_software=None, *, _graph_read=None):
+    from . import csv_goal_revisions as csv_revision
+    from .app_owner_goals import verify_frozen_run
+
+    verify_frozen_run(store, c, user, r["snapshot"]["draft"], limits, s, archival_software=archival_software)
+    _binding_checkpoint(store, c, _graph_read)
+    csv_revision.verify_job(store,c,user,job,s,r,limits,contract)
+    _binding_checkpoint(store, c, _graph_read)
+    if "offline_replay" in s:
+        from .agent_apps import is_agent, offline_replay_model
+
+        if not is_agent(r["snapshot"]["draft"]["candidate"]):
+            raise DomainError("VERSION_CONFLICT", "Offline Replay cannot change executor family")
+        offline_replay_model(s["offline_replay"])
+    expected_resource = r["snapshot"]["draft"]["candidate"]["manifest"]["data_bindings"][0]["resource_ref"]
+    return expected_resource
+
+
+def load_binding(store, c, user, job, limits, *, authorize=True, archival_software=None, return_release=False, _logic_out=None, _origin_out=None, _use_out=None):
+    from . import csv_goal_revisions as csv_revision
+    s, a, scope = _load_binding_prefix(store, c, user, job, limits, authorize=authorize, return_release=return_release)
     if authorize:
-        contract = (store._frozen_contract_after_scope(c,job) if scope is not None
-            else store.frozen_contract(c, job))
-        if contract.limits.model_dump() != s["limits"]:
-            raise DomainError("VERSION_CONFLICT", "Accepted limits no longer match frozen envelope")
-        logic_source: dict[str, Any] = _logic_out if _logic_out is not None else {}
-        scope_limits = limits
-        if "human_correction" in s:
-            from . import natural_spec_corrections
-            ref = s["human_correction"]
-            _, reviewed = natural_spec_corrections.load_review(store,c,user,ref["instance_id"],ref["parent_run_id"],ref["review_key"])
-            scope_limits = natural_spec_corrections.validation_limits(reviewed,limits)
+        contract, logic_source, scope_limits = _binding_contract_limits(store, c, user, job, limits, s, scope, _logic_out)
         if (scope is not None and archival_software is None
                 and scope["reference"] == s.get("human_correction")
                 and scope["release"]["id"] == s["release_id"]
@@ -601,17 +654,7 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
             r = read_release(store, c, user, s["release_id"], scope_limits,
                 archival_software=archival_software,_logic_out=logic_source,
                 **({"_origin_out": _origin_out} if _origin_out is not None else {}))
-        from .app_owner_goals import verify_frozen_run
-
-        verify_frozen_run(store, c, user, r["snapshot"]["draft"], limits, s, archival_software=archival_software)
-        csv_revision.verify_job(store,c,user,job,s,r,limits,contract)
-        if "offline_replay" in s:
-            from .agent_apps import is_agent, offline_replay_model
-
-            if not is_agent(r["snapshot"]["draft"]["candidate"]):
-                raise DomainError("VERSION_CONFLICT", "Offline Replay cannot change executor family")
-            offline_replay_model(s["offline_replay"])
-        expected_resource = r["snapshot"]["draft"]["candidate"]["manifest"]["data_bindings"][0]["resource_ref"]
+        expected_resource = _binding_release_base(store, c, user, job, limits, s, r, contract, archival_software)
         if csv_revision.MARKER in s:
             effective_draft,_,_,_ = csv_revision.bound(store,c,user,r,limits,s)
             expected_resource = effective_draft["candidate"]["manifest"]["data_bindings"][0]["resource_ref"]
@@ -635,6 +678,109 @@ def load_binding(store, c, user, job, limits, *, authorize=True, archival_softwa
             expected_resource = use_source["resource_id"]
         _binding_release_from_facts(job, s, r, expected_resource)
     return (s, a, r) if return_release else (s, a)
+
+
+@dataclass(frozen=True)
+class _ColdBindingPrefix:
+    guard: Any
+    key: str
+    user: str
+    job: Any
+    limits: Limits
+    role: str
+    snapshot: dict
+    app_run: Any
+    contract: Any
+
+
+def _cold_binding_prefix(store, c, user, job, limits, guard, role):
+    from .natural_spec_runtime import _ColdGraphRead
+    from .pa_spec_apps import require
+    try:
+        require(type(guard) is _ColdGraphRead and role in {"source", "cold"} and type(limits) is Limits)
+        _binding_checkpoint(store, c, guard)
+        key = "binding-prefix:" + role + ":" + job["id"] + ":" + fingerprint(limits.model_dump())
+        s, a, scope = _load_binding_prefix(store, c, user, job, limits, return_release=True, _graph_read=guard, _graph_key=key)
+        contract, _, scope_limits = _binding_contract_limits(store, c, user, job, limits, s, scope, None, _graph_read=guard)
+        require(scope is None and scope_limits is limits
+            and not {"human_correction", "logic_check", "project_check", "offline_replay", "csv_review", "owner_goal_binding_fingerprint"}.intersection(s),
+            "Cold graph binding changed family")
+        guard.add(key, dict(job=dict(job), snapshot=s, app_run=dict(a), contract=contract.model_dump(), limits=limits))
+        return _ColdBindingPrefix(guard, key, user, job, limits, role, s, a, contract)
+    except BaseException:
+        if type(guard) is _ColdGraphRead:
+            guard.invalidate()
+        raise
+
+
+def _cold_binding_release_prefix(store, c, user, prefix, release):
+    from .natural_spec_runtime import _ColdGraphRead, _model_inputs
+    from .pa_spec_apps import require
+    try:
+        require(type(prefix) is _ColdBindingPrefix)
+        g = prefix.guard
+        _binding_checkpoint(store, c, g)
+        require(prefix.user == user and release["id"] == prefix.snapshot["release_id"]
+            and "natural_logic_source" not in release["snapshot"]
+            and _model_inputs(dict(job=dict(prefix.job), snapshot=prefix.snapshot,
+                app_run=dict(prefix.app_run), contract=prefix.contract.model_dump(), limits=prefix.limits))
+                == _model_inputs(g.inputs[prefix.key]))
+        resource = _binding_release_base(store, c, user, prefix.job, prefix.limits,
+            prefix.snapshot, release, prefix.contract, _graph_read=g)
+        require(not {"human_correction", "logic_check", "project_check", "offline_replay"}.intersection(prefix.snapshot))
+        g.add(prefix.key + ":release", dict(release=dict(release), resource=resource))
+        return resource
+    except BaseException:
+        if type(prefix) is _ColdBindingPrefix and type(prefix.guard) is _ColdGraphRead:
+            prefix.guard.invalidate()
+        raise
+
+
+def _cold_binding_from_use(store, c, user, prefix, release, use_value):
+    from .natural_spec_runtime import _ColdGraphRead
+    from .pa_spec_apps import require
+    try:
+        require(type(prefix) is _ColdBindingPrefix)
+        g = prefix.guard
+        _binding_checkpoint(store, c, g)
+        stored = g.inputs[prefix.key + ":release"]
+        require(prefix.user == user and stored["release"] == dict(release))
+        resource = stored["resource"]
+        if "pb_use" in prefix.snapshot:
+            require(prefix.role == "cold" and "pa_use" not in prefix.snapshot
+                and type(use_value) is tuple and len(use_value) == 5)
+            resource = use_value[3]["resource_id"]
+        else:
+            require(prefix.role == "source" and "pa_use" not in prefix.snapshot and use_value is None)
+        _binding_release_from_facts(prefix.job, prefix.snapshot, release, resource)
+        _binding_checkpoint(store, c, g)
+        return prefix.snapshot, prefix.app_run, release
+    except BaseException:
+        if type(prefix) is _ColdBindingPrefix and type(prefix.guard) is _ColdGraphRead:
+            prefix.guard.invalidate()
+        raise
+
+
+def _cold_binding_facet(store, c, user, prefix, limits):
+    """Same complete raw queue identity, with a distinct caller Limits facet."""
+    from .natural_spec_runtime import _ColdGraphRead, _model_inputs
+    from .pa_spec_apps import require
+    try:
+        require(type(prefix) is _ColdBindingPrefix and type(limits) is Limits)
+        guard = prefix.guard
+        _binding_checkpoint(store, c, guard)
+        require(prefix.user == user and _model_inputs(dict(job=dict(prefix.job), snapshot=prefix.snapshot,
+            app_run=dict(prefix.app_run), contract=prefix.contract.model_dump(), limits=prefix.limits))
+            == _model_inputs(guard.inputs[prefix.key]))
+        key = "binding-prefix:" + prefix.role + ":" + prefix.job["id"] + ":" + fingerprint(limits.model_dump())
+        guard.add(key, dict(job=dict(prefix.job), snapshot=prefix.snapshot, app_run=dict(prefix.app_run),
+            contract=prefix.contract.model_dump(), limits=limits))
+        return _ColdBindingPrefix(guard, key, user, prefix.job, limits, prefix.role,
+            prefix.snapshot, prefix.app_run, prefix.contract)
+    except BaseException:
+        if type(prefix) is _ColdBindingPrefix and type(prefix.guard) is _ColdGraphRead:
+            prefix.guard.invalidate()
+        raise
 
 
 def inspect_job(store, user, rid):

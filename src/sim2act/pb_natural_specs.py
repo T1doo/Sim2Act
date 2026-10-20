@@ -10,14 +10,14 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from threading import get_ident
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import Depends
-from pydantic import Field
+from pydantic import Field, ValidationError
 from sqlalchemy import bindparam, insert, select
 
 from . import natural_specs as natural
-from .contracts import Limits, Strict
+from .contracts import GoalCardRunSource, Limits, Strict
 from .db import (
     app_drafts,
     attempts,
@@ -103,41 +103,158 @@ class ExtractInput(Strict):
     ]
 
 
-def source_gate(store, c, user, pid, rid):
+def _checkpoint_graph(store, c, guard):
+    if guard is not None:
+        from .natural_spec_runtime import _cold_read_checkpoint
+        _cold_read_checkpoint(store, c, guard)
+
+
+def _checkpoint_graph_owner(guard):
+    if guard is not None:
+        from .natural_spec_runtime import _ColdGraphRead
+        require(type(guard) is _ColdGraphRead, "Exact Cold graph read scope required")
+        guard.check(guard.store, guard.connection)
+
+
+def _invalidate_graph(guard):
+    from .natural_spec_runtime import _ColdGraphRead
+    if type(guard) is _ColdGraphRead:
+        _ColdGraphRead.invalidate(guard)
+
+
+def _invalidate_cold_inputs(*values):
+    """Invalidate only known exact local facts; never invoke an impostor hook."""
+    from .natural_spec_runtime import _ColdGraphRead, _ColdRunFacts
+
+    pending, seen = list(values), set()
+    while pending:
+        value = pending.pop()
+        if id(value) in seen:
+            continue
+        seen.add(id(value))
+        kind = type(value)
+        if kind is _ColdGraphRead:
+            _ColdGraphRead.invalidate(value)
+        elif kind is _ColdRunFacts:
+            pending.extend((getattr(value, "guard", None), getattr(value, "_origin_guard", None)))
+        elif kind in {_ColdSourcePrefix, _ColdSourceAuditPrefix,
+                      _ColdExtractionPrefix, _ColdExtractionAuditPrefix, _ColdReviewRead}:
+            pending.extend((getattr(value, "guard", None), getattr(value, "_origin_guard", None)))
+        elif kind in {_ColdSourceTyped, _ColdSourceAuditFacts}:
+            pending.append(getattr(value, "prefix", None))
+        elif kind is _ColdSourceFacts:
+            pending.extend((getattr(value, "typed", None), getattr(value, "audit", None)))
+        elif kind is _ColdExtractionReview:
+            pending.extend((getattr(value, "prefix", None), getattr(value, "source", None)))
+
+
+def _cold_fields(store, c, guard, key, value):
+    """Only continuity of full explicit facts; never an authority or resolver."""
+    try:
+        from .natural_spec_runtime import _model_inputs
+        _checkpoint_graph(store, c, guard)
+        require(guard is not None and type(key) is str and key in guard.inputs,
+                "Cold extraction facts belong to a different read segment")
+        require(_model_inputs(value) == _model_inputs(guard.inputs[key]),
+                "Cold extraction facts changed in this read segment")
+    except BaseException:
+        _invalidate_cold_inputs(guard)
+        raise
+
+
+def _cold_model_dump(expected, model):
+    """Only fixed known model serializers; no instance/subclass dump hook."""
+    from .text_workflows import RunScopeInput
+    allowed = (ExtractInput, ReviewInput, Metadata, GoalCardRunSource, RunScopeInput, Limits)
+    require(any(expected is kind for kind in allowed) and type(model) is expected,
+            "Exact owned Cold typed model required")
+    if expected is ExtractInput:
+        require(type(model.review) is ReviewInput and type(model.review.recipe) is natural.Recipe)
+    elif expected is ReviewInput:
+        require(type(model.recipe) is natural.Recipe)
+    return expected.model_dump(model)
+
+
+def _cold_typed_checkpoint(store, c, guard, models):
+    """Check only fixed typed JSON subtrees at owned callee return boundaries."""
+    try:
+        _checkpoint_graph(store, c, guard)
+        if guard is None:
+            return
+        from .natural_live_admission import _trial_typed_equal
+        require(type(models) is list)
+        for expected, model, raw in models:
+            require(any(expected is kind for kind in (ExtractInput, Metadata, GoalCardRunSource))
+                    and type(raw) is dict, "Complete owned typed subtree pin required")
+            require(_trial_typed_equal(_cold_model_dump(expected, model), raw),
+                    "Owned Cold typed model changed after its complete raw proof")
+    except BaseException:
+        _invalidate_cold_inputs(guard)
+        raise
+
+
+def source_gate(store, c, user, pid, rid, *, _graph_read=None):
     """Scalar classification bounds lineage depth before any protected Run body."""
     from . import pa_spec_apps as spec
     from .text_workflows import RunScopeInput
 
+    _checkpoint_graph(store, c, _graph_read)
     store.own_project(c, user, pid)
+    _checkpoint_graph(store, c, _graph_read)
     parameters = {"pb_gate_run": rid}
-    header = c.execute(_GATE_HEADER, parameters).mappings().first()
+    result = c.execute(_GATE_HEADER, parameters)
+    _checkpoint_graph(store, c, _graph_read)
+    header = result.mappings().first()
     if header is None or header["principal_id"] != user or header["project_id"] != pid:
         raise DomainError("PERMISSION_DENIED")
-    apps = c.execute(_GATE_APPS, {"pb_gate_runtime": header["runtime_id"],
-        "pb_gate_project": pid}).mappings().all()
+    result = c.execute(_GATE_APPS, {"pb_gate_runtime": header["runtime_id"],
+        "pb_gate_project": pid})
+    _checkpoint_graph(store, c, _graph_read)
+    apps = result.mappings().all()
     require(len(apps) == 1 and apps[0]["family"] == natural.VERSION
             and apps[0]["origin"] == "goal" and apps[0]["task"] is None,
             "Only an original natural-spec successful task may be extracted; no extraction chains")
     aid = apps[0]["id"]
     app_parameters = {"pb_gate_app": aid}
-    kind = c.execute(_GATE_KIND, app_parameters).scalar()
+    result = c.execute(_GATE_KIND, app_parameters)
+    _checkpoint_graph(store, c, _graph_read)
+    kind = result.scalar()
     require(kind in {None, spec.KIND})
-    require(c.execute(_GATE_LEDGER, app_parameters).first() is None, "P-B lineage cannot be disguised as P-A")
-    require(spec.job_scope_gate(store, c, user, rid))
-    require(c.execute(_GATE_STATUS, parameters).scalar_one() == "SUCCEEDED",
+    result = c.execute(_GATE_LEDGER, app_parameters)
+    _checkpoint_graph(store, c, _graph_read)
+    require(result.first() is None, "P-B lineage cannot be disguised as P-A")
+    scoped = spec.job_scope_gate(store, c, user, rid,
+        **({"_graph_read": _graph_read} if _graph_read is not None else {}))
+    _checkpoint_graph(store, c, _graph_read)
+    require(scoped)
+    result = c.execute(_GATE_STATUS, parameters)
+    _checkpoint_graph(store, c, _graph_read)
+    require(result.scalar_one() == "SUCCEEDED",
             "Only a completed successful task is a P-B source")
     # Independent committed metadata must agree before any source Run/receipt body.
-    scope, seal = pair(c, user, rid, spec.RUN_META, "accepted", RunScopeInput)
+    paired = (pair(c, user, rid, spec.RUN_META, "accepted", RunScopeInput)
+        if _graph_read is None else _cold_persisted_pair(store, c, user,
+            rid, spec.RUN_META, "accepted", RunScopeInput, _graph_read))
+    _checkpoint_graph(store, c, _graph_read)
+    scope, seal = paired
     require(fingerprint(scope.model_dump()) == fingerprint(seal))
-    saved = c.execute(_GATE_SAVED, parameters).scalars().all()
-    committed = c.execute(_GATE_COMMITTED, parameters).scalars().all()
+    result = c.execute(_GATE_SAVED, parameters)
+    _checkpoint_graph(store, c, _graph_read)
+    saved = result.scalars().all()
+    result = c.execute(_GATE_COMMITTED, parameters)
+    _checkpoint_graph(store, c, _graph_read)
+    committed = result.scalars().all()
     pointer_parameters = {"pb_gate_app_run": scope.app_run_id, "pb_gate_instance": scope.instance_id}
-    output = c.execute(_GATE_OUTPUT, pointer_parameters).scalars().all()
-    typed = c.execute(_GATE_TYPED, pointer_parameters).scalars().all()
+    result = c.execute(_GATE_OUTPUT, pointer_parameters)
+    _checkpoint_graph(store, c, _graph_read)
+    output = result.scalars().all()
+    result = c.execute(_GATE_TYPED, pointer_parameters)
+    _checkpoint_graph(store, c, _graph_read)
+    typed = result.scalars().all()
     require(len(saved) == 1 and saved == committed == output == typed and saved[0],
             "Independent committed source artifact pointers differ")
     store.authorize(c, user, header["runtime_id"], pid, saved[0], natural.READ)
-
+    _checkpoint_graph(store, c, _graph_read)
 
 
 def source_audit(store, c, user, pid, rid):
@@ -178,19 +295,34 @@ def source_audit(store, c, user, pid, rid):
         token.inflight.discard(key)
 
 
-def _source_audit(store, c, user, pid, rid):
-    """Original complete current source scope and audit bytes, never a permit."""
+def _source_audit_prefix(store, c, user, pid, rid, *, _graph_read=None):
     from . import pa_spec_apps as spec
-    from .db import delivery_graph_requests, goal_card_versions, goal_cards
     from .text_workflows import RunScopeInput
 
-    source_gate(store, c, user, pid, rid)
-    scope, seal = pair(c, user, rid, spec.RUN_META, "accepted", RunScopeInput)
-    original = c.execute(select(app_drafts).where(app_drafts.c.id == scope.app_id,
-        app_drafts.c.project_id == pid, app_drafts.c.runtime_id == scope.runtime_id)).mappings().one()
+    source_gate(store, c, user, pid, rid, **({"_graph_read": _graph_read} if _graph_read is not None else {}))
+    _checkpoint_graph(store, c, _graph_read)
+    paired = (pair(c, user, rid, spec.RUN_META, "accepted", RunScopeInput)
+        if _graph_read is None else _cold_persisted_pair(store, c, user,
+            rid, spec.RUN_META, "accepted", RunScopeInput, _graph_read))
+    _checkpoint_graph(store, c, _graph_read)
+    scope, seal = paired
+    result = c.execute(select(app_drafts).where(app_drafts.c.id == scope.app_id,
+        app_drafts.c.project_id == pid, app_drafts.c.runtime_id == scope.runtime_id))
+    _checkpoint_graph(store, c, _graph_read)
+    original = result.mappings().one()
     require("spec_task" not in original["candidate"])
-    rows = dict(scope=scope.model_dump(), seal=seal,
-                original_audit=spec.audit_fingerprint(store, c, user, original))
+    rows = dict(scope=scope.model_dump(), seal=seal)
+    return scope, seal, original, rows
+
+
+def _source_audit_rows(store, c, user, pid, rid, scope, original, rows, original_audit,
+                       *, _graph_read=None, _source_reader=None):
+    from . import pa_spec_apps as spec
+    from .db import delivery_graph_requests, goal_card_versions, goal_cards
+
+    _checkpoint_graph(store, c, _graph_read)
+    rows = dict(rows)
+    rows["original_audit"] = original_audit
     queries = {
         "run": select(runs).where(runs.c.id == rid, runs.c.principal_id == user, runs.c.project_id == pid),
         "contract": select(run_contracts).where(run_contracts.c.run_id == rid),
@@ -222,7 +354,9 @@ def _source_audit(store, c, user, pid, rid):
         delivery_graph_requests.c.principal_id == user,
         delivery_graph_requests.c.kind.in_([spec.META, spec.META + "_seal", spec.BIND, spec.BIND + "_seal"])
         ).order_by(delivery_graph_requests.c.kind, delivery_graph_requests.c.request_key)
-    contract = c.execute(select(run_contracts.c.snapshot).where(run_contracts.c.run_id == rid)).scalar_one()
+    result = c.execute(select(run_contracts.c.snapshot).where(run_contracts.c.run_id == rid))
+    _checkpoint_graph(store, c, _graph_read)
+    contract = result.scalar_one()
     goal_id = contract["goal"]["goal_id"]
     queries["current_goal"] = select(goal_cards).where(goal_cards.c.id == goal_id,
         goal_cards.c.project_id == pid)
@@ -231,26 +365,151 @@ def _source_audit(store, c, user, pid, rid):
         goal_cards.c.project_id == pid).order_by(goal_card_versions.c.version)
     rows["original"] = dict(original)
     for name, query in queries.items():
-        rows[name] = [dict(row) for row in c.execute(query).mappings()]
-    return fingerprint(rows)
+        if _source_reader is not None and name in {"attempts", "operations"}:
+            from .natural_spec_runtime import _ColdRunFacts
+            require(type(_source_reader) is _ColdRunFacts)
+            _source_reader.check(store, c, _source_reader.job)
+            require(_source_reader.guard is _graph_read
+                and _source_reader.job["id"] == rid
+                and _source_reader.job["principal_id"] == user
+                and _source_reader.job["project_id"] == pid)
+            if name == "attempts":
+                raw = _source_reader.attempt_rows(ledger=True)
+            else:
+                raw = sorted(_source_reader.receipt_operations(), key=lambda row: row["id"])
+            _checkpoint_graph(store, c, _graph_read)
+            _source_reader.check(store, c, _source_reader.job)
+            rows[name] = [dict(row) for row in raw]
+        else:
+            result = c.execute(query)
+            _checkpoint_graph(store, c, _graph_read)
+            rows[name] = [dict(row) for row in result.mappings()]
+    return rows
 
 
-def scope_gate(store, c, user, aid, location):
+def _source_audit(store, c, user, pid, rid):
+    """Original complete current source scope and audit bytes, never a permit."""
+    from . import pa_spec_apps as spec
+
+    scope, _, original, rows = _source_audit_prefix(store, c, user, pid, rid)
+    original_audit = spec.audit_fingerprint(store, c, user, original)
+    return fingerprint(_source_audit_rows(store, c, user, pid, rid,
+        scope, original, rows, original_audit))
+
+
+@dataclass(frozen=True)
+class _ColdSourceAuditPrefix:
+    guard: Any
+    key: str
+    user: str
+    pid: str
+    rid: str
+    scope: Any
+    seal: dict
+    original: Any
+    rows: dict
+    _origin_guard: Any = field(init=False, repr=False)
+
+    def __post_init__(self):
+        object.__setattr__(self, "_origin_guard", self.guard)
+
+    def fields(self):
+        from .text_workflows import RunScopeInput
+        return dict(user=self.user, pid=self.pid, rid=self.rid, scope=_cold_model_dump(RunScopeInput, self.scope),
+                    seal=self.seal, original=dict(self.original), rows=self.rows)
+
+
+@dataclass(frozen=True)
+class _ColdSourceAuditFacts:
+    prefix: _ColdSourceAuditPrefix
+    key: str
+    original_audit_rows: dict
+    rows: dict
+    digest: str
+
+    def fields(self):
+        return dict(prefix=self.prefix.fields(), original_audit_rows=self.original_audit_rows,
+                    rows=self.rows, digest=self.digest)
+
+
+def _cold_source_audit_prefix(store, c, user, pid, rid, guard):
+    """Stop exactly before the original native spec audit dependency."""
+    try:
+        if guard is None:
+            raise DomainError("VERSION_CONFLICT", "Exact Cold graph read scope required")
+        _checkpoint_graph(store, c, guard)
+        scope, seal, original, rows = _source_audit_prefix(store, c, user, pid, rid, _graph_read=guard)
+        prefix = _ColdSourceAuditPrefix(guard, "pb-source-audit:" + user + ":" + pid + ":" + rid,
+                                        user, pid, rid, scope, seal, original, rows)
+        guard.add(prefix.key, prefix.fields())
+        return prefix
+    except BaseException:
+        _invalidate_cold_inputs(guard)
+        raise
+
+
+def _cold_source_audit_from_original(store, c, user, prefix, original_audit_rows, *, source_reader=None):
+    """Collect every original row after a complete, explicitly supplied native audit.
+
+    Only the exact same-epoch Run reader may supply complete Attempt/Operation
+    raw rows at their original positions. It supplies no authority or proof.
+    """
+    guard = None
+    try:
+        from .natural_spec_runtime import _ColdRunFacts
+
+        require(type(prefix) is _ColdSourceAuditPrefix)
+        guard = prefix.guard
+        require(guard is prefix._origin_guard, "Cold extraction read scope cannot be replaced")
+        if guard is None:
+            raise DomainError("VERSION_CONFLICT", "Exact Cold graph read scope required")
+        _cold_fields(store, c, guard, prefix.key, prefix.fields())
+        require(user == prefix.user and (source_reader is None or type(source_reader) is _ColdRunFacts))
+        require(type(original_audit_rows) is dict and set(original_audit_rows) == {
+            "run", "contract", "original", "attempts", "operations", "intents", "events",
+            "confirmation", "goal_head", "goal_version"}, "Complete original native audit rows required")
+        guard.add(prefix.key + ":native", original_audit_rows)
+        rows = _source_audit_rows(store, c, user, prefix.pid, prefix.rid,
+            prefix.scope, prefix.original, prefix.rows, fingerprint(original_audit_rows),
+            _graph_read=guard, _source_reader=source_reader)
+        _checkpoint_graph(store, c, guard)
+        facts = _ColdSourceAuditFacts(prefix, prefix.key + ":complete", original_audit_rows,
+                                      rows, fingerprint(rows))
+        guard.add(facts.key, facts.fields())
+        return facts
+    except BaseException:
+        _invalidate_cold_inputs(guard, prefix, source_reader)
+        raise
+
+
+def scope_gate(store, c, user, aid, location, *, _graph_read=None):
     """Called by spec dispatch before full candidate or extraction ledger reads."""
+    _checkpoint_graph(store, c, _graph_read)
     store.own_project(c, user, location["project_id"])
+    _checkpoint_graph(store, c, _graph_read)
     store.authorize(c, user, location["runtime_id"], location["project_id"],
                     location["resource"], natural.READ)
+    _checkpoint_graph(store, c, _graph_read)
     store.authorize(c, user, location["runtime_id"], location["project_id"],
                     location["project_id"], natural.SAVE)
-    kind = c.execute(select(task_extractions.c.snapshot["kind"].as_string())
-                     .where(task_extractions.c.app_id == aid)).scalar()
+    _checkpoint_graph(store, c, _graph_read)
+    result = c.execute(select(task_extractions.c.snapshot["kind"].as_string())
+                     .where(task_extractions.c.app_id == aid))
+    _checkpoint_graph(store, c, _graph_read)
+    kind = result.scalar()
     require(kind == KIND and location["family"] == natural.VERSION and location["task"] == KIND)
-    meta, seal = pair(c, user, aid, META, "scope", Metadata)
+    paired = (pair(c, user, aid, META, "scope", Metadata)
+        if _graph_read is None else _cold_persisted_pair(store, c, user,
+            aid, META, "scope", Metadata, _graph_read))
+    _checkpoint_graph(store, c, _graph_read)
+    meta, seal = paired
     require(fingerprint(meta.model_dump()) == fingerprint(seal)
             and meta.app_id == aid and meta.principal_id == user
             and meta.project_id == location["project_id"]
             and meta.runtime_id == location["runtime_id"] and meta.resource_id == location["resource"])
-    source_gate(store, c, user, meta.project_id, meta.source_run_id)
+    source_gate(store, c, user, meta.project_id, meta.source_run_id,
+                **({"_graph_read": _graph_read} if _graph_read is not None else {}))
+    _checkpoint_graph(store, c, _graph_read)
     return True
 
 
@@ -348,24 +607,217 @@ def source(store, c, user, pid, rid, limits):
         token.inflight.discard(key)
 
 
+def _source_prefix(store, c, user, pid, rid, *, _graph_read=None):
+    source_gate(store, c, user, pid, rid, **({"_graph_read": _graph_read} if _graph_read is not None else {}))
+    _checkpoint_graph(store, c, _graph_read)
+    result = c.execute(select(runs.c.status).where(runs.c.id == rid))
+    _checkpoint_graph(store, c, _graph_read)
+    status = result.scalar_one()
+    require(status == "SUCCEEDED", "Only a completed successful task is a P-B source")
+    result = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user,
+                                        runs.c.project_id == pid))
+    _checkpoint_graph(store, c, _graph_read)
+    return result.mappings().one()
+
+
+def _source_typed(store, c, user, pid, rid, job, binding, proved, *, _graph_read=None):
+    _checkpoint_graph(store, c, _graph_read)
+    draft, snap, app_run = binding["draft"], binding["snapshot"], binding["app_run"]
+    is_natural = natural.is_candidate(draft["candidate"])
+    _checkpoint_graph(store, c, _graph_read)
+    require(is_natural and "spec_task" not in draft["candidate"])
+    result = c.execute(select(internal_instance_data).where(
+        internal_instance_data.c.instance_id == snap["instance_id"],
+        internal_instance_data.c.run_id == app_run["id"]))
+    _checkpoint_graph(store, c, _graph_read)
+    typed = result.mappings().one()
+    proof = _source_proof_fields(user, pid, rid, binding, draft, snap, app_run, job, typed, proved)
+    _checkpoint_graph(store, c, _graph_read)
+    return typed, proof
+
+
+def _source_from_audit(proof, digest):
+    proof.update(runtime_audit_fingerprint=digest,
+        citation_status="PASS", semantic_status="UNKNOWN", owner_acceptance="PENDING")
+    return proof
+
+
 def _source(store, c, user, pid, rid, limits, *, _source_origin=True):
     from . import pa_spec_apps as spec
 
-    source_gate(store, c, user, pid, rid)
-    status = c.execute(select(runs.c.status).where(runs.c.id == rid)).scalar_one()
-    require(status == "SUCCEEDED", "Only a completed successful task is a P-B source")
-    job = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user,
-                                     runs.c.project_id == pid)).mappings().one()
+    job = _source_prefix(store, c, user, pid, rid)
     binding, _, proved = spec.verify_job(store, c, user, job, limits, _source_origin=_source_origin)
-    draft, snap, app_run = binding["draft"], binding["snapshot"], binding["app_run"]
-    require(natural.is_candidate(draft["candidate"]) and "spec_task" not in draft["candidate"])
-    typed = c.execute(select(internal_instance_data).where(
-        internal_instance_data.c.instance_id == snap["instance_id"],
-        internal_instance_data.c.run_id == app_run["id"])).mappings().one()
-    proof = _source_proof_fields(user, pid, rid, binding, draft, snap, app_run, job, typed, proved)
-    proof.update(runtime_audit_fingerprint=source_audit(store, c, user, pid, rid),
-        citation_status="PASS", semantic_status="UNKNOWN", owner_acceptance="PENDING")
-    return binding, proof
+    _, proof = _source_typed(store, c, user, pid, rid, job, binding, proved)
+    return binding, _source_from_audit(proof, source_audit(store, c, user, pid, rid))
+
+
+@dataclass(frozen=True)
+class _ColdSourcePrefix:
+    guard: Any
+    key: str
+    user: str
+    pid: str
+    rid: str
+    limits: Limits
+    role: str
+    job: Any
+    _origin_guard: Any = field(init=False, repr=False)
+
+    def __post_init__(self):
+        object.__setattr__(self, "_origin_guard", self.guard)
+
+    def fields(self):
+        return dict(user=self.user, pid=self.pid, rid=self.rid, role=self.role,
+                    limits=_cold_model_dump(Limits, self.limits), job=dict(self.job))
+
+
+@dataclass(frozen=True)
+class _ColdSourceTyped:
+    prefix: _ColdSourcePrefix
+    key: str
+    binding: dict
+    outputs: dict
+    proved: list
+    typed: Any
+    proof: dict
+
+    def fields(self):
+        return dict(prefix=self.prefix.fields(), binding=self.binding, outputs=self.outputs,
+                    proved=self.proved, typed=dict(self.typed), proof=self.proof)
+
+
+@dataclass(frozen=True)
+class _ColdSourceFacts:
+    typed: _ColdSourceTyped
+    audit: _ColdSourceAuditFacts
+    key: str
+    proof: dict
+
+    @property
+    def binding(self):
+        return self.typed.binding
+
+    def fields(self):
+        return dict(typed=self.typed.fields(), audit=self.audit.fields(), proof=self.proof)
+
+
+def _cold_source_prefix(store, c, user, pid, rid, limits, guard, role):
+    """Stop before verify_job; caller supplies its complete role-specific result."""
+    try:
+        if guard is None:
+            raise DomainError("VERSION_CONFLICT", "Exact Cold graph read scope required")
+        _checkpoint_graph(store, c, guard)
+        require(type(limits) is Limits and role in {"source", "generate", "cold"})
+        job = _source_prefix(store, c, user, pid, rid, _graph_read=guard)
+        key = ":".join(("pb-source", role, user, pid, rid, fingerprint(limits.model_dump())))
+        prefix = _ColdSourcePrefix(guard, key, user, pid, rid, limits, role, job)
+        guard.add(prefix.key, prefix.fields())
+        return prefix
+    except BaseException:
+        _invalidate_cold_inputs(guard)
+        raise
+
+
+def _cold_source_typed(store, c, user, prefix, binding, outputs, proved):
+    """Consume complete verify_job facts, then read the original typed row."""
+    guard = None
+    try:
+        require(type(prefix) is _ColdSourcePrefix)
+        guard = prefix.guard
+        require(guard is prefix._origin_guard, "Cold extraction read scope cannot be replaced")
+        if guard is None:
+            raise DomainError("VERSION_CONFLICT", "Exact Cold graph read scope required")
+        _cold_fields(store, c, guard, prefix.key, prefix.fields())
+        require(user == prefix.user)
+        require(type(binding) is dict and type(outputs) is dict and type(proved) is list)
+        guard.add(prefix.key + ":verified", dict(binding=binding, outputs=outputs, proved=proved))
+        typed, proof = _source_typed(store, c, user, prefix.pid, prefix.rid,
+            prefix.job, binding, proved, _graph_read=guard)
+        facts = _ColdSourceTyped(prefix, prefix.key + ":typed", binding, outputs, proved, typed, proof)
+        guard.add(facts.key, facts.fields())
+        return facts
+    except BaseException:
+        _invalidate_cold_inputs(guard, prefix)
+        raise
+
+
+def _cold_source_from_audit(store, c, user, typed, audit):
+    """Append only the original full Source audit at its original dependency edge."""
+    guard = None
+    try:
+        require(type(typed) is _ColdSourceTyped and type(typed.prefix) is _ColdSourcePrefix
+            and type(audit) is _ColdSourceAuditFacts and type(audit.prefix) is _ColdSourceAuditPrefix)
+        prefix = typed.prefix
+        guard = prefix.guard
+        require(guard is prefix._origin_guard, "Cold extraction read scope cannot be replaced")
+        if guard is None:
+            raise DomainError("VERSION_CONFLICT", "Exact Cold graph read scope required")
+        _cold_fields(store, c, guard, typed.key, typed.fields())
+        _cold_fields(store, c, guard, audit.key, audit.fields())
+        require(user == prefix.user == audit.prefix.user and guard is audit.prefix.guard
+                and audit.prefix.guard is audit.prefix._origin_guard
+                and prefix.pid == audit.prefix.pid and prefix.rid == audit.prefix.rid)
+        proof = _source_from_audit(dict(typed.proof), audit.digest)
+        facts = _ColdSourceFacts(typed, audit, prefix.key + ":complete", proof)
+        guard.add(facts.key, facts.fields())
+        return facts
+    except BaseException:
+        _invalidate_cold_inputs(guard, typed, audit)
+        raise
+
+
+def _cold_source_facet_from_source(store, c, user, source_facts, limits, binding, outputs, proved, *, role=None):
+    """Rebuild one full Limits facet from complete new verify_job facts.
+
+    Root must independently prove bound/clock/counters/receipts/result for this
+    exact Limits facet before supplying binding/outputs/proved. Only the same
+    epoch's complete Run/typed/native+Source audit raw facts are reused here.
+    """
+    guard = None
+    try:
+        require(type(source_facts) is _ColdSourceFacts
+            and type(source_facts.typed) is _ColdSourceTyped
+            and type(source_facts.typed.prefix) is _ColdSourcePrefix
+            and type(source_facts.audit) is _ColdSourceAuditFacts
+            and type(source_facts.audit.prefix) is _ColdSourceAuditPrefix)
+        original = source_facts.typed.prefix
+        guard = original.guard
+        require(guard is original._origin_guard, "Cold Source read scope cannot be replaced")
+        if guard is None:
+            raise DomainError("VERSION_CONFLICT", "Exact Cold graph read scope required")
+        _cold_fields(store, c, guard, source_facts.key, source_facts.fields())
+        require(user == original.user == source_facts.audit.prefix.user
+            and guard is source_facts.audit.prefix.guard
+            and source_facts.audit.prefix.guard is source_facts.audit.prefix._origin_guard
+            and original.pid == source_facts.audit.prefix.pid
+            and original.rid == source_facts.audit.prefix.rid
+            and type(limits) is Limits and type(binding) is dict
+            and type(outputs) is dict and type(proved) is list)
+        facet_role = original.role if role is None else role
+        require(facet_role in {"source", "generate", "cold"})
+        key = ":".join(("pb-source", facet_role, user, original.pid, original.rid,
+                        fingerprint(limits.model_dump())))
+        prefix = _ColdSourcePrefix(guard, key, user, original.pid, original.rid,
+                                    limits, facet_role, original.job)
+        guard.add(prefix.key, prefix.fields())
+        guard.add(prefix.key + ":limits", limits)
+        guard.add(prefix.key + ":verified", dict(binding=binding, outputs=outputs, proved=proved))
+        draft, snap, app_run = binding["draft"], binding["snapshot"], binding["app_run"]
+        is_natural = natural.is_candidate(draft["candidate"])
+        _checkpoint_graph(store, c, guard)
+        require(is_natural and "spec_task" not in draft["candidate"])
+        typed = source_facts.typed.typed
+        # These are the exact predicates of the original typed row SELECT.
+        require(typed["instance_id"] == snap["instance_id"] and typed["run_id"] == app_run["id"])
+        proof = _source_proof_fields(user, original.pid, original.rid, binding,
+            draft, snap, app_run, original.job, typed, proved)
+        _checkpoint_graph(store, c, guard)
+        typed_facts = _ColdSourceTyped(prefix, prefix.key + ":typed", binding, outputs, proved, typed, proof)
+        guard.add(typed_facts.key, typed_facts.fields())
+        return _cold_source_from_audit(store, c, user, typed_facts, source_facts.audit)
+    except BaseException:
+        _invalidate_cold_inputs(guard, source_facts)
+        raise
 
 
 def _source_proof_fields(user, pid, rid, binding, draft, snap, app_run, job, typed, proved):
@@ -387,10 +839,62 @@ def _source_proof_fields(user, pid, rid, binding, draft, snap, app_run, job, typ
         receipt_fingerprint=fingerprint(proved), audit_fingerprint=binding["audit_fingerprint"])
 
 
-def candidate(body, proof, material, goal, aid, pid, limits):
+@dataclass(frozen=True)
+class _ColdReviewRead:
+    guard: Any
+    key: str
+    body: ReviewInput
+    limits: Limits
+    approved: Limits
+    binding: dict
+    proof: dict
+    material: dict
+    goal: Any
+    _origin_guard: Any = field(init=False, repr=False)
+
+    def __post_init__(self):
+        object.__setattr__(self, "_origin_guard", self.guard)
+
+    def fields(self):
+        return dict(body=_cold_model_dump(ReviewInput, self.body), limits=self.limits, approved=self.approved,
+                    binding=self.binding, proof=self.proof, material=self.material,
+                    goal=_cold_model_dump(GoalCardRunSource, self.goal))
+
+    def check(self):
+        guard = None
+        try:
+            from .natural_spec_runtime import _ColdGraphRead
+            require(type(self) is _ColdReviewRead)
+            guard = self.guard
+            require(guard is self._origin_guard, "Cold review read scope cannot be replaced")
+            if guard is None:
+                raise DomainError("VERSION_CONFLICT", "Exact Cold graph read scope required")
+            require(type(guard) is _ColdGraphRead)
+            _cold_fields(guard.store, guard.connection, guard, self.key, self.fields())
+        except BaseException:
+            _invalidate_cold_inputs(guard, self)
+            raise
+
+
+def _check_review_read(guard, read):
+    try:
+        if read is not None:
+            require(type(read) is _ColdReviewRead and read.guard is guard)
+            read.check()
+        else:
+            require(guard is None, "Complete strict review inputs required")
+    except BaseException:
+        _invalidate_cold_inputs(guard, read)
+        raise
+
+
+def candidate(body, proof, material, goal, aid, pid, limits, *, _graph_read=None, _review_read=None):
     recipe = body.recipe.model_dump(exclude_none=True)
     value = natural.expand(recipe, aid, goal.card_id, pid, material["hash"], material["resource_id"],
                            goal.snapshot["content"], limits, proof["output_fingerprint"])
+    _checkpoint_graph_owner(_graph_read)
+    if _review_read is not None:
+        _check_review_read(_graph_read, _review_read)
     value["manifest"]["origin"] = "task_run"
     value["manifest"]["source_run_ref"] = body.source_run_id
     value["spec_task"] = dict(kind=KIND, source_run_id=body.source_run_id,
@@ -415,7 +919,7 @@ def _review_source_from_facts(body, proof):
             and proof["recipe_fingerprint"] == body.expected_source_recipe_fingerprint)
 
 
-def _review_from_facts(user, pid, body, limits, binding, proof, material, goal):
+def _review_from_facts(user, pid, body, limits, binding, proof, material, goal, *, _graph_read=None, _graph_key=None):
     """Original target/candidate tail after source comparison and current target gates.
 
     Supply full Source proof/history/audit, the exact target material/Goal and
@@ -430,8 +934,26 @@ def _review_from_facts(user, pid, body, limits, binding, proof, material, goal):
     aid = "app_" + fingerprint(dict(kind=KIND, user=user, project=pid, request=body.model_dump()))[:32]
     runtime_id = "appruntime_" + fingerprint(dict(kind=KIND, app=aid))[:32]
     approved = Limits(**binding["draft"]["candidate"]["manifest"]["runtime_limits"])
-    value = candidate(body, proof, material, goal, aid, pid, approved)
-    _, _, report = natural.compile_candidate(value, limits)
+    review_read = None
+    if _graph_read is not None:
+        from .contracts import GoalCardRunSource
+        _checkpoint_graph_owner(_graph_read)
+        require(type(_graph_key) is str and type(body) is ReviewInput
+            and type(limits) is Limits and type(goal) is GoalCardRunSource)
+        review_read = _ColdReviewRead(_graph_read, _graph_key + ":inputs", body, limits,
+            approved, binding, proof, material, goal)
+        _graph_read.add(review_read.key, review_read.fields())
+    value = candidate(body, proof, material, goal, aid, pid, approved,
+        **({"_graph_read": _graph_read, "_review_read": review_read} if _graph_read is not None else {}))
+    _checkpoint_graph_owner(_graph_read)
+    if review_read is not None:
+        review_read.check()
+        _graph_read.add(review_read.key + ":candidate", value)
+    compiled = natural.compile_candidate(value, limits)
+    _checkpoint_graph_owner(_graph_read)
+    if review_read is not None:
+        review_read.check()
+    _, _, report = compiled
     result = dict(namespace=VERSION, principal_id=user, project_id=pid, source_run_id=body.source_run_id,
         request=body.model_dump(), request_fingerprint=fingerprint(body.model_dump()),
         source_proof=proof, source_proof_fingerprint=fingerprint(proof),
@@ -446,10 +968,19 @@ def _review_from_facts(user, pid, body, limits, binding, proof, material, goal):
             goal=dict(card_id=goal.card_id, version=goal.version, fingerprint=goal.fingerprint)),
         candidate=value, candidate_fingerprint=fingerprint(value), app_id=aid, runtime_id=runtime_id,
         report=report, approved_source_limits=approved.model_dump(),
-        preview=natural.preview(material, value, {}), consent=CONSENT,
+        preview=_review_preview(material, value, _graph_read,
+            **({"_review_read": review_read} if review_read is not None else {})), consent=CONSENT,
         artifact_write_consent=natural.CONSENT, new_model_requests=0, project_writes=0,
         semantic_status="UNKNOWN", owner_acceptance="PENDING", formal_publication_enabled=False)
     return {**result, "review_fingerprint": fingerprint(result)}, material, goal
+
+
+def _review_preview(material, value, guard, *, _review_read=None):
+    preview = natural.preview(material, value, {})
+    _checkpoint_graph_owner(guard)
+    if _review_read is not None:
+        _check_review_read(guard, _review_read)
+    return preview
 
 
 def frozen_for(user, pid, body, checked):
@@ -461,44 +992,428 @@ def frozen_for(user, pid, body, checked):
         approved_source_limits=checked["approved_source_limits"])
 
 
-@controlled
-def verify(store, c, user, draft, limits):
+def _persisted_pair_input(expected, value):
+    """Only the three fixed owned persisted schemas inherit the old mapping."""
+    from .text_workflows import RunScopeInput
+
+    require(any(expected is kind for kind in (ExtractInput, Metadata, RunScopeInput)),
+            "Fixed owned Cold persisted schema required")
+    try:
+        if expected is ExtractInput:
+            return ExtractInput.model_validate(value)
+        if expected is Metadata:
+            return Metadata.model_validate(value)
+        return RunScopeInput.model_validate(value)
+    except (ValidationError, KeyError, TypeError, ValueError):
+        raise DomainError("VERSION_CONFLICT", "Malformed persisted DeliveryGraph binding") from None
+
+
+def _persisted_extract_input(value):
+    # Retain the existing fixed ExtractInput parser boundary and its callers.
+    return _persisted_pair_input(ExtractInput, value)
+
+
+def _cold_persisted_pair(store, c, user, aid, kind, key, expected, guard):
+    """Fixed existing pairs; IO/checkpoints and external callees are not mapped."""
+    try:
+        require(guard is not None, "Exact Cold extraction read scope required")
+        from . import delivery_graph_apps as graph
+        from . import pa_spec_apps as spec
+        from .text_workflows import RunScopeInput
+
+        require((expected is ExtractInput and kind == EXTRACT)
+                or (expected is Metadata and kind == META and key == "scope")
+                or (expected is RunScopeInput and kind == spec.RUN_META and key == "accepted"),
+                "Fixed owned Cold persisted pair required")
+        _checkpoint_graph(store, c, guard)
+        rows = []
+        for stored_kind in (kind, kind + "_seal"):
+            row = graph.lookup(c, user, aid, stored_kind, key)
+            _checkpoint_graph(store, c, guard)
+            rows.append(row)
+        require(all(rows), "Independent text logic seals missing")
+        values = []
+        for row in rows:
+            spec._persisted_snapshot_finite(row['snapshot'])
+            value = graph.checked(row)
+            _checkpoint_graph(store, c, guard)
+            values.append(value)
+        left, right = values
+        require(set(left) == {"request", "response"})
+        left_fingerprint = fingerprint(left)
+        _checkpoint_graph(store, c, guard)
+        right_fingerprint = fingerprint(right)
+        _checkpoint_graph(store, c, guard)
+        require(left_fingerprint == right_fingerprint)
+        # No checkpoint, SQL or external callback is enclosed by this mapper.
+        body = (_persisted_extract_input(left["request"]) if expected is ExtractInput
+                else _persisted_pair_input(expected, left["request"]))
+        _checkpoint_graph(store, c, guard)
+        for row in rows:
+            request_fingerprint = fingerprint(expected.model_dump(body))
+            _checkpoint_graph(store, c, guard)
+            require(row["request_fingerprint"] == request_fingerprint)
+        return body, left["response"]
+    except BaseException:
+        _invalidate_cold_inputs(guard)
+        raise
+
+
+def _cold_extract_pair(store, c, user, aid, key, guard):
+    return _cold_persisted_pair(store, c, user, aid, EXTRACT, key, ExtractInput, guard)
+
+
+def _verify_prefix(store, c, user, draft, *, _graph_read=None):
     from . import pa_spec_apps as spec
 
-    require(spec.scope_gate(store, c, user, draft["id"]))
-    marker = c.execute(select(task_extractions).where(task_extractions.c.app_id == draft["id"])).mappings().one()
-    body, frozen = pair(c, user, draft["id"], EXTRACT, marker["request_key"], ExtractInput)
-    meta, _ = pair(c, user, draft["id"], META, "scope", Metadata)
+    _checkpoint_graph(store, c, _graph_read)
+    scoped = spec.scope_gate(store, c, user, draft["id"],
+        **({"_graph_read": _graph_read} if _graph_read is not None else {}))
+    _checkpoint_graph(store, c, _graph_read)
+    require(scoped)
+    result = c.execute(select(task_extractions).where(task_extractions.c.app_id == draft["id"]))
+    _checkpoint_graph(store, c, _graph_read)
+    marker = result.mappings().one()
+    paired = (pair(c, user, draft["id"], EXTRACT, marker["request_key"], ExtractInput)
+        if _graph_read is None else _cold_extract_pair(store, c, user,
+            draft["id"], marker["request_key"], _graph_read))
+    _checkpoint_graph(store, c, _graph_read)
+    body, frozen = paired
+    paired = (pair(c, user, draft["id"], META, "scope", Metadata)
+        if _graph_read is None else _cold_persisted_pair(store, c, user,
+            draft["id"], META, "scope", Metadata, _graph_read))
+    _checkpoint_graph(store, c, _graph_read)
+    meta, _ = paired
     require(marker["principal_id"] == user and marker["task_id"] == body.review.source_run_id == meta.source_run_id
             and marker["request_key"] == body.review.request_key
             and marker["request_fingerprint"] == fingerprint(body.model_dump()))
-    checked, material, goal = review(store, c, user, draft["project_id"], body.review, limits, draft["runtime_id"])
+    return marker, body, frozen, meta
+
+
+def _extraction_name(store, c, draft, guard, *, _typed_models=None):
+    result = c.execute(select(app_drafts.c.name).where(app_drafts.c.id == draft["id"]))
+    _cold_typed_checkpoint(store, c, guard, _typed_models)
+    return result.scalar_one()
+
+
+def _verify_from_review(store, c, user, draft, limits, marker, body, frozen, meta,
+                        checked, material, goal, *, _graph_read=None, _typed_models=None):
+    _cold_typed_checkpoint(store, c, _graph_read, _typed_models)
     require(body.expected_review_fingerprint == checked["review_fingerprint"]
             and frozen == frozen_for(user, draft["project_id"], body, checked)
             and fingerprint(marker["snapshot"]) == fingerprint(frozen)
             and draft["id"] == checked["app_id"] and draft["runtime_id"] == checked["runtime_id"]
             and fingerprint(draft["candidate"]) == draft["fingerprint"] == checked["candidate_fingerprint"]
-            and c.execute(select(app_drafts.c.name).where(app_drafts.c.id == draft["id"])).scalar_one() == body.review.name
+            and _extraction_name(store, c, draft, _graph_read,
+                **({"_typed_models": _typed_models} if _graph_read is not None else {})) == body.review.name
             and meta.resource_id == material["resource_id"])
-    manifest, _, report = natural.compile_candidate(draft["candidate"], limits)
+    compiled = natural.compile_candidate(draft["candidate"], limits)
+    _cold_typed_checkpoint(store, c, _graph_read, _typed_models)
+    manifest, _, report = compiled
     return manifest, report, material, goal.model_dump()
 
 
-def audit_fingerprint(store, c, user, draft, *, _audit_out=None):
+@controlled
+def verify(store, c, user, draft, limits):
+    marker, body, frozen, meta = _verify_prefix(store, c, user, draft)
+    checked, material, goal = review(store, c, user, draft["project_id"], body.review, limits, draft["runtime_id"])
+    return _verify_from_review(store, c, user, draft, limits,
+        marker, body, frozen, meta, checked, material, goal)
+
+
+@dataclass(frozen=True)
+class _ColdExtractionPrefix:
+    guard: Any
+    key: str
+    user: str
+    draft: Any
+    limits: Limits
+    role: str
+    marker: Any
+    body: ExtractInput
+    frozen: dict
+    meta: Metadata
+    _origin_guard: Any = field(init=False, repr=False)
+
+    def __post_init__(self):
+        object.__setattr__(self, "_origin_guard", self.guard)
+
+    def fields(self):
+        return dict(user=self.user, draft=dict(self.draft), limits=_cold_model_dump(Limits, self.limits), role=self.role,
+                    marker=dict(self.marker), body=_cold_model_dump(ExtractInput, self.body),
+                    frozen=self.frozen, meta=_cold_model_dump(Metadata, self.meta))
+
+
+@dataclass(frozen=True)
+class _ColdExtractionReview:
+    prefix: _ColdExtractionPrefix
+    source: _ColdSourceFacts
+    key: str
+    checked: dict
+    material: dict
+    goal: Any
+
+    def fields(self):
+        return dict(prefix=self.prefix.fields(), source=self.source.fields(), checked=self.checked,
+                    material=self.material, goal=_cold_model_dump(GoalCardRunSource, self.goal))
+
+
+def _cold_verify_prefix(store, c, user, draft, limits, guard, role):
+    """Stop after exact extraction identity and before its Source dependency."""
+    try:
+        if guard is None:
+            raise DomainError("VERSION_CONFLICT", "Exact Cold graph read scope required")
+        _checkpoint_graph(store, c, guard)
+        require(type(limits) is Limits and role in {"source", "generate", "cold"})
+        marker, body, frozen, meta = _verify_prefix(store, c, user, draft, _graph_read=guard)
+        key = ":".join(("pb-extraction", role, user, draft["id"], fingerprint(limits.model_dump())))
+        prefix = _ColdExtractionPrefix(guard, key, user, draft, limits, role, marker, body, frozen, meta)
+        guard.add(prefix.key, prefix.fields())
+        return prefix
+    except BaseException:
+        _invalidate_cold_inputs(guard)
+        raise
+
+
+def _cold_review_from_source(store, c, user, prefix, source_facts):
+    """Compare Source first, then original current target gates and full review."""
+    guard = None
+    try:
+        from . import pa_spec_apps as spec
+
+        require(type(prefix) is _ColdExtractionPrefix and type(source_facts) is _ColdSourceFacts
+            and type(source_facts.typed) is _ColdSourceTyped
+            and type(source_facts.typed.prefix) is _ColdSourcePrefix)
+        guard = prefix.guard
+        require(guard is prefix._origin_guard, "Cold extraction read scope cannot be replaced")
+        if guard is None:
+            raise DomainError("VERSION_CONFLICT", "Exact Cold graph read scope required")
+        _cold_fields(store, c, guard, prefix.key, prefix.fields())
+        _cold_fields(store, c, guard, source_facts.key, source_facts.fields())
+        source_prefix = source_facts.typed.prefix
+        require(user == prefix.user == source_prefix.user and guard is source_prefix.guard
+                and source_prefix.guard is source_prefix._origin_guard
+                and prefix.draft["project_id"] == source_prefix.pid
+                and prefix.body.review.source_run_id == source_prefix.rid
+                and prefix.limits is source_prefix.limits and prefix.role == source_prefix.role)
+        models: list[tuple[type[Strict], Strict, dict]] = [(ExtractInput, prefix.body, guard.inputs[prefix.key]["body"]),
+                  (Metadata, prefix.meta, guard.inputs[prefix.key]["meta"])]
+        _review_source_from_facts(prefix.body.review, source_facts.proof)
+        _cold_typed_checkpoint(store, c, guard, models)
+        targeted = spec.target(store, c, user, prefix.draft["project_id"], prefix.body.review.card_id,
+            prefix.body.review.expected_goal_version, prefix.body.review.expected_goal_fingerprint,
+            prefix.draft["runtime_id"], family=natural.VERSION, _graph_read=guard)
+        _cold_typed_checkpoint(store, c, guard, models)
+        material, goal = targeted
+        target = dict(material=material, goal=_cold_model_dump(GoalCardRunSource, goal))
+        guard.add(prefix.key + ":target", target)
+        models.append((GoalCardRunSource, goal, target["goal"]))
+        reviewed = _review_from_facts(user, prefix.draft["project_id"], prefix.body.review, prefix.limits,
+            source_facts.binding, source_facts.proof, material, goal,
+            _graph_read=guard, _graph_key=prefix.key + ":review")
+        _cold_typed_checkpoint(store, c, guard, models)
+        checked, material, goal = reviewed
+        facts = _ColdExtractionReview(prefix, source_facts, prefix.key + ":review", checked, material, goal)
+        guard.add(facts.key, facts.fields())
+        return facts
+    except BaseException:
+        _invalidate_cold_inputs(guard, prefix, source_facts)
+        raise
+
+
+def _cold_verify_from_review(store, c, user, prefix, review_facts):
+    guard = None
+    try:
+        require(type(prefix) is _ColdExtractionPrefix and type(review_facts) is _ColdExtractionReview)
+        guard = prefix.guard
+        require(guard is prefix._origin_guard, "Cold extraction read scope cannot be replaced")
+        if guard is None:
+            raise DomainError("VERSION_CONFLICT", "Exact Cold graph read scope required")
+        _cold_fields(store, c, guard, prefix.key, prefix.fields())
+        _cold_fields(store, c, guard, review_facts.key, review_facts.fields())
+        require(review_facts.prefix is prefix and user == prefix.user)
+        models: list[tuple[type[Strict], Strict, dict]] = [(ExtractInput, prefix.body, guard.inputs[prefix.key]["body"]),
+                  (Metadata, prefix.meta, guard.inputs[prefix.key]["meta"]),
+                  (GoalCardRunSource, review_facts.goal, guard.inputs[review_facts.key]["goal"])]
+        value = _verify_from_review(store, c, user, prefix.draft, prefix.limits,
+            prefix.marker, prefix.body, prefix.frozen, prefix.meta,
+            review_facts.checked, review_facts.material, review_facts.goal,
+            _graph_read=guard, _typed_models=models)
+        _cold_typed_checkpoint(store, c, guard, models)
+        manifest, report, material, goal = value
+        guard.add(prefix.key + ":verified", dict(manifest=manifest.model_dump(),
+            report=report, material=material, goal=goal))
+        return value
+    except BaseException:
+        _invalidate_cold_inputs(guard, prefix, review_facts)
+        raise
+
+
+def _cold_verify_facet_from_review(store, c, user, prefix, review_facts, limits, source_facts, *, role=None):
+    """Recompile a new Limits facet over the same full metadata and target facts.
+
+    Fresh original scope/authority gates remain root-owned at the role edge.
+    Complete new Source proof is required; no earlier compile/review digest is
+    used as a substitute for this Limits facet's complete comparison/compile.
+    """
+    guard = None
+    try:
+        require(type(prefix) is _ColdExtractionPrefix and type(review_facts) is _ColdExtractionReview
+            and type(source_facts) is _ColdSourceFacts
+            and type(source_facts.typed) is _ColdSourceTyped
+            and type(source_facts.typed.prefix) is _ColdSourcePrefix)
+        guard = prefix.guard
+        require(guard is prefix._origin_guard, "Cold extraction read scope cannot be replaced")
+        if guard is None:
+            raise DomainError("VERSION_CONFLICT", "Exact Cold graph read scope required")
+        _cold_fields(store, c, guard, prefix.key, prefix.fields())
+        _cold_fields(store, c, guard, review_facts.key, review_facts.fields())
+        _cold_fields(store, c, guard, source_facts.key, source_facts.fields())
+        source_prefix = source_facts.typed.prefix
+        facet_role = prefix.role if role is None else role
+        require(user == prefix.user == source_prefix.user and review_facts.prefix is prefix
+            and type(limits) is Limits and facet_role in {"source", "generate", "cold"}
+            and guard is source_prefix.guard and source_prefix.guard is source_prefix._origin_guard
+            and limits is source_prefix.limits
+            and facet_role == source_prefix.role
+            and prefix.draft["project_id"] == source_prefix.pid
+            and prefix.body.review.source_run_id == source_prefix.rid)
+        key = ":".join(("pb-extraction", facet_role, user, prefix.draft["id"],
+                        fingerprint(limits.model_dump())))
+        facet = _ColdExtractionPrefix(guard, key, user, prefix.draft, limits, facet_role,
+            prefix.marker, prefix.body, prefix.frozen, prefix.meta)
+        guard.add(facet.key, facet.fields())
+        guard.add(facet.key + ":limits", limits)
+        models: list[tuple[type[Strict], Strict, dict]] = [(ExtractInput, prefix.body, guard.inputs[prefix.key]["body"]),
+                  (Metadata, prefix.meta, guard.inputs[prefix.key]["meta"]),
+                  (GoalCardRunSource, review_facts.goal, guard.inputs[review_facts.key]["goal"])]
+        _review_source_from_facts(facet.body.review, source_facts.proof)
+        _cold_typed_checkpoint(store, c, guard, models)
+        # Original complete target bytes and Goal identity; no repeated target IO.
+        material, goal = review_facts.material, review_facts.goal
+        guard.add(facet.key + ":target", dict(material=material, goal=_cold_model_dump(GoalCardRunSource, goal)))
+        reviewed = _review_from_facts(user, facet.draft["project_id"], facet.body.review, limits,
+            source_facts.binding, source_facts.proof, material, goal,
+            _graph_read=guard, _graph_key=facet.key + ":review")
+        _cold_typed_checkpoint(store, c, guard, models)
+        checked, material, goal = reviewed
+        review = _ColdExtractionReview(facet, source_facts, facet.key + ":review", checked, material, goal)
+        guard.add(review.key, review.fields())
+        # Shared exact AND order retains the name scalar at the original point.
+        value = _cold_verify_from_review(store, c, user, facet, review)
+        _checkpoint_graph(store, c, guard)
+        return facet, review, value
+    except BaseException:
+        _invalidate_cold_inputs(guard, prefix, review_facts, source_facts)
+        raise
+
+
+def _audit_prefix(store, c, user, draft, *, _graph_read=None):
     from . import pa_spec_apps as spec
 
-    require(spec.scope_gate(store, c, user, draft["id"]))
-    meta, meta_seal = pair(c, user, draft["id"], META, "scope", Metadata)
-    marker = c.execute(select(task_extractions).where(task_extractions.c.app_id == draft["id"])).mappings().one()
-    body, frozen = pair(c, user, draft["id"], EXTRACT, marker["request_key"], ExtractInput)
-    actual = c.execute(select(app_drafts).where(app_drafts.c.id == draft["id"],
-        app_drafts.c.project_id == draft["project_id"], app_drafts.c.runtime_id == draft["runtime_id"])).mappings().one()
-    digest = fingerprint(dict(source_audit=source_audit(store, c, user, draft["project_id"], meta.source_run_id),
+    _checkpoint_graph(store, c, _graph_read)
+    scoped = spec.scope_gate(store, c, user, draft["id"],
+        **({"_graph_read": _graph_read} if _graph_read is not None else {}))
+    _checkpoint_graph(store, c, _graph_read)
+    require(scoped)
+    paired = (pair(c, user, draft["id"], META, "scope", Metadata)
+        if _graph_read is None else _cold_persisted_pair(store, c, user,
+            draft["id"], META, "scope", Metadata, _graph_read))
+    _checkpoint_graph(store, c, _graph_read)
+    meta, meta_seal = paired
+    result = c.execute(select(task_extractions).where(task_extractions.c.app_id == draft["id"]))
+    _checkpoint_graph(store, c, _graph_read)
+    marker = result.mappings().one()
+    paired = (pair(c, user, draft["id"], EXTRACT, marker["request_key"], ExtractInput)
+        if _graph_read is None else _cold_extract_pair(store, c, user,
+            draft["id"], marker["request_key"], _graph_read))
+    _checkpoint_graph(store, c, _graph_read)
+    body, frozen = paired
+    result = c.execute(select(app_drafts).where(app_drafts.c.id == draft["id"],
+        app_drafts.c.project_id == draft["project_id"], app_drafts.c.runtime_id == draft["runtime_id"]))
+    _checkpoint_graph(store, c, _graph_read)
+    actual = result.mappings().one()
+    return meta, meta_seal, marker, body, frozen, actual
+
+
+def _audit_from_source(meta, meta_seal, marker, body, frozen, actual, source_digest, *, _audit_out=None):
+    digest = fingerprint(dict(source_audit=source_digest,
         metadata=meta.model_dump(), metadata_seal=meta_seal,
         marker=dict(marker), request=body.model_dump(), frozen=frozen, draft=dict(actual)))
     if _audit_out is not None:
         _audit_out.update(base=copy.deepcopy(dict(actual)), digest=digest)
     return digest
+
+
+def audit_fingerprint(store, c, user, draft, *, _audit_out=None):
+    meta, meta_seal, marker, body, frozen, actual = _audit_prefix(store, c, user, draft)
+    source_digest = source_audit(store, c, user, draft["project_id"], meta.source_run_id)
+    return _audit_from_source(meta, meta_seal, marker, body, frozen, actual, source_digest,
+                              _audit_out=_audit_out)
+
+
+@dataclass(frozen=True)
+class _ColdExtractionAuditPrefix:
+    guard: Any
+    key: str
+    user: str
+    draft: Any
+    meta: Metadata
+    meta_seal: dict
+    marker: Any
+    body: ExtractInput
+    frozen: dict
+    actual: Any
+    _origin_guard: Any = field(init=False, repr=False)
+
+    def __post_init__(self):
+        object.__setattr__(self, "_origin_guard", self.guard)
+
+    def fields(self):
+        return dict(user=self.user, draft=dict(self.draft), metadata=_cold_model_dump(Metadata, self.meta),
+                    metadata_seal=self.meta_seal, marker=dict(self.marker), body=_cold_model_dump(ExtractInput, self.body),
+                    frozen=self.frozen, actual=dict(self.actual))
+
+
+def _cold_audit_prefix(store, c, user, draft, guard):
+    """Stop at the original Source audit field before collecting that dependency."""
+    try:
+        if guard is None:
+            raise DomainError("VERSION_CONFLICT", "Exact Cold graph read scope required")
+        _checkpoint_graph(store, c, guard)
+        meta, meta_seal, marker, body, frozen, actual = _audit_prefix(store, c, user, draft, _graph_read=guard)
+        prefix = _ColdExtractionAuditPrefix(guard, "pb-extraction-audit:" + user + ":" + draft["id"],
+            user, draft, meta, meta_seal, marker, body, frozen, actual)
+        guard.add(prefix.key, prefix.fields())
+        return prefix
+    except BaseException:
+        _invalidate_cold_inputs(guard)
+        raise
+
+
+def _cold_audit_from_source(store, c, user, prefix, source_facts, *, _audit_out=None):
+    guard = None
+    try:
+        require(type(prefix) is _ColdExtractionAuditPrefix
+            and type(source_facts) is _ColdSourceAuditFacts
+            and type(source_facts.prefix) is _ColdSourceAuditPrefix)
+        guard = prefix.guard
+        require(guard is prefix._origin_guard, "Cold extraction read scope cannot be replaced")
+        if guard is None:
+            raise DomainError("VERSION_CONFLICT", "Exact Cold graph read scope required")
+        _cold_fields(store, c, guard, prefix.key, prefix.fields())
+        _cold_fields(store, c, guard, source_facts.key, source_facts.fields())
+        require(user == prefix.user == source_facts.prefix.user and guard is source_facts.prefix.guard
+                and source_facts.prefix.guard is source_facts.prefix._origin_guard
+                and prefix.draft["project_id"] == source_facts.prefix.pid
+                and prefix.meta.source_run_id == source_facts.prefix.rid)
+        digest = _audit_from_source(prefix.meta, prefix.meta_seal, prefix.marker, prefix.body,
+            prefix.frozen, prefix.actual, source_facts.digest, _audit_out=_audit_out)
+        _checkpoint_graph(store, c, guard)
+        return digest
+    except BaseException:
+        _invalidate_cold_inputs(guard, prefix, source_facts)
+        raise
 
 
 def receipt(body, checked, frozen):

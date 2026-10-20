@@ -728,6 +728,11 @@ def initial_messages(store, c, run):
     from .goal_applications import source
 
     contract, material = source(store, c, run)
+    return _initial_messages_from_facts(contract, material)
+
+
+def _initial_messages_from_facts(contract, material):
+    """Original natural prompt body after the caller proves exact source facts."""
     bounded_source(material)
     return [
         dict(
@@ -753,10 +758,16 @@ def initial_messages(store, c, run):
 
 
 def from_response(store, c, run, value):
-    from .csv_dag import resolve
     from .goal_applications import source
 
     contract, material = source(store, c, run)
+    return _from_response_from_facts(run, contract, material, value)
+
+
+def _from_response_from_facts(run, contract, material, value):
+    """One shared sample/Recipe validation core; caller retains source authority."""
+    from .csv_dag import resolve
+
     if not isinstance(value, dict) or set(value) != {
         "recipe",
         "sample_nodes",

@@ -147,11 +147,11 @@ def _typed(value, model):
         _require(False)
 
 
-def _requirements(user, contract, key):
-    requirements = evidence.requirements_for(user, contract, key)
-    original = gate.parse_contract(evidence._contract_data(contract))
-    budget.scope_for(original, key)  # Original exact seven-slot/caps constraints.
-    return original, requirements
+def _requirements(user, contract, key, *, _guard=None):
+    requirements = gate._trial_result(evidence.requirements_for(user, contract, key), _guard)
+    original = gate._trial_result(gate.parse_contract(gate._trial_result(evidence._contract_data(contract), _guard), **{'_guard': _guard} if _guard is not None else {}), _guard)
+    gate._trial_result(budget.scope_for(original, key), _guard)
+    return (original, requirements)
 
 
 def check_run(store, c, user, contract, key, stage, run_id, version, fence, worker_id):
@@ -163,12 +163,8 @@ def check_run(store, c, user, contract, key, stage, run_id, version, fence, work
     _require(type(worker_id) is str and bool(worker_id) and run["worker_id"] == worker_id)
     if phase is None:
         gate._generation_context(store, c, run, original)
-    return RunCheck(requirements_fingerprint=fingerprint(expected.model_dump()),
-        approval_fingerprint=fingerprint(approval.model_dump()), stage=stage, run_id=run_id,
-        runtime_id=run["runtime_id"], version=version, fence=fence, worker_id=worker_id,
-        stage_fingerprint=None if phase is None else fingerprint(phase.model_dump()),
-        checked_at=at, deadline=min(run["lease_until"], original.expires_at,
-                                  run["created_at"] + original.caps.run_seconds))
+    return _run_check_from_facts(original, expected, approval, phase, run, at, stage,
+                                 run_id, version, fence, worker_id)
 
 
 def check_source(requirements, result, *, now):
@@ -241,24 +237,19 @@ def _bound(store, c, user, contract, key, ledger, quota, identity, wire):
     return _bound_from_checked_facts(store, c, user, original, expected, state, cursor, item, wire)
 
 
-def _bound_from_checked_facts(store, c, user, original, expected, state, cursor, item, wire):
+def _bound_from_checked_facts(store, c, user, original, expected, state, cursor, item, wire, *, _guard=None):
     """Bind already checked policy inputs; no ledger parsing or source/Run permit.
 
     The caller supplies this call's complete _requirements/_ledger/_typed results.
     Project locking and the original scope/wire/cursor predicates still run here;
     reserve/record/settle retain their distinct subsequent freshness semantics.
     """
-    _require(user == state.scope.principal_id and expected == state.scope, "PERMISSION_DENIED")
-    project = store.lock_project(c, user, state.scope.project_id)
-    _require(project["runtime_id"] == state.scope.runtime_id, "PERMISSION_DENIED")
-    _require(item.requirements_fingerprint == fingerprint(expected.model_dump())
-        and item.account_id == state.account_id == cursor.account_id
-        and item.quota_subject == expected.quota_subject == cursor.quota_subject
-        and type(wire) is bytes and len(wire) == item.wire_bytes
-        and hashlib.sha256(wire).hexdigest() == item.wire_sha256)
-    _require(not state.slots or cursor.last_reserved_at is not None
-             and cursor.last_reserved_at >= state.slots[-1].reserved_at)
-    return original, state, cursor, item
+    _require(user == state.scope.principal_id and expected == state.scope, 'PERMISSION_DENIED')
+    project = gate._trial_result(store.lock_project(c, user, state.scope.project_id), _guard)
+    _require(project['runtime_id'] == state.scope.runtime_id, 'PERMISSION_DENIED')
+    _require(item.requirements_fingerprint == gate._trial_result(fingerprint(gate._trial_result(expected.model_dump(), _guard)), _guard) and item.account_id == state.account_id == cursor.account_id and (item.quota_subject == expected.quota_subject == cursor.quota_subject) and (type(wire) is bytes) and (len(wire) == item.wire_bytes) and (gate._trial_result(gate._trial_result(hashlib.sha256(wire), _guard).hexdigest(), _guard) == item.wire_sha256))
+    _require(not state.slots or (cursor.last_reserved_at is not None and cursor.last_reserved_at >= state.slots[-1].reserved_at))
+    return (original, state, cursor, item)
 
 
 def _fresh(store, c, user, contract, key, ledger, item, source):
@@ -331,3 +322,45 @@ def settle(store, c, user, contract, key, ledger, quota, identity, wire, source,
                                          halted=state.halted or not accepted))
     _ledger(updated)
     return Transition(ledger=updated, quota=cursor)
+
+
+def _run_check_from_facts(original, expected, approval, phase, run, at, stage, run_id, version, fence, worker_id, *, _guard=None):
+    """Original result fields only, after fresh complete Run/phase predicates."""
+    return gate._trial_result(RunCheck(requirements_fingerprint=gate._trial_result(fingerprint(gate._trial_result(expected.model_dump(), _guard)), _guard), approval_fingerprint=gate._trial_result(fingerprint(gate._trial_result(approval.model_dump(), _guard)), _guard), stage=stage, run_id=run_id, runtime_id=run['runtime_id'], version=version, fence=fence, worker_id=worker_id, stage_fingerprint=None if phase is None else gate._trial_result(fingerprint(gate._trial_result(phase.model_dump(), _guard)), _guard), checked_at=at, deadline=min(run['lease_until'], original.expires_at, run['created_at'] + original.caps.run_seconds)), _guard)
+
+
+def _graph_check_run(graph, store, c, user, contract, key, stage, run_id, version, fence, worker_id, stage_facts):
+    """Consume an assembled complete graph stage; never accept an Authority DTO.
+
+    stage_facts is (job,bound,Generate candidate,Generate metadata,
+    Generate job,Generate frozen,accounted Generate,accounted Source,extraction).
+    Its producers are fixed graph nodes; _graph_stage_current replays every
+    original cross-role predicate, not an opaque checked flag or hash summary.
+    """
+
+    def _parent_pin():
+        gate._graph_trial_pin(graph, store, c)
+        gate._graph_trial_stage_raw(graph, stage_facts)
+    _models: list[tuple[type, object, dict]] = []
+    _guard = gate._trial_typed_guard(_parent_pin, _models)
+    try:
+        from . import natural_live_admission as admission
+        _guard()
+        gate._graph_trial_contract_models(graph, store, c, _models, contract)
+        gate._graph_trial_stage_models(graph, store, c, _models, stage_facts)
+        _guard()
+        _require(stage == 'cold')
+        original, expected = gate._trial_result(_requirements(user, contract, key, **{'_guard': _guard} if _guard is not None else {}), _guard)
+        gate._graph_trial_produced(graph, store, c, _models, gate.PBTrialContract, original)
+        gate._graph_trial_produced(graph, store, c, _models, evidence.EvidenceRequirements, expected)
+        approval, phase, run, at = gate._trial_result(admission._graph_run_context(graph, store, c, user, original, key, stage, run_id, version, fence, stage_facts), _guard)
+        gate._graph_trial_produced(graph, store, c, _models, gate.Approval, approval)
+        gate._graph_trial_produced(graph, store, c, _models, gate.StageAuthority, phase)
+        _require(type(worker_id) is str and bool(worker_id) and (run['worker_id'] == worker_id))
+        _guard()
+        return gate._trial_result(_run_check_from_facts(original, expected, approval, phase, run, at, stage, run_id, version, fence, worker_id, _guard=_guard), _guard)
+    except BaseException:
+        from .natural_spec_runtime import _ColdGraphRead
+        if type(graph) is _ColdGraphRead:
+            _ColdGraphRead.invalidate(graph)
+        raise

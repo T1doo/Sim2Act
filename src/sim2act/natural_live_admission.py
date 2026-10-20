@@ -9,7 +9,7 @@ import hashlib
 import math
 import time
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import Field, model_validator
 from sqlalchemy import select
@@ -188,8 +188,8 @@ def contract_model(value):
     return PBTrialContract if value.get("path") == "P-B" else TrialContract
 
 
-def parse_contract(value):
-    return contract_model(value).model_validate(value)
+def parse_contract(value, *, _guard=None):
+    return _trial_result(_trial_result(contract_model(value), _guard).model_validate(value), _guard)
 
 
 def _review_window(contract):
@@ -294,45 +294,25 @@ class StageAuthorityV2(StageAuthority):
     stage_approval_expires_at: float = Field(gt=0, allow_inf_nan=False)
 
 
-def _stage_deadlines(c, user, contract, stage, generation_run_id):
+def _stage_deadlines(c, user, contract, stage, generation_run_id, *, _guard=None):
     if not isinstance(contract, TrialContractV2):
         return {}
-    if stage == "source":
-        predecessor_id, runtime = generation_run_id, contract.runtime_id
-        # Generation is an accepted candidate, still semantically PARTIAL.
-        statuses = {"SUCCEEDED", "PARTIAL"}
+    if stage == 'source':
+        predecessor_id, runtime = (generation_run_id, contract.runtime_id)
+        statuses = {'SUCCEEDED', 'PARTIAL'}
     else:
-        require(stage == "cold")
-        require(_keys(c, user, entity(contract), PHASE) <= {"source", "cold"})
-        source = _saved(c, user, entity(contract), PHASE, "source", StageApproveInput)
-        original = _saved(c, user, entity(contract), APPROVE, "approve", Approval)
-        generation_at = c.execute(select(runs.c.created_at).where(runs.c.id == generation_run_id)).scalar()
-        require(type(generation_at) in (int, float) and math.isfinite(generation_at))
-        require(isinstance(source.authority, StageAuthorityV2)
-            and source.approval_key == original.request.request_key
-            and source.authority.predecessor_run_id == generation_run_id
-            and source.authority.predecessor_created_at == generation_at
-            and source.authority.stage_approval_expires_at == min(generation_at + contract.stage_handoff_seconds, contract.execution_expires_at)
-            and source.authority.stage == "source"
-            and source.authority.contract_fingerprint == fingerprint(contract.model_dump())
-            and source.authority.generation_run_id == generation_run_id
-            and source.expected_authority_fingerprint == fingerprint(source.authority.model_dump()))
-        predecessor_id, runtime = source.authority.run_id, source.authority.runtime_id
-        statuses = {"SUCCEEDED"}
-    # Only scalar timing/identity metadata; no private result/context body.
-    previous = c.execute(select(runs.c.id, runs.c.created_at, runs.c.principal_id,
-        runs.c.project_id, runs.c.runtime_id, runs.c.status, runs.c.cancel_intent).where(
-        runs.c.id == predecessor_id)).mappings().first()
-    require(previous is not None and previous["principal_id"] == user
-        and previous["project_id"] == contract.project_id and previous["runtime_id"] == runtime
-        and previous["status"] in statuses and previous["cancel_intent"] is False
-        and type(previous["created_at"]) in (int, float) and math.isfinite(previous["created_at"])
-        and contract.prepared_at <= previous["created_at"] <= time.time(),
-        "Exact previous stage timing or identity changed")
-    return dict(predecessor_run_id=predecessor_id,
-        predecessor_created_at=previous["created_at"],
-        stage_approval_expires_at=min(previous["created_at"] + contract.stage_handoff_seconds,
-                                      contract.execution_expires_at))
+        require(stage == 'cold')
+        require(_trial_result(_keys(c, user, _trial_result(entity(contract, **{'_guard': _guard} if _guard is not None else {}), _guard), PHASE, **{'_guard': _guard} if _guard is not None else {}), _guard) <= {'source', 'cold'})
+        source = _trial_result(_saved(c, user, _trial_result(entity(contract, **{'_guard': _guard} if _guard is not None else {}), _guard), PHASE, 'source', StageApproveInput, **{'_guard': _guard} if _guard is not None else {}), _guard)
+        original = _trial_result(_saved(c, user, _trial_result(entity(contract, **{'_guard': _guard} if _guard is not None else {}), _guard), APPROVE, 'approve', Approval, **{'_guard': _guard} if _guard is not None else {}), _guard)
+        generation_at = _trial_result(_trial_result(c.execute(select(runs.c.created_at).where(runs.c.id == generation_run_id)), _guard).scalar(), _guard)
+        require(type(generation_at) in (int, float) and _trial_result(math.isfinite(generation_at), _guard))
+        require(isinstance(source.authority, StageAuthorityV2) and source.approval_key == original.request.request_key and (source.authority.predecessor_run_id == generation_run_id) and (source.authority.predecessor_created_at == generation_at) and (source.authority.stage_approval_expires_at == min(generation_at + contract.stage_handoff_seconds, contract.execution_expires_at)) and (source.authority.stage == 'source') and (source.authority.contract_fingerprint == _trial_result(fingerprint(_trial_result(contract.model_dump(), _guard)), _guard)) and (source.authority.generation_run_id == generation_run_id) and (source.expected_authority_fingerprint == _trial_result(fingerprint(_trial_result(source.authority.model_dump(), _guard)), _guard)))
+        predecessor_id, runtime = (source.authority.run_id, source.authority.runtime_id)
+        statuses = {'SUCCEEDED'}
+    previous = _trial_result(_trial_result(_trial_result(c.execute(select(runs.c.id, runs.c.created_at, runs.c.principal_id, runs.c.project_id, runs.c.runtime_id, runs.c.status, runs.c.cancel_intent).where(runs.c.id == predecessor_id)), _guard).mappings(), _guard).first(), _guard)
+    require(previous is not None and previous['principal_id'] == user and (previous['project_id'] == contract.project_id) and (previous['runtime_id'] == runtime) and (previous['status'] in statuses) and (previous['cancel_intent'] is False) and (type(previous['created_at']) in (int, float)) and _trial_result(math.isfinite(previous['created_at']), _guard) and (contract.prepared_at <= previous['created_at'] <= _trial_result(time.time(), _guard)), 'Exact previous stage timing or identity changed')
+    return dict(predecessor_run_id=predecessor_id, predecessor_created_at=previous['created_at'], stage_approval_expires_at=min(previous['created_at'] + contract.stage_handoff_seconds, contract.execution_expires_at))
 
 
 def _stage_review_window(authority):
@@ -355,32 +335,19 @@ def _limits(contract):
                   run_seconds=contract.caps.run_seconds)
 
 
-def _stage_instance_after_bound(store, c, user, project, job, snapshot, release, epoch):
+def _stage_instance_after_bound(store, c, user, project, job, snapshot, release, epoch, *, _guard=None, _graph_read=None):
     """Recheck the current pointers after the caller's complete SQLite bound proof."""
     from .lifecycle import immutable_release_pointer, owned_release_pointer
-
-    require(store.test_only and store.sqlite and c.in_transaction()
-            and c.connection.driver_connection is not None
-            and c.connection.driver_connection.in_transaction,
-            "Bound Release reuse requires an active offline SQLite transaction")
-    inst = c.execute(select(internal_instances).where(
-        internal_instances.c.id == snapshot["instance_id"]).with_for_update()).mappings().first()
-    if inst is None or inst["principal_id"] != user:
-        raise DomainError("PERMISSION_DENIED")
-    draft = release["snapshot"]["draft"]
-    require(inst["project_id"] == project == job["project_id"] == release["project_id"]
-            and inst["source_app_id"] == draft["id"]
-            and inst["runtime_id"] == job["runtime_id"] == draft["runtime_id"]
-            and inst["release_id"] == release["id"]
-            and type(inst["revision"]) is int and inst["revision"] >= 1
-            and epoch == c.info.get("source_proof_write_epoch", 0),
-            "Bound Instance or read segment changed")
-    current = owned_release_pointer(store, c, user, inst["release_id"])
-    immutable_release_pointer(c, user, current)
-    require(dict(current) == dict(release)
-            and epoch == c.info.get("source_proof_write_epoch", 0),
-            "Verified Release or read segment changed")
-    return inst, current
+    require(store.test_only and store.sqlite and _trial_result(c.in_transaction(), _guard) and (c.connection.driver_connection is not None) and c.connection.driver_connection.in_transaction, 'Bound Release reuse requires an active offline SQLite transaction')
+    inst = _trial_result(_trial_result(_trial_result(c.execute(select(internal_instances).where(internal_instances.c.id == snapshot['instance_id']).with_for_update()), _guard).mappings(), _guard).first(), _guard)
+    if inst is None or inst['principal_id'] != user:
+        raise DomainError('PERMISSION_DENIED')
+    draft = release['snapshot']['draft']
+    require(inst['project_id'] == project == job['project_id'] == release['project_id'] and inst['source_app_id'] == draft['id'] and (inst['runtime_id'] == job['runtime_id'] == draft['runtime_id']) and (inst['release_id'] == release['id']) and (type(inst['revision']) is int) and (inst['revision'] >= 1) and (epoch == c.info.get('source_proof_write_epoch', 0)), 'Bound Instance or read segment changed')
+    current = _trial_result(owned_release_pointer(store, c, user, inst['release_id'], **{'_graph_read': _graph_read} if _graph_read is not None else {}), _guard)
+    _trial_result(immutable_release_pointer(c, user, current, **{'_graph_read': _graph_read} if _graph_read is not None else {}), _guard)
+    require(dict(current) == dict(release) and epoch == c.info.get('source_proof_write_epoch', 0), 'Verified Release or read segment changed')
+    return (inst, current)
 
 
 def _stage_current(store, c, user, contract, stage, run_id):
@@ -417,39 +384,20 @@ def _stage_current_read(store, c, user, contract, stage, run_id, pa_spec_apps, *
                                 _journal=_journal)
 
 
-def _stage_target_from_facts(bound, target):
+def _stage_target_from_facts(bound, target, *, _guard=None):
     """Pure original predicates; caller retains all preceding scope/IO gates."""
-    require(bound["source"]["resource_id"] == target.resource_id
-            and bound["source"]["hash"] == target.source_hash
-            and bound["source"]["content"] == target.content
-            and bound["goal"] == dict(card_id=target.card_id, version=target.goal_version,
-                fingerprint=target.goal_fingerprint, snapshot=target.goal_snapshot.model_dump()))
+    require(bound['source']['resource_id'] == target.resource_id and bound['source']['hash'] == target.source_hash and (bound['source']['content'] == target.content) and (bound['goal'] == dict(card_id=target.card_id, version=target.goal_version, fingerprint=target.goal_fingerprint, snapshot=_trial_result(target.goal_snapshot.model_dump(), _guard))))
 
 
-def _stage_generate_from_facts(contract, approval, gen, frozen):
+def _stage_generate_from_facts(contract, approval, gen, frozen, *, _guard=None):
     """Pure original predicates; caller retains all preceding scope/IO gates."""
     first = contract.bindings[0]
-    require(type(gen["created_at"]) in (float, int) and math.isfinite(gen["created_at"])
-            and approval.approved_at <= gen["created_at"] < contract.expires_at
-            and frozen.source_goal_card is not None
-            and frozen.source_goal_card.model_dump() == dict(card_id=first.card_id,
-                version=first.goal_version, fingerprint=first.goal_fingerprint,
-                snapshot=first.goal_snapshot.model_dump())
-            and frozen.application_generation is not None
-            and frozen.application_generation.version == "goal-natural-spec-application.v1"
-            and frozen.request_model == contract.model,
-            "Original Generate must be accepted under this precise trial approval")
+    require(type(gen['created_at']) in (float, int) and _trial_result(math.isfinite(gen['created_at']), _guard) and (approval.approved_at <= gen['created_at'] < contract.expires_at) and (frozen.source_goal_card is not None) and (_trial_result(frozen.source_goal_card.model_dump(), _guard) == dict(card_id=first.card_id, version=first.goal_version, fingerprint=first.goal_fingerprint, snapshot=_trial_result(first.goal_snapshot.model_dump(), _guard))) and (frozen.application_generation is not None) and (frozen.application_generation.version == 'goal-natural-spec-application.v1') and (frozen.request_model == contract.model), 'Original Generate must be accepted under this precise trial approval')
 
 
-def _stage_authority_fields_from_facts(contract, stage, timing, job, bound, inst, draft, release, gen_id, raw, target):
+def _stage_authority_fields_from_facts(contract, stage, timing, job, bound, inst, draft, release, gen_id, raw, target, *, _guard=None):
     """Partial fields only; never a complete StageAuthority or a permission."""
-    return dict(**timing, contract_fingerprint=fingerprint(contract.model_dump()),
-        stage=stage, run_id=job["id"], accepted_fingerprint=job["fingerprint"],
-        app_run_id=bound["app_run"]["id"], instance_id=inst["id"], instance_revision=inst["revision"],
-        runtime_id=job["runtime_id"], app_id=draft["id"], candidate_fingerprint=draft["fingerprint"],
-        recipe_fingerprint=fingerprint(draft["candidate"]["spec_recipe"]),
-        release_id=release["id"], release_fingerprint=release["fingerprint"], generation_run_id=gen_id,
-        generation_candidate_fingerprint=fingerprint(raw), target_goal_fingerprint=target.goal_fingerprint,)
+    return dict(**timing, contract_fingerprint=_trial_result(fingerprint(_trial_result(contract.model_dump(), _guard)), _guard), stage=stage, run_id=job['id'], accepted_fingerprint=job['fingerprint'], app_run_id=bound['app_run']['id'], instance_id=inst['id'], instance_revision=inst['revision'], runtime_id=job['runtime_id'], app_id=draft['id'], candidate_fingerprint=draft['fingerprint'], recipe_fingerprint=_trial_result(fingerprint(draft['candidate']['spec_recipe']), _guard), release_id=release['id'], release_fingerprint=release['fingerprint'], generation_run_id=gen_id, generation_candidate_fingerprint=_trial_result(fingerprint(raw), _guard), target_goal_fingerprint=target.goal_fingerprint)
 
 
 def _stage_current_bound(store, c, user, contract, stage, job, bound, epoch, *, _journal=False):
@@ -481,9 +429,7 @@ def _stage_current_bound(store, c, user, contract, stage, job, bound, epoch, *, 
             store, c, user, contract.project_id, job, snapshot, release, epoch)
     else:
         inst, current_release = instance(store, c, user, snapshot["instance_id"], _limits(contract), lock=True)
-    require(current_release["id"] == release["id"]
-            and current_release["fingerprint"] == release["fingerprint"]
-            and bound["app_run"]["request_key"] == getattr(contract.stage_keys, stage))
+    _stage_release_from_facts(contract, stage, bound, current_release, release)
     target = contract.bindings[1 if stage == "cold" else 0]
     _stage_target_from_facts(bound, target)
     # Match the original generation by its frozen future key, not a supplied ID.
@@ -493,8 +439,7 @@ def _stage_current_bound(store, c, user, contract, stage, job, bound, epoch, *, 
     require(gen_id is not None)
     raw, metadata = pa_spec_apps.model_source(store, c, user, gen_id,
                                              _limits(contract), contract.project_id)
-    require(metadata["runtime_id"] == contract.runtime_id
-            and metadata["resource_refs"] == [contract.bindings[0].resource_id])
+    _stage_generation_metadata_from_facts(contract, metadata)
     approval = _saved(c, user, entity(contract), APPROVE, "approve", Approval)
     gen = c.execute(select(runs).where(runs.c.id == gen_id)).mappings().one()
     frozen = store.frozen_contract(c, gen)
@@ -503,27 +448,25 @@ def _stage_current_bound(store, c, user, contract, stage, job, bound, epoch, *, 
     if pb_cold:
         _pb_origin(store, c, user, contract, approval.request.request_key, bound)
     else:
-        require("spec_task" not in original, "Only P-B cold may use an extracted task")
+        _stage_plain_origin_from_facts(original)
     if pb_cold:
         pass
     elif "spec_binding" in original:
         origin = c.execute(select(task_extractions.c.task_id).where(
             task_extractions.c.app_id == draft["id"], task_extractions.c.principal_id == user)).scalar()
-        require(origin == gen_id)
+        _stage_generation_origin_from_facts(origin, gen_id)
     else:
-        require(original.get("goal_application", {}).get("run_id") == gen_id)
+        _stage_goal_origin_from_facts(original, gen_id)
     # Existing bound/audit proves the whole app lineage. Additionally require its
     # actual graph to be exactly the original generated graph (no edited extras).
     expected_recipe = (contract.extraction_recipe.model_dump(exclude_none=True)
                        if pb_cold else raw["spec_recipe"])
-    require(fingerprint(expected_recipe) == fingerprint(draft["candidate"]["spec_recipe"]))
+    _stage_recipe_from_facts(expected_recipe, draft)
     backend = _generation_accounted(store, c, user, contract, approval.request.request_key, gen_id)
     if backend is not None and stage == "cold":
         from .pa_trial_dispatch import journal_stage_accounted
         source = _saved(c, user, entity(contract), PHASE, "source", StageApproveInput)
-        require(source.approval_key == approval.request.request_key
-            and source.authority.contract_fingerprint == fingerprint(contract.model_dump())
-            and source.authority.generation_run_id == gen_id)
+        _stage_source_phase_from_facts(contract, approval, gen_id, source)
         journal_stage_accounted(store, c, user, contract, approval.request.request_key,
                                 source.authority.run_id, "source")
     timing = _stage_deadlines(c, user, contract, stage, gen_id)
@@ -597,11 +540,7 @@ def _pb_origin(store, c, user, contract, approval_key, bound):
     from .pa_trial_dispatch import _pb_accounting, journal_stage_accounted
     backend, ledger, source_id = _pb_accounting(store, c, user, contract, approval_key)
     if backend is not None:
-        require(source_id is not None
-            and body.review.source_run_id == source_id
-            and body.review.request_key == contract.extraction_request_key
-            and body.review.recipe == contract.extraction_recipe,
-            "P-B requires this original trial's successful source and exact extraction")
+        _stage_pb_origin_from_facts(contract, body, source_id)
         journal_stage_accounted(store, c, user, contract, approval_key, source_id, "source")
         return
     slots = [s for s in ledger["slots"] if s["reservation"]["stage"] == "source"]
@@ -752,73 +691,61 @@ def recover_stage(store, user, contract: TrialContract | TrialContractV2, approv
             fee_status="NOT_VERIFIED", dispatch_authorized=False, new_model_requests=0)
 
 
-def entity(contract):
-    return "naturaltrial_" + fingerprint(dict(user=contract.principal_id,
-        project=contract.project_id, key=contract.trial_key))[:32]
+def entity(contract, *, _guard=None):
+    return 'naturaltrial_' + _trial_result(fingerprint(dict(user=contract.principal_id, project=contract.project_id, key=contract.trial_key)), _guard)[:32]
 
 
-def authorization_fingerprint(c, user, pid, runtime, resource_ids):
-    rows = c.execute(select(grants).where(grants.c.project_id == pid,
-        grants.c.principal_id.in_([user, runtime]),
-        grants.c.resource_id.in_([pid, *resource_ids])).order_by(grants.c.id)).mappings()
-    return fingerprint([dict(row) for row in rows])
+def authorization_fingerprint(c, user, pid, runtime, resource_ids, *, _guard=None):
+    rows = _trial_result(_trial_result(c.execute(select(grants).where(grants.c.project_id == pid, grants.c.principal_id.in_([user, runtime]), grants.c.resource_id.in_([pid, *resource_ids])).order_by(grants.c.id)), _guard).mappings(), _guard)
+    values = _trial_result([dict(row) for row in rows], _guard)
+    return _trial_result(fingerprint(values), _guard)
 
 
-def _authorize(store, c, user, contract):
+def _authorize(store, c, user, contract, *, _guard=None):
     if user != contract.principal_id:
-        raise DomainError("PERMISSION_DENIED")
-    project = store.lock_project(c, user, contract.project_id)
-    require(project["runtime_id"] == contract.runtime_id)
-    # Both READ gates and SAVE precede any private material/Goal/approval body.
+        raise DomainError('PERMISSION_DENIED')
+    project = _trial_result(store.lock_project(c, user, contract.project_id), _guard)
+    require(project['runtime_id'] == contract.runtime_id)
     for binding in contract.bindings:
-        store.authorize(c, user, contract.runtime_id, contract.project_id,
-                        binding.resource_id, "resource.read")
-        location = c.execute(select(goal_cards.c.project_id).where(
-            goal_cards.c.id == binding.card_id)).scalar()
+        _trial_result(store.authorize(c, user, contract.runtime_id, contract.project_id, binding.resource_id, 'resource.read'), _guard)
+        location = _trial_result(_trial_result(c.execute(select(goal_cards.c.project_id).where(goal_cards.c.id == binding.card_id)), _guard).scalar(), _guard)
         if location != contract.project_id:
-            raise DomainError("PERMISSION_DENIED")
-    store.authorize(c, user, contract.runtime_id, contract.project_id,
-                    contract.project_id, "artifact.save_text")
+            raise DomainError('PERMISSION_DENIED')
+    _trial_result(store.authorize(c, user, contract.runtime_id, contract.project_id, contract.project_id, 'artifact.save_text'), _guard)
 
 
-def _current(store, c, user, contract, *, active=True):
-    _authorize(store, c, user, contract)
+def _current(store, c, user, contract, *, active=True, _guard=None):
+    _trial_result(_authorize(store, c, user, contract, **{'_guard': _guard} if _guard is not None else {}), _guard)
     if isinstance(contract, TrialContractV2):
-        require(TrialContractV2.model_validate(contract.model_dump()) == contract)
+        require(_trial_result(TrialContractV2.model_validate(_trial_result(contract.model_dump(), _guard)), _guard) == contract)
     for binding in contract.bindings:
-        material = authorized_read(store, c, user, contract.runtime_id,
-            contract.project_id, "resource.read", {"resource_id": binding.resource_id})
-        require(material["format"] == "txt" and material["hash"] == binding.source_hash
-                and material["content"] == binding.content)
-        saved = validate_card_version(store, c, user, binding.card_id, binding.goal_version)
-        head = c.execute(select(goal_cards.c.version, goal_cards.c.fingerprint).where(
-            goal_cards.c.id == binding.card_id)).mappings().first()
-        require(head is not None and head["version"] == binding.goal_version
-                and head["fingerprint"] == saved["fingerprint"] == binding.goal_fingerprint
-                and fingerprint(saved["snapshot"]) == fingerprint(binding.goal_snapshot.model_dump()))
-    require(authorization_fingerprint(c, user, contract.project_id, contract.runtime_id,
-        [b.resource_id for b in contract.bindings]) == contract.authorization_fingerprint)
+        material = _trial_result(authorized_read(store, c, user, contract.runtime_id, contract.project_id, 'resource.read', {'resource_id': binding.resource_id}), _guard)
+        require(material['format'] == 'txt' and material['hash'] == binding.source_hash and (material['content'] == binding.content))
+        saved = _trial_result(validate_card_version(store, c, user, binding.card_id, binding.goal_version), _guard)
+        head = _trial_result(_trial_result(_trial_result(c.execute(select(goal_cards.c.version, goal_cards.c.fingerprint).where(goal_cards.c.id == binding.card_id)), _guard).mappings(), _guard).first(), _guard)
+        require(head is not None and head['version'] == binding.goal_version and (head['fingerprint'] == saved['fingerprint'] == binding.goal_fingerprint) and (_trial_result(fingerprint(saved['snapshot']), _guard) == _trial_result(fingerprint(_trial_result(binding.goal_snapshot.model_dump(), _guard)), _guard)))
+    require(_trial_result(authorization_fingerprint(c, user, contract.project_id, contract.runtime_id, [b.resource_id for b in contract.bindings], **{'_guard': _guard} if _guard is not None else {}), _guard) == contract.authorization_fingerprint)
     if active:
-        require(contract.software_fingerprint == implementation(), "Trial software changed")
-        require(time.time() < contract.expires_at, "Trial approval expired")
+        require(contract.software_fingerprint == _trial_result(implementation(), _guard), 'Trial software changed')
+        require(_trial_result(time.time(), _guard) < contract.expires_at, 'Trial approval expired')
         if isinstance(contract, TrialContractV2):
-            require(time.time() >= contract.prepared_at, "Trial not yet active")
+            require(_trial_result(time.time(), _guard) >= contract.prepared_at, 'Trial not yet active')
 
 
-def _keys(c, user, eid, kind):
-    rows = c.execute(select(delivery_graph_requests.c.kind,
-        delivery_graph_requests.c.request_key).where(delivery_graph_requests.c.app_id == eid,
-        delivery_graph_requests.c.principal_id == user,
-        delivery_graph_requests.c.kind.in_([kind, kind + "_seal"]))).mappings().all()
-    left = {r["request_key"] for r in rows if r["kind"] == kind}
-    right = {r["request_key"] for r in rows if r["kind"] == kind + "_seal"}
-    require(left == right, "Natural trial paired history incomplete")
+def _keys(c, user, eid, kind, *, _guard=None):
+    rows = _trial_result(_trial_result(_trial_result(c.execute(select(delivery_graph_requests.c.kind, delivery_graph_requests.c.request_key).where(delivery_graph_requests.c.app_id == eid, delivery_graph_requests.c.principal_id == user, delivery_graph_requests.c.kind.in_([kind, kind + '_seal']))), _guard).mappings(), _guard).all(), _guard)
+    left = {r['request_key'] for r in rows if r['kind'] == kind}
+    right = {r['request_key'] for r in rows if r['kind'] == kind + '_seal'}
+    require(left == right, 'Natural trial paired history incomplete')
     return left
 
 
-def _saved(c, user, eid, kind, key, model):
-    body, response = pair(c, user, eid, kind, key, model)
-    require(fingerprint(body.model_dump()) == fingerprint(response))
+def _saved(c, user, eid, kind, key, model, *, _guard=None):
+    body, response = _trial_result(pair(c, user, eid, kind, key, model), _guard)
+    if _guard is not None:
+        _guard = _trial_typed_guard(_guard, [(model, body, response)])
+        _guard()
+    require(_trial_result(fingerprint(_trial_result(body.model_dump(), _guard)), _guard) == _trial_result(fingerprint(response), _guard))
     return body
 
 
@@ -826,29 +753,20 @@ def _save(c, user, eid, kind, key, body):
     remember(c, user, eid, kind, key, body, body.model_dump())
 
 
-def _approved(store, c, user, contract, approval_key, *, active=True):
-    _current(store, c, user, contract, active=active)
-    eid = entity(contract)
-    require(not _keys(c, user, eid, CLOSED), "Natural trial preparation irreversibly closed")
-    require(_keys(c, user, eid, SCOPE) == {"scope"}
-            and _keys(c, user, eid, APPROVE) == {"approve"}
-            and _keys(c, user, eid, REVOKE) <= {"revoke"})
-    saved = _saved(c, user, eid, SCOPE, "scope", type(contract))
-    approval = _saved(c, user, eid, APPROVE, "approve", Approval)
-    fp = fingerprint(contract.model_dump())
-    require(fingerprint(saved.model_dump()) == fp == approval.contract_fingerprint
-            == approval.request.expected_contract_fingerprint
-            and approval.principal_id == user and approval.project_id == contract.project_id
-            and approval.request.request_key == approval_key
-            and math.isfinite(approval.approved_at) and approval.approved_at > 0
-            and approval.expires_at == contract.expires_at
-            and approval.approved_at < approval.expires_at)
+def _approved(store, c, user, contract, approval_key, *, active=True, _guard=None):
+    _trial_result(_current(store, c, user, contract, active=active, **{'_guard': _guard} if _guard is not None else {}), _guard)
+    eid = _trial_result(entity(contract, **{'_guard': _guard} if _guard is not None else {}), _guard)
+    require(not _trial_result(_keys(c, user, eid, CLOSED, **{'_guard': _guard} if _guard is not None else {}), _guard), 'Natural trial preparation irreversibly closed')
+    require(_trial_result(_keys(c, user, eid, SCOPE, **{'_guard': _guard} if _guard is not None else {}), _guard) == {'scope'} and _trial_result(_keys(c, user, eid, APPROVE, **{'_guard': _guard} if _guard is not None else {}), _guard) == {'approve'} and (_trial_result(_keys(c, user, eid, REVOKE, **{'_guard': _guard} if _guard is not None else {}), _guard) <= {'revoke'}))
+    saved = _trial_result(_saved(c, user, eid, SCOPE, 'scope', type(contract), **{'_guard': _guard} if _guard is not None else {}), _guard)
+    approval = _trial_result(_saved(c, user, eid, APPROVE, 'approve', Approval, **{'_guard': _guard} if _guard is not None else {}), _guard)
+    fp = _trial_result(fingerprint(_trial_result(contract.model_dump(), _guard)), _guard)
+    require(_trial_result(fingerprint(_trial_result(saved.model_dump(), _guard)), _guard) == fp == approval.contract_fingerprint == approval.request.expected_contract_fingerprint and approval.principal_id == user and (approval.project_id == contract.project_id) and (approval.request.request_key == approval_key) and _trial_result(math.isfinite(approval.approved_at), _guard) and (approval.approved_at > 0) and (approval.expires_at == contract.expires_at) and (approval.approved_at < approval.expires_at))
     if isinstance(contract, TrialContractV2):
-        require(contract.prepared_at <= approval.approved_at < contract.review_expires_at,
-                "Original approval outside reviewed window")
+        require(contract.prepared_at <= approval.approved_at < contract.review_expires_at, 'Original approval outside reviewed window')
     if active:
-        require(not _keys(c, user, eid, REVOKE), "Natural trial irreversibly revoked")
-        require(approval.approved_at <= time.time() < approval.expires_at)
+        require(not _trial_result(_keys(c, user, eid, REVOKE, **{'_guard': _guard} if _guard is not None else {}), _guard), 'Natural trial irreversibly revoked')
+        require(approval.approved_at <= _trial_result(time.time(), _guard) < approval.expires_at)
     return approval
 
 
@@ -938,33 +856,17 @@ def _run_context(store, c, user, contract, approval_key, stage, run_id, expected
         accepted = _saved(c, user, entity(contract), PHASE, stage, StageApproveInput)
         require(accepted.approval_key == approval_key)
         phase, _ = _stage_current(store, c, user, contract, stage, run_id)
-        require(phase == accepted.authority
-                and fingerprint(phase.model_dump()) == accepted.expected_authority_fingerprint)
-    run = c.execute(select(runs.c.id, runs.c.project_id, runs.c.principal_id,
-        runs.c.runtime_id, runs.c.request_key, runs.c.status, runs.c.cancel_intent,
-        runs.c.version, runs.c.fence, runs.c.lease_until, runs.c.created_at, runs.c.worker_id,
-        runs.c.resource_refs).where(runs.c.id == run_id).with_for_update()).mappings().first()
+        _stage_accepted_from_facts(phase, accepted)
+    run = _run_context_row(c, run_id)
     at = time.time()
     _require_run_context_row(user, contract, stage, run, expected_version, fence, approval, phase, at)
     return approval, phase, run, at
 
 
-def _require_run_context_row(user, contract, stage, run, expected_version, fence, approval, phase, at):
+def _require_run_context_row(user, contract, stage, run, expected_version, fence, approval, phase, at, *, _guard=None):
     """The original complete Run predicate, also after a synchronous readback."""
-    binding = contract.bindings[1 if stage == "cold" else 0]
-    require(type(expected_version) is int and type(fence) is int
-            and run is not None and run["principal_id"] == user
-            and run["project_id"] == contract.project_id
-            and run["runtime_id"] == (contract.runtime_id if phase is None else phase.runtime_id)
-            and (phase is not None or run["request_key"] == contract.stage_keys.generate)
-            and run["resource_refs"] == [binding.resource_id]
-            and run["status"] == "RUNNING" and run["cancel_intent"] is False
-            and run["version"] == expected_version and run["fence"] == fence and fence >= 1
-            and type(run["created_at"]) in (int, float) and math.isfinite(run["created_at"])
-            and approval.approved_at <= run["created_at"] <= at
-            and type(run["lease_until"]) in (int, float) and math.isfinite(run["lease_until"])
-            and at < min(run["lease_until"], run["created_at"] + contract.caps.run_seconds,
-                         contract.expires_at), "Run identity, cancellation, version or finite lease changed")
+    binding = contract.bindings[1 if stage == 'cold' else 0]
+    require(type(expected_version) is int and type(fence) is int and (run is not None) and (run['principal_id'] == user) and (run['project_id'] == contract.project_id) and (run['runtime_id'] == (contract.runtime_id if phase is None else phase.runtime_id)) and (phase is not None or run['request_key'] == contract.stage_keys.generate) and (run['resource_refs'] == [binding.resource_id]) and (run['status'] == 'RUNNING') and (run['cancel_intent'] is False) and (run['version'] == expected_version) and (run['fence'] == fence) and (fence >= 1) and (type(run['created_at']) in (int, float)) and _trial_result(math.isfinite(run['created_at']), _guard) and (approval.approved_at <= run['created_at'] <= at) and (type(run['lease_until']) in (int, float)) and _trial_result(math.isfinite(run['lease_until']), _guard) and (at < min(run['lease_until'], run['created_at'] + contract.caps.run_seconds, contract.expires_at)), 'Run identity, cancellation, version or finite lease changed')
 
 
 def _generation_context(store, c, run, contract):
@@ -1004,3 +906,656 @@ def admit(store, c, user, contract: TrialContract | TrialContractV2, approval_ke
                   run_id=run_id, runtime_id=run["runtime_id"], run_version=expected_version, fence=fence,
                   expires_at=min(contract.expires_at, run["created_at"] + contract.caps.run_seconds),
                   stage_authority_fingerprint=None if phase is None else fingerprint(phase.model_dump()))
+
+
+def _graph_trial_pin(graph, store, c):
+    """Continuity only; exact local type, never a Grant, permission or resolver."""
+    from .natural_spec_runtime import _ColdGraphRead
+    require(type(graph) is _ColdGraphRead)
+    try:
+        _ColdGraphRead.check(graph, store, c)
+    except BaseException:
+        _ColdGraphRead.invalidate(graph)
+        raise
+
+
+def _graph_stage_current(graph, store, c, user, contract, stage, stage_facts):
+    """Original PB stage cross-role predicates after complete graph producers.
+
+    No paired Authority is an input. Generate/Source accounting are full actual
+    row/chain/NS-byte tuples from _graph_stage_accounted. Cold extraction facts
+    are the complete pb.verify-equivalent graph node, not a request fingerprint.
+    """
+
+    def _parent_pin():
+        _graph_trial_pin(graph, store, c)
+        _graph_trial_stage_raw(graph, stage_facts)
+    _models: list[tuple[type, object, dict]] = []
+    _guard = _trial_typed_guard(_parent_pin, _models)
+    try:
+        _guard()
+        _graph_trial_contract_models(graph, store, c, _models, contract)
+        _graph_trial_stage_models(graph, store, c, _models, stage_facts)
+        _guard()
+        require(type(contract) is PBTrialContract and stage in ('source', 'cold'))
+        job, bound, raw, metadata, gen, frozen, generated, source, extraction = stage_facts
+        stage_prefix = _trial_result(_graph_stage_before_generation(graph, store, c, user, contract, stage, job, bound), _guard)
+        draft, release = (bound['draft'], bound['release'])
+        inst, current_release, target, gen_id, approval = _trial_result(_graph_stage_before_accounting(graph, store, c, user, contract, stage, job, bound, raw, metadata, gen, frozen, stage_prefix), _guard)
+        _graph_trial_produced(graph, store, c, _models, Approval, approval)
+        require(generated[0] == gen and len(generated[1]) == len(generated[2]) == 3)
+        from .pa_trial_dispatch import _stage_usage_from_facts
+        for chain in generated[2]:
+            require(chain[3] in generated[1])
+            _trial_result(_stage_usage_from_facts(chain[3], 'generate', chain[0], chain[2], chain[3], _guard=_guard), _guard)
+        original = draft['candidate']
+        if stage == 'cold':
+            require(type(extraction) is tuple and len(extraction) == 4)
+            extraction_draft, body, extraction_target, extraction_goal = extraction
+            source_run, source_actual, source_chains, source_ns = source
+            require(extraction_draft['id'] == draft['id'])
+            _trial_result(_stage_pb_origin_from_facts(contract, body, source_run['id'], _guard=_guard), _guard)
+            require(len(source_actual) == len(source_chains) == len(source_ns) == 2)
+            for chain in source_chains:
+                require(chain[3] in source_actual)
+                _trial_result(_stage_usage_from_facts(chain[3], 'source', chain[0], chain[2], chain[3], _guard=_guard), _guard)
+        else:
+            _trial_result(_stage_plain_origin_from_facts(original, _guard=_guard), _guard)
+            if 'spec_binding' in original:
+                ids = _trial_result(_trial_result(_trial_result(c.execute(select(task_extractions.c.task_id).where(task_extractions.c.app_id == draft['id'], task_extractions.c.principal_id == user)), _guard).scalars(), _guard).all(), _guard)
+                require(len(ids) == 1)
+                _trial_result(_stage_generation_origin_from_facts(ids[0], gen_id, _guard=_guard), _guard)
+            else:
+                _trial_result(_stage_goal_origin_from_facts(original, gen_id, _guard=_guard), _guard)
+        expected_recipe = _trial_result(contract.extraction_recipe.model_dump(exclude_none=True), _guard) if stage == 'cold' else raw['spec_recipe']
+        _trial_result(_stage_recipe_from_facts(expected_recipe, draft, _guard=_guard), _guard)
+        if stage == 'cold':
+            accepted = _trial_result(_saved(c, user, _trial_result(entity(contract, **{'_guard': _guard} if _guard is not None else {}), _guard), PHASE, 'source', StageApproveInput, **{'_guard': _guard} if _guard is not None else {}), _guard)
+            _graph_trial_produced(graph, store, c, _models, StageApproveInput, accepted)
+            _trial_result(_stage_source_phase_from_facts(contract, approval, gen_id, accepted, _guard=_guard), _guard)
+            require(accepted.authority.run_id == source[0]['id'])
+        timing = _trial_result(_stage_deadlines(c, user, contract, stage, gen_id, _guard=_guard), _guard)
+        fields = _trial_result(_stage_authority_fields_from_facts(contract, stage, timing, job, bound, inst, draft, release, gen_id, raw, target, _guard=_guard), _guard)
+        authority = _trial_result(StageAuthority(**fields, authorization_fingerprint=_trial_result(authorization_fingerprint(c, user, contract.project_id, job['runtime_id'], [x.resource_id for x in contract.bindings], **{'_guard': _guard} if _guard is not None else {}), _guard)), _guard)
+        _graph_trial_produced(graph, store, c, _models, StageAuthority, authority)
+        _guard()
+        return (authority, job)
+    except BaseException:
+        from .natural_spec_runtime import _ColdGraphRead
+        if type(graph) is _ColdGraphRead:
+            _ColdGraphRead.invalidate(graph)
+        raise
+
+
+def _graph_run_context(graph, store, c, user, contract, approval_key, stage, run_id, expected_version, fence, stage_facts):
+    """Original live edges around complete graph stage reconstruction."""
+
+    def _parent_pin():
+        _graph_trial_pin(graph, store, c)
+        _graph_trial_stage_raw(graph, stage_facts)
+    _models: list[tuple[type, object, dict]] = []
+    _guard = _trial_typed_guard(_parent_pin, _models)
+    try:
+        _guard()
+        _graph_trial_contract_models(graph, store, c, _models, contract)
+        _graph_trial_stage_models(graph, store, c, _models, stage_facts)
+        _guard()
+        require(type(contract) is PBTrialContract and stage == 'cold')
+        require(stage_facts[0]['id'] == run_id, 'Stage facts belong to another Run')
+        approval = _trial_result(_approved(store, c, user, contract, approval_key, **{'_guard': _guard} if _guard is not None else {}), _guard)
+        _graph_trial_produced(graph, store, c, _models, Approval, approval)
+        require(_trial_result(_keys(c, user, _trial_result(entity(contract, **{'_guard': _guard} if _guard is not None else {}), _guard), PHASE, **{'_guard': _guard} if _guard is not None else {}), _guard) <= {'source', 'cold'})
+        accepted = _trial_result(_saved(c, user, _trial_result(entity(contract, **{'_guard': _guard} if _guard is not None else {}), _guard), PHASE, stage, StageApproveInput, **{'_guard': _guard} if _guard is not None else {}), _guard)
+        _graph_trial_produced(graph, store, c, _models, StageApproveInput, accepted)
+        require(accepted.approval_key == approval_key)
+        phase, _ = _trial_result(_graph_stage_current(graph, store, c, user, contract, stage, stage_facts), _guard)
+        _graph_trial_produced(graph, store, c, _models, StageAuthority, phase)
+        require(phase.run_id == run_id, 'Reconstructed stage belongs to another Run')
+        _trial_result(_stage_accepted_from_facts(phase, accepted, _guard=_guard), _guard)
+        run = _trial_result(_run_context_row(c, run_id, _guard=_guard), _guard)
+        require(run is not None and run['id'] == run_id, 'Locked row belongs to another Run')
+        at = _trial_result(time.time(), _guard)
+        _trial_result(_require_run_context_row(user, contract, stage, run, expected_version, fence, approval, phase, at, _guard=_guard), _guard)
+        _guard()
+        return (approval, phase, run, at)
+    except BaseException:
+        from .natural_spec_runtime import _ColdGraphRead
+        if type(graph) is _ColdGraphRead:
+            _ColdGraphRead.invalidate(graph)
+        raise
+
+
+def _stage_release_from_facts(contract, stage, bound, current_release, release, *, _guard=None):
+    require(current_release['id'] == release['id'] and current_release['fingerprint'] == release['fingerprint'] and (bound['app_run']['request_key'] == getattr(contract.stage_keys, stage)))
+
+
+def _stage_generation_metadata_from_facts(contract, metadata, *, _guard=None):
+    require(metadata['runtime_id'] == contract.runtime_id and metadata['resource_refs'] == [contract.bindings[0].resource_id])
+
+
+def _stage_plain_origin_from_facts(original, *, _guard=None):
+    require('spec_task' not in original, 'Only P-B cold may use an extracted task')
+
+
+def _stage_generation_origin_from_facts(origin, gen_id, *, _guard=None):
+    require(origin == gen_id)
+
+
+def _stage_goal_origin_from_facts(original, gen_id, *, _guard=None):
+    require(original.get('goal_application', {}).get('run_id') == gen_id)
+
+
+def _stage_recipe_from_facts(expected_recipe, draft, *, _guard=None):
+    require(_trial_result(fingerprint(expected_recipe), _guard) == _trial_result(fingerprint(draft['candidate']['spec_recipe']), _guard))
+
+
+def _stage_source_phase_from_facts(contract, approval, gen_id, source, *, _guard=None):
+    require(source.approval_key == approval.request.request_key and source.authority.contract_fingerprint == _trial_result(fingerprint(_trial_result(contract.model_dump(), _guard)), _guard) and (source.authority.generation_run_id == gen_id))
+
+
+def _stage_accepted_from_facts(phase, accepted, *, _guard=None):
+    require(phase == accepted.authority and _trial_result(fingerprint(_trial_result(phase.model_dump(), _guard)), _guard) == accepted.expected_authority_fingerprint)
+
+
+def _stage_pb_origin_from_facts(contract, body, source_id, *, _guard=None):
+    require(source_id is not None and body.review.source_run_id == source_id and (body.review.request_key == contract.extraction_request_key) and (body.review.recipe == contract.extraction_recipe), "P-B requires this original trial's successful source and exact extraction")
+
+
+def _run_context_row(c, run_id, *, _guard=None):
+    run = _trial_result(_trial_result(_trial_result(c.execute(select(runs.c.id, runs.c.project_id, runs.c.principal_id, runs.c.runtime_id, runs.c.request_key, runs.c.status, runs.c.cancel_intent, runs.c.version, runs.c.fence, runs.c.lease_until, runs.c.created_at, runs.c.worker_id, runs.c.resource_refs).where(runs.c.id == run_id).with_for_update()), _guard).mappings(), _guard).first(), _guard)
+    return run
+
+
+def _trial_result(value, _guard=None):
+    """Post-callee pin before its result is consumed; None keeps original behavior.
+
+    Strict callers pass only a fixed local exact-graph pin closure. This leaf
+    does not validate a predicate, resolve anything, or grant authority.
+    """
+    if _guard is not None:
+        _guard()
+    return value
+
+
+def _graph_stage_before_generation(graph, store, c, user, contract, stage, job, bound):
+    """Original current Instance/Release/target and Generate-ID prefix only; no model source, J or Authority."""
+
+    def _parent_pin():
+        _graph_trial_pin(graph, store, c)
+    _models: list[tuple[type, object, dict]] = []
+    _guard = _trial_typed_guard(_parent_pin, _models)
+    try:
+        from . import natural_specs, pa_spec_apps
+        _guard()
+        _graph_trial_contract_models(graph, store, c, _models, contract)
+        _guard()
+        require(type(contract) is PBTrialContract and stage in ('source', 'cold'))
+        require(_trial_result(pa_spec_apps.job_scope_gate(store, c, user, job['id'], _graph_read=graph), _guard))
+        require(job['principal_id'] == user and job['project_id'] == contract.project_id)
+        snapshot, draft, release = (bound['snapshot'], bound['draft'], bound['release'])
+        require(_trial_result(natural_specs.is_candidate(draft['candidate']), _guard))
+        inst, current_release = _trial_result(_stage_instance_after_bound(store, c, user, contract.project_id, job, snapshot, release, c.info.get('source_proof_write_epoch', 0), _guard=_guard, _graph_read=graph), _guard)
+        _trial_result(_stage_release_from_facts(contract, stage, bound, current_release, release, _guard=_guard), _guard)
+        target = contract.bindings[1 if stage == 'cold' else 0]
+        _trial_result(_stage_target_from_facts(bound, target, _guard=_guard), _guard)
+        gen_id = _trial_result(_trial_result(c.execute(select(runs.c.id).where(runs.c.principal_id == user, runs.c.project_id == contract.project_id, runs.c.request_key == contract.stage_keys.generate)), _guard).scalar(), _guard)
+        require(gen_id is not None)
+        return (inst, current_release, target, gen_id)
+    except BaseException:
+        from .natural_spec_runtime import _ColdGraphRead
+        if type(graph) is _ColdGraphRead:
+            _ColdGraphRead.invalidate(graph)
+        raise
+
+
+def _graph_stage_before_accounting(graph, store, c, user, contract, stage, job, bound, raw, metadata, gen, frozen, stage_prefix):
+    """Original Generate metadata/approval/frozen prefix after complete native source; no J, accounting or Authority."""
+
+    def _parent_pin():
+        _graph_trial_pin(graph, store, c)
+    _models: list[tuple[type, object, dict]] = []
+    _guard = _trial_typed_guard(_parent_pin, _models)
+    try:
+        _guard()
+        _graph_trial_contract_models(graph, store, c, _models, contract)
+        _graph_trial_frozen_models(graph, store, c, _models, frozen)
+        _guard()
+        require(type(contract) is PBTrialContract and stage in ('source', 'cold'))
+        inst, current_release, target, gen_id = stage_prefix
+        require(gen['id'] == gen_id)
+        _trial_result(_stage_generation_metadata_from_facts(contract, metadata, _guard=_guard), _guard)
+        approval = _trial_result(_saved(c, user, _trial_result(entity(contract, **{'_guard': _guard} if _guard is not None else {}), _guard), APPROVE, 'approve', Approval, **{'_guard': _guard} if _guard is not None else {}), _guard)
+        _graph_trial_produced(graph, store, c, _models, Approval, approval)
+        _trial_result(_stage_generate_from_facts(contract, approval, gen, frozen, _guard=_guard), _guard)
+        return (inst, current_release, target, gen_id, approval)
+    except BaseException:
+        from .natural_spec_runtime import _ColdGraphRead
+        if type(graph) is _ColdGraphRead:
+            _ColdGraphRead.invalidate(graph)
+        raise
+
+
+def _trial_typed_classes():
+    from . import natural_source_archives as archive
+    from . import natural_trial_budget as budget
+    from . import pb_natural_specs as pb
+    from . import pb_natural_uses as use
+    from . import production_trial_policy as policy
+    from . import production_trial_sender as sender
+    from .contracts import AppManifest, FrozenRunContract, GoalCardRunSource, Limits
+    return (PBTrialContract, TrialContract, TrialContractV2, Approval,
+        StageApproveInput, StageAuthority, StageAuthorityV2, MaterialGoal,
+        AppManifest, FrozenRunContract, GoalCardRunSource, Limits, budget.Scope,
+        pb.ExtractInput, use.CommitInput, use.ReviewInput, policy.Ledger,
+        policy.AccountQuotaCursor, policy.Slot, policy.ReservationIdentity,
+        policy.RunCheck, policy.SourceVerificationResult, policy.evidence.EvidenceRequirements, sender.Capture,
+        archive.BodyArchive)
+
+
+def _trial_typed_equal(actual, saved):
+    """Compare complete fixed-model dumps without Python numeric coercion."""
+    pending = [(actual, saved)]
+    while pending:
+        left, right = pending.pop()
+        kind = type(left)
+        if kind is not type(right):
+            return False
+        if kind is dict:
+            if (len(left) != len(right)
+                    or not all(type(key) is str for key in left)
+                    or not all(type(key) is str for key in right)
+                    or left.keys() != right.keys()):
+                return False
+            pending.extend((value, right[key]) for key, value in left.items())
+        elif kind is list or kind is tuple:
+            if len(left) != len(right):
+                return False
+            pending.extend(zip(left, right, strict=True))
+        elif (kind is str or kind is int or kind is float or kind is bool
+                or kind is bytes or kind is type(None)):
+            if left != right:
+                return False
+        else:
+            return False
+    return True
+
+
+def _trial_typed_nested_classes():
+    """Fixed standard-Pydantic schemas reachable from the fixed cohort roots."""
+    from . import contracts
+    from . import natural_specs as natural
+    from . import pb_natural_specs as pb
+    from . import production_trial_policy as policy
+
+    return _trial_typed_classes() + (ApproveInput, TrialCaps, SourceSnapshot,
+        GoalSnapshot, StageKeys, GoalCardInput, natural.Recipe, natural.Step,
+        pb.ReviewInput, policy.Outcome,
+        contracts.Dependency, contracts.PermissionRequirement, contracts.View,
+        contracts.FieldSource, contracts.BranchCondition, contracts.BranchGroup,
+        contracts.WorkflowStep, contracts.ActionBinding, contracts.DataBinding,
+        contracts.RuntimeIdentity, contracts.GoalSpec, contracts.ResourceSnapshot,
+        contracts.NaturalPlanningPolicy, contracts.NaturalActivationBinding,
+        contracts.FixedGoalAcceptance, contracts.ApplicationGenerationPolicy,
+        contracts.ApplicationGenerationActivation, contracts.OrdinaryCsvReport,
+        contracts.OrdinaryHumanReview, contracts.OrdinaryArtifactDelivery,
+        contracts.OrdinaryCorrection, contracts.OrdinaryCorrectionFeedback,
+        contracts.OrdinaryCorrectionRequest, contracts.OrdinaryCorrectionIssue)
+
+
+def _trial_pure_mapping(value):
+    """Exact native mapping projection, before any key lookup or comparison."""
+    from sqlalchemy.engine import RowMapping
+    from sqlalchemy.sql.elements import quoted_name
+
+    if type(value) is RowMapping:
+        from .natural_spec_runtime import _cold_graph_row_values
+
+        # Native SQL row storage and dict(row) preserve trusted quoted_name
+        # column keys. Project either shape only after checking every key.
+        items = _cold_graph_row_values(value)
+    else:
+        require(type(value) is dict, 'Exact complete trial raw mapping required')
+        items = tuple(dict.items(value))
+    require(all(type(key) is str or type(key) is quoted_name for key, _ in items),
+        'Exact trusted trial raw keys required')
+    if type(value) is dict and all(type(key) is str for key, _ in items):
+        return value
+    names = tuple(str(key) for key, _ in items)
+    require(len(set(names)) == len(names), 'Complete trial raw keys must remain distinct')
+    return {name: item for name, (_, item) in zip(names, items, strict=True)}
+
+
+def _trial_pure_data(value):
+    """Copy only complete controlled data; never equality/iteration on strangers."""
+    from sqlalchemy.engine import RowMapping
+
+    active = set()
+
+    def visit(item):
+        result: Any
+        kind = type(item)
+        if any(kind is allowed for allowed in (str, int, float, bool, bytes, type(None))):
+            return item
+        require(any(kind is allowed for allowed in (dict, RowMapping, list, tuple)),
+            'Unsupported nested trial raw data')
+        identity = id(item)
+        require(identity not in active, 'Cyclic trial raw data')
+        active.add(identity)
+        if kind is dict or kind is RowMapping:
+            raw = _trial_pure_mapping(item)
+            result = {key: visit(child) for key, child in dict.items(raw)}
+        elif kind is list:
+            result = [visit(child) for child in item]
+        else:
+            result = tuple(visit(child) for child in item)
+        active.remove(identity)
+        return result
+
+    return visit(value)
+
+
+def _trial_typed_storage(expected, model):
+    """Gate every actual nested value before the fixed standard serializer."""
+    from .contracts import BranchCondition, WorkflowStep
+
+    roots, allowed = _trial_typed_classes(), _trial_typed_nested_classes()
+    require(any(expected is kind for kind in roots) and type(model) is expected,
+        'Exact typed trial fact required')
+    active: set[int] = set()
+    seen: dict[int, Any] = {}
+
+    def visit(value):
+        result: Any
+        kind = type(value)
+        if any(kind is item for item in (str, int, float, bool, bytes, type(None))):
+            return value
+        require(any(kind is item for item in (dict, list, tuple))
+            or any(kind is item for item in allowed), 'Unsupported nested typed trial fact')
+        identity = id(value)
+        require(identity not in active, 'Cyclic typed trial fact')
+        if identity in seen:
+            return seen[identity]
+        active.add(identity)
+        if kind is dict:
+            require(all(type(key) is str for key in value), 'Exact typed trial JSON keys required')
+            result = {key: visit(child) for key, child in dict.items(value)}
+        elif kind is list:
+            result = [visit(child) for child in value]
+        elif kind is tuple:
+            result = tuple(visit(child) for child in value)
+        else:
+            raw = object.__getattribute__(value, '__dict__')
+            fields = type.__getattribute__(kind, '__pydantic_fields__')
+            selected = object.__getattribute__(value, '__pydantic_fields_set__')
+            require(type(raw) is dict and all(type(key) is str for key in raw)
+                and type(fields) is dict and all(type(key) is str for key in fields)
+                and raw.keys() == fields.keys()
+                and type(selected) is set and all(type(key) is str for key in selected)
+                and selected <= fields.keys()
+                and object.__getattribute__(value, '__pydantic_extra__') is None
+                and object.__getattribute__(value, '__pydantic_private__') is None,
+                'Complete fixed typed trial storage required')
+            # These are the only two output omissions in the fixed schemas.
+            # Preserve all actual container/numeric types before serialization;
+            # a serializer must not normalize a list/tuple drift into equality.
+            result = {key: visit(child) for key, child in dict.items(raw)
+                if not (child is None and (kind is BranchCondition and key == 'value'
+                    or kind is WorkflowStep and key == 'when'))}
+        active.remove(identity)
+        seen[identity] = result
+        return result
+
+    return visit(model)
+
+
+def _trial_typed_values(models):
+    """One pure complete cohort pass; no graph pin, IO, parse or authority."""
+    require(type(models) is list, 'Exact trial model cohort required')
+    for entry in models:
+        require(type(entry) is tuple and len(entry) == 3, 'Exact trial model triple required')
+        expected, model, raw = entry
+        actual = _trial_typed_storage(expected, model)
+        require(type(raw) is dict, 'Complete typed trial raw pin required')
+        saved = _trial_pure_data(raw)
+        require(_trial_typed_equal(actual, saved),
+            'Typed trial storage changed after its complete raw proof')
+        # All reachable actual values were gated above. The fixed schemas have
+        # standard serializers only; their two exclude_if hooks test `is None`.
+        # Suppress Pydantic's warning-dispatch callback for rejected typed
+        # values; the complete type-aware comparison below owns that rejection.
+        value = expected.model_dump(model, warnings=False)
+        require(_trial_typed_equal(value, saved),
+            'Typed trial fact changed after its complete raw proof')
+
+
+def _trial_typed_guard(parent, models):
+    """Keep the original full parent boundary, then the same pure cohort pass."""
+    if parent is None:
+        return None
+
+    def checked():
+        parent()
+        _trial_typed_values(models)
+    return checked
+
+
+def _trial_typed_hold(models, expected, model, raw):
+    """Identity-only lexical triples; no cached validation result or permit."""
+    require(type(models) is list and type(model) is expected and type(raw) is dict)
+    for entry in models:
+        require(type(entry) is tuple and len(entry) == 3)
+        kind, actual, previous = entry
+        if kind is expected and actual is model and previous is raw:
+            return
+    models.append((expected, model, raw))
+
+
+def _graph_trial_hold(graph, store, c, models, expected, model, raw):
+    """Assemble one lexical parameter pin; caller checks the whole cohort."""
+    _trial_typed_hold(models, expected, model, raw)
+
+
+def _graph_trial_models_pin(graph, store, c, models):
+    def parent():
+        _graph_trial_pin(graph, store, c)
+    try:
+        _trial_typed_guard(parent, models)()
+    except BaseException:
+        from .natural_spec_runtime import _ColdGraphRead
+        if type(graph) is _ColdGraphRead:
+            _ColdGraphRead.invalidate(graph)
+        raise
+
+
+def _graph_trial_produced(graph, store, c, models, expected, model):
+    """Freeze one newly returned original-verifier output before following IO."""
+    def parent():
+        _graph_trial_pin(graph, store, c)
+    checked = _trial_typed_guard(parent, models)
+    checked()
+    # Exact type is checked before invoking a fixed class serialization method.
+    require(any(expected is kind for kind in _trial_typed_classes()) and type(model) is expected)
+    raw = expected.model_dump(model)
+    checked()
+    _graph_trial_hold(graph, store, c, models, expected, model, raw)
+    checked()
+    return raw
+
+
+def _graph_trial_contract_models(graph, store, c, models, contract):
+    _graph_trial_pin(graph, store, c)
+    raw = PBTrialContract.model_dump(graph.binding.contract)
+    _graph_trial_pin(graph, store, c)
+    _graph_trial_hold(graph, store, c, models, PBTrialContract, contract, raw)
+
+
+def _graph_trial_journal_models_from_raw(models, state, cursor, raw):
+    from . import production_trial_policy as policy
+
+    raw = _trial_pure_mapping(raw)
+    _trial_typed_hold(models, policy.Ledger, state, raw['ledger'])
+    if cursor is not None:
+        _trial_typed_hold(models, policy.AccountQuotaCursor, cursor, raw['cursor'])
+
+
+def _graph_trial_accounted_models_from_raw(models, value, saved):
+    from . import natural_source_archives as archive
+    from . import production_trial_policy as policy
+    from . import production_trial_sender as sender
+
+    saved = _trial_pure_mapping(saved)
+    require(type(value) is tuple and len(value) == 4)
+    run, actual, chains, ns = value
+    require(type(actual) is tuple and type(chains) is tuple and type(ns) is tuple
+        and type(saved['actual']) is tuple and type(saved['chains']) is tuple
+        and type(saved['ns_reads']) is tuple)
+    require(_trial_typed_equal(_trial_pure_data(_trial_pure_mapping(run)),
+            _trial_pure_data(saved['run']))
+        and _trial_typed_equal(tuple(_trial_pure_data(_trial_pure_mapping(a)) for a in actual),
+            _trial_pure_data(saved['actual']))
+        and len(chains) == len(saved['chains']) and len(ns) == len(saved['ns_reads']))
+    for chain, raw in zip(chains, saved['chains'], strict=True):
+        require(type(chain) is tuple and len(chain) == 6 and type(raw) is tuple and len(raw) == 6)
+        slot, capture, parsed, checked, wire, payload = chain
+        require(type(wire) is bytes and type(payload) is bytes
+            and _trial_typed_equal(_trial_pure_data(parsed), _trial_pure_data(raw[2]))
+            and _trial_typed_equal(_trial_pure_data(_trial_pure_mapping(checked)), _trial_pure_data(raw[3]))
+            and _trial_typed_equal(wire, _trial_pure_data(raw[4]))
+            and _trial_typed_equal(payload, _trial_pure_data(raw[5])))
+        _trial_typed_hold(models, policy.Slot, slot, raw[0])
+        _trial_typed_hold(models, sender.Capture, capture, raw[1])
+    for entry, raw in zip(ns, saved['ns_reads'], strict=True):
+        require(type(entry) is tuple and len(entry) == 5 and type(raw) is tuple and len(raw) == 5)
+        aid, request, wire, response, payload = entry
+        require(type(aid) is str and type(wire) is bytes and type(payload) is bytes
+            and _trial_typed_equal(aid, _trial_pure_data(raw[0]))
+            and _trial_typed_equal(wire, _trial_pure_data(raw[2]))
+            and _trial_typed_equal(payload, _trial_pure_data(raw[4])))
+        _trial_typed_hold(models, archive.BodyArchive, request, raw[1])
+        _trial_typed_hold(models, archive.BodyArchive, response, raw[3])
+
+
+def _graph_trial_frozen_models_from_raw(models, frozen, raw):
+    from .contracts import FrozenRunContract
+
+    _trial_typed_hold(models, FrozenRunContract, frozen, _trial_pure_mapping(raw))
+
+
+def _graph_trial_extraction_models_from_raw(models, extraction, raw):
+    from . import pb_natural_specs as pb
+
+    raw = _trial_pure_mapping(raw)
+    require(type(extraction) is tuple and len(extraction) == 4)
+    draft, body, target, goal = extraction
+    require(_trial_typed_equal(_trial_pure_data(draft), _trial_pure_data(raw['draft']))
+        and _trial_typed_equal(_trial_pure_data(target), _trial_pure_data(raw['target']))
+        and _trial_typed_equal(_trial_pure_data(goal), _trial_pure_data(raw['goal'])))
+    _trial_typed_hold(models, pb.ExtractInput, body, raw['request'])
+
+
+def _graph_trial_stage_models_from_raw(models, stage_facts, inputs):
+    inputs = _trial_pure_mapping(inputs)
+    require((type(stage_facts) is tuple or type(stage_facts) is list) and len(stage_facts) == 9)
+    job, bound, raw, metadata, gen, frozen, generated, source, extraction = stage_facts
+    facet = _trial_pure_mapping(inputs['trial-generated-model-facet'])
+    _graph_trial_frozen_models_from_raw(models, frozen, facet['frozen'])
+    _graph_trial_accounted_models_from_raw(models, generated, inputs['cold-trial:accounted-generate'])
+    if source is not None:
+        _graph_trial_accounted_models_from_raw(models, source, inputs['cold-trial:accounted-source'])
+    if extraction is not None:
+        full = _trial_pure_mapping(inputs['cold-trial:complete'])
+        _graph_trial_extraction_models_from_raw(models, extraction, full['extraction'])
+
+
+def _graph_trial_stage_raw_from_raw(stage_facts, full):
+    """Original complete Stage identity joins, over exact controlled storage."""
+    full = _trial_pure_mapping(full)
+    require((type(stage_facts) is tuple or type(stage_facts) is list) and len(stage_facts) == 9)
+    job, bound, raw, metadata, gen, frozen, generated, source, extraction = stage_facts
+    _trial_pure_mapping(bound)
+    if bound is full['binding']:
+        require(_trial_typed_equal(_trial_pure_data(_trial_pure_mapping(job)),
+                _trial_pure_data(_trial_pure_mapping(full['cold_job'])))
+            and source is not None and extraction is not None)
+    else:
+        saved_source = _trial_pure_mapping(full['source'])
+        require(bound is full['source_binding']
+            and _trial_typed_equal(_trial_pure_data(_trial_pure_mapping(job)),
+                _trial_pure_data(saved_source['run']))
+            and source is None and extraction is None)
+    generation = _trial_pure_mapping(full['generation'])
+    require(raw is generation['raw'] and metadata is generation['metadata']
+        and _trial_typed_equal(_trial_pure_data(_trial_pure_mapping(gen)),
+            _trial_pure_data(generation['run'])))
+    if extraction is not None:
+        require(type(extraction) is tuple and len(extraction) == 4)
+        draft, body, target, goal = extraction
+        saved = _trial_pure_mapping(full['extraction'])
+        require(draft is saved['draft'] and target is saved['target'] and goal is saved['goal'])
+
+
+def _graph_trial_journal_models(graph, store, c, models, state, cursor=None):
+    _graph_trial_pin(graph, store, c)
+    inputs = _trial_pure_mapping(graph.inputs)
+    require('cold-trial:journal' in inputs, 'Complete original J raw pin required')
+    _graph_trial_journal_models_from_raw(models, state, cursor, inputs['cold-trial:journal'])
+
+
+def _graph_trial_accounted_models(graph, store, c, models, value, stage):
+    _graph_trial_pin(graph, store, c)
+    require(type(stage) is str and stage in ('source', 'generate'))
+    key = 'cold-trial:accounted-' + stage
+    inputs = _trial_pure_mapping(graph.inputs)
+    require(key in inputs, 'Complete accounted stage raw pin required')
+    _graph_trial_accounted_models_from_raw(models, value, inputs[key])
+
+
+def _graph_trial_frozen_models(graph, store, c, models, frozen):
+    _graph_trial_pin(graph, store, c)
+    inputs = _trial_pure_mapping(graph.inputs)
+    require('trial-generated-model-facet' in inputs, 'Complete native Generation facet raw pin required')
+    facet = _trial_pure_mapping(inputs['trial-generated-model-facet'])
+    _graph_trial_frozen_models_from_raw(models, frozen, facet['frozen'])
+
+
+def _graph_trial_extraction_models(graph, store, c, models, extraction):
+    _graph_trial_pin(graph, store, c)
+    inputs = _trial_pure_mapping(graph.inputs)
+    require('cold-trial:complete' in inputs)
+    full = _trial_pure_mapping(inputs['cold-trial:complete'])
+    _graph_trial_extraction_models_from_raw(models, extraction, full['extraction'])
+
+
+def _graph_trial_stage_models(graph, store, c, models, stage_facts):
+    _graph_trial_pin(graph, store, c)
+    _graph_trial_stage_models_from_raw(models, stage_facts, graph.inputs)
+
+
+def _graph_trial_accounted_raw(graph, store, c, value, models):
+    """One shared full serialization shape; contains every original body byte."""
+    from . import natural_source_archives as archive
+    from . import production_trial_policy as policy
+    from . import production_trial_sender as sender
+    run, actual, chains, ns = value
+    full_chains, full_ns = [], []
+    for slot, capture, parsed, checked, wire, payload in chains:
+        a = _graph_trial_produced(graph, store, c, models, policy.Slot, slot)
+        b = _graph_trial_produced(graph, store, c, models, sender.Capture, capture)
+        full_chains.append((a, b, parsed, dict(checked), wire, payload))
+    for aid, request, wire, response, payload in ns:
+        a = _graph_trial_produced(graph, store, c, models, archive.BodyArchive, request)
+        b = _graph_trial_produced(graph, store, c, models, archive.BodyArchive, response)
+        full_ns.append((aid, a, wire, b, payload))
+    return dict(run=dict(run), actual=tuple(dict(a) for a in actual),
+        chains=tuple(full_chains), ns_reads=tuple(full_ns))
+
+
+def _graph_trial_stage_raw(graph, stage_facts):
+    """External boundary retains a full pin before the shared pure joins."""
+    from .natural_spec_runtime import _ColdGraphRead
+
+    require(type(graph) is _ColdGraphRead)
+    _graph_trial_pin(graph, graph.store, graph.connection)
+    inputs = _trial_pure_mapping(graph.inputs)
+    require('cold-trial:complete' in inputs)
+    _graph_trial_stage_raw_from_raw(stage_facts, inputs['cold-trial:complete'])

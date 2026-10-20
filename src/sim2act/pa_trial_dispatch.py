@@ -471,18 +471,12 @@ def _pb_accounting(store, c, user, contract, key):
     markers = c.execute(select(*[attempts.c.parameters["pa_trial_binding"][k]
         .as_string().label(k) for k in fields]).where(attempts.c.run_id == generation)).mappings().all()
     if any(m["version"] == VERSION for m in markers):
-        gate.require(len(markers) == 3 and all(m["version"] == VERSION
-            and m["trial_fingerprint"] == fingerprint(contract.model_dump())
-            and m["approval_key"] == key for m in markers)
-            and len({m["account_id"] for m in markers}) == 1)
+        _pb_markers_from_facts(contract, key, markers)
         binding = ProductionTrialBinding(contract, key, markers[0]["account_id"])
         _journal_source(store, c, binding)
         state, _, _ = _journal_state(store, c, binding)
-        first = [s for s in state.slots if s.identity.stage in ("generate", "source")]
-        source_ids = {s.identity.run_id for s in first if s.identity.stage == "source"}
-        gate.require(not state.halted and len(first) == 5 and all(s.accepted for s in first)
-            and len(source_ids) == 1)
-        return binding, state, next(iter(source_ids))
+        source_id = _pb_prefix_source_from_facts(state)
+        return binding, state, source_id
     # A lost/mixed production marker cannot reinterpret its journal as MOCK.
     gate.require(store.test_only and store.sqlite and c.execute(select(delivery_graph_requests.c.kind)
         .where(delivery_graph_requests.c.principal_id == user,
@@ -976,81 +970,19 @@ def request_captured(worker, run, aid, wire, original_guard, provider, *, _heart
     return captured
 
 
-def _metadata(c, run, aid, kind):
+def _metadata(c, run, aid, kind, *, _guard=None):
     """Late failure accounting reads digest/identity projections, never body_b64."""
-    selected = c.execute(
-        select(
-            rows.c.kind,
-            rows.c.snapshot["request"]["trial"]["contract_fingerprint"]
-            .as_string()
-            .label("trial_fp"),
-            rows.c.snapshot["request"]["attempt_id"].as_string().label("key_attempt"),
-            rows.c.snapshot["request"]["family"].as_string().label("key_family"),
-            rows.c.snapshot["request"]["wire_sha256"].as_string().label("wire_sha256"),
-            *[
-                rows.c.snapshot["response"][k].as_string().label(k)
-                for k in (
-                    "run_id",
-                    "attempt_id",
-                    "principal_id",
-                    "project_id",
-                    "runtime_id",
-                    "phase",
-                    "sha256",
-                    "canonical_sha256",
-                    "omission",
-                )
-            ],
-            rows.c.snapshot["response"]["byte_count"].as_integer().label("byte_count"),
-            rows.c.snapshot["response"]["received_complete"].as_boolean().label("complete"),
-        ).where(
-            rows.c.principal_id == run["principal_id"],
-            rows.c.app_id == run["id"],
-            rows.c.request_key == aid,
-            rows.c.kind.in_([kind, kind + "_seal"]),
-        )
-    )
-    values = [dict(r) for r in selected.mappings()]
+    selected = gate._trial_result(c.execute(select(rows.c.kind, rows.c.snapshot['request']['trial']['contract_fingerprint'].as_string().label('trial_fp'), rows.c.snapshot['request']['attempt_id'].as_string().label('key_attempt'), rows.c.snapshot['request']['family'].as_string().label('key_family'), rows.c.snapshot['request']['wire_sha256'].as_string().label('wire_sha256'), *[rows.c.snapshot['response'][k].as_string().label(k) for k in ('run_id', 'attempt_id', 'principal_id', 'project_id', 'runtime_id', 'phase', 'sha256', 'canonical_sha256', 'omission')], rows.c.snapshot['response']['byte_count'].as_integer().label('byte_count'), rows.c.snapshot['response']['received_complete'].as_boolean().label('complete')).where(rows.c.principal_id == run['principal_id'], rows.c.app_id == run['id'], rows.c.request_key == aid, rows.c.kind.in_([kind, kind + '_seal']))), _guard)
+    values = gate._trial_result([dict(r) for r in gate._trial_result(selected.mappings(), _guard)], _guard)
     if not values:
         return None
-    gate.require(len(values) == 2 and {r.pop("kind") for r in values} == {kind, kind + "_seal"})
+    gate.require(len(values) == 2 and {r.pop('kind') for r in values} == {kind, kind + '_seal'})
     gate.require(values[0] == values[1])
     value = values[0]
-    gate.require(
-        value["phase"] == ("RESERVED_REQUEST" if kind == REQUEST else "RECEIVED_DECODED_BODY")
-    )
-    gate.require(
-        value["run_id"] == run["id"]
-        and value["attempt_id"] == aid
-        and value["key_attempt"] == aid
-        and value["key_family"] == kind
-        and all(value[k] == run[k] for k in ("principal_id", "project_id", "runtime_id"))
-    )
-    anchors = (
-        c.execute(
-            select(events.c.data).where(
-                events.c.run_id == run["id"],
-                events.c.kind == "PA_TRIAL_BODY",
-                events.c.data["attempt_id"].as_string() == aid,
-                events.c.data["family"].as_string() == kind,
-            )
-        )
-        .scalars()
-        .all()
-    )
-    gate.require(
-        len(anchors) == 1
-        and all(
-            anchors[0].get(k) == value[field]
-            for k, field in (
-                ("decoded_sha256", "sha256"),
-                ("canonical_sha256", "canonical_sha256"),
-                ("byte_count", "byte_count"),
-                ("complete", "complete"),
-                ("omission", "omission"),
-            )
-        )
-    )
+    gate.require(value['phase'] == ('RESERVED_REQUEST' if kind == REQUEST else 'RECEIVED_DECODED_BODY'))
+    gate.require(value['run_id'] == run['id'] and value['attempt_id'] == aid and (value['key_attempt'] == aid) and (value['key_family'] == kind) and all((value[k] == run[k] for k in ('principal_id', 'project_id', 'runtime_id'))))
+    anchors = gate._trial_result(gate._trial_result(gate._trial_result(c.execute(select(events.c.data).where(events.c.run_id == run['id'], events.c.kind == 'PA_TRIAL_BODY', events.c.data['attempt_id'].as_string() == aid, events.c.data['family'].as_string() == kind)), _guard).scalars(), _guard).all(), _guard)
+    gate.require(len(anchors) == 1 and all((anchors[0].get(k) == value[field] for k, field in (('decoded_sha256', 'sha256'), ('canonical_sha256', 'canonical_sha256'), ('byte_count', 'byte_count'), ('complete', 'complete'), ('omission', 'omission')))))
     return value
 
 
@@ -1253,17 +1185,14 @@ def reject(worker, c, run, aid, raw):
     )
 
 
-def _journal_source(store, c, b):
+def _journal_source(store, c, b, *, _guard=None):
     from .production_trial_policy import check_source, evidence
     from .production_trial_source import load_offline
-
-    if _production_binding(b):
+    if gate._trial_result(_production_binding(b), _guard):
         from .spec_production import source
-        return source(store, c, b)
-    loaded = load_offline(store, c, b.contract.principal_id, b.contract,
-                          b.approval_key, b.account_id)
-    return check_source(evidence.requirements_for(b.contract.principal_id, b.contract,
-                        b.approval_key), loaded.source, now=time.time())
+        return gate._trial_result(source(store, c, b), _guard)
+    loaded = gate._trial_result(load_offline(store, c, b.contract.principal_id, b.contract, b.approval_key, b.account_id), _guard)
+    return gate._trial_result(check_source(gate._trial_result(evidence.requirements_for(b.contract.principal_id, b.contract, b.approval_key), _guard), loaded.source, now=gate._trial_result(time.time(), _guard)), _guard)
 
 
 def check_journal_claim(store, c, run, b):
@@ -1296,19 +1225,15 @@ def check_journal_claim(store, c, run, b):
     return deadline
 
 
-def _journal_state(store, c, b):
+def _journal_state(store, c, b, *, _guard=None):
     from . import production_trial_journal as journal
-
-    gate.require((_production_binding(b) or store.test_only and store.sqlite)
-                 and c.engine is store.engine)
-    _, scope, request, quota_request, entity = journal._context(
-        store, c, b.contract.principal_id, b.contract, b.approval_key, b.account_id)
-    # Backend mixing cannot acquire history/send authority.
-    old = budget.scope_for(b.contract, b.approval_key)
-    gate.require(budget._load(c, old.principal_id, old.project_id, budget.KIND, old.trial_key) is None)
-    _, cursor, qr = journal._quota(c, quota_request, entity, create=False)
-    _, state, revision = journal._ledger(c, scope, request, cursor, qr)
-    return state, cursor, revision
+    gate.require((gate._trial_result(_production_binding(b), _guard) or (store.test_only and store.sqlite)) and c.engine is store.engine)
+    _, scope, request, quota_request, entity = gate._trial_result(journal._context(store, c, b.contract.principal_id, b.contract, b.approval_key, b.account_id), _guard)
+    old = gate._trial_result(budget.scope_for(b.contract, b.approval_key), _guard)
+    gate.require(gate._trial_result(budget._load(c, old.principal_id, old.project_id, budget.KIND, old.trial_key), _guard) is None)
+    _, cursor, qr = gate._trial_result(journal._quota(c, quota_request, entity, create=False), _guard)
+    _, state, revision = gate._trial_result(journal._ledger(c, scope, request, cursor, qr), _guard)
+    return (state, cursor, revision)
 
 
 def _journal_wait(worker, b, rid, *, _heartbeat_state=None):
@@ -1337,23 +1262,9 @@ def _journal_wait(worker, b, rid, *, _heartbeat_state=None):
         _check_heartbeat(_heartbeat_state)
 
 
-def _journal_owner(c, b, run, aid):
-    # Exact scalar binding before any private request/response or journal body.
-    header = c.execute(select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id,
-        attempts.c.mode,
-        *[attempts.c.parameters["pa_trial_binding"][k].as_string().label(k)
-          for k in ("version", "trial_fingerprint", "approval_key", "account_id", "worker_id")],
-        attempts.c.parameters["pa_trial_binding"]["run_version"].as_integer().label("run_version"),
-        attempts.c.parameters["pa_trial_binding"]["fence"].as_integer().label("fence"))
-        .select_from(runs).join(attempts, attempts.c.run_id == runs.c.id)
-        .where(runs.c.id == run["id"], attempts.c.id == aid)).mappings().first()
-    gate.require(header is not None and header["mode"] == _binding_mode(b)
-        and header["version"] == b.version
-        and header["trial_fingerprint"] == b.contract_fingerprint
-        and header["approval_key"] == b.approval_key and header["account_id"] == b.account_id
-        and header["principal_id"] == b.contract.principal_id
-        and header["project_id"] == b.contract.project_id
-        and all(header[k] == run[k] for k in ("principal_id", "project_id", "runtime_id")))
+def _journal_owner(c, b, run, aid, *, _guard=None):
+    header = gate._trial_result(gate._trial_result(gate._trial_result(c.execute(select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id, attempts.c.mode, *[attempts.c.parameters['pa_trial_binding'][k].as_string().label(k) for k in ('version', 'trial_fingerprint', 'approval_key', 'account_id', 'worker_id')], attempts.c.parameters['pa_trial_binding']['run_version'].as_integer().label('run_version'), attempts.c.parameters['pa_trial_binding']['fence'].as_integer().label('fence')).select_from(runs).join(attempts, attempts.c.run_id == runs.c.id).where(runs.c.id == run['id'], attempts.c.id == aid)), _guard).mappings(), _guard).first(), _guard)
+    gate._trial_result(_journal_owner_from_facts(b, run, header, _guard=_guard), _guard)
     return header
 
 
@@ -1375,12 +1286,7 @@ def _journal_slot(store, c, b, run, aid, wire):
         phase = gate._saved(c, run["principal_id"], gate.entity(b.contract), gate.PHASE,
                             item.stage, gate.StageApproveInput)
         phase_fp = fingerprint(phase.authority.model_dump())
-    gate.require(item.run_id == run["id"] and item.runtime_id == run["runtime_id"]
-        and item.version == header["run_version"] and item.fence == header["fence"]
-        and item.worker_id == header["worker_id"]
-        and item.stage == _stage(b, run)
-        and item.approval_fingerprint == fingerprint(approval.model_dump())
-        and item.stage_fingerprint == phase_fp)
+    _journal_slot_identity_from_facts(b, run, header, item, approval, phase_fp)
     return slot
 
 
@@ -1433,88 +1339,35 @@ def _journal_chain(store, c, b, run, aid, raw=None):
         gate.require(meta is not None and meta["trial_fp"] == b.contract_fingerprint
             and meta["complete"] and meta["omission"] == "NONE")
         saved = budget._load(c, run["principal_id"], run["id"], kind, aid)
-        gate.require(saved["request"] == dict(trial=scope.model_dump(), attempt_id=aid,
-            family=kind, wire_sha256=meta["wire_sha256"]))
-        body = BodyArchive.model_validate(saved["response"])
-        if body.body_b64 is None:
-            raise DomainError("VERSION_CONFLICT", "Exact natural trial changed")
-        payload = base64.b64decode(body.body_b64, validate=True)
-        gate.require(_body(run, aid, payload, True, body.canonical_sha256,
-            "natural_source_request_body.v1" if kind == REQUEST
-            else "natural_source_response_body.v1", _production=_production_binding(b)) == body)
-        gate.require(meta["sha256"] == hashlib.sha256(payload).hexdigest())
+        payload = _journal_body_from_facts(b, run, aid, kind, scope, meta, saved)
         payloads.append(payload)
     wire, payload = payloads
     slot = _journal_slot(store, c, b, run, aid, wire)
     capture = sender._captured(c, run["principal_id"], slot.identity)
-    gate.require(slot.accepted and slot.attempted and capture is not None
-        and slot.settlement == capture.outcome and capture.complete
-        and capture.raw_sha256 == hashlib.sha256(payload).hexdigest()
-        and capture.body_b64 == base64.b64encode(payload).decode("ascii"))
+    _journal_capture_from_facts(slot, capture, payload)
     parsed = strict_json(payload, 131072)
     canonical, evidence = response_archive(parsed)
     response = _metadata(c, run, aid, RESPONSE)
-    gate.require(canonical is not None and response["canonical_sha256"] == evidence["sha256"]
-        == capture.canonical_sha256 and capture.canonical_ascii_bytes == evidence["bytes"])
-    if raw is not None:
-        gate.require(response_archive(raw) == (canonical, evidence))
+    _journal_canonical_from_facts(response, capture, canonical, evidence, raw)
     actual = c.execute(select(attempts).where(attempts.c.run_id == run["id"],
                                                attempts.c.id == aid)).mappings().one()
     _journal_attempt_from_facts(b, wire, slot, actual)
     return slot, capture, parsed, actual
 
 
-def _journal_attempt_from_facts(b, wire, slot, actual):
+def _journal_attempt_from_facts(b, wire, slot, actual, *, _guard=None):
     """Bind the original Attempt after owner, full bodies/slot/capture/raw checks.
 
     Not a replacement for current authority, _journal_slot or full policy
     _bound: caller must retain its transaction and complete ledger validation.
     """
-    params = actual["parameters"]
-    gate.require(actual["request_model"] == b.contract.model and actual["mode"] == _binding_mode(b)
-        and actual["reserved_tokens"] == len(wire) + params["max_tokens"]
-        and params["max_tokens"] == strict_json(wire, 32768)["max_tokens"]
-        and params["max_tokens"] <= b.contract.caps.max_output_tokens
-        and (params.get("generation_wire") == slot.identity.wire_sha256
-             and params.get("generation_fence") == slot.identity.fence
-            if slot.identity.stage == "generate" else
-            params.get("natural_spec_wire", {}).get("sha256") == slot.identity.wire_sha256
-            and params["natural_spec_wire"].get("bytes") == len(wire)
-            and params["natural_spec"].get("fence") == slot.identity.fence
-            and params["natural_spec"].get("run_version") == slot.identity.version))
+    params = actual['parameters']
+    gate.require(actual['request_model'] == b.contract.model and actual['mode'] == gate._trial_result(_binding_mode(b), _guard) and (actual['reserved_tokens'] == len(wire) + params['max_tokens']) and (params['max_tokens'] == gate._trial_result(strict_json(wire, 32768), _guard)['max_tokens']) and (params['max_tokens'] <= b.contract.caps.max_output_tokens) and (params.get('generation_wire') == slot.identity.wire_sha256 and params.get('generation_fence') == slot.identity.fence if slot.identity.stage == 'generate' else params.get('natural_spec_wire', {}).get('sha256') == slot.identity.wire_sha256 and params['natural_spec_wire'].get('bytes') == len(wire) and (params['natural_spec'].get('fence') == slot.identity.fence) and (params['natural_spec'].get('run_version') == slot.identity.version)))
 
 
 def journal_stage_accounted(store, c, user, contract, key, rid, stage):
     """Original current lineage calls this only after its full ownership gate."""
-    gate.require(stage in ("generate", "source", "cold") and user == contract.principal_id)
-    owner = c.execute(select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id,
-        runs.c.request_key, runs.c.status).where(runs.c.id == rid)).mappings().first()
-    gate.require(owner is not None and owner["principal_id"] == user
-        and owner["project_id"] == contract.project_id)
-    if stage == "generate":
-        gate.require(owner["runtime_id"] == contract.runtime_id
-            and owner["request_key"] == contract.stage_keys.generate)
-        from .goal_applications import source_scope_gate
-        source_scope_gate(store, c, rid)
-    else:
-        phase = gate._saved(c, user, gate.entity(contract), gate.PHASE, stage, gate.StageApproveInput)
-        gate.require(phase.approval_key == key and phase.authority.run_id == rid
-            and phase.authority.stage == stage and phase.authority.runtime_id == owner["runtime_id"]
-            and phase.authority.contract_fingerprint == fingerprint(contract.model_dump())
-            and phase.expected_authority_fingerprint == fingerprint(phase.authority.model_dump())
-            and owner["status"] == "SUCCEEDED")
-        from .pa_spec_apps import job_scope_gate
-        gate.require(job_scope_gate(store, c, user, rid))
-        from .db import internal_app_runs, internal_run_bindings
-        app_key = c.execute(select(internal_app_runs.c.request_key)
-            .select_from(internal_run_bindings).join(internal_app_runs,
-                internal_app_runs.c.id == internal_run_bindings.c.app_run_id)
-            .where(internal_run_bindings.c.run_id == rid,
-                internal_app_runs.c.principal_id == user,
-                internal_app_runs.c.id == phase.authority.app_run_id,
-                internal_app_runs.c.instance_id == phase.authority.instance_id)).scalar_one_or_none()
-        gate.require(app_key == getattr(contract.stage_keys, stage)
-            and owner["request_key"] == "internal:" + phase.authority.app_run_id)
+    _journal_stage_header(store, c, user, contract, key, rid, stage)
     actual = c.execute(select(attempts).where(attempts.c.run_id == rid)
                        .order_by(attempts.c.created_at, attempts.c.id)).mappings().all()
     gate.require(len(actual) == (3 if stage == "generate" else 2))
@@ -1549,37 +1402,314 @@ def journal_stage_accounted(store, c, user, contract, key, rid, stage):
             gate.require(op == "VERIFIED")
 
 
-def _stage_slots_from_facts(state, actual, rid, stage):
+def _stage_slots_from_facts(state, actual, rid, stage, *, _guard=None):
     """Use full checked ledger and Attempt multisets after original stage gates.
 
     Caller keeps exact 3/2 stage count, marker/account checks, phase/ownership,
     current permissions and _journal_state. This is not a ledger verifier.
     """
     slots = [s for s in state.slots if s.identity.stage == stage]
-    gate.require(not state.halted and len(slots) == len(actual)
-        and {s.identity.attempt_id for s in slots} == {a["id"] for a in actual}
-        and all(s.identity.run_id == rid for s in slots))
+    gate.require(not state.halted and len(slots) == len(actual) and ({s.identity.attempt_id for s in slots} == {a['id'] for a in actual}) and all((s.identity.run_id == rid for s in slots)))
 
 
-def _stage_usage_from_facts(a, stage, slot, parsed, checked):
+def _stage_usage_from_facts(a, stage, slot, parsed, checked, *, _guard=None):
     """Original accounting comparison after the complete same-aid journal chain."""
-    usage = normalize_usage(parsed)
-    gate.require(checked == a and a["status"] == ("RECEIVED" if stage == "generate" else "VERIFIED")
-            and a["usage"] == usage and usage["status"] == "known"
-            and all(getattr(slot.settlement, k) == usage["tokens"].get(k)
-                    for k in ("prompt_tokens", "completion_tokens", "total_tokens")))
+    usage = gate._trial_result(normalize_usage(parsed), _guard)
+    gate.require(checked == a and a['status'] == ('RECEIVED' if stage == 'generate' else 'VERIFIED') and (a['usage'] == usage) and (usage['status'] == 'known') and all((getattr(slot.settlement, k) == usage['tokens'].get(k) for k in ('prompt_tokens', 'completion_tokens', 'total_tokens'))))
 
 
-def _stage_source_archive_from_facts(a, body, archived, original_wire, slot, capture, parsed):
+def _stage_source_archive_from_facts(a, body, archived, original_wire, slot, capture, parsed, *, _guard=None):
     """Join checked NS bytes to checked controller bytes before Operation SELECT.
 
     Caller retains both ordered _read gates, the entire stage history and the
     original following VERIFIED Operation check. Matching hashes alone do not
     establish authority or replace the raw-byte comparison here.
     """
-    gate.require(body.sha256 == capture.raw_sha256
-                and archived == base64.b64decode(capture.body_b64)
-                and body.canonical_sha256 == capture.canonical_sha256
-                and hashlib.sha256(original_wire).hexdigest() == slot.identity.wire_sha256
-                and a["response"].get("received_raw") == response_archive(parsed)[0]
-                and a["response"].get("raw_evidence") == response_archive(parsed)[1])
+    gate.require(body.sha256 == capture.raw_sha256 and archived == gate._trial_result(base64.b64decode(capture.body_b64), _guard) and (body.canonical_sha256 == capture.canonical_sha256) and (gate._trial_result(gate._trial_result(hashlib.sha256(original_wire), _guard).hexdigest(), _guard) == slot.identity.wire_sha256) and (a['response'].get('received_raw') == gate._trial_result(response_archive(parsed), _guard)[0]) and (a['response'].get('raw_evidence') == gate._trial_result(response_archive(parsed), _guard)[1]))
+
+
+def _journal_owner_from_facts(b, run, header, *, _guard=None):
+    gate.require(header is not None and header['mode'] == gate._trial_result(_binding_mode(b), _guard) and (header['version'] == b.version) and (header['trial_fingerprint'] == b.contract_fingerprint) and (header['approval_key'] == b.approval_key) and (header['account_id'] == b.account_id) and (header['principal_id'] == b.contract.principal_id) and (header['project_id'] == b.contract.project_id) and all((header[k] == run[k] for k in ('principal_id', 'project_id', 'runtime_id'))))
+
+
+def _journal_slot_identity_from_facts(b, run, header, item, approval, phase_fp, *, _guard=None):
+    gate.require(item.run_id == run['id'] and item.runtime_id == run['runtime_id'] and (item.version == header['run_version']) and (item.fence == header['fence']) and (item.worker_id == header['worker_id']) and (item.stage == gate._trial_result(_stage(b, run), _guard)) and (item.approval_fingerprint == gate._trial_result(fingerprint(gate._trial_result(approval.model_dump(), _guard)), _guard)) and (item.stage_fingerprint == phase_fp))
+
+
+def _journal_body_from_facts(b, run, aid, kind, scope, meta, saved, *, _guard=None):
+    gate.require(saved['request'] == dict(trial=gate._trial_result(scope.model_dump(), _guard), attempt_id=aid, family=kind, wire_sha256=meta['wire_sha256']))
+    body = gate._trial_result(BodyArchive.model_validate(saved['response']), _guard)
+    if _guard is not None:
+        _guard = gate._trial_typed_guard(_guard, [(BodyArchive, body, saved['response'])])
+        _guard()
+    if body.body_b64 is None:
+        raise DomainError('VERSION_CONFLICT', 'Exact natural trial changed')
+    payload = gate._trial_result(base64.b64decode(body.body_b64, validate=True), _guard)
+    gate.require(gate._trial_result(_body(run, aid, payload, True, body.canonical_sha256, 'natural_source_request_body.v1' if kind == REQUEST else 'natural_source_response_body.v1', _production=gate._trial_result(_production_binding(b), _guard)), _guard) == body)
+    gate.require(meta['sha256'] == gate._trial_result(gate._trial_result(hashlib.sha256(payload), _guard).hexdigest(), _guard))
+    return payload
+
+
+def _journal_stage_header(store, c, user, contract, key, rid, stage, *, _guard=None, _graph_read=None):
+    gate.require(stage in ('generate', 'source', 'cold') and user == contract.principal_id)
+    owner = gate._trial_result(gate._trial_result(gate._trial_result(c.execute(select(runs.c.principal_id, runs.c.project_id, runs.c.runtime_id, runs.c.request_key, runs.c.status).where(runs.c.id == rid)), _guard).mappings(), _guard).first(), _guard)
+    gate.require(owner is not None and owner['principal_id'] == user and (owner['project_id'] == contract.project_id))
+    if stage == 'generate':
+        gate.require(owner['runtime_id'] == contract.runtime_id and owner['request_key'] == contract.stage_keys.generate)
+        from .goal_applications import source_scope_gate
+        gate._trial_result(source_scope_gate(store, c, rid, **{'_graph_read': _graph_read} if _graph_read is not None else {}), _guard)
+    else:
+        phase = gate._trial_result(gate._saved(c, user, gate._trial_result(gate.entity(contract, **{'_guard': _guard} if _guard is not None else {}), _guard), gate.PHASE, stage, gate.StageApproveInput, **{'_guard': _guard} if _guard is not None else {}), _guard)
+        if _guard is not None:
+            value = gate.StageApproveInput.model_dump(phase)
+            _guard()
+            _guard = gate._trial_typed_guard(_guard, [(gate.StageApproveInput, phase, value)])
+            _guard()
+        gate.require(phase.approval_key == key and phase.authority.run_id == rid and (phase.authority.stage == stage) and (phase.authority.runtime_id == owner['runtime_id']) and (phase.authority.contract_fingerprint == gate._trial_result(fingerprint(gate._trial_result(contract.model_dump(), _guard)), _guard)) and (phase.expected_authority_fingerprint == gate._trial_result(fingerprint(gate._trial_result(phase.authority.model_dump(), _guard)), _guard)) and (owner['status'] == 'SUCCEEDED'))
+        from .pa_spec_apps import job_scope_gate
+        gate.require(gate._trial_result(job_scope_gate(store, c, user, rid, **{'_graph_read': _graph_read} if _graph_read is not None else {}), _guard))
+        from .db import internal_app_runs, internal_run_bindings
+        app_key = gate._trial_result(gate._trial_result(c.execute(select(internal_app_runs.c.request_key).select_from(internal_run_bindings).join(internal_app_runs, internal_app_runs.c.id == internal_run_bindings.c.app_run_id).where(internal_run_bindings.c.run_id == rid, internal_app_runs.c.principal_id == user, internal_app_runs.c.id == phase.authority.app_run_id, internal_app_runs.c.instance_id == phase.authority.instance_id)), _guard).scalar_one_or_none(), _guard)
+        gate.require(app_key == getattr(contract.stage_keys, stage) and owner['request_key'] == 'internal:' + phase.authority.app_run_id)
+
+
+def _graph_journal_state(graph, store, c, b):
+
+    def _parent_pin():
+        gate._graph_trial_pin(graph, store, c)
+    _models: list[tuple[type, object, dict]] = []
+    _guard = gate._trial_typed_guard(_parent_pin, _models)
+    try:
+        _guard()
+        gate.require(b is graph.binding)
+        _guard()
+        gate.require(gate._trial_result(_production_binding(b), _guard) and type(b.contract) is gate.PBTrialContract)
+        value = gate._trial_result(_journal_state(store, c, b, _guard=_guard), _guard)
+        _guard()
+        state, cursor, revision = value
+        from . import production_trial_policy as policy
+        ledger_raw = gate._graph_trial_produced(graph, store, c, _models, policy.Ledger, state)
+        cursor_raw = gate._graph_trial_produced(graph, store, c, _models, policy.AccountQuotaCursor, cursor)
+        completed_raw = dict(ledger=ledger_raw, cursor=cursor_raw, revision=revision)
+        if 'cold-trial:journal' in graph.inputs:
+            gate.require(completed_raw == graph.inputs['cold-trial:journal'])
+        else:
+            graph.add('cold-trial:journal', completed_raw)
+        _guard()
+        return value
+    except BaseException:
+        from .natural_spec_runtime import _ColdGraphRead
+        if type(graph) is _ColdGraphRead:
+            _ColdGraphRead.invalidate(graph)
+        raise
+
+
+def _graph_journal_chain(graph, store, c, b, run, aid, state, cursor, raw=None):
+    """Original complete same-aid proof with one already loaded complete J.
+
+    Fresh owned scalar gate, body/seal/event bytes, checked policy binding,
+    capture and actual Attempt all remain. No source/stage ancestor is rebuilt.
+    """
+
+    def _parent_pin():
+        gate._graph_trial_pin(graph, store, c)
+    _models: list[tuple[type, object, dict]] = []
+    _guard = gate._trial_typed_guard(_parent_pin, _models)
+    try:
+        from . import production_trial_policy as policy
+        from . import production_trial_sender as sender
+        _guard()
+        gate.require(b is graph.binding)
+        gate._graph_trial_journal_models(graph, store, c, _models, state, cursor)
+        _guard()
+        header = gate._trial_result(_journal_owner(c, b, run, aid, _guard=_guard), _guard)
+        scope = gate._trial_result(budget.scope_for(b.contract, b.approval_key), _guard)
+        gate._graph_trial_produced(graph, store, c, _models, budget.Scope, scope)
+        payloads = []
+        for kind in (REQUEST, RESPONSE):
+            meta = gate._trial_result(_metadata(c, run, aid, kind, _guard=_guard), _guard)
+            gate.require(meta is not None and meta['trial_fp'] == b.contract_fingerprint and meta['complete'] and (meta['omission'] == 'NONE'))
+            saved = gate._trial_result(budget._load(c, run['principal_id'], run['id'], kind, aid), _guard)
+            payloads.append(gate._trial_result(_journal_body_from_facts(b, run, aid, kind, scope, meta, saved, _guard=_guard), _guard))
+            _guard()
+        wire, payload = payloads
+        matches = tuple((s for s in state.slots if s.identity.attempt_id == aid))
+        gate.require(len(matches) == 1, 'Exact natural trial changed')
+        slot = matches[0]
+        original, expected = gate._trial_result(policy._requirements(run['principal_id'], b.contract, b.approval_key, **{'_guard': _guard} if _guard is not None else {}), _guard)
+        gate._graph_trial_produced(graph, store, c, _models, gate.PBTrialContract, original)
+        gate._graph_trial_produced(graph, store, c, _models, policy.evidence.EvidenceRequirements, expected)
+        gate._trial_result(policy._bound_from_checked_facts(store, c, run['principal_id'], original, expected, state, cursor, slot.identity, wire, _guard=_guard), _guard)
+        approval = gate._trial_result(gate._saved(c, run['principal_id'], gate._trial_result(gate.entity(b.contract, **{'_guard': _guard} if _guard is not None else {}), _guard), gate.APPROVE, 'approve', gate.Approval, **{'_guard': _guard} if _guard is not None else {}), _guard)
+        gate._graph_trial_produced(graph, store, c, _models, gate.Approval, approval)
+        phase_fp = None
+        if slot.identity.stage != 'generate':
+            phase = gate._trial_result(gate._saved(c, run['principal_id'], gate._trial_result(gate.entity(b.contract, **{'_guard': _guard} if _guard is not None else {}), _guard), gate.PHASE, slot.identity.stage, gate.StageApproveInput, **{'_guard': _guard} if _guard is not None else {}), _guard)
+            gate._graph_trial_produced(graph, store, c, _models, gate.StageApproveInput, phase)
+            phase_fp = gate._trial_result(fingerprint(gate._trial_result(phase.authority.model_dump(), _guard)), _guard)
+        gate._trial_result(_journal_slot_identity_from_facts(b, run, header, slot.identity, approval, phase_fp, _guard=_guard), _guard)
+        capture = gate._trial_result(sender._captured(c, run['principal_id'], slot.identity), _guard)
+        gate._graph_trial_produced(graph, store, c, _models, sender.Capture, capture)
+        gate._trial_result(_journal_capture_from_facts(slot, capture, payload, _guard=_guard), _guard)
+        parsed = gate._trial_result(strict_json(payload, 131072), _guard)
+        canonical, evidence = gate._trial_result(response_archive(parsed), _guard)
+        response = gate._trial_result(_metadata(c, run, aid, RESPONSE, _guard=_guard), _guard)
+        gate._trial_result(_journal_canonical_from_facts(response, capture, canonical, evidence, raw, _guard=_guard), _guard)
+        actual = gate._trial_result(gate._trial_result(gate._trial_result(c.execute(select(attempts).where(attempts.c.run_id == run['id'], attempts.c.id == aid)), _guard).mappings(), _guard).one(), _guard)
+        gate._trial_result(_journal_attempt_from_facts(b, wire, slot, actual, _guard=_guard), _guard)
+        _guard()
+        return (slot, capture, parsed, actual, wire, payload)
+    except BaseException:
+        from .natural_spec_runtime import _ColdGraphRead
+        if type(graph) is _ColdGraphRead:
+            _ColdGraphRead.invalidate(graph)
+        raise
+
+
+def _graph_stage_accounted(graph, store, c, b, state, cursor, rid, stage):
+    """Complete Generate/Source V accounting, retaining every actual aid.
+
+    Returns (full Run, ordered actual Attempts, ordered complete chains,
+    ordered NS reads). No stage Authority is accepted as a substitute.
+    """
+
+    def _parent_pin():
+        gate._graph_trial_pin(graph, store, c)
+    _models: list[tuple[type, object, dict]] = []
+    _guard = gate._trial_typed_guard(_parent_pin, _models)
+    try:
+        _guard()
+        gate.require(b is graph.binding)
+        gate._graph_trial_journal_models(graph, store, c, _models, state, cursor)
+        _guard()
+        gate.require(stage in ('generate', 'source') and gate._trial_result(_production_binding(b), _guard))
+        user, contract, key = (b.contract.principal_id, b.contract, b.approval_key)
+        gate._trial_result(_journal_stage_header(store, c, user, contract, key, rid, stage, _guard=_guard, _graph_read=graph), _guard)
+        actual = tuple(gate._trial_result(gate._trial_result(gate._trial_result(c.execute(select(attempts).where(attempts.c.run_id == rid).order_by(attempts.c.created_at, attempts.c.id)), _guard).mappings(), _guard).all(), _guard))
+        gate.require(len(actual) == (3 if stage == 'generate' else 2))
+        markers = [a['parameters'].get('pa_trial_binding', {}) for a in actual]
+        gate.require(all((m.get('version') == b.version and m.get('account_id') == b.account_id and (m.get('trial_fingerprint') == b.contract_fingerprint) and (m.get('approval_key') == key) for m in markers)))
+        run = gate._trial_result(gate._trial_result(gate._trial_result(c.execute(select(runs).where(runs.c.id == rid)), _guard).mappings(), _guard).one(), _guard)
+        gate._trial_result(_stage_slots_from_facts(state, actual, rid, stage, _guard=_guard), _guard)
+        chains, ns_reads = ([], [])
+        for a in actual:
+            chain = gate._trial_result(_graph_journal_chain(graph, store, c, b, run, a['id'], state, cursor), _guard)
+            from . import production_trial_policy as policy
+            from . import production_trial_sender as sender
+            gate._graph_trial_produced(graph, store, c, _models, policy.Slot, chain[0])
+            gate._graph_trial_produced(graph, store, c, _models, sender.Capture, chain[1])
+            slot, capture, parsed, checked, wire, payload = chain
+            gate._trial_result(_stage_usage_from_facts(a, stage, slot, parsed, checked, _guard=_guard), _guard)
+            if stage == 'generate':
+                gate.require(a['parameters'].get('generation_raw_evidence') == gate._trial_result(response_archive(parsed), _guard)[1] and a['parameters'].get('generation_received_raw') == gate._trial_result(response_archive(parsed), _guard)[0])
+            else:
+                from . import natural_source_archives as archive
+                from .db import operations
+                request, original_wire = gate._trial_result(archive._read(c, user, run, a['id'], archive.REQUEST, _guard=_guard), _guard)
+                gate._graph_trial_produced(graph, store, c, _models, archive.BodyArchive, request)
+                body, archived = gate._trial_result(archive._read(c, user, run, a['id'], archive.RESPONSE, _guard=_guard), _guard)
+                gate._graph_trial_produced(graph, store, c, _models, archive.BodyArchive, body)
+                gate._trial_result(_stage_source_archive_from_facts(a, body, archived, original_wire, slot, capture, parsed, _guard=_guard), _guard)
+                gate.require(original_wire == wire and archived == payload)
+                op = gate._trial_result(gate._trial_result(c.execute(select(operations.c.status).where(operations.c.run_id == rid, operations.c.id == a['parameters']['natural_spec']['operation_id'])), _guard).scalar_one(), _guard)
+                gate.require(op == 'VERIFIED')
+                ns_reads.append((a['id'], request, original_wire, body, archived))
+            chains.append(chain)
+            _guard()
+        completed_value = (run, actual, tuple(chains), tuple(ns_reads))
+        completed_raw = gate._graph_trial_accounted_raw(graph, store, c, completed_value, _models)
+        key = 'cold-trial:accounted-' + stage
+        if key in graph.inputs:
+            gate.require(completed_raw == graph.inputs[key])
+        else:
+            graph.add(key, completed_raw)
+        _guard()
+        return completed_value
+    except BaseException:
+        from .natural_spec_runtime import _ColdGraphRead
+        if type(graph) is _ColdGraphRead:
+            _ColdGraphRead.invalidate(graph)
+        raise
+
+
+def _graph_pb_accounting(graph, store, c, b, generation, state):
+    """Production J/Generate marker selection with all original fresh edges."""
+
+    def _parent_pin():
+        gate._graph_trial_pin(graph, store, c)
+    _models: list[tuple[type, object, dict]] = []
+    _guard = gate._trial_typed_guard(_parent_pin, _models)
+    try:
+        _guard()
+        gate.require(b is graph.binding)
+        gate._graph_trial_journal_models(graph, store, c, _models, state)
+        _guard()
+        gate.require(gate._trial_result(_production_binding(b), _guard) and type(b.contract) is gate.PBTrialContract)
+        user, contract, key = (b.contract.principal_id, b.contract, b.approval_key)
+        gate._trial_result(gate._approved(store, c, user, contract, key, **{'_guard': _guard} if _guard is not None else {}), _guard)
+        gate.require(generation['principal_id'] == user and generation['project_id'] == contract.project_id and (generation['runtime_id'] == contract.runtime_id) and (generation['request_key'] == contract.stage_keys.generate))
+        markers = gate._trial_result(gate._trial_result(gate._trial_result(c.execute(select(*[attempts.c.parameters['pa_trial_binding'][k].as_string().label(k) for k in ('version', 'trial_fingerprint', 'approval_key', 'account_id')]).where(attempts.c.run_id == generation['id'])), _guard).mappings(), _guard).all(), _guard)
+        gate._trial_result(_pb_markers_from_facts(contract, key, markers, _guard=_guard), _guard)
+        gate.require(all((m['account_id'] == b.account_id for m in markers)))
+        gate._trial_result(_journal_source(store, c, b, _guard=_guard), _guard)
+        _guard()
+        return gate._trial_result(_pb_prefix_source_from_facts(state, _guard=_guard), _guard)
+    except BaseException:
+        from .natural_spec_runtime import _ColdGraphRead
+        if type(graph) is _ColdGraphRead:
+            _ColdGraphRead.invalidate(graph)
+        raise
+
+
+def _graph_pb_archive_chain(graph, store, c, b, state, resolved, source_facts):
+    """Join full NS/controller byte sets; not only their public digests."""
+
+    def _parent_pin():
+        gate._graph_trial_pin(graph, store, c)
+    _models: list[tuple[type, object, dict]] = []
+    _guard = gate._trial_typed_guard(_parent_pin, _models)
+    try:
+        _guard()
+        gate.require(b is graph.binding)
+        gate._graph_trial_journal_models(graph, store, c, _models, state)
+        gate._graph_trial_accounted_models(graph, store, c, _models, source_facts, 'source')
+        _guard()
+        receipt = resolved.public_receipt
+        source, actual, chains, ns_reads = source_facts
+        slots = [s for s in state.slots if s.identity.stage == 'source']
+        gate.require(gate._trial_result(_production_binding(b), _guard) and (not state.halted) and (len(slots) == len(receipt['attempts']) == len(chains) == len(ns_reads) == 2) and (receipt['verification'] == 'SPEC_PRODUCTION_CONTROLLER_ARCHIVE') and (receipt['live_allowed'] is False) and (receipt['source_run_id'] == source['id']))
+        for slot, proof in gate._trial_result(zip(slots, receipt['attempts'], strict=True), _guard):
+            matching = tuple((chain for chain in chains if chain[3]['id'] == proof['attempt_id']))
+            gate.require(len(matching) == 1)
+            linked, capture, parsed, checked, wire, payload = matching[0]
+            gate.require(linked == slot and checked in actual and (slot.identity.run_id == source['id']) and (slot.identity.attempt_id == proof['attempt_id']) and (slot.identity.wire_sha256 == proof['request_sha256']) and (slot.identity.wire_bytes == proof['request_bytes']) and (capture.raw_sha256 == proof['decoded_body_sha256']) and (capture.raw_bytes == proof['decoded_body_bytes']) and (capture.canonical_sha256 == proof['canonical_ascii_sha256']) and (capture.canonical_ascii_bytes == proof['canonical_ascii_bytes']))
+            index = receipt['attempts'].index(proof)
+            gate.require(resolved.request_bodies[index] == wire and resolved.response_bodies[index] == payload)
+        _guard()
+    except BaseException:
+        from .natural_spec_runtime import _ColdGraphRead
+        if type(graph) is _ColdGraphRead:
+            _ColdGraphRead.invalidate(graph)
+        raise
+
+
+def _journal_capture_from_facts(slot, capture, payload, *, _guard=None):
+    gate.require(slot.accepted and slot.attempted and (capture is not None) and (slot.settlement == capture.outcome) and capture.complete and (capture.raw_sha256 == gate._trial_result(gate._trial_result(hashlib.sha256(payload), _guard).hexdigest(), _guard)) and (capture.body_b64 == gate._trial_result(gate._trial_result(base64.b64encode(payload), _guard).decode('ascii'), _guard)))
+
+
+def _journal_canonical_from_facts(response, capture, canonical, evidence, raw, *, _guard=None):
+    gate.require(canonical is not None and response['canonical_sha256'] == evidence['sha256'] == capture.canonical_sha256 and (capture.canonical_ascii_bytes == evidence['bytes']))
+    if raw is not None:
+        gate.require(gate._trial_result(response_archive(raw), _guard) == (canonical, evidence))
+
+
+def _pb_markers_from_facts(contract, key, markers, *, _guard=None):
+    from .spec_production import VERSION
+    gate.require(len(markers) == 3 and all((m['version'] == VERSION and m['trial_fingerprint'] == gate._trial_result(fingerprint(gate._trial_result(contract.model_dump(), _guard)), _guard) and (m['approval_key'] == key) for m in markers)) and (len({m['account_id'] for m in markers}) == 1))
+
+
+def _pb_prefix_source_from_facts(state, *, _guard=None):
+    first = [s for s in state.slots if s.identity.stage in ('generate', 'source')]
+    source_ids = {s.identity.run_id for s in first if s.identity.stage == 'source'}
+    gate.require(not state.halted and len(first) == 5 and all((s.accepted for s in first)) and (len(source_ids) == 1))
+    return next(iter(source_ids))

@@ -20,6 +20,7 @@ from .contracts import (
     ApplicationGenerationActivation,
     ApplicationGenerationPolicy,
     AppManifest,
+    FrozenRunContract,
     Strict,
     strict_json,
 )
@@ -113,8 +114,14 @@ def policy(provider, user, pid, body, activation=None, app_limits=None):
     ).model_dump(exclude_none=True)
 
 
-def source_scope_gate(store, c, rid):
+def source_scope_gate(store, c, rid, *, _graph_read=None):
     """Reuse only a complete new-trial scope proof in the existing read segment."""
+    if _graph_read is not None:
+        from .natural_spec_runtime import _cold_read_checkpoint
+        _cold_read_checkpoint(store, c, _graph_read)
+        result = _source_scope_gate(store, c, rid, _graph_read=_graph_read)
+        _cold_read_checkpoint(store, c, _graph_read)
+        return result
     from .pb_natural_specs import _source_reads_current
     token = c.info.get("pb_source_reads")
     if not _source_reads_current(store, c, token):
@@ -245,36 +252,55 @@ def _journal_scope_anchor(store, c, rid, *, expected=None):
                 accepted=[dict(row) for row in accepted], versions=versions)
 
 
-def _source_scope_gate(store, c, rid):
+def _source_scope_gate(store, c, rid, *, _graph_read=None):
     """Only identifier projections before authorization; never fetch protected bodies."""
+    def checkpoint():
+        if _graph_read is not None:
+            from .natural_spec_runtime import _cold_read_checkpoint
+            _cold_read_checkpoint(store, c, _graph_read)
+
+    checkpoint()
     from .local_record_apps import job_scope_gate as record_scope_gate
-    if record_scope_gate(store, c, rid):
+    record_scoped = record_scope_gate(store, c, rid)
+    checkpoint()
+    if record_scoped:
         return False
     metadata = c.execute(select(runs.c.principal_id, runs.c.project_id,
         runs.c.runtime_id).where(runs.c.id == rid)).mappings().first()
+    checkpoint()
     if metadata is not None:
         from .pa_spec_apps import job_scope_gate
         # Application family scope is independently identified and authorized
         # before any Run resource list or frozen contract body is evaluated.
-        if job_scope_gate(store, c, metadata["principal_id"], rid):
+        spec_scoped = job_scope_gate(store, c, metadata["principal_id"], rid,
+            **({"_graph_read": _graph_read} if _graph_read is not None else {}))
+        checkpoint()
+        if spec_scoped:
             return False
         store.own_project(c, metadata["principal_id"], metadata["project_id"])
+        checkpoint()
         from .csv_goal_revisions import job_gate as csv_revision_gate
         csv_revision_gate(store,c,metadata["principal_id"],rid)
+        checkpoint()
         from .csv_full_report import scope_gate as csv_full_report_scope_gate
 
         csv_full_report_scope_gate(store, c, rid)
+        checkpoint()
         from .csv_full_report_instances import scope_gate as report_instance_gate
         report_instance_gate(store, c, rid)
+        checkpoint()
         refs = c.execute(select(runs.c.resource_refs).where(runs.c.id == rid)).scalar_one()
+        checkpoint()
         if not isinstance(refs, list):
             raise DomainError("VERSION_CONFLICT")
         for resource_id in refs:
             store.authorize(c, metadata["principal_id"], metadata["runtime_id"], metadata["project_id"], resource_id, "resource.read")
+            checkpoint()
         metadata = {**metadata, "resource_refs": refs}
         from .ordinary_corrections import scope_gate as correction_scope_gate
 
         correction_scope_gate(store, c, rid)
+        checkpoint()
     hints = c.execute(select(
         run_contracts.c.snapshot["application_generation"]["version"].as_string().label("kind"),
         run_contracts.c.snapshot["application_generation"]["app_id"].as_string().label("app_id"),
@@ -286,21 +312,28 @@ def _source_scope_gate(store, c, rid):
         run_contracts.c.snapshot["resources"][0]["resource_id"].as_string().label("resource"),
         run_contracts.c.snapshot["source_goal_card"]["snapshot"]["content"]["resource_refs"].label("goal_refs"))
         .where(run_contracts.c.run_id == rid)).mappings().first()
+    checkpoint()
     anchored = c.execute(select(
         events.c.data["application_generation"]["version"].as_string().label("kind"),
         events.c.data["application_generation"]["activation"]["approval_id"].as_string().label("aid"),
         events.c.data["application_generation"]["app_id"].as_string().label("app_id"))
         .where(events.c.run_id == rid, events.c.kind == "ACCEPTED")).mappings().all()
+    checkpoint()
     marked = any(r["kind"] is not None or r["aid"] is not None or r["app_id"] is not None for r in anchored)
     if not marked and (not hints or all(hints[k] is None for k in ("kind", "aid", "app_id"))):
         from .pa_spec_apps import job_scope_gate
-        job_scope_gate(store, c, metadata["principal_id"], rid) if metadata else None
+        if metadata:
+            job_scope_gate(store, c, metadata["principal_id"], rid,
+                **({"_graph_read": _graph_read} if _graph_read is not None else {}))
+            checkpoint()
         return False
     if metadata is None or len(metadata["resource_refs"]) != 1:
         raise DomainError("VERSION_CONFLICT")
     store.own_project(c, metadata["principal_id"], metadata["project_id"])
+    checkpoint()
     store.authorize(c, metadata["principal_id"], metadata["runtime_id"],
         metadata["project_id"], metadata["resource_refs"][0], "resource.read")
+    checkpoint()
     if len(anchored) != 1 or hints is None:
         raise DomainError("VERSION_CONFLICT")
     aid = anchored[0]["aid"] or hints["aid"]
@@ -308,6 +341,7 @@ def _source_scope_gate(store, c, rid):
         from .generation_approvals import _meta
 
         meta = _meta(store, c, metadata["principal_id"], aid, content=True)
+        checkpoint()
         if (meta.project_id, meta.runtime_id, [meta.resource_id]) != (
                 metadata["project_id"], metadata["runtime_id"], metadata["resource_refs"]):
             raise DomainError("VERSION_CONFLICT")
@@ -321,12 +355,19 @@ def _source_scope_gate(store, c, rid):
         if aid is not None:
             raise DomainError("PERMISSION_DENIED", "Spec generation has no LIVE scope")
         store.authorize(c, metadata["principal_id"], metadata["runtime_id"], metadata["project_id"], metadata["project_id"], "artifact.save_text")
+        checkpoint()
     return True
 
 
 def source(store, c, run):
     source_scope_gate(store, c, run["id"])
+    return _source_body(store, c, run)
+
+
+def _source_body(store, c, run, reader=None):
     contract = store.frozen_contract(c, run)
+    if reader is not None:
+        reader.check()
     if (
         contract.application_generation is None
         or contract.source_goal_card is None
@@ -343,6 +384,8 @@ def source(store, c, run):
         "resource.read",
         {"resource_id": run["resource_refs"][0]},
     )
+    if reader is not None:
+        reader.check()
     frozen_source = [
         {"resource_id": value["resource_id"], "hash": value["hash"], "format": value["format"]}
     ]
@@ -371,6 +414,13 @@ def initial_messages(store, c, run):
     if contract.application_generation.version in SPEC_GENERATIONS:
         from .pa_spec_apps import initial_messages as spec_messages
         return spec_messages(store, c, run)
+    return _initial_messages_from_facts(contract, material)
+
+
+def _initial_messages_from_facts(contract, material):
+    if contract.application_generation.version in SPEC_GENERATIONS:
+        from .pa_spec_apps import _initial_messages_from_facts as spec_messages
+        return spec_messages(contract, material)
     from .agent_apps import schemas
 
     action_input, output = schemas()
@@ -495,23 +545,21 @@ def history(store, c, run):
 
 
 def _history(store, c, run):
+    return _history_core(_GenerationFactsReader(store, c, run))
+
+
+def _history_core(reader):
     """Reconstruct every request from frozen input and separately anchored received responses."""
-    messages = initial_messages(store, c, run)
-    selected = store.frozen_contract(c, run).application_generation
+    store, c, run = reader.store, reader.c, reader.run
+    messages = reader.initial()
+    selected = reader.frozen().application_generation
     if selected.activation is not None:
         from .generation_approvals import validate_run
 
         validate_run(store, c, run)
-    rows = (
-        c.execute(
-            select(attempts)
-            .where(attempts.c.run_id == run["id"])
-            .order_by(attempts.c.created_at, attempts.c.id)
-        )
-        .mappings()
-        .all()
-    )
-    check_counters(store, c, run, rows)
+        reader.check()
+    rows = reader.ordered_attempts()
+    _check_counters_core(reader, rows)
     if len(rows) > 3:
         raise DomainError("VERSION_CONFLICT", "Generation request count changed")
     for index, attempt in enumerate(rows):
@@ -530,16 +578,10 @@ def _history(store, c, run):
         ):
             raise DomainError("VERSION_CONFLICT", "Invalid typed generation attempt evidence")
         tools = stage_tools(selected, index)
+        reader.check()
         wire = body(messages, tools, parameters["max_tokens"])
-        seals = (
-            c.execute(
-                select(events.c.data).where(
-                    events.c.run_id == run["id"], events.c.kind == "GA_RECEIVED"
-                )
-            )
-            .scalars()
-            .all()
-        )
+        reader.check()
+        seals = reader._anchors("GA_RECEIVED")
         expected = {
             "attempt_id": attempt["id"],
             "index": index,
@@ -552,30 +594,23 @@ def _history(store, c, run):
                 raise DomainError("VERSION_CONFLICT", "Invalid protected response archive")
             archived = strict_json(original, 32768)
             canonical, metadata = response_archive(archived)
+            reader.check()
             if (
                 canonical != original
                 or metadata != parameters.get("generation_raw_evidence")
-                or parse_generation(archived, selected)[0] != attempt["response"]
-                or normalize_usage(archived) != attempt["usage"]
+                or reader.parsed_generation(archived, selected)[0] != attempt["response"]
+                or reader.normalized_usage(archived) != attempt["usage"]
                 or archived.get("model") != attempt["response_model"]
             ):
                 raise DomainError("VERSION_CONFLICT", "Protected response archive changed")
             expected["raw_fingerprint"] = metadata["sha256"]
         elif (
             "generation_raw_evidence" in parameters
-            or store.frozen_contract(c, run).application_generation.response_archive_policy
+            or reader.frozen().application_generation.response_archive_policy
             is not None
         ):
             raise DomainError("VERSION_CONFLICT", "Protected response archive missing")
-        reserved = (
-            c.execute(
-                select(events.c.data).where(
-                    events.c.run_id == run["id"], events.c.kind == "GA_WIRE_RESERVED"
-                )
-            )
-            .scalars()
-            .all()
-        )
+        reserved = reader._anchors("GA_WIRE_RESERVED")
         wire_seal = {
             "sha256": hashlib.sha256(wire).hexdigest(),
             "bytes": len(wire),
@@ -593,34 +628,37 @@ def _history(store, c, run):
             not in reserved
             or not 1
             <= parameters["max_tokens"]
-            <= store.frozen_contract(c, run).limits.max_output_tokens
+            <= reader.frozen().limits.max_output_tokens
             or attempt["reserved_tokens"] != len(wire) + parameters["max_tokens"]
             or parameters.get("generation_wire") != hashlib.sha256(wire).hexdigest()
             or parameters.get("request_fingerprint")
             != fingerprint({"messages": messages, "tools": tools, "model": "intern-s2"})
             or attempt["request_model"] != "intern-s2"
-            or attempt["mode"] != ("LIVE" if store.frozen_contract(c, run).mode == "live" else "MOCK")
+            or attempt["mode"] != ("LIVE" if reader.frozen().mode == "live" else "MOCK")
             or attempt["usage"]["status"] != "known"
         ):
             raise DomainError("VERSION_CONFLICT", "Generation differs from actual provider wire")
         identity = returned_model_identity("intern-s2", attempt["response_model"], enforced=attempt["mode"] == "LIVE")
+        reader.check()
         require_returned_model(identity)
+        reader.check()
         if selected.activation is not None and identity["normalized_returned_model"] != "intern-s2":
             raise DomainError("VERSION_CONFLICT", "Scoped provider response identity changed")
         if fingerprint(parameters.get("model_identity")) != fingerprint(identity):
             raise DomainError("VERSION_CONFLICT", "Actual provider identity evidence changed")
         checked_usage(
             {"usage": attempt["usage"]["tokens"]},
-            store.frozen_contract(c, run).limits,
+            reader.frozen().limits,
             parameters["max_tokens"],
             attempt["reserved_tokens"],
         )
+        reader.check()
         messages.append(copy.deepcopy(attempt["response"]))
         if index == 0:
             calls = attempt["response"].get("tool_calls", [])
             if len(calls) != 1:
                 raise DomainError("VERSION_CONFLICT", "One actual source read required")
-            receipt = read_receipt(store, c, run, calls[0])
+            receipt = reader.read_receipt(calls[0])
             messages.append(
                 {
                     "role": "tool",
@@ -636,11 +674,10 @@ def _history(store, c, run):
             )
         elif index == 1:
             if selected.version in SPEC_GENERATIONS:
-                from .pa_spec_apps import check_receipt
                 calls = attempt["response"].get("tool_calls", [])
                 if len(calls) != 1:
                     raise DomainError("VERSION_CONFLICT", "One actual spec checker feedback required")
-                receipt = check_receipt(store, c, run, calls[0])
+                receipt = reader.check_receipt(calls[0])
                 expected_diagnostic = receipt["data"]["diagnostic"]
                 if fingerprint(parameters.get("generation_diagnostic")) != fingerprint(expected_diagnostic):
                     raise DomainError("VERSION_CONFLICT", "Checker feedback and revision authorization differ")
@@ -648,15 +685,7 @@ def _history(store, c, run):
                 messages.append(dict(role="user", content="Consume the actual check feedback. Return the complete same candidate if PASS, or one corrected candidate if FAIL. No tools; final response only."))
             diagnostic = parameters.get("generation_diagnostic")
             if diagnostic is not None:
-                sealed = (
-                    c.execute(
-                        select(events.c.data).where(
-                            events.c.run_id == run["id"], events.c.kind == "GA_DIAGNOSTIC"
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
+                sealed = reader._anchors("GA_DIAGNOSTIC")
                 if {"attempt_id": attempt["id"], "diagnostic": diagnostic} not in sealed:
                     raise DomainError("VERSION_CONFLICT", "Repair diagnostic changed")
                 messages.append(
@@ -672,31 +701,527 @@ def _history(store, c, run):
                         ),
                     }
                 )
+    reader.check()
     return messages, rows
 
 
+class _ColdGenerationRawSeed:
+    """Pinned complete native audit rows; no history, candidate or authority.
+
+    The root collects and pins these raw rows at its original audit position.
+    Later Source still proves its original current authorities before attaching
+    the seed. Only complete Attempts/Operations are reused, lazily at their old
+    first-read positions. No callback, SQL or selected projection is accepted.
+    """
+
+    def __init__(self, store, c, user, rows, guard):
+        self.store, self.connection, self.user = store, c, user
+        self.rows, self.guard, self._origin_guard = rows, guard, guard
+        self.name = None
+        try:
+            self.check(store, c, user)
+            self.name = "original-native-audit:" + rows["original"]["id"]
+            self.check(store, c, user)
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def invalidate(self):
+        from .natural_spec_runtime import _ColdGraphRead
+
+        if type(self._origin_guard) is _ColdGraphRead:
+            self._origin_guard.invalidate()
+        if type(self.guard) is _ColdGraphRead and self.guard is not self._origin_guard:
+            self.guard.invalidate()
+
+    def check(self, store, c, user, run=None, contract=None):
+        from .contracts import FrozenRunContract
+        from .db import goal_card_versions
+        from .natural_spec_runtime import _cold_read_checkpoint, _ColdGraphRead
+
+        try:
+            if (type(self.guard) is not _ColdGraphRead or self.guard is not self._origin_guard
+                    or self.store is not store or self.connection is not c or self.user != user):
+                raise DomainError("VERSION_CONFLICT", "Exact Generation raw seed scope required")
+            _cold_read_checkpoint(store, c, self.guard)
+            rows = self.rows
+            if type(rows) is not dict or set(rows) != {
+                    "run", "contract", "original", "attempts", "operations", "intents", "events",
+                    "confirmation", "goal_head", "goal_version"}:
+                raise DomainError("VERSION_CONFLICT", "Complete native audit rows required")
+            for name, table in (("run", runs), ("contract", run_contracts), ("original", app_drafts)):
+                if type(rows[name]) is not dict or set(rows[name]) != set(table.c.keys()):
+                    raise DomainError("VERSION_CONFLICT", "Complete native audit scalar row required")
+            for name, table in (("attempts", attempts), ("operations", operations),
+                    ("intents", operation_intents), ("events", events),
+                    ("confirmation", goal_application_candidates), ("goal_head", goal_cards),
+                    ("goal_version", goal_card_versions)):
+                if type(rows[name]) is not list or any(type(row) is not dict
+                        or set(row) != set(table.c.keys()) for row in rows[name]):
+                    raise DomainError("VERSION_CONFLICT", "Complete native audit raw row list required")
+            original, raw_run, raw_contract = rows["original"], rows["run"], rows["contract"]
+            name = "original-native-audit:" + original["id"]
+            if ((self.name is not None and self.name != name)
+                    or self.guard.inputs.get(name) is not rows
+                    or user != self.guard.binding.contract.principal_id
+                    or raw_run["principal_id"] != user
+                    or raw_run["project_id"] != self.guard.binding.contract.project_id
+                    or original["project_id"] != raw_run["project_id"]
+                    or raw_contract["run_id"] != raw_run["id"]):
+                raise DomainError("VERSION_CONFLICT", "Generation raw seed binding changed")
+            if run is not None and dict(run) != raw_run:
+                raise DomainError("VERSION_CONFLICT", "Generation raw seed complete Run changed")
+            if contract is not None:
+                if (type(contract) is not FrozenRunContract
+                        or raw_contract["snapshot"] != FrozenRunContract.model_dump(contract, exclude_none=True)
+                        or raw_contract["fingerprint"] != fingerprint(FrozenRunContract.model_dump(contract, exclude_none=True))):
+                    raise DomainError("VERSION_CONFLICT", "Generation raw seed frozen contract changed")
+            _cold_read_checkpoint(store, c, self.guard)
+        except BaseException:
+            self.invalidate()
+            raise
+
+
+class _GenerationFactsReader:
+    """Fixed original Generation SQL positions; no callback/selector or authority token."""
+
+    def __init__(self, store, c, run, guard=None):
+        self.store, self.c, self.run, self.guard = store, c, run, guard
+        self._guard_initial = guard
+        self.source_record_name = None
+        self.contract = self.material = self.source_pin = None
+        self.authorities = ()
+        self.history_value = None
+        self.candidate_values = {}
+        self.run_pin = copy.deepcopy(dict(run))
+        self.raw_reads = []
+        self._raw_cache = {}
+        self.raw_seed = self._raw_seed_initial = None
+        self.check()
+        if guard is not None:
+            guard.add("generation:" + run["id"] + ":run", self.run_pin)
+            self.check()
+
+    def check(self):
+        try:
+            if self.guard is not self._guard_initial:
+                if self._guard_initial is not None:
+                    self._guard_initial.invalidate()
+                raise DomainError("VERSION_CONFLICT", "Generation read scope pointer changed")
+            if self.guard is None:
+                return
+            from .natural_spec_runtime import _cold_read_checkpoint
+            _cold_read_checkpoint(self.store, self.c, self.guard)
+            if self.raw_seed is not self._raw_seed_initial:
+                raise DomainError("VERSION_CONFLICT", "Generation raw seed pointer changed")
+            if self.raw_seed is not None:
+                if type(self.raw_seed) is not _ColdGenerationRawSeed:
+                    raise DomainError("VERSION_CONFLICT", "Exact Generation raw seed required")
+                self.raw_seed.check(self.store, self.c, self.run["principal_id"], self.run, self.contract)
+            if dict(self.run) != self.run_pin:
+                self.guard.invalidate()
+                raise DomainError("VERSION_CONFLICT", "Generation Run input changed")
+            if self.source_pin is not None:
+                if (self.source_record_name is not None
+                        and self.guard.inputs.get(self.source_record_name) is not self.source_pin):
+                    self.guard.invalidate()
+                    raise DomainError("VERSION_CONFLICT", "Generation source anchor rebound")
+                if type(self.contract) is not FrozenRunContract:
+                    raise DomainError("VERSION_CONFLICT", "Missing complete generation contract")
+                from .natural_live_admission import _trial_typed_equal
+                if (self.authorities != tuple(self.source_pin["authorities"])
+                        or dict(self.run) != self.source_pin["run"]
+                        or not _trial_typed_equal(FrozenRunContract.model_dump(self.contract), self.source_pin["contract"])
+                        or self.material != self.source_pin["material"]):
+                    self.guard.invalidate()
+                    raise DomainError("VERSION_CONFLICT", "Generation source facts changed")
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def record(self, label, value):
+        try:
+            self.check()
+            if self.guard is not None:
+                raw = copy.deepcopy(value)
+                self.guard.add("generation:" + self.run["id"] + ":" + str(len(self.raw_reads)) + ":" + label, raw)
+                self.raw_reads.append((label, raw))
+            self.check()
+            return raw if self.guard is not None else value
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def invalidate(self):
+        # Always poison the originally installed scope, even if a pointer drifted.
+        if self._guard_initial is not None:
+            self._guard_initial.invalidate()
+        for seed in (self.raw_seed, self._raw_seed_initial):
+            if type(seed) is _ColdGenerationRawSeed:
+                seed.invalidate()
+
+    def _raw_key(self, name, *parts):
+        try:
+            self.check()
+            if self.guard is None:
+                return (name, *parts)
+            return (self.run_pin["principal_id"], self.run_pin["project_id"],
+                    self.run_pin["runtime_id"], self.run_pin["id"], name, *parts)
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def _raw_present(self, key):
+        try:
+            self.check()
+            return self.guard is not None and key in self._raw_cache
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def _raw_get(self, key):
+        try:
+            self.check()
+            name, entry = self._raw_cache[key]
+            if (self.guard.inputs.get(name) is not entry
+                    or tuple(entry["key"]) != key):
+                raise DomainError("VERSION_CONFLICT", "Generation raw fact rebound")
+            self.check()
+            return entry["value"]
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def _raw_put(self, key, label, value):
+        try:
+            self.check()
+            if self.guard is None:
+                return value
+            if key in self._raw_cache:
+                raise DomainError("VERSION_CONFLICT", "Generation raw fact cannot be replaced")
+            name = "generation:" + self.run["id"] + ":" + str(len(self.raw_reads)) + ":raw-" + label
+            entry = self.record("raw-" + label, dict(key=list(key), value=value))
+            self._raw_cache[key] = (name, entry)
+            self.check()
+            return entry["value"]
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def source(self):
+        try:
+            if self.guard is None:
+                return source(self.store, self.c, self.run)
+            self.check()
+            if self.source_pin is None:
+                raise DomainError("VERSION_CONFLICT", "Missing complete generation source")
+            self.store.own_project(self.c, self.run["principal_id"], self.run["project_id"])
+            self.check()
+            self.store.recheck_proof_authorities(self.c, {"_call_authorities": self.authorities})
+            self.check()
+            return self.contract, self.material
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def frozen(self):
+        try:
+            if self.guard is None:
+                return self.store.frozen_contract(self.c, self.run)
+            self.check()
+            if self.source_pin is None:
+                raise DomainError("VERSION_CONFLICT", "Missing frozen generation contract")
+            return self.contract
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def initial(self):
+        try:
+            if self.guard is None:
+                return initial_messages(self.store, self.c, self.run)
+            contract, material = self.source()
+            value = _initial_messages_from_facts(contract, material)
+            self.check()
+            return value
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def ordered_attempts(self):
+        try:
+            key = self._raw_key("attempts")
+            if self._raw_present(key):
+                return self._raw_get(key)
+            self.check()
+            if self.raw_seed is None:
+                value = self.c.execute(select(attempts).where(attempts.c.run_id == self.run["id"])
+                    .order_by(attempts.c.created_at, attempts.c.id)).mappings().all()
+            else:
+                self.raw_seed.check(self.store, self.c, self.run["principal_id"], self.run, self.contract)
+                from .natural_spec_runtime import _cold_attempt_order
+                # Native audit is id-ordered. Preserve SQLite storage-class order
+                # only at the original history read edge, including corrupt values.
+                value = sorted(copy.deepcopy(self.raw_seed.rows["attempts"]),
+                    key=_cold_attempt_order)
+            self.check()
+            return self._raw_put(key, "attempts", value)
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def counter_operations(self):
+        try:
+            key = self._raw_key("counter-operations")
+            if self._raw_present(key):
+                return self._raw_get(key)
+            self.check()
+            if self.raw_seed is None:
+                value = self.c.execute(select(operations).where(operations.c.run_id == self.run["id"])).mappings().all()
+            else:
+                self.raw_seed.check(self.store, self.c, self.run["principal_id"], self.run, self.contract)
+                value = copy.deepcopy(self.raw_seed.rows["operations"])
+            self.check()
+            return self._raw_put(key, "counter-operations", value)
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def _anchors(self, kind):
+        try:
+            if kind not in {"GA_RECEIVED", "GA_WIRE_RESERVED", "GA_DIAGNOSTIC", "GA_SPEC_CHECKED",
+                            "GA_CANDIDATE_VALIDATED", "GA_APP_CONFIRMED"}:
+                raise DomainError("VERSION_CONFLICT", "Unknown generation evidence kind")
+            key = self._raw_key("anchors", kind)
+            if self._raw_present(key):
+                return self._raw_get(key)
+            self.check()
+            value = self.c.execute(select(events.c.data).where(events.c.run_id == self.run["id"],
+                events.c.kind == kind)).scalars().all()
+            self.check()
+            return self._raw_put(key, kind, value)
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def read_operation(self):
+        try:
+            key = self._raw_key("read-operation", "ga_read")
+            if self._raw_present(key):
+                return self._raw_get(key)
+            self.check()
+            value = self.c.execute(select(operations).where(operations.c.run_id == self.run["id"],
+                operations.c.call_id == "ga_read")).mappings().first()
+            self.check()
+            return self._raw_put(key, "read-operation", value)
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def checker_operation(self):
+        try:
+            key = self._raw_key("checker-operation", "ga_spec_check")
+            if self._raw_present(key):
+                return self._raw_get(key)
+            self.check()
+            value = self.c.execute(select(operations).where(operations.c.run_id == self.run["id"],
+                operations.c.call_id == "ga_spec_check")).mappings().first()
+            self.check()
+            return self._raw_put(key, "checker-operation", value)
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def intent(self, op):
+        try:
+            key = self._raw_key("operation-intent", op["id"])
+            if self._raw_present(key):
+                return self._raw_get(key)
+            self.check()
+            value = self.c.execute(select(operation_intents.c.request).where(
+                operation_intents.c.operation_id == op["id"])).scalar()
+            self.check()
+            return self._raw_put(key, "operation-intent", value)
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def checker_response(self):
+        try:
+            key = self._raw_key("checker-response", 1)
+            if self._raw_present(key):
+                return self._raw_get(key)
+            self.check()
+            value = self.c.execute(select(attempts.c.response).where(attempts.c.run_id == self.run["id"],
+                attempts.c.parameters["generation_index"].as_integer() == 1)).scalar()
+            self.check()
+            return self._raw_put(key, "checker-response", value)
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def parsed_generation(self, raw, selected):
+        try:
+            value = parse_generation(raw, selected)
+            self.check()
+            return value
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def normalized_usage(self, raw):
+        try:
+            value = normalize_usage(raw)
+            self.check()
+            return value
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def read_receipt(self, call):
+        try:
+            if self.guard is None:
+                return read_receipt(self.store, self.c, self.run, call)
+            return _read_receipt_core(self, call)
+        except BaseException:
+            self.invalidate()
+            raise
+
+    def check_receipt(self, call):
+        try:
+            from .pa_spec_apps import _check_receipt_core, check_receipt
+            value = (check_receipt(self.store, self.c, self.run, call) if self.guard is None
+                     else _check_receipt_core(self, call))
+            self.check()
+            return value
+        except BaseException:
+            self.invalidate()
+            raise
+
+
+def _cold_generation_reader(store, c, run, reader):
+    try:
+        if (type(reader) is not _GenerationFactsReader or reader.guard is None
+                or reader.store is not store or reader.c is not c or dict(reader.run) != dict(run)):
+            if type(reader) is _GenerationFactsReader and reader.guard is not None:
+                reader.guard.invalidate()
+            raise DomainError("VERSION_CONFLICT", "Exact original generation facts reader required")
+        reader.check()
+        return reader
+    except BaseException:
+        if type(reader) is _GenerationFactsReader:
+            reader.invalidate()
+        raise
+
+
+def _cold_generation_source(store, c, run, guard, *, raw_seed=None):
+    """One full original source proof; no candidate/history or app proof is published."""
+    from .natural_spec_runtime import _ColdGraphRead
+    from .natural_specs import GENERATION
+    try:
+        if type(guard) is not _ColdGraphRead:
+            raise DomainError("VERSION_CONFLICT", "Exact Cold read scope required")
+        reader = _GenerationFactsReader(store, c, run, guard)
+        # The original scalar family/owner/authority gate; never a candidate verifier.
+        with store.proof_authorities(c) as authorities:
+            _source_scope_gate(store, c, run["id"], _graph_read=guard)
+            reader.check()
+            contract, material = _source_body(store, c, run, reader)
+            reader.check()
+        if (type(contract) is not FrozenRunContract
+                or contract.application_generation is None
+                or contract.application_generation.version != GENERATION
+                or contract.application_generation.activation is not None
+                or run["principal_id"] != guard.binding.contract.principal_id
+                or run["project_id"] != guard.binding.contract.project_id):
+            raise DomainError("VERSION_CONFLICT", "Cold Generation source role changed")
+        reader.contract, reader.material = contract, material
+        if raw_seed is not None:
+            if type(raw_seed) is not _ColdGenerationRawSeed:
+                raise DomainError("VERSION_CONFLICT", "Exact Generation raw seed required")
+            raw_seed.check(store, c, run["principal_id"], run, contract)
+            if raw_seed.guard is not guard:
+                raise DomainError("VERSION_CONFLICT", "Generation raw seed belongs to another read scope")
+            reader.raw_seed = reader._raw_seed_initial = raw_seed
+        reader.authorities = tuple(sorted(authorities))
+        reader.source_pin = dict(run=copy.deepcopy(dict(run)),
+            contract=copy.deepcopy(FrozenRunContract.model_dump(contract)), material=copy.deepcopy(material),
+            authorities=list(reader.authorities))
+        reader.source_pin = reader.record("complete-source", reader.source_pin)
+        reader.source_record_name = "generation:" + run["id"] + ":0:complete-source"
+        reader.check()
+        return contract, material, reader
+    except BaseException:
+        if type(guard) is _ColdGraphRead:
+            guard.invalidate()
+        if type(raw_seed) is _ColdGenerationRawSeed:
+            raw_seed.invalidate()
+        raise
+
+
+def _cold_history_from_source(store, c, run, contract, material, reader):
+    try:
+        reader = _cold_generation_reader(store, c, run, reader)
+        if reader.contract is not contract or reader.material is not material or reader.history_value is not None:
+            reader.guard.invalidate()
+            raise DomainError("VERSION_CONFLICT", "Generation history inputs missing or rebound")
+        value = _history_core(reader)
+        reader.check()
+        reader.history_value = reader.record("complete-history",
+            (value[0], [dict(row) for row in value[1]]))
+        return reader.history_value
+    except BaseException:
+        if type(reader) is _GenerationFactsReader:
+            reader.invalidate()
+        raise
+
+
+def _cold_candidate_from_history(store, c, run, contract, material, history_value, limits, reader):
+    try:
+        reader = _cold_generation_reader(store, c, run, reader)
+        from .contracts import Limits
+        if limits is not None and type(limits) is not Limits:
+            reader.guard.invalidate()
+            raise DomainError("VERSION_CONFLICT", "Exact complete candidate Limits required")
+        role = ("NONE",) if limits is None else ("LIMITS", fingerprint(limits.model_dump()))
+        if (reader.contract is not contract or reader.material is not material
+                or reader.history_value is not history_value or role in reader.candidate_values):
+            reader.guard.invalidate()
+            raise DomainError("VERSION_CONFLICT", "Complete Generation history missing or rebound")
+        # Preserve None as a separate role; history always used frozen generation Limits.
+        reader.record("candidate-role", None if limits is None else limits.model_dump())
+        _, rows = history_value
+        last = _candidate_attempt_from_history(contract, rows)
+        reader.check()
+        value = _parse_candidate_core(reader, last["response"], limits or contract.limits)
+        reader.check()
+        seal = _candidate_validation_seal(rows[-1], value)
+        reader.check()
+        recorded = reader._anchors("GA_CANDIDATE_VALIDATED")
+        value = _candidate_from_checked_facts(value, seal, recorded)
+        reader.check()
+        reader.candidate_values[role] = reader.record("complete-candidate", value)
+        return reader.candidate_values[role]
+    except BaseException:
+        if type(reader) is _GenerationFactsReader:
+            reader.invalidate()
+        raise
+
+
+
 def read_receipt(store, c, run, call):
+    return _read_receipt_core(_GenerationFactsReader(store, c, run), call)
+
+
+def _read_receipt_core(reader, call):
+    run = reader.run
     if call.get("function", {}).get("name") != "resource.read":
         raise DomainError("PERMISSION_DENIED")
     args = strict_json(call["function"]["arguments"])
     if args != {"resource_id": run["resource_refs"][0]}:
         raise DomainError("PERMISSION_DENIED")
-    op = (
-        c.execute(
-            select(operations).where(
-                operations.c.run_id == run["id"], operations.c.call_id == "ga_read"
-            )
-        )
-        .mappings()
-        .first()
-    )
-    intent = (
-        None
-        if not op
-        else c.execute(
-            select(operation_intents.c.request).where(operation_intents.c.operation_id == op["id"])
-        ).scalar()
-    )
+    op = reader.read_operation()
+    intent = None if not op else reader.intent(op)
     expected = {"tool": "resource.read", "args": args}
     if (
         not op
@@ -708,7 +1233,7 @@ def read_receipt(store, c, run, call):
         != {
             "operation_id": op["id"],
             "status": "VERIFIED",
-            "data": source(store, c, run)[1],
+            "data": reader.source()[1],
             "artifact_refs": [],
             "receipt_ref": op["id"],
             "check_results": [{"check": "receipt.readback.v1", "status": "PASS"}],
@@ -717,31 +1242,42 @@ def read_receipt(store, c, run, call):
         }
     ):
         raise DomainError("VERSION_CONFLICT", "Generation lacks actual exact-source receipt")
+    reader.check()
     return op["receipt"]
 
 
 def parse_candidate(store, c, run, message, limits):
+    return _parse_candidate_core(_GenerationFactsReader(store, c, run), message, limits)
+
+
+def _parse_candidate_core(reader, message, limits):
+    store, c, run = reader.store, reader.c, reader.run
     from .apps import compile_preview
 
     if set(message) != {"role", "content"} or message["role"] != "assistant":
         raise DomainError("INVALID_MANIFEST", "Content-only candidate response required")
     value = strict_json(message["content"], 16384)
-    contract, _ = source(store, c, run)
+    contract, _ = reader.source()
     if contract.application_generation.version in SPEC_GENERATIONS:
-        from .pa_spec_apps import check_receipt, from_response
-        checked = c.execute(select(attempts.c.response).where(attempts.c.run_id == run["id"],
-            attempts.c.parameters["generation_index"].as_integer() == 1)).scalar()
+        from .pa_spec_apps import _from_response_from_facts, from_response
+        checked = reader.checker_response()
         if checked:
             call = checked["tool_calls"][0]
-            receipt = check_receipt(store, c, run, call)
+            receipt = reader.check_receipt(call)
             proposed = strict_json(call["function"]["arguments"], 16384)["candidate"]
             if receipt["data"]["status"] == "PASS" and fingerprint(proposed) != fingerprint(value):
                 raise DomainError("VERSION_CONFLICT", "A passing proposal cannot be silently replaced")
-        return from_response(store, c, run, value)
+        if reader.guard is None:
+            return from_response(store, c, run, value)
+        contract, material = reader.source()
+        result = _from_response_from_facts(run, contract, material, value, reader=reader)
+        reader.check()
+        return result
     if not isinstance(value, dict) or set(value) != {"manifest", "actions", "source_hash", "goal"}:
         raise DomainError("INVALID_MANIFEST", "Closed provider candidate required")
     manifest, action, _ = compile_preview(value, limits)
-    contract, material = source(store, c, run)
+    reader.check()
+    contract, material = reader.source()
     selected = contract.application_generation
     if (
         action.executor.ref != "text.literal_evidence"
@@ -758,6 +1294,7 @@ def parse_candidate(store, c, run, message, limits):
         raise DomainError(
             "VERSION_CONFLICT", "Provider changed frozen IDs, source, full goal or budget"
         )
+    reader.check()
     return value
 
 
@@ -1355,15 +1892,20 @@ def check_active(worker, c, run, attempt_id=None):
 
 
 def check_counters(store, c, run, rows):
-    contract = store.frozen_contract(c, run)
+    return _check_counters_core(_GenerationFactsReader(store, c, run), rows)
+
+
+def _check_counters_core(reader, rows):
+    run = reader.run
+    contract = reader.frozen()
     limits = contract.limits
     spec = contract.application_generation.version in SPEC_GENERATIONS
     ctx = run["context"]
     _check_counter_rows(rows)
-    count_tools = (
-        c.execute(select(operations).where(operations.c.run_id == run["id"])).mappings().all()
-    )
+    reader.check()
+    count_tools = reader.counter_operations()
     _check_counters_from_facts(ctx, limits, spec, rows, count_tools)
+    reader.check()
 
 
 def _check_counter_rows(rows):

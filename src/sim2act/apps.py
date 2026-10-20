@@ -4,8 +4,10 @@ import copy
 import json
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass
 from sqlite3 import Connection as SQLiteConnection
 from threading import get_ident
+from typing import Any
 
 from sqlalchemy import insert, select, update
 
@@ -68,19 +70,39 @@ class _ColdGraphOriginFacts:
         self.role, self.role_limits, self.inputs = role, role_limits, inputs
         self.user, self.draft, self.limits, self.origin = user, draft, limits, origin
         self.active, self.busy = True, False
-        self.key = self.input_key()
+        self.key = self.input_key(_validate=True)
         self.check(self.store, c, user, draft, limits)
 
-    def input_key(self):
-        from .natural_spec_runtime import _model_inputs
+    def input_key(self, *, _validate=False):
+        from .natural_live_admission import (
+            PBTrialContract,
+            _trial_typed_equal,
+            _trial_typed_storage,
+        )
+        from .natural_spec_runtime import _cold_graph_inputs, _cold_graph_validate_inputs
+        from .pa_spec_apps import require
+        from .spec_production import ProductionTrialBinding
 
         b = self.binding
+        require(type(b) is ProductionTrialBinding and type(b.contract) is PBTrialContract
+            and type(self.origin) is tuple and len(self.origin) == 4
+            and type(self.origin[0]) is AppManifest,
+            "Exact Cold graph origin binding and manifest required")
         manifest, report, source, goal = self.origin
-        return _model_inputs(dict(inputs=self.inputs, role=self.role, role_limits=self.role_limits,
+        contract = _trial_typed_storage(PBTrialContract, b.contract)
+        manifest_raw = _trial_typed_storage(AppManifest, manifest)
+        if _validate:
+            require(_trial_typed_equal(contract, PBTrialContract.model_dump(b.contract, warnings=False))
+                and _trial_typed_equal(manifest_raw, AppManifest.model_dump(manifest, warnings=False)),
+                "Cold graph origin storage and fixed schema dumps differ")
+        values = dict(inputs=self.inputs, role=self.role, role_limits=self.role_limits,
             principal=self.user, draft=self.draft, limits=self.limits,
-            origin=[manifest.model_dump(), report, source, goal],
-            binding=dict(contract=b.contract.model_dump(), key=b.approval_key,
-                account=b.account_id, version=b.version, fingerprint=b.contract_fingerprint)))
+            origin=[manifest_raw, report, source, goal],
+            binding=dict(contract=contract, key=b.approval_key,
+                account=b.account_id, version=b.version, fingerprint=b.contract_fingerprint))
+        if _validate:
+            _cold_graph_validate_inputs(values)
+        return _cold_graph_inputs(values)
 
     def check(self, store, c, user, draft, limits):
         try:
@@ -535,25 +557,120 @@ def validate_frozen_candidate(store, c, user, draft, platform_limits, *, _origin
         _origin_out=_origin_out, _reuse_origin=_reuse_origin)
 
 
-def _validate_frozen_candidate(store, c, user, draft, platform_limits, *, _origin_out=None, _reuse_origin=None, _strict_origin=None):
+def _checkpoint_candidate_read(store, c, guard):
+    if guard is not None:
+        from .natural_spec_runtime import _cold_read_checkpoint
+        _cold_read_checkpoint(store, c, guard)
+
+
+def _record_candidate_origin(c, user, draft, limits, manifest, action, report, origin, out):
+    if out is not None:
+        out.update(draft=copy.deepcopy(dict(draft)),manifest=manifest,action=action,report=report,origin=origin,
+            principal_id=user,platform_limits=limits.model_dump(),
+            _call_connection=c,_call_transaction=c.get_transaction())
+
+
+@dataclass(frozen=True)
+class _ColdCandidatePrefix:
+    """A pinned prefix result, before the original origin-verification position."""
+    guard: Any
+    key: str
+    user: str
+    draft: dict
+    limits: Limits
+    values: tuple
+    role: str
+
+    def fields(self):
+        project, candidate, manifest, action, report = self.values
+        actions = [a.model_dump() for a in action] if type(action) is list else action.model_dump()
+        return dict(role=self.role, principal=self.user, draft=self.draft, limits=self.limits,
+            project=project, candidate=candidate, manifest=manifest.model_dump(), action=actions, report=report)
+
+
+def _cold_candidate_prefix(store, c, user, draft, limits, guard, role):
+    from .natural_spec_runtime import _cold_read_checkpoint, _ColdGraphRead
+    from .pa_spec_apps import is_candidate, require
+
+    try:
+        require(type(guard) is _ColdGraphRead, "Cold candidate requires its local read scope")
+        _cold_read_checkpoint(store, c, guard)
+        require(role in {"source", "generate", "cold"})
+        values = _frozen_candidate_prefix(store, c, user, draft, limits, _graph_read=guard)
+        spec_candidate = is_candidate(values[1])
+        _cold_read_checkpoint(store, c, guard)
+        require(spec_candidate, "Cold graph candidate prefix changed family")
+        key = "candidate-prefix:" + role + ":" + draft["id"] + ":" + fingerprint(limits.model_dump())
+        result = _ColdCandidatePrefix(guard, key, user, draft, limits, values, role)
+        guard.add(key, result.fields())
+        return result
+
+    except BaseException:
+        if type(guard) is _ColdGraphRead:
+            guard.invalidate()
+        raise
+
+
+def _cold_candidate_from_origin(store, c, user, prefix, facts, *, _origin_out=None):
+    from .natural_spec_runtime import _cold_read_checkpoint, _ColdGraphRead, _model_inputs
+    from .pa_spec_apps import require
+
+    try:
+        require(type(prefix) is _ColdCandidatePrefix and type(facts) is _ColdGraphOriginFacts,
+                "Exact Cold prefix and complete origin facts required")
+        _cold_read_checkpoint(store, c, prefix.guard)
+        facts.check(store, c, user, prefix.draft, prefix.limits)
+        require(not facts.busy and prefix.user == user and prefix.role == facts.role
+            and _model_inputs(prefix.fields()) == _model_inputs(prefix.guard.inputs[prefix.key]),
+            "Cold candidate prefix or role changed before origin consumption")
+        facts.busy = True
+        _, _, manifest, action, report = prefix.values
+        _record_candidate_origin(c, user, prefix.draft, prefix.limits, manifest, action, report, facts.origin, _origin_out)
+        _cold_read_checkpoint(store, c, prefix.guard)
+        facts.check(store, c, user, prefix.draft, prefix.limits)
+        return prefix.draft, manifest, action, report
+    except BaseException:
+        if type(facts) is _ColdGraphOriginFacts:
+            facts.invalidate()
+        if type(prefix) is _ColdCandidatePrefix and type(prefix.guard) is _ColdGraphRead:
+            prefix.guard.invalidate()
+        raise
+    finally:
+        if type(facts) is _ColdGraphOriginFacts:
+            facts.busy = False
+
+
+def _frozen_candidate_prefix(store, c, user, draft, platform_limits, *, _strict_origin=None, _graph_read=None):
+    _checkpoint_candidate_read(store, c, _graph_read)
     aid = draft["id"]
     from .text_continuations import draft_gate
 
     draft_gate(store, c, user, aid)
+    _checkpoint_candidate_read(store, c, _graph_read)
     if _strict_origin is not None:
         _strict_origin.check(store, c, user, draft, platform_limits)
     project = store.own_project(c, user, draft["project_id"])
+    _checkpoint_candidate_read(store, c, _graph_read)
     if _strict_origin is not None:
         _strict_origin.check(store, c, user, draft, platform_limits)
     candidate = draft["candidate"]
     if fingerprint(candidate) != draft["fingerprint"]:
         raise DomainError("VERSION_CONFLICT", "草案指纹已变化")
     validate_source_family(c, user, draft)
+    _checkpoint_candidate_read(store, c, _graph_read)
     if _strict_origin is not None:
         _strict_origin.check(store, c, user, draft, platform_limits)
     manifest, action, report = compile_preview(candidate, platform_limits)
+    _checkpoint_candidate_read(store, c, _graph_read)
     if _strict_origin is not None:
         _strict_origin.check(store, c, user, draft, platform_limits)
+    return project, candidate, manifest, action, report
+
+
+def _validate_frozen_candidate(store, c, user, draft, platform_limits, *, _origin_out=None, _reuse_origin=None, _strict_origin=None):
+    aid = draft["id"]
+    project, candidate, manifest, action, report = _frozen_candidate_prefix(
+        store, c, user, draft, platform_limits, _strict_origin=_strict_origin)
     from . import pa_spec_apps
     if _strict_origin is not None:
         spec_candidate = pa_spec_apps.is_candidate(candidate)
@@ -573,10 +690,7 @@ def _validate_frozen_candidate(store, c, user, draft, platform_limits, *, _origi
             origin = _reuse_origin["origin"]
         else:
             origin = pa_spec_apps.verify_origin(store, c, user, draft, platform_limits)
-        if _origin_out is not None:
-            _origin_out.update(draft=copy.deepcopy(dict(draft)),manifest=manifest,action=action,report=report,origin=origin,
-                principal_id=user,platform_limits=platform_limits.model_dump(),
-                _call_connection=c,_call_transaction=c.get_transaction())
+        _record_candidate_origin(c, user, draft, platform_limits, manifest, action, report, origin, _origin_out)
         if _strict_origin is not None:
             _strict_origin.check(store, c, user, draft, platform_limits)
         return draft, manifest, action, report
