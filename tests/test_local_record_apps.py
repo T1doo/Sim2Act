@@ -10,12 +10,12 @@ import re
 
 import pytest
 from fastapi.testclient import TestClient
+from record_test_store import reopen_record_test_store
 from sql_private_barrier import PrivateReadBarrier
 from sqlalchemy import select, update
 
 from sim2act.api import create_app
 from sim2act.db import (
-    Store,
     attempts,
     delivery_graph_requests,
     fingerprint,
@@ -291,7 +291,7 @@ def test_actual_a_b_and_done_fold_independent_records_preserve_immutable_events(
     assert events[2]["previous_event_fingerprint"] == fingerprint(events[0])
     assert [event["previous_collection_fingerprint"] for event in events] == [None, fingerprint(events[0]), fingerprint(events[1])]
     assert events[0]["reason"] == events[1]["reason"] == "" and events[2]["reason"] == DONE_REASON
-    cold = Store(env[1].database_url, test_only=True)
+    cold = reopen_record_test_store(env[0])
     try:
         with TestClient(create_app(cold, env[1])) as client:
             client.headers["Authorization"] = "Bearer synthetic-test-A"
@@ -343,7 +343,7 @@ def test_original_key_cold_get_and_exact_replay_never_duplicate_effect(env, evid
     body = create_body(current(env, data))
     first = execute(env, data, body)
     before = snapshot(env[0])
-    cold = Store(env[1].database_url, test_only=True)
+    cold = reopen_record_test_store(env[0])
     try:
         with TestClient(create_app(cold, env[1])) as client:
             client.headers["Authorization"] = "Bearer synthetic-test-A"

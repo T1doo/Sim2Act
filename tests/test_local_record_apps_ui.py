@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 from local_record_control_assertions import assert_control_changes
+from record_test_store import reopen_record_test_store
 from sqlalchemy import select, update
 from test_local_record_apps import (
     DETAILS_A,
@@ -37,7 +38,7 @@ from test_local_record_apps import (
     write_json,
 )
 
-from sim2act.db import Store, attempts, fingerprint, grants, reservations, runs
+from sim2act.db import attempts, fingerprint, grants, reservations, runs
 from sim2act.worker import Worker
 
 
@@ -45,7 +46,7 @@ def source_inputs(root):
     paths = sorted(path for path in (root / "src/sim2act").rglob("*")
         if path.is_file() and path.suffix in {".py", ".js", ".css", ".html"})
     paths.extend([Path(__file__).resolve(), *(Path(__file__).with_name(name).resolve() for name in
-        ["local_record_apps_ui.cjs", "local_record_control_assertions.py"])])
+        ["local_record_apps_ui.cjs", "local_record_control_assertions.py", "record_test_store.py"])])
     return {str(path.relative_to(root)) if path.is_relative_to(root) else str(path):
         dict(bytes=path.stat().st_size, sha256=hashlib.sha256(path.read_bytes()).hexdigest()) for path in paths}
 
@@ -221,7 +222,7 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
                     break
                 if request.get("command") == "worker":
                     assert scenario in {"flow-recovery", "private-preview", "content-edit"}, "Read-only page scenarios cannot invoke Worker"
-                    cold = Store(env[1].database_url, test_only=True)
+                    cold = reopen_record_test_store(env[0])
                     stores.append(cold)
                     before = states(cold)
                     assert Worker(cold, env[1], NoModel()).once()

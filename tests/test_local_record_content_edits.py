@@ -4,6 +4,7 @@ import copy
 
 import pytest
 from fastapi.testclient import TestClient
+from record_test_store import reopen_record_test_store
 from sqlalchemy import update
 from test_local_record_apps import (
     DETAILS_A,
@@ -26,7 +27,7 @@ from test_local_record_apps import (
 
 from sim2act import local_record_apps as records
 from sim2act.api import create_app
-from sim2act.db import Store, runs
+from sim2act.db import runs
 from sim2act.errors import DomainError
 from sim2act.worker import Worker
 
@@ -74,7 +75,7 @@ def test_content_edit_actual_worker_independent_fold_cold_read_and_explicit_reve
             assert e["previous_event_fingerprint"] == state["history"][0]["event_fingerprint"]
         fold[e["record_id"]] = (e["title"], e["details"], e["state"], e["record_revision"])
     assert list(fold.values()) == [(TITLE, DETAILS, "OPEN", 2), (TITLE_B, DETAILS_B, "OPEN", 1)]
-    cold = Store(env[1].database_url, test_only=True)
+    cold = reopen_record_test_store(env[0])
     try:
         with TestClient(create_app(cold, env[1])) as client:
             client.headers["Authorization"] = "Bearer synthetic-test-A"
