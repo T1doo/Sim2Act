@@ -302,3 +302,6 @@ protected Edge第三ownedAPI、loopback context、四gated Mock请求+默认/rec
 最终作者1730唯一选定节点1664PASS/66SKIP/0FAIL/0ERROR，main1698+supplement32无交集；原650精确641PASS/9SKIP，30页面原预算串行全PASS。主进程2239.7957秒（四backend最长1068.09、串行UI1168.79秒，不累计pytest分片），补充2.004秒。401源码/测试/scripts前后/当前同字节；原141、独审37及性能17原/压缩SHA逐项验证。66SKIP为63实际PG/2指定旧归档/1Windows，另2升级deselected。全树Ruff10/mypy5与实际2b逐诊断相同，改动Ruff通过；早期新第6个mypy类型问题已修且日志保留。
 
 实际默认cache EROFS后以授权/tmp cache正规editable安装，无扩权/凭据，原字节不变，仅5 ignored egg-info；16:03断连通知后16:04:17UTC命令成功、HEAD/dirty/测试进程保全，无未知锁删除或新写入者。首次并发中断与净化child缺包、材料post/read两DOM FAIL和随后current-isolated FAIL均留档；最终串行同预算全PASS，但超时完整因果未确定。独审只读24GET定位旧递归验证26995SQL/9.47–10.72秒，新namespace调用0、热点源与2b同字节，不据此宣称提速或放宽预算。PG/应用角色、Windows/native/视觉、真实升级/模型/付费API、完整P-A/P-B/AT10、语义/owner、远端CI/部署NOT_RUN。当前有限修复未见最终选定范围剩余FAIL，原生容量/历史超时原因仍是未闭环范围。原普通开发分支推送，无main/coredev/原CSV分支/force/模型/部署或被拒浏览器重试；[完整终态和失败](../evidence/run-private-read-scope-20261011/README.md)。
+
+
+2026-10-20 原 F2-T06 [OPEN 记录内容更正](LocalRecordContentEdit20261020.md)：产品 `fa244834efe50358459340b30f5a988a39089164`，新应用显式选择 v2 typed 合同后可更正 OPEN 标题/正文，ID/状态及不可变历史保持；旧 v1 不扩能力、无新工具/表/写授权。作者11唯一节点11PASS，实际新页面79检查/4普通冷Worker/3冷页，独审另跨实例/项目/主体3拒绝且全表零写，无P1/P2。失败 setup、哈希和原件见[证据](../evidence/local-record-content-edit-20261020/README.md)。仅 Linux/SQLite/HTTP/JSDOM/NoModel，不关闭旧软件迁移、真实语义、PG/Windows/native/CI、PB/G0 或正式发布门。

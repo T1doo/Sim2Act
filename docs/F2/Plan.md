@@ -1,5 +1,7 @@
 # F2 并行工程 Plan：权威当前状态
 
+2026-10-20 原 F2-T06 [OPEN 记录内容更正](LocalRecordContentEdit20261020.md)：产品 `fa244834efe50358459340b30f5a988a39089164`，新应用显式选择 v2 typed 合同后可更正 OPEN 标题/正文，ID/状态及不可变历史保持；旧 v1 不扩能力、无新工具/表/写授权。作者11唯一节点11PASS，实际新页面79检查/4普通冷Worker/3冷页，独审另跨实例/项目/主体3拒绝且全表零写，无P1/P2。失败 setup、哈希和原件见[证据](../evidence/local-record-content-edit-20261020/README.md)。仅 Linux/SQLite/HTTP/JSDOM/NoModel，不关闭旧软件迁移、真实语义、PG/Windows/native/CI、PB/G0 或正式发布门。
+
 2026-10-19 从`a343c60a8446d697b684d47862d9a9f1c61d7182`接续[SPEC默认关闭生产控制器接线](SpecProductionController20261019.md)：独立P-A生产binding复用原七槽/Run/Attempt/Guard/journal，固定账户resolver仍缺源拒绝，未安装真实权益或软件准入。第三轮5PASS/156输入零漂移，实际3+2+2到Source/v1与Cold/v2 SUCCEEDED；最终仅结果metadata去除LIVE误报零字段，另2PASS/151输入零漂移和两Run实际bound/receipts投影、AST桥，最终格式七请求NOT_RERUN。共7唯一最新PASS，15执行13P2F，原失败与初始缺raw stdout边界保留。最终类型检查FAIL8条与HEAD旧诊断相同；Windows/PG/真实/CI/发布未验，不签整个F2或真实LIVE。无远端/auth探测或推送。
 
 2026-10-19 从`2deea01b4ca879a84dbbbeab65102fc4ecfb6976`接续原F05/F2-T04/T06的[显式表格条形图v1](ExplicitTableChart20261019.md)：已有严格表格中由用户明确选原类别列/单数值系列，单位未指定，点击重新鉴权原Run与历史Release后显示；改选择仅清图，不执行Run/模型。3唯一场景最新均PASS，五次保存执行3P2F：首批display/原text-table PASS，guard先超时、再fixture空POST400，记录/夹具修正后完整guard PASS；原失败与缺失观察文件边界保留，已PASS两节点未重跑。最终189输入、同一141文件安装包，112个Python文件未变；真实模型0。9份通过图形为JSDOM DOM快照，不是独立SVG导出或原生视觉验收。Windows/PG/CI/真实语义/人工/正式发布未提升，无远端/auth探测或推送；14原本地提交保留。[原件](../evidence/explicit-table-chart-20261019/README.md)。
