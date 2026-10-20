@@ -40,3 +40,5 @@
 具体下一步应先建立 validator 专项差分 oracle：成对组合结构错误、hidden RowMapping、forbid-root、非有限浮点、超长整数与 surrogate，保留当前原始存储范围、别名/环检测和终端错误顺序，再证明一种无需无用中间归一化的验证方案。历史 validator 133 次包括 130 add 与初 pin，不是每个 key 都调用；原仪器化 1.9 秒不承诺可回收。本轮没有实施该重写或运行新测试。
 
 直接改为 Pickler 写 `SHA.update` 也 **NOT_READY**：虽然可形式上保持 prefix+payload 的 hash 域，分块 hash 会在尚未完成输入读取时引入 write 回调与 GIL 释放时点；原整段 SHA 在完整 bytes 生成后发生，当前没有可变别名独占证明。[Python 官方 hashlib 文档](https://docs.python.org/3.12/library/hashlib.html) 说明超过 2047 字节的单次 constructor/update 可释放 GIL。独审没有可直接接受的新大产品改动，因此不盲写 codec、不删 checkpoint、不扩租约或准入。
+
+2026-10-20另获授权的一次[原观察器同输入两臂比较](../pb-cold-observer-pair-20261020/README.md)已完成：同原f9dfcf源码与闭库，deep3.866212秒、outer3.797118秒，约1.8%无实质信号，否定该有限候选并停止。未重跑本前缀配对或完整PB，不改变本报告结论及原G0/租约失败边界。
