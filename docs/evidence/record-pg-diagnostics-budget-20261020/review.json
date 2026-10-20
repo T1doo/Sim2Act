@@ -1,0 +1,92 @@
+{
+  "verdict": "LIMITED_LOCAL_DIAGNOSTICS_AND_SHARED_BUDGET_REVIEW_PASS",
+  "P1": [],
+  "P2": [],
+  "review_mode": "READ_ONLY_NO_TEST_OR_DATABASE_OR_CI_EXECUTION",
+  "sha256": {
+    "scripts/record_pg_ci.py": "2ce638593d97dbf60800fa1f1cffc75c162e402871066d70d32dc9a783b44781",
+    "tests/test_record_pg_ci_diagnostics.py": "a2b604dcbf96d6681f5ef076619dc1677f89ae7300567d6b7f9dfbf6cd2b0a9a"
+  },
+  "scope": "Only runner tool-output diagnostics and cleanup shared budget, with local Python process-shim tests",
+  "diagnostic_controls": {
+    "allowlist": [
+      "postgres.log",
+      "tool-<32 lowercase hex>.stdout",
+      "tool-<32 lowercase hex>.stderr"
+    ],
+    "maximum_files": 8,
+    "scan_entries": 64,
+    "raw_read_per_file_bytes": 4097,
+    "maximum_raw_read_bytes": 32776,
+    "final_json_limit_bytes": 262144,
+    "requires_ordinary_single_link_file": true,
+    "rejects_symlink_reparse_hardlink": true,
+    "partial_or_unterminated_final_line_dropped": true,
+    "secrets": [
+      "Four existing cfg owner/runtime URLs and random passwords",
+      "Existing in-memory SECRET_VALUES",
+      "PostgreSQL URI shape",
+      "Long hex tokens"
+    ],
+    "credential_files_not_diagnostic_inputs": [
+      "private.json",
+      "initdb-password.txt"
+    ],
+    "existing_config_control_read_unchanged": true,
+    "first_timeout_or_exit_diagnostic_preserved": true,
+    "cleanup_finally_captures_startup_and_tool_log_snapshot": true
+  },
+  "budget_controls": {
+    "command_phase_seconds": 45,
+    "status_limit_seconds": 5,
+    "stop_limit_seconds": 35,
+    "final_status_reserve_seconds": 5,
+    "killed_test_wait_uses_same_deadline": true,
+    "tool_checks_deadline_after_opening_output_files": true,
+    "remaining_exhausted_starts_no_new_process": true,
+    "initialized_cluster_final_status3_required_before_root_deletion_or_PASS": true,
+    "workflow_cleanup_seconds_unchanged": 60,
+    "job_minutes_unchanged": 15,
+    "note": "45-second command budget reserves nominal 15 seconds inside existing workflow cap for bounded archival/filesystem deletion; real Windows filesystem timing remains unmeasured"
+  },
+  "resolved_review_finding": {
+    "severity": "P2",
+    "original": "Owned directory without PG_VERSION bypassed status check yet could delete root/write PASS",
+    "resolution": "Missing version-file marker raises inside try, finally saves diagnostics, with no PG tool, root deletion or PASS",
+    "regression": "test_missing_cluster_version_preserves_diagnostics_without_deletion_or_pass"
+  },
+  "inspected_author_execution": {
+    "junit": "/tmp/record-pg-diagnostic-local-junit-v2.xml",
+    "stdout": "/tmp/record-pg-diagnostic-local-pytest-v2.log",
+    "tests": 6,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 3.408,
+    "cases": [
+      "test_timeout_saved_outputs_are_sanitized_and_survive_owned_root_deletion",
+      "test_diagnostic_bounds_drop_cut_or_unterminated_lines_and_reject_private_links",
+      "test_three_cleanup_process_calls_share_one_deadline",
+      "test_slow_stop_cannot_reset_cleanup_budget_or_delete_without_final_status",
+      "test_expired_shared_deadline_starts_no_final_status_process",
+      "test_missing_cluster_version_preserves_diagnostics_without_deletion_or_pass"
+    ],
+    "classification": "LOCAL_POSIX_PYTHON_SHIMS_AND_TEMP_FILES_NOT_WINDOWS_NOT_POSTGRESQL"
+  },
+  "unchanged": {
+    "product_workflow_role_fixture_diff": [],
+    "archived_failed_ci_log_sha256": "4324db64a8b67e2ff612c40b237ee4d823e5283cfaf99eb5afdafc8d1f05e67d",
+    "original_ci": "39367188323 failure; PG tests 0/restart 0, no change to historical result"
+  },
+  "remaining": [
+    "No Windows handle/PG startup/role/ten-node/restart acceptance from these local tests",
+    "No new CI or PG is authorized/executed by this patch; normal skip-CI push only",
+    "Missing/unsafe/unreadable logs and caps are explicitly bounded snapshots, not complete startup log claims"
+  ],
+  "reviewer_repository_edits": false,
+  "reviewer_test_executions": 0,
+  "reviewer_pg_executions": 0,
+  "reviewer_ci_executions": 0,
+  "actions_denied": [],
+  "actions_uncertain": []
+}

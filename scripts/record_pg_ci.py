@@ -5,11 +5,14 @@ import gzip
 import hashlib
 import json
 import os
+import re
 import secrets
 import socket
+import stat
 import subprocess
 import sys
 import time
+from itertools import islice
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -18,6 +21,12 @@ SELECTED = REPO / "docs/evidence/record-pg-isolation-20261020/existing-record-re
 RESTART_NODE = "tests/test_local_record_content_edits.py::test_content_edit_actual_worker_independent_fold_cold_read_and_explicit_revert"
 EXCLUDED_NODE = "tests/test_local_record_apps.py::test_referenced_json_read_revoke_blocks_current_recovery_and_commit_before_bodies"
 SECRET_VALUES = []
+DIAGNOSTIC_FILES = 8
+DIAGNOSTIC_BYTES_PER_FILE = 4096
+DIAGNOSTIC_SCAN_FILES = 64
+DIAGNOSTIC_OUTPUT_BYTES = 262144
+CLEANUP_COMMAND_SECONDS = 45
+CLEANUP_FINAL_STATUS_SECONDS = 5
 
 
 def selected_nodes():
@@ -62,7 +71,80 @@ def config():
     return cfg
 
 
-def tool(cfg, program, args, *, password=None, timeout=35, ok=(0,)):
+def diagnostic_text(value, cfg):
+    """Only sanitized log text may cross from the owned root into evidence."""
+    for key in ("owner_url", "runtime_url", "owner_password", "app_password"):
+        secret = cfg.get(key)
+        if secret:
+            value = value.replace(secret, "[REDACTED]")
+    value = clean_text(value)
+    value = re.sub(r"(?i)\bpostgres(?:ql)?(?:\+[a-z0-9_]+)?://[^\s\"'<>]*",
+        "[REDACTED_DATABASE_URL]", value)
+    # Passwords are random 64-hex strings; also cover case transformations and
+    # other long hex tokens. Drop a cut final line before applying this filter.
+    return re.sub(r"(?i)\b[0-9a-f]{16,}\b", "[REDACTED_HEX]", value)
+
+
+def read_tool_log(path, cfg):
+    """Bound reads and never follow a credential-file link/reparse point."""
+    info = path.lstat()
+    if (not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode) or info.st_nlink != 1
+            or getattr(info, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)):
+        raise ValueError("Diagnostic input is not an owned ordinary log")
+    with path.open("rb") as handle:
+        raw = handle.read(DIAGNOSTIC_BYTES_PER_FILE + 1)
+    bytes_read = len(raw)
+    truncated = len(raw) > DIAGNOSTIC_BYTES_PER_FILE
+    if truncated:
+        raw = raw[:DIAGNOSTIC_BYTES_PER_FILE]
+    dropped_unterminated_line = bool(raw and not raw.endswith(b"\n"))
+    if dropped_unterminated_line:
+        # A secret or URL may straddle the byte boundary. Do not publish any
+        # fragment of that unfinished line, even if it contains useful text.
+        newline = raw.rfind(b"\n")
+        raw = raw[:newline + 1] if newline >= 0 else b""
+    return dict(text=diagnostic_text(raw.decode("utf-8", errors="replace"), cfg),
+        truncated=truncated, dropped_unterminated_line=dropped_unterminated_line, bytes_read=bytes_read)
+
+
+def capture_diagnostics(cfg, name, reason, focused=()):
+    """Allowlist logs only; private.json and password files are never inputs."""
+    owned = root()
+    candidates = [*focused, owned / "postgres.log"]
+    candidates.extend(islice(owned.iterdir(), DIAGNOSTIC_SCAN_FILES))
+    entries = []
+    seen = set()
+    for path in candidates:
+        if len(entries) == DIAGNOSTIC_FILES:
+            break
+        if (path.parent != owned or path.name in seen or not
+                (path.name == "postgres.log" or re.fullmatch(r"tool-[a-f0-9]{32}\.(stdout|stderr)", path.name))):
+            continue
+        seen.add(path.name)
+        try:
+            entry = read_tool_log(path, cfg)
+        except FileNotFoundError:
+            continue
+        except (OSError, ValueError):
+            entry = dict(status="UNREADABLE_OR_UNSAFE_LOG", text="")
+        entries.append(dict(file=path.name, **entry))
+    receipt = dict(reason=reason, input_files_limit=DIAGNOSTIC_FILES, scan_entries_limit=DIAGNOSTIC_SCAN_FILES,
+        per_file_read_limit=DIAGNOSTIC_BYTES_PER_FILE + 1,
+        total_read_limit=DIAGNOSTIC_FILES * (DIAGNOSTIC_BYTES_PER_FILE + 1),
+        output_bytes_limit=DIAGNOSTIC_OUTPUT_BYTES, logs=entries)
+    if len(json.dumps(receipt, ensure_ascii=False, indent=2).encode("utf-8")) + 1 > DIAGNOSTIC_OUTPUT_BYTES:
+        raise RuntimeError("Sanitized diagnostic exceeds its fixed byte envelope")
+    write(name, receipt)
+
+
+def remaining_timeout(deadline, limit, *, reserve=0):
+    remaining = deadline - time.monotonic() - reserve
+    if remaining <= 0:
+        raise RuntimeError("Shared cleanup command budget exhausted")
+    return min(limit, remaining)
+
+
+def tool(cfg, program, args, *, password=None, timeout=35, ok=(0,), deadline=None):
     allowed = {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "COMSPEC", "PATHEXT"}
     env = {key: value for key, value in os.environ.items() if key.upper() in allowed}
     env["PGCLIENTENCODING"] = "UTF8"
@@ -73,16 +155,27 @@ def tool(cfg, program, args, *, password=None, timeout=35, ok=(0,)):
     # is killed on timeout. Owned regular files do not require descendant EOF.
     nonce = secrets.token_hex(16)
     output, errors = (root() / ("tool-" + nonce + suffix) for suffix in (".stdout", ".stderr"))
+    timed_out = False
     with output.open("wb") as out, errors.open("wb") as err:
         try:
+            if deadline is not None:
+                timeout = remaining_timeout(deadline, timeout)
             result = subprocess.run([str(Path(cfg["pgbin"]) / (program + ".exe")), *args],
                 env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=err, timeout=timeout)
         except subprocess.TimeoutExpired:
-            raise RuntimeError(f"{program} exceeded its fixed {timeout}-second watchdog") from None
-    result.stdout = output.read_text(encoding="utf-8", errors="replace")
-    result.stderr = errors.read_text(encoding="utf-8", errors="replace")
+            timed_out = True
+    if timed_out:
+        # Keep the first failure, including output already written on timeout.
+        # Cleanup independently snapshots startup logs before deleting the root.
+        if not (EVIDENCE / "tool-failure-diagnostics.json").exists():
+            capture_diagnostics(cfg, "tool-failure-diagnostics.json", "tool_timeout", (output, errors))
+        raise RuntimeError(f"{program} exceeded its fixed {timeout}-second watchdog") from None
+    result.stdout = read_tool_log(output, cfg)["text"]
+    result.stderr = read_tool_log(errors, cfg)["text"]
     if result.returncode not in ok:
-        raise RuntimeError(f"{program} exit {result.returncode}: " + clean_text(result.stdout + result.stderr))
+        if not (EVIDENCE / "tool-failure-diagnostics.json").exists():
+            capture_diagnostics(cfg, "tool-failure-diagnostics.json", "tool_exit", (output, errors))
+        raise RuntimeError(f"{program} exit {result.returncode}: " + result.stdout + result.stderr)
     return result
 
 
@@ -228,15 +321,19 @@ def child_test():
     return int(code) if int(code) else (0 if plugin.count == 1 else 1)
 
 
-def kill_owned_test(cfg):
+def kill_owned_test(cfg, *, deadline=None):
     if not cfg.get("test_pid"):
         return
+    if deadline is not None:
+        remaining_timeout(deadline, 8)
     import psutil
     try:
         process = psutil.Process(cfg["test_pid"])
         if abs(process.create_time() - cfg["test_created"]) < 0.01:
             children = process.children(recursive=True)
             for child in reversed(children):
+                if deadline is not None:
+                    remaining_timeout(deadline, 8)
                 try:
                     child.kill()
                 except psutil.NoSuchProcess:
@@ -245,7 +342,8 @@ def kill_owned_test(cfg):
                 process.kill()
             except psutil.NoSuchProcess:
                 pass
-            _, alive = psutil.wait_procs([*children, process], timeout=8)
+            wait = 8 if deadline is None else remaining_timeout(deadline, 8)
+            _, alive = psutil.wait_procs([*children, process], timeout=wait)
             assert not alive, "Owned test process tree did not terminate"
     except psutil.NoSuchProcess:
         pass
@@ -285,19 +383,38 @@ def redact_evidence():
 
 
 def cleanup():
+    started = time.monotonic()
+    deadline = started + CLEANUP_COMMAND_SECONDS
     owned = root()
     if not owned.exists():
         write("cleanup.json", dict(status="NO_OWNED_RESOURCE_CREATED", root_absent=True))
         return
     cfg = config()
-    kill_owned_test(cfg)
     cluster = Path(cfg["cluster"])
     status = None
-    if (cluster / "PG_VERSION").exists():
-        current = tool(cfg, "pg_ctl", ["-D", str(cluster), "status"], ok=(0, 3))
+    calls = []
+
+    def cleanup_tool(args, operation, *, limit=5, reserve=0, ok=(0,)):
+        timeout = remaining_timeout(deadline, limit, reserve=reserve)
+        if operation == "stop":
+            if timeout < 2:
+                raise RuntimeError("Shared cleanup budget cannot cover PG stop and final status")
+            args = [*args, "-t", str(int(timeout - 1)), "stop"]
+        calls.append(dict(operation=operation, timeout_seconds=timeout))
+        return tool(cfg, "pg_ctl", args, timeout=timeout, ok=ok, deadline=deadline - reserve)
+
+    try:
+        kill_owned_test(cfg, deadline=deadline)
+        if not (cluster / "PG_VERSION").is_file():
+            raise RuntimeError("Owned cluster initialization is unverified; no deletion or cleanup PASS")
+        current = cleanup_tool(["-D", str(cluster), "status"], "initial_status", ok=(0, 3))
         if current.returncode == 0:
-            tool(cfg, "pg_ctl", ["-D", str(cluster), "-m", "fast", "-w", "-t", "30", "stop"])
-        status = tool(cfg, "pg_ctl", ["-D", str(cluster), "status"], ok=(3,)).returncode
+            cleanup_tool(["-D", str(cluster), "-m", "fast", "-w"], "stop", limit=35,
+                reserve=CLEANUP_FINAL_STATUS_SECONDS)
+        status = cleanup_tool(["-D", str(cluster), "status"], "final_status", ok=(3,)).returncode
+    finally:
+        capture_diagnostics(cfg, "startup-diagnostics.json", "before_owned_root_deletion")
+    command_elapsed = time.monotonic() - started
     redact_evidence()
     sanitized_files = {str(p.relative_to(EVIDENCE)).replace("\\", "/"): hashlib.sha256(p.read_bytes()).hexdigest()
         for p in EVIDENCE.rglob("*") if p.is_file() and p.suffix in {".json", ".xml", ".log", ".stderr"}}
@@ -306,7 +423,9 @@ def cleanup():
     assert not owned.exists()
     write("cleanup.json", dict(status="PASS", post_stop_status_exit=status, owned_cluster_deleted=not cluster.exists(),
         private_config_deleted=not (owned / "private.json").exists(), initdb_password_deleted=not (owned / "initdb-password.txt").exists(),
-        owned_root_deleted=True, container_used=False, volume_used=False, redaction_complete=True, sanitized_files=sanitized_files))
+        owned_root_deleted=True, container_used=False, volume_used=False, redaction_complete=True, sanitized_files=sanitized_files,
+        shared_command_budget_seconds=CLEANUP_COMMAND_SECONDS, command_phase_seconds=command_elapsed,
+        tool_calls=calls, workflow_step_seconds=60, file_cleanup_margin_seconds=60 - CLEANUP_COMMAND_SECONDS))
     print("PASS: owned PostgreSQL stopped and its entire directory/private files deleted")
 
 
