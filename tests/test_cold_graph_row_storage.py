@@ -1,8 +1,9 @@
-"""Draft only: full raw-row local-pin coverage; no model/claim/Run execution.
+"""Full raw-row local-pin coverage; no model/claim/Run execution.
 
-Root must apply/review the candidate and run these tests with the existing codec
-module. This file has only been parsed, never imported or executed by the author.
+Synthetic metadata also exercises mutation during a pickle global import hook.
+These units do not establish trial authority or complete P-B acceptance.
 """
+import builtins
 import copy
 
 import pytest
@@ -126,3 +127,51 @@ def test_valid_safe_index_does_not_touch_colliding_foreign_key_callbacks():
     runtime._cold_graph_validate_inputs(value)
     runtime._cold_graph_bytes(value)
     assert calls == []
+
+
+def test_shared_row_metadata_is_reread_after_pickle_global_import_callback(monkeypatch):
+    """A single dump is not a callback-free interval for metadata reuse."""
+    metadata = SimpleResultMetaData(['visible'])
+    index = {'visible': 0, 'hidden': 1}
+    rows = [RowMapping(metadata, None, index, ('same', 'same')) for _ in range(2)]
+    original_import = builtins.__import__
+    original_storage = runtime._cold_graph_row_storage
+    projections, imports = [], []
+
+    def storage(value):
+        payload = original_storage(value)
+        projections.append(payload[2].copy())
+        return payload
+
+    def importing(name, *args, **kwargs):
+        # CPython's first save_global(marker) happens after the first row's
+        # reducer returned its payload, before the second row is reduced.
+        if name == runtime.__name__ and not imports:
+            imports.append(name)
+            index['hidden'] = 0
+        return original_import(name, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(runtime, '_cold_graph_row_storage', storage)
+        patch.setattr(builtins, '__import__', importing)
+        encoded = runtime._cold_graph_bytes(rows)
+    assert imports == [runtime.__name__]
+    assert projections == [{'visible': 0, 'hidden': 1}, {'visible': 0, 'hidden': 0}]
+    assert encoded != runtime._cold_graph_bytes(rows)
+
+
+def test_invalid_hidden_position_precedes_missing_visible_index(monkeypatch):
+    value = RowMapping(SimpleResultMetaData(['missing']), None, {'hidden': True}, ('same',))
+    error = DomainError('VERSION_CONFLICT', 'original position failure')
+    messages = []
+
+    def require(ok, message='unused'):
+        if not ok:
+            messages.append(message)
+            raise error
+
+    monkeypatch.setattr(runtime, 'require', require)
+    with pytest.raises(DomainError) as caught:
+        runtime._cold_graph_row_storage(value)
+    assert caught.value is error
+    assert messages == ['Complete Cold graph SQL row index positions required']

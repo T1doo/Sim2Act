@@ -1267,9 +1267,10 @@ def _trial_typed_storage(expected, model):
     def visit(value):
         result: Any
         kind = type(value)
-        if any(kind is item for item in (str, int, float, bool, bytes, type(None))):
+        if (kind is str or kind is int or kind is float or kind is bool
+                or kind is bytes or kind is type(None)):
             return value
-        require(any(kind is item for item in (dict, list, tuple))
+        require(kind is dict or kind is list or kind is tuple
             or any(kind is item for item in allowed), 'Unsupported nested typed trial fact')
         identity = id(value)
         require(identity not in active, 'Cyclic typed trial fact')

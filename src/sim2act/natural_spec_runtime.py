@@ -1617,13 +1617,15 @@ def _cold_graph_validate_inputs(values, *, _forbid_root=None):
         if _forbid_root is not None:
             require(value is not _forbid_root, "Incoming Cold graph reaches its input root")
         kind = type(value)
-        if any(kind is allowed for allowed in (str, int, float, bool, type(None))):
+        if (kind is str or kind is int or kind is float or kind is bool
+                or kind is type(None)):
             return value
         # Codec already has this exact trusted scalar reducer. Raw metadata keys
         # are values in the row-storage payload, so validator covers them too.
         if kind is _ColdGraphQuotedName:
             return ['quoted-name-v1', str(value)]
-        require(any(kind is allowed for allowed in (dict, _ColdGraphRowMapping, list, tuple, Limits, bytes)),
+        require(kind is dict or kind is _ColdGraphRowMapping or kind is list
+            or kind is tuple or kind is Limits or kind is bytes,
             "Unsupported Cold graph input container")
         identity = id(value)
         require(identity not in active, "Cyclic Cold graph input")
@@ -1693,9 +1695,12 @@ def _cold_graph_row_storage(value):
     # Native dict iteration does not hash or compare any key. Foreign Column/
     # forged objects are ignored without conversion, lookup or serialization.
     for key, position in dict.items(index):
-        if type(key) is str or type(key) is _ColdGraphQuotedName:
-            require(type(position) is int and 0 <= position < size,
-                "Complete Cold graph SQL row index positions required")
+        key_type = type(key)
+        if key_type is str or key_type is _ColdGraphQuotedName:
+            # Keep every per-row check; only avoid dispatching the pure require
+            # helpers for each valid position. Never reuse mutable row metadata.
+            if type(position) is not int or not 0 <= position < size:
+                require(False, "Complete Cold graph SQL row index positions required")
             lookup[str(key)] = position
     require(all(str(key) in lookup for key in keys),
         "Complete Cold graph SQL row keys required")
