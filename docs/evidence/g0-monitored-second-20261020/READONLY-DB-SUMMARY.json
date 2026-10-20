@@ -1,0 +1,260 @@
+{
+  "mode": "stdlib sqlite3 mode=ro; SELECT only (preceded by readonly schema SELECT/PRAGMA inspection)",
+  "queries": {
+    "runs": "select id,request_key,status,version,fence,lease_until,result,error from runs order by created_at,id",
+    "attempts": "select id,run_id,status,mode,usage,reserved_tokens,response is not null as has_response,length(response) as response_characters,error from attempts order by created_at,id",
+    "operation_statuses": "select run_id,status,count(*) as count from operations group by run_id,status",
+    "delivery_kinds": "select kind,count(*) as count from delivery_graph_requests group by kind order by kind"
+  },
+  "sha256_before": "b9c152e7120893c13699f763b4400d4a7e67a52f58e82e197eae38896e6e4064",
+  "sha256_after": "b9c152e7120893c13699f763b4400d4a7e67a52f58e82e197eae38896e6e4064",
+  "unchanged": true,
+  "rows": {
+    "runs": [
+      {
+        "id": "run_490d9c583f8f48b4bead75a7a3d9bfb6",
+        "request_key": "natural-generation",
+        "status": "PARTIAL",
+        "version": 2,
+        "fence": 1,
+        "lease_until": 0.0,
+        "result": "{\"candidate\": {\"namespace\": \"pa-natural-spec-app.v1\", \"manifest\": {\"schema_version\": \"1.0-draft\", \"app_id\": \"app_74bffa9e2002476e3f9ef3cca3c1e8f6\", \"revision\": 1, \"origin\": \"goal\", \"goal_ref\": \"goal_e950f1757af44366ab04b5630a073665\", \"source_run_ref\": null, \"input_schema\": {\"type\": \"object\", \"properties\": {}, \"required\": [], \"additionalProperties\": false}, \"output_schema\": {\"type\": \"object\", \"properties\": {\"resource_id\": {\"type\": \"string\", \"maxLength\": 2048}, \"hash\": {\"type\": \"string\", \"maxLength\": 2048}, \"checklist\": {\"type\": \"object\", \"properties\": {\"check_version\": {\"type\": \"string\", \"enum\": [\"natural.spec_citations.v1\"]}, \"source\": {\"type\": \"object\", \"properties\": {\"resource_id\": {\"type\": \"string\", \"maxLength\": 2048}, \"hash\": {\"type\": \"string\", \"maxLength\": 2048}, \"format\": {\"type\": \"string\", \"enum\": [\"txt\", \"md\"]}, \"revision\": {\"type\": \"integer\", \"enum\": [1]}, \"coordinate_space\": {\"type\": \"string\", \"enum\": [\"unicode_scalar_index.v1\"]}}, \"required\": [\"resource_id\", \"hash\", \"format\", \"revision\", \"coordinate_space\"], \"additionalProperties\": false}, \"source_content\": {\"type\": \"string\", \"maxLength\": 2048}, \"items\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"item_id\": {\"type\": \"string\", \"maxLength\": 40}, \"kind\": {\"type\": \"string\", \"enum\": [\"condition\", \"exception\", \"open_question\", \"requirement\", \"unclassified\"]}, \"summary\": {\"type\": \"string\", \"maxLength\": 240}, \"citations\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"start\": {\"type\": \"integer\", \"minimum\": 0, \"maximum\": 2048}, \"end\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 2048}, \"quote\": {\"type\": \"string\", \"maxLength\": 2048}}, \"required\": [\"start\", \"end\", \"quote\"], \"additionalProperties\": false}, \"maxItems\": 2}, \"targets\": {\"type\": \"array\", \"items\": {\"type\": \"string\", \"maxLength\": 40}, \"maxItems\": 8}, \"relation_status\": {\"type\": \"string\", \"enum\": [\"UNASSIGNED\", \"MODEL_ASSERTED\", \"NOT_APPLICABLE\"]}, \"decision_status\": {\"type\": \"string\", \"enum\": [\"OPEN\", \"NOT_APPLICABLE\"]}}, \"required\": [\"item_id\", \"kind\", \"summary\", \"citations\", \"targets\", \"relation_status\", \"decision_status\"], \"additionalProperties\": false}, \"maxItems\": 8}, \"feedback\": {\"type\": \"object\", \"properties\": {\"check\": {\"type\": \"string\", \"enum\": [\"natural.spec_citations.v1\"]}, \"citation_status\": {\"type\": \"string\", \"enum\": [\"PASS\"]}, \"coverage_status\": {\"type\": \"string\", \"enum\": [\"FULL\", \"PARTIAL\"]}, \"uncovered\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"start\": {\"type\": \"integer\", \"minimum\": 0, \"maximum\": 2048}, \"end\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 2048}, \"quote\": {\"type\": \"string\", \"maxLength\": 2048}}, \"required\": [\"start\", \"end\", \"quote\"], \"additionalProperties\": false}, \"maxItems\": 32}, \"semantic_status\": {\"type\": \"string\", \"enum\": [\"UNKNOWN\"]}}, \"required\": [\"check\", \"citation_status\", \"coverage_status\", \"uncovered\", \"semantic_status\"], \"additionalProperties\": false}, \"human_unresolved\": {\"type\": \"array\", \"items\": {\"type\": \"string\", \"maxLength\": 4000}, \"maxItems\": 16}, \"source_retention\": {\"type\": \"string\", \"enum\": [\"EXACT\"]}, \"semantic_goal_acceptance\": {\"type\": \"string\", \"enum\": [\"NOT_RUN\"]}, \"owner_acceptance\": {\"type\": \"string\", \"enum\": [\"PENDING\"]}}, \"required\": [\"check_version\", \"source\", \"source_content\", \"items\", \"feedback\", \"human_unresolved\", \"source_retention\", \"semantic_goal_acceptance\", \"owner_acceptance\"], \"additionalProperties\": false}, \"citation_status\": {\"type\": \"string\", \"enum\": [\"PASS\"]}, \"semantic_status\": {\"type\": \"string\", \"enum\": [\"UNKNOWN\"]}, \"semantic_goal_acceptance\": {\"type\": \"string\", \"enum\": [\"NOT_RUN\"]}}, \"required\": [\"resource_id\", \"hash\", \"checklist\", \"citation_status\", \"semantic_status\", \"semantic_goal_acceptance\"], \"additionalProperties\": false}, \"action_bindings\": [{\"binding_id\": \"read_pick\", \"action_id\": \"action_5345801fd1451fbdc89ee81a2f0a28fe\", \"revision\": 1}, {\"binding_id\": \"duties_pick\", \"action_id\": \"action_b04252017caac1fa8d34f8462e75e0d7\", \"revision\": 1}, {\"binding_id\": \"qualifiers_pick\", \"action_id\": \"action_1838e1653d0f54ea20e4edd6c1e0de59\", \"revision\": 1}, {\"binding_id\": \"merge_pick\", \"action_id\": \"action_da67a57fa95d1ef22069123e448e3f30\", \"revision\": 1}, {\"binding_id\": \"check_pick\", \"action_id\": \"action_39c1133a9c88be0621ef71428d870aac\", \"revision\": 1}, {\"binding_id\": \"save_pick\", \"action_id\": \"action_cf4d7a7caa1b5a85451694a2b4721142\", \"revision\": 1}], \"data_bindings\": [{\"binding_id\": \"source\", \"resource_ref\": \"res_c64c41fcd78e4296b33820873c7559c9\"}], \"runtime_identity_requirements\": {\"mode\": \"user_and_app_intersection\"}, \"data_schema_version\": 1, \"workflow\": [{\"step_id\": \"read_pick\", \"binding_id\": \"read_pick\", \"depends_on\": [], \"inputs\": {\"resource_id\": {\"source\": \"data\", \"ref\": \"source\", \"field\": \"resource_id\"}}}, {\"step_id\": \"duties_pick\", \"binding_id\": \"duties_pick\", \"depends_on\": [\"read_pick\"], \"inputs\": {\"resource_id\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"resource_id\"}, \"content\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"content\"}, \"hash\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"hash\"}, \"format\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"format\"}}}, {\"step_id\": \"qualifiers_pick\", \"binding_id\": \"qualifiers_pick\", \"depends_on\": [\"read_pick\"], \"inputs\": {\"resource_id\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"resource_id\"}, \"content\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"content\"}, \"hash\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"hash\"}, \"format\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"format\"}}}, {\"step_id\": \"merge_pick\", \"binding_id\": \"merge_pick\", \"depends_on\": [\"duties_pick\", \"qualifiers_pick\"], \"inputs\": {\"first\": {\"source\": \"step\", \"ref\": \"duties_pick\", \"field\": \"items\"}, \"second\": {\"source\": \"step\", \"ref\": \"qualifiers_pick\", \"field\": \"items\"}}}, {\"step_id\": \"check_pick\", \"binding_id\": \"check_pick\", \"depends_on\": [\"read_pick\", \"merge_pick\"], \"inputs\": {\"resource_id\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"resource_id\"}, \"content\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"content\"}, \"hash\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"hash\"}, \"format\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"format\"}, \"items\": {\"source\": \"step\", \"ref\": \"merge_pick\", \"field\": \"items\"}}}, {\"step_id\": \"save_pick\", \"binding_id\": \"save_pick\", \"depends_on\": [\"check_pick\"], \"inputs\": {\"text\": {\"source\": \"step\", \"ref\": \"check_pick\", \"field\": \"text\"}}}], \"outputs\": {\"resource_id\": {\"source\": \"step\", \"ref\": \"save_pick\", \"field\": \"resource_id\"}, \"hash\": {\"source\": \"step\", \"ref\": \"save_pick\", \"field\": \"hash\"}, \"checklist\": {\"source\": \"step\", \"ref\": \"check_pick\", \"field\": \"checklist\"}, \"citation_status\": {\"source\": \"step\", \"ref\": \"check_pick\", \"field\": \"citation_status\"}, \"semantic_status\": {\"source\": \"step\", \"ref\": \"check_pick\", \"field\": \"semantic_status\"}, \"semantic_goal_acceptance\": {\"source\": \"step\", \"ref\": \"check_pick\", \"field\": \"semantic_goal_acceptance\"}}, \"views\": [{\"component_ref\": \"table\", \"output_field\": \"checklist\"}], \"validation_suite_ref\": \"natural.spec_citations.v1\", \"runtime_limits\": {\"max_requests\": 2, \"max_tools\": 4, \"max_repairs\": 0, \"max_total_tokens\": 64000, \"max_output_tokens\": 1024, \"run_seconds\": 300}, \"permission_requirements\": [{\"tool_ref\": \"resource.read\", \"resource_ref\": \"res_c64c41fcd78e4296b33820873c7559c9\"}, {\"tool_ref\": \"artifact.save_text\", \"resource_ref\": \"proj_5f2b05f78c9441ed9b47a293ad1c52f7\"}], \"dependency_lock\": [{\"kind\": \"resource\", \"ref\": \"res_c64c41fcd78e4296b33820873c7559c9\", \"version\": \"1\"}, {\"kind\": \"tool\", \"ref\": \"resource.read\", \"version\": \"1\"}, {\"kind\": \"prompt\", \"ref\": \"model.spec.requirements.v1\", \"version\": \"1\"}, {\"kind\": \"prompt\", \"ref\": \"model.spec.qualifiers.v1\", \"version\": \"1\"}, {\"kind\": \"tool\", \"ref\": \"spec.merge_evidence\", \"version\": \"1\"}, {\"kind\": \"tool\", \"ref\": \"spec.verify_citations\", \"version\": \"1\"}, {\"kind\": \"tool\", \"ref\": \"artifact.save_text\", \"version\": \"1\"}, {\"kind\": \"check\", \"ref\": \"natural.spec_citations.v1\", \"version\": \"1\"}, {\"kind\": \"check\", \"ref\": \"receipt.readback.v1\", \"version\": \"1\"}]}, \"actions\": [{\"schema_version\": \"1.0-draft\", \"action_id\": \"action_5345801fd1451fbdc89ee81a2f0a28fe\", \"revision\": 1, \"input_schema\": {\"type\": \"object\", \"properties\": {\"resource_id\": {\"type\": \"string\", \"maxLength\": 2048}}, \"required\": [\"resource_id\"], \"additionalProperties\": false}, \"output_schema\": {\"type\": \"object\", \"properties\": {\"resource_id\": {\"type\": \"string\", \"maxLength\": 2048}, \"content\": {\"type\": \"string\", \"maxLength\": 2048}, \"hash\": {\"type\": \"string\", \"maxLength\": 2048}, \"format\": {\"type\": \"string\", \"enum\": [\"txt\", \"md\"]}}, \"required\": [\"resource_id\", \"content\", \"hash\", \"format\"], \"additionalProperties\": false}, \"executor\": {\"kind\": \"registered_tool\", \"ref\": \"resource.read\", \"version\": \"1\"}, \"allowed_tool_refs\": [], \"dependencies\": [{\"kind\": \"resource\", \"ref\": \"res_c64c41fcd78e4296b33820873c7559c9\", \"version\": \"1\"}], \"permission_requirements\": [{\"tool_ref\": \"resource.read\", \"resource_ref\": \"res_c64c41fcd78e4296b33820873c7559c9\"}], \"effect\": \"read\", \"preconditions\": [], \"postcheck_refs\": [\"natural.spec_citations.v1\"], \"limits\": {\"max_requests\": 2, \"max_tools\": 4, \"max_repairs\": 0, \"max_total_tokens\": 64000, \"max_output_tokens\": 1024, \"run_seconds\": 300}, \"idempotency\": \"read_only\", \"reconcile_ref\": \"operation.lookup.v1\", \"error_contract\": [\"INVALID_INPUT\", \"PERMISSION_DENIED\", \"GRANT_REVOKED\", \"VERIFICATION_FAILED\", \"OUTCOME_UNKNOWN\"]}, {\"schema_version\": \"1.0-draft\", \"action_id\": \"action_b04252017caac1fa8d34f8462e75e0d7\", \"revision\": 1, \"input_schema\": {\"type\": \"object\", \"properties\": {\"resource_id\": {\"type\": \"string\", \"maxLength\": 2048}, \"content\": {\"type\": \"string\", \"maxLength\": 2048}, \"hash\": {\"type\": \"string\", \"maxLength\": 2048}, \"format\": {\"type\": \"string\", \"enum\": [\"txt\", \"md\"]}}, \"required\": [\"resource_id\", \"content\", \"hash\", \"format\"], \"additionalProperties\": false}, \"output_schema\": {\"type\": \"object\", \"properties\": {\"items\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"item_id\": {\"type\": \"string\", \"maxLength\": 40}, \"kind\": {\"type\": \"string\", \"enum\": [\"condition\", \"exception\", \"open_question\", \"requirement\", \"unclassified\"]}, \"summary\": {\"type\": \"string\", \"maxLength\": 240}, \"citations\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"start\": {\"type\": \"integer\", \"minimum\": 0, \"maximum\": 2048}, \"end\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 2048}, \"quote\": {\"type\": \"string\", \"maxLength\": 2048}}, \"required\": [\"start\", \"end\", \"quote\"], \"additionalProperties\": false}, \"maxItems\": 2}, \"targets\": {\"type\": \"array\", \"items\": {\"type\": \"string\", \"maxLength\": 40}, \"maxItems\": 8}}, \"required\": [\"item_id\", \"kind\", \"summary\", \"citations\", \"targets\"], \"additionalProperties\": false}, \"maxItems\": 8}, \"feedback\": {\"type\": \"object\", \"properties\": {\"check\": {\"type\": \"string\", \"enum\": [\"natural.spec_citations.v1\"]}, \"citation_status\": {\"type\": \"string\", \"enum\": [\"PASS\"]}, \"coverage_status\": {\"type\": \"string\", \"enum\": [\"FULL\", \"PARTIAL\"]}, \"uncovered\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"start\": {\"type\": \"integer\", \"minimum\": 0, \"maximum\": 2048}, \"end\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 2048}, \"quote\": {\"type\": \"string\", \"maxLength\": 2048}}, \"required\": [\"start\", \"end\", \"quote\"], \"additionalProperties\": false}, \"maxItems\": 32}, \"semantic_status\": {\"type\": \"string\", \"enum\": [\"UNKNOWN\"]}}, \"required\": [\"check\", \"citation_status\", \"coverage_status\", \"uncovered\", \"semantic_status\"], \"additionalProperties\": false}}, \"required\": [\"items\", \"feedback\"], \"additionalProperties\": false}, \"executor\": {\"kind\": \"bounded_agent\", \"ref\": \"model.spec.requirements\", \"version\": \"1\"}, \"allowed_tool_refs\": [], \"dependencies\": [{\"kind\": \"resource\", \"ref\": \"res_c64c41fcd78e4296b33820873c7559c9\", \"version\": \"1\"}, {\"kind\": \"prompt\", \"ref\": \"model.spec.requirements.v1\", \"version\": \"1\"}], \"permission_requirements\": [{\"tool_ref\": \"resource.read\", \"resource_ref\": \"res_c64c41fcd78e4296b33820873c7559c9\"}], \"effect\": \"read\", \"preconditions\": [], \"postcheck_refs\": [\"natural.spec_citations.v1\"], \"limits\": {\"max_requests\": 2, \"max_tools\": 4, \"max_repairs\": 0, \"max_total_tokens\": 64000, \"max_output_tokens\": 1024, \"run_seconds\": 300}, \"idempotency\": \"read_only\", \"reconcile_ref\": \"operation.lookup.v1\", \"error_contract\": [\"INVALID_INPUT\", \"PERMISSION_DENIED\", \"GRANT_REVOKED\", \"VERIFICATION_FAILED\", \"OUTCOME_UNKNOWN\"]}, {\"schema_version\": \"1.0-draft\", \"action_id\": \"action_1838e1653d0f54ea20e4edd6c1e0de59\", \"revision\": 1, \"input_schema\": {\"type\": \"object\", \"properties\": {\"resource_id\": {\"type\": \"string\", \"maxLength\": 2048}, \"content\": {\"type\": \"string\", \"maxLength\": 2048}, \"hash\": {\"type\": \"string\", \"maxLength\": 2048}, \"format\": {\"type\": \"string\", \"enum\": [\"txt\", \"md\"]}}, \"required\": [\"resource_id\", \"content\", \"hash\", \"format\"], \"additionalProperties\": false}, \"output_schema\": {\"type\": \"object\", \"properties\": {\"items\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"item_id\": {\"type\": \"string\", \"maxLength\": 40}, \"kind\": {\"type\": \"string\", \"enum\": [\"condition\", \"exception\", \"open_question\", \"requirement\", \"unclassified\"]}, \"summary\": {\"type\": \"string\", \"maxLength\": 240}, \"citations\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"start\": {\"type\": \"integer\", \"minimum\": 0, \"maximum\": 2048}, \"end\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 2048}, \"quote\": {\"type\": \"string\", \"maxLength\": 2048}}, \"required\": [\"start\", \"end\", \"quote\"], \"additionalProperties\": false}, \"maxItems\": 2}, \"targets\": {\"type\": \"array\", \"items\": {\"type\": \"string\", \"maxLength\": 40}, \"maxItems\": 8}}, \"required\": [\"item_id\", \"kind\", \"summary\", \"citations\", \"targets\"], \"additionalProperties\": false}, \"maxItems\": 8}, \"feedback\": {\"type\": \"object\", \"properties\": {\"check\": {\"type\": \"string\", \"enum\": [\"natural.spec_citations.v1\"]}, \"citation_status\": {\"type\": \"string\", \"enum\": [\"PASS\"]}, \"coverage_status\": {\"type\": \"string\", \"enum\": [\"FULL\", \"PARTIAL\"]}, \"uncovered\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"start\": {\"type\": \"integer\", \"minimum\": 0, \"maximum\": 2048}, \"end\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 2048}, \"quote\": {\"type\": \"string\", \"maxLength\": 2048}}, \"required\": [\"start\", \"end\", \"quote\"], \"additionalProperties\": false}, \"maxItems\": 32}, \"semantic_status\": {\"type\": \"string\", \"enum\": [\"UNKNOWN\"]}}, \"required\": [\"check\", \"citation_status\", \"coverage_status\", \"uncovered\", \"semantic_status\"], \"additionalProperties\": false}}, \"required\": [\"items\", \"feedback\"], \"additionalProperties\": false}, \"executor\": {\"kind\": \"bounded_agent\", \"ref\": \"model.spec.qualifiers\", \"version\": \"1\"}, \"allowed_tool_refs\": [], \"dependencies\": [{\"kind\": \"resource\", \"ref\": \"res_c64c41fcd78e4296b33820873c7559c9\", \"version\": \"1\"}, {\"kind\": \"prompt\", \"ref\": \"model.spec.qualifiers.v1\", \"version\": \"1\"}], \"permission_requirements\": [{\"tool_ref\": \"resource.read\", \"resource_ref\": \"res_c64c41fcd78e4296b33820873c7559c9\"}], \"effect\": \"read\", \"preconditions\": [], \"postcheck_refs\": [\"natural.spec_citations.v1\"], \"limits\": {\"max_requests\": 2, \"max_tools\": 4, \"max_repairs\": 0, \"max_total_tokens\": 64000, \"max_output_tokens\": 1024, \"run_seconds\": 300}, \"idempotency\": \"read_only\", \"reconcile_ref\": \"operation.lookup.v1\", \"error_contract\": [\"INVALID_INPUT\", \"PERMISSION_DENIED\", \"GRANT_REVOKED\", \"VERIFICATION_FAILED\", \"OUTCOME_UNKNOWN\"]}, {\"schema_version\": \"1.0-draft\", \"action_id\": \"action_da67a57fa95d1ef22069123e448e3f30\", \"revision\": 1, \"input_schema\": {\"type\": \"object\", \"properties\": {\"first\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"item_id\": {\"type\": \"string\", \"maxLength\": 40}, \"kind\": {\"type\": \"string\", \"enum\": [\"condition\", \"exception\", \"open_question\", \"requirement\", \"unclassified\"]}, \"summary\": {\"type\": \"string\", \"maxLength\": 240}, \"citations\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"start\": {\"type\": \"integer\", \"minimum\": 0, \"maximum\": 2048}, \"end\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 2048}, \"quote\": {\"type\": \"string\", \"maxLength\": 2048}}, \"required\": [\"start\", \"end\", \"quote\"], \"additionalProperties\": false}, \"maxItems\": 2}, \"targets\": {\"type\": \"array\", \"items\": {\"type\": \"string\", \"maxLength\": 40}, \"maxItems\": 8}}, \"required\": [\"item_id\", \"kind\", \"summary\", \"citations\", \"targets\"], \"additionalProperties\": false}, \"maxItems\": 8}, \"second\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"item_id\": {\"type\": \"string\", \"maxLength\": 40}, \"kind\": {\"type\": \"string\", \"enum\": [\"condition\", \"exception\", \"open_question\", \"requirement\", \"unclassified\"]}, \"summary\": {\"type\": \"string\", \"maxLength\": 240}, \"citations\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"start\": {\"type\": \"integer\", \"minimum\": 0, \"maximum\": 2048}, \"end\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 2048}, \"quote\": {\"type\": \"string\", \"maxLength\": 2048}}, \"required\": [\"start\", \"end\", \"quote\"], \"additionalProperties\": false}, \"maxItems\": 2}, \"targets\": {\"type\": \"array\", \"items\": {\"type\": \"string\", \"maxLength\": 40}, \"maxItems\": 8}}, \"required\": [\"item_id\", \"kind\", \"summary\", \"citations\", \"targets\"], \"additionalProperties\": false}, \"maxItems\": 8}}, \"required\": [\"first\", \"second\"], \"additionalProperties\": false}, \"output_schema\": {\"type\": \"object\", \"properties\": {\"items\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"item_id\": {\"type\": \"string\", \"maxLength\": 40}, \"kind\": {\"type\": \"string\", \"enum\": [\"condition\", \"exception\", \"open_question\", \"requirement\", \"unclassified\"]}, \"summary\": {\"type\": \"string\", \"maxLength\": 240}, \"citations\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"start\": {\"type\": \"integer\", \"minimum\": 0, \"maximum\": 2048}, \"end\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 2048}, \"quote\": {\"type\": \"string\", \"maxLength\": 2048}}, \"required\": [\"start\", \"end\", \"quote\"], \"additionalProperties\": false}, \"maxItems\": 2}, \"targets\": {\"type\": \"array\", \"items\": {\"type\": \"string\", \"maxLength\": 40}, \"maxItems\": 8}}, \"required\": [\"item_id\", \"kind\", \"summary\", \"citations\", \"targets\"], \"additionalProperties\": false}, \"maxItems\": 8}, \"feedback\": {\"type\": \"object\", \"properties\": {\"check\": {\"type\": \"string\", \"enum\": [\"natural.spec_citations.v1\"]}, \"citation_status\": {\"type\": \"string\", \"enum\": [\"PASS\"]}, \"coverage_status\": {\"type\": \"string\", \"enum\": [\"FULL\", \"PARTIAL\"]}, \"uncovered\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"start\": {\"type\": \"integer\", \"minimum\": 0, \"maximum\": 2048}, \"end\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 2048}, \"quote\": {\"type\": \"string\", \"maxLength\": 2048}}, \"required\": [\"start\", \"end\", \"quote\"], \"additionalProperties\": false}, \"maxItems\": 32}, \"semantic_status\": {\"type\": \"string\", \"enum\": [\"UNKNOWN\"]}}, \"required\": [\"check\", \"citation_status\", \"coverage_status\", \"uncovered\", \"semantic_status\"], \"additionalProperties\": false}}, \"required\": [\"items\", \"feedback\"], \"additionalProperties\": false}, \"executor\": {\"kind\": \"registered_tool\", \"ref\": \"spec.merge_evidence\", \"version\": \"1\"}, \"allowed_tool_refs\": [], \"dependencies\": [{\"kind\": \"resource\", \"ref\": \"res_c64c41fcd78e4296b33820873c7559c9\", \"version\": \"1\"}], \"permission_requirements\": [{\"tool_ref\": \"resource.read\", \"resource_ref\": \"res_c64c41fcd78e4296b33820873c7559c9\"}], \"effect\": \"read\", \"preconditions\": [], \"postcheck_refs\": [\"natural.spec_citations.v1\"], \"limits\": {\"max_requests\": 2, \"max_tools\": 4, \"max_repairs\": 0, \"max_total_tokens\": 64000, \"max_output_tokens\": 1024, \"run_seconds\": 300}, \"idempotency\": \"read_only\", \"reconcile_ref\": \"operation.lookup.v1\", \"error_contract\": [\"INVALID_INPUT\", \"PERMISSION_DENIED\", \"GRANT_REVOKED\", \"VERIFICATION_FAILED\", \"OUTCOME_UNKNOWN\"]}, {\"schema_version\": \"1.0-draft\", \"action_id\": \"action_39c1133a9c88be0621ef71428d870aac\", \"revision\": 1, \"input_schema\": {\"type\": \"object\", \"properties\": {\"resource_id\": {\"type\": \"string\", \"maxLength\": 2048}, \"content\": {\"type\": \"string\", \"maxLength\": 2048}, \"hash\": {\"type\": \"string\", \"maxLength\": 2048}, \"format\": {\"type\": \"string\", \"enum\": [\"txt\", \"md\"]}, \"items\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"item_id\": {\"type\": \"string\", \"maxLength\": 40}, \"kind\": {\"type\": \"string\", \"enum\": [\"condition\", \"exception\", \"open_question\", \"requirement\", \"unclassified\"]}, \"summary\": {\"type\": \"string\", \"maxLength\": 240}, \"citations\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"start\": {\"type\": \"integer\", \"minimum\": 0, \"maximum\": 2048}, \"end\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 2048}, \"quote\": {\"type\": \"string\", \"maxLength\": 2048}}, \"required\": [\"start\", \"end\", \"quote\"], \"additionalProperties\": false}, \"maxItems\": 2}, \"targets\": {\"type\": \"array\", \"items\": {\"type\": \"string\", \"maxLength\": 40}, \"maxItems\": 8}}, \"required\": [\"item_id\", \"kind\", \"summary\", \"citations\", \"targets\"], \"additionalProperties\": false}, \"maxItems\": 8}}, \"required\": [\"resource_id\", \"content\", \"hash\", \"format\", \"items\"], \"additionalProperties\": false}, \"output_schema\": {\"type\": \"object\", \"properties\": {\"checklist\": {\"type\": \"object\", \"properties\": {\"check_version\": {\"type\": \"string\", \"enum\": [\"natural.spec_citations.v1\"]}, \"source\": {\"type\": \"object\", \"properties\": {\"resource_id\": {\"type\": \"string\", \"maxLength\": 2048}, \"hash\": {\"type\": \"string\", \"maxLength\": 2048}, \"format\": {\"type\": \"string\", \"enum\": [\"txt\", \"md\"]}, \"revision\": {\"type\": \"integer\", \"enum\": [1]}, \"coordinate_space\": {\"type\": \"string\", \"enum\": [\"unicode_scalar_index.v1\"]}}, \"required\": [\"resource_id\", \"hash\", \"format\", \"revision\", \"coordinate_space\"], \"additionalProperties\": false}, \"source_content\": {\"type\": \"string\", \"maxLength\": 2048}, \"items\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"item_id\": {\"type\": \"string\", \"maxLength\": 40}, \"kind\": {\"type\": \"string\", \"enum\": [\"condition\", \"exception\", \"open_question\", \"requirement\", \"unclassified\"]}, \"summary\": {\"type\": \"string\", \"maxLength\": 240}, \"citations\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"start\": {\"type\": \"integer\", \"minimum\": 0, \"maximum\": 2048}, \"end\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 2048}, \"quote\": {\"type\": \"string\", \"maxLength\": 2048}}, \"required\": [\"start\", \"end\", \"quote\"], \"additionalProperties\": false}, \"maxItems\": 2}, \"targets\": {\"type\": \"array\", \"items\": {\"type\": \"string\", \"maxLength\": 40}, \"maxItems\": 8}, \"relation_status\": {\"type\": \"string\", \"enum\": [\"UNASSIGNED\", \"MODEL_ASSERTED\", \"NOT_APPLICABLE\"]}, \"decision_status\": {\"type\": \"string\", \"enum\": [\"OPEN\", \"NOT_APPLICABLE\"]}}, \"required\": [\"item_id\", \"kind\", \"summary\", \"citations\", \"targets\", \"relation_status\", \"decision_status\"], \"additionalProperties\": false}, \"maxItems\": 8}, \"feedback\": {\"type\": \"object\", \"properties\": {\"check\": {\"type\": \"string\", \"enum\": [\"natural.spec_citations.v1\"]}, \"citation_status\": {\"type\": \"string\", \"enum\": [\"PASS\"]}, \"coverage_status\": {\"type\": \"string\", \"enum\": [\"FULL\", \"PARTIAL\"]}, \"uncovered\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"start\": {\"type\": \"integer\", \"minimum\": 0, \"maximum\": 2048}, \"end\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 2048}, \"quote\": {\"type\": \"string\", \"maxLength\": 2048}}, \"required\": [\"start\", \"end\", \"quote\"], \"additionalProperties\": false}, \"maxItems\": 32}, \"semantic_status\": {\"type\": \"string\", \"enum\": [\"UNKNOWN\"]}}, \"required\": [\"check\", \"citation_status\", \"coverage_status\", \"uncovered\", \"semantic_status\"], \"additionalProperties\": false}, \"human_unresolved\": {\"type\": \"array\", \"items\": {\"type\": \"string\", \"maxLength\": 4000}, \"maxItems\": 16}, \"source_retention\": {\"type\": \"string\", \"enum\": [\"EXACT\"]}, \"semantic_goal_acceptance\": {\"type\": \"string\", \"enum\": [\"NOT_RUN\"]}, \"owner_acceptance\": {\"type\": \"string\", \"enum\": [\"PENDING\"]}}, \"required\": [\"check_version\", \"source\", \"source_content\", \"items\", \"feedback\", \"human_unresolved\", \"source_retention\", \"semantic_goal_acceptance\", \"owner_acceptance\"], \"additionalProperties\": false}, \"text\": {\"type\": \"string\", \"maxLength\": 8000}, \"citation_status\": {\"type\": \"string\", \"enum\": [\"PASS\"]}, \"semantic_status\": {\"type\": \"string\", \"enum\": [\"UNKNOWN\"]}, \"semantic_goal_acceptance\": {\"type\": \"string\", \"enum\": [\"NOT_RUN\"]}}, \"required\": [\"checklist\", \"text\", \"citation_status\", \"semantic_status\", \"semantic_goal_acceptance\"], \"additionalProperties\": false}, \"executor\": {\"kind\": \"registered_tool\", \"ref\": \"spec.verify_citations\", \"version\": \"1\"}, \"allowed_tool_refs\": [], \"dependencies\": [{\"kind\": \"resource\", \"ref\": \"res_c64c41fcd78e4296b33820873c7559c9\", \"version\": \"1\"}], \"permission_requirements\": [{\"tool_ref\": \"resource.read\", \"resource_ref\": \"res_c64c41fcd78e4296b33820873c7559c9\"}], \"effect\": \"read\", \"preconditions\": [], \"postcheck_refs\": [\"natural.spec_citations.v1\"], \"limits\": {\"max_requests\": 2, \"max_tools\": 4, \"max_repairs\": 0, \"max_total_tokens\": 64000, \"max_output_tokens\": 1024, \"run_seconds\": 300}, \"idempotency\": \"read_only\", \"reconcile_ref\": \"operation.lookup.v1\", \"error_contract\": [\"INVALID_INPUT\", \"PERMISSION_DENIED\", \"GRANT_REVOKED\", \"VERIFICATION_FAILED\", \"OUTCOME_UNKNOWN\"]}, {\"schema_version\": \"1.0-draft\", \"action_id\": \"action_cf4d7a7caa1b5a85451694a2b4721142\", \"revision\": 1, \"input_schema\": {\"type\": \"object\", \"properties\": {\"text\": {\"type\": \"string\", \"maxLength\": 8000}}, \"required\": [\"text\"], \"additionalProperties\": false}, \"output_schema\": {\"type\": \"object\", \"properties\": {\"resource_id\": {\"type\": \"string\", \"maxLength\": 2048}, \"hash\": {\"type\": \"string\", \"maxLength\": 2048}}, \"required\": [\"resource_id\", \"hash\"], \"additionalProperties\": false}, \"executor\": {\"kind\": \"registered_tool\", \"ref\": \"artifact.save_text\", \"version\": \"1\"}, \"allowed_tool_refs\": [], \"dependencies\": [{\"kind\": \"resource\", \"ref\": \"res_c64c41fcd78e4296b33820873c7559c9\", \"version\": \"1\"}], \"permission_requirements\": [{\"tool_ref\": \"artifact.save_text\", \"resource_ref\": \"proj_5f2b05f78c9441ed9b47a293ad1c52f7\"}], \"effect\": \"project_write\", \"preconditions\": [], \"postcheck_refs\": [\"receipt.readback.v1\"], \"limits\": {\"max_requests\": 2, \"max_tools\": 4, \"max_repairs\": 0, \"max_total_tokens\": 64000, \"max_output_tokens\": 1024, \"run_seconds\": 300}, \"idempotency\": \"transactional\", \"reconcile_ref\": \"operation.lookup.v1\", \"error_contract\": [\"INVALID_INPUT\", \"PERMISSION_DENIED\", \"GRANT_REVOKED\", \"VERIFICATION_FAILED\", \"OUTCOME_UNKNOWN\"]}], \"spec_recipe\": {\"version\": \"natural-spec-recipe.v1\", \"steps\": [{\"step_id\": \"read_pick\", \"operator\": \"resource.read\", \"depends_on\": [], \"inputs\": {\"resource_id\": {\"source\": \"data\", \"ref\": \"source\", \"field\": \"resource_id\"}}}, {\"step_id\": \"duties_pick\", \"operator\": \"model.spec.requirements\", \"depends_on\": [\"read_pick\"], \"inputs\": {\"resource_id\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"resource_id\"}, \"content\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"content\"}, \"hash\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"hash\"}, \"format\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"format\"}}}, {\"step_id\": \"qualifiers_pick\", \"operator\": \"model.spec.qualifiers\", \"depends_on\": [\"read_pick\"], \"inputs\": {\"resource_id\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"resource_id\"}, \"content\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"content\"}, \"hash\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"hash\"}, \"format\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"format\"}}}, {\"step_id\": \"merge_pick\", \"operator\": \"spec.merge_evidence\", \"depends_on\": [\"duties_pick\", \"qualifiers_pick\"], \"inputs\": {\"first\": {\"source\": \"step\", \"ref\": \"duties_pick\", \"field\": \"items\"}, \"second\": {\"source\": \"step\", \"ref\": \"qualifiers_pick\", \"field\": \"items\"}}}, {\"step_id\": \"check_pick\", \"operator\": \"spec.verify_citations\", \"depends_on\": [\"read_pick\", \"merge_pick\"], \"inputs\": {\"resource_id\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"resource_id\"}, \"content\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"content\"}, \"hash\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"hash\"}, \"format\": {\"source\": \"step\", \"ref\": \"read_pick\", \"field\": \"format\"}, \"items\": {\"source\": \"step\", \"ref\": \"merge_pick\", \"field\": \"items\"}}}, {\"step_id\": \"save_pick\", \"operator\": \"artifact.save_text\", \"depends_on\": [\"check_pick\"], \"inputs\": {\"text\": {\"source\": \"step\", \"ref\": \"check_pick\", \"field\": \"text\"}}}]}, \"source_hash\": \"edfd24199006620d09d00a278521f49a4b4a9c5924d16f806028bfdf78073018\", \"goal\": {\"title\": \"Operating notes\", \"goal\": \"Extract duties, conditions, exceptions and pending choices into a reusable cited review checklist\", \"known\": [], \"assumptions\": [], \"unresolved\": [\"Human question 0\", \"Human question 1\", \"Human question 2\", \"Human question 3\", \"Human question 4\", \"Human question 5\", \"Human question 6\", \"Human question 7\", \"Human question 8\", \"Human question 9\", \"Human question 10\", \"Human question 11\", \"Human question 12\", \"Human question 13\", \"Human question 14\", \"Human question 15\"], \"constraints\": [\"Preserve the full source and uncertain relations\"], \"acceptance_checks\": [\"Human review of completeness and meaning\"], \"resource_refs\": [\"res_c64c41fcd78e4296b33820873c7559c9\"]}, \"model_sample_check\": {\"check\": \"natural.spec_citations.v1\", \"sample_fingerprint\": \"46bcc2f9eacf18bababa0c5abb81c08201c3ef281570734380f3c0d2fdc89b8f\", \"citation_status\": \"PASS\", \"semantic_goal_acceptance\": \"NOT_RUN\", \"source_retention\": \"EXACT\"}}, \"candidate_fingerprint\": \"3743892696991c5fe6642367f20a5ec27015e810752c7bb42cc464b329f3115f\", \"goal_acceptance\": \"NOT_RUN\", \"semantic_status\": \"UNKNOWN\", \"app_created\": false}",
+        "error": "null"
+      },
+      {
+        "id": "run_749b7835be7941409d14e837825cae4e",
+        "request_key": "internal:iapprun_d2f2ab34cda4445bb5b3befcb90bfda7",
+        "status": "SUCCEEDED",
+        "version": 2,
+        "fence": 1,
+        "lease_until": 0.0,
+        "result": "{\"namespace\": \"pa-natural-spec-app.v1\", \"app_run_id\": \"iapprun_d2f2ab34cda4445bb5b3befcb90bfda7\", \"instance_id\": \"iinstance_60eb5cdc3c50621fe38008cdb42b3416\", \"release_id\": \"irelease_2608fb9f444b4713b3d89a1e2b96e58e\", \"result_version\": 1, \"plan_fingerprint\": \"357c4b07e63ab396cfcf83ff387dc87dd50d5f16498eaf2e70d24dd8915d84a9\", \"receipt_refs\": [\"op_59bd518c9a9140b5960dd6288ed06b16\", \"op_c52311bd316d47728703c2c742bc4fc2\", \"op_5743ec30a22b4b298f9317dad0875e23\", \"op_8c3e33e305c04743a15ae12d0b623c37\", \"op_c40b20a9c5124dbc980a1cdbd66e2e70\", \"op_5ddcf6dee88c431f97cf7fe31b602be9\"], \"model_requests\": 2, \"citation_status\": \"PASS\", \"semantic_status\": \"UNKNOWN\", \"semantic_goal_acceptance\": \"NOT_RUN\", \"formal_publication_enabled\": false}",
+        "error": "null"
+      },
+      {
+        "id": "run_5a57cfd530b743e89136033c47bfe5de",
+        "request_key": "internal:iapprun_a8a9ee327f2740939a4e2186b70533d7",
+        "status": "RUNNING",
+        "version": 1,
+        "fence": 1,
+        "lease_until": 1792514198.2167094,
+        "result": null,
+        "error": null
+      }
+    ],
+    "attempts": [
+      {
+        "id": "attempt_56f8cab4414d42d0abb3a3ba7c1b7ef7",
+        "run_id": "run_490d9c583f8f48b4bead75a7a3d9bfb6",
+        "status": "RECEIVED",
+        "mode": "LIVE",
+        "usage": "{\"status\": \"known\", \"tokens\": {\"prompt_tokens\": 100, \"completion_tokens\": 900, \"total_tokens\": 1000}}",
+        "reserved_tokens": 7274,
+        "has_response": 1,
+        "response_characters": 205,
+        "error": null
+      },
+      {
+        "id": "attempt_f9213764bbcb42feadc80936123f00d0",
+        "run_id": "run_490d9c583f8f48b4bead75a7a3d9bfb6",
+        "status": "RECEIVED",
+        "mode": "LIVE",
+        "usage": "{\"status\": \"known\", \"tokens\": {\"prompt_tokens\": 100, \"completion_tokens\": 900, \"total_tokens\": 1000}}",
+        "reserved_tokens": 11674,
+        "has_response": 1,
+        "response_characters": 4389,
+        "error": null
+      },
+      {
+        "id": "attempt_4121c80ff8ac47768130b8fb47d44310",
+        "run_id": "run_490d9c583f8f48b4bead75a7a3d9bfb6",
+        "status": "RECEIVED",
+        "mode": "LIVE",
+        "usage": "{\"status\": \"known\", \"tokens\": {\"prompt_tokens\": 100, \"completion_tokens\": 900, \"total_tokens\": 1000}}",
+        "reserved_tokens": 13410,
+        "has_response": 1,
+        "response_characters": 4255,
+        "error": null
+      },
+      {
+        "id": "attempt_1a2ace6189b540c59c525a0e39307261",
+        "run_id": "run_749b7835be7941409d14e837825cae4e",
+        "status": "VERIFIED",
+        "mode": "LIVE",
+        "usage": "{\"status\": \"known\", \"tokens\": {\"prompt_tokens\": 100, \"completion_tokens\": 900, \"total_tokens\": 1000}}",
+        "reserved_tokens": 3990,
+        "has_response": 1,
+        "response_characters": 808,
+        "error": null
+      },
+      {
+        "id": "attempt_2e38cc8d20364f2a8c50cd8873327563",
+        "run_id": "run_749b7835be7941409d14e837825cae4e",
+        "status": "VERIFIED",
+        "mode": "LIVE",
+        "usage": "{\"status\": \"known\", \"tokens\": {\"prompt_tokens\": 100, \"completion_tokens\": 900, \"total_tokens\": 1000}}",
+        "reserved_tokens": 4024,
+        "has_response": 1,
+        "response_characters": 1347,
+        "error": null
+      },
+      {
+        "id": "attempt_82cf6e74a8cf41e8a8400ee9cd648f90",
+        "run_id": "run_5a57cfd530b743e89136033c47bfe5de",
+        "status": "RECEIVED",
+        "mode": "LIVE",
+        "usage": "{\"status\": \"known\", \"tokens\": {\"prompt_tokens\": 100, \"completion_tokens\": 900, \"total_tokens\": 1000}}",
+        "reserved_tokens": 3974,
+        "has_response": 1,
+        "response_characters": 708,
+        "error": null
+      }
+    ],
+    "operation_statuses": [
+      {
+        "run_id": "run_490d9c583f8f48b4bead75a7a3d9bfb6",
+        "status": "VERIFIED",
+        "count": 2
+      },
+      {
+        "run_id": "run_5a57cfd530b743e89136033c47bfe5de",
+        "status": "DISPATCHED",
+        "count": 1
+      },
+      {
+        "run_id": "run_5a57cfd530b743e89136033c47bfe5de",
+        "status": "VERIFIED",
+        "count": 1
+      },
+      {
+        "run_id": "run_749b7835be7941409d14e837825cae4e",
+        "status": "VERIFIED",
+        "count": 6
+      }
+    ],
+    "delivery_kinds": [
+      {
+        "kind": "natural-live-trial.v1.approve",
+        "count": 1
+      },
+      {
+        "kind": "natural-live-trial.v1.approve_seal",
+        "count": 1
+      },
+      {
+        "kind": "natural-live-trial.v1.phase",
+        "count": 2
+      },
+      {
+        "kind": "natural-live-trial.v1.phase_seal",
+        "count": 2
+      },
+      {
+        "kind": "natural-live-trial.v1.scope",
+        "count": 1
+      },
+      {
+        "kind": "natural-live-trial.v1.scope_seal",
+        "count": 1
+      },
+      {
+        "kind": "natural_source_request_body.v1",
+        "count": 3
+      },
+      {
+        "kind": "natural_source_request_body.v1_seal",
+        "count": 3
+      },
+      {
+        "kind": "natural_source_response_body.v1",
+        "count": 3
+      },
+      {
+        "kind": "natural_source_response_body.v1_seal",
+        "count": 3
+      },
+      {
+        "kind": "pa_spec_run_scope",
+        "count": 2
+      },
+      {
+        "kind": "pa_spec_run_scope_seal",
+        "count": 2
+      },
+      {
+        "kind": "pa_trial_request_body.v1",
+        "count": 6
+      },
+      {
+        "kind": "pa_trial_request_body.v1_seal",
+        "count": 6
+      },
+      {
+        "kind": "pa_trial_response_body.v1",
+        "count": 6
+      },
+      {
+        "kind": "pa_trial_response_body.v1_seal",
+        "count": 6
+      },
+      {
+        "kind": "pb_natural_spec_extract",
+        "count": 1
+      },
+      {
+        "kind": "pb_natural_spec_extract_seal",
+        "count": 1
+      },
+      {
+        "kind": "pb_natural_spec_metadata",
+        "count": 1
+      },
+      {
+        "kind": "pb_natural_spec_metadata_seal",
+        "count": 1
+      },
+      {
+        "kind": "pb_natural_use",
+        "count": 1
+      },
+      {
+        "kind": "pb_natural_use_scope",
+        "count": 1
+      },
+      {
+        "kind": "pb_natural_use_scope_seal",
+        "count": 1
+      },
+      {
+        "kind": "pb_natural_use_seal",
+        "count": 1
+      },
+      {
+        "kind": "uninstalled-production-trial-capture.v1",
+        "count": 6
+      },
+      {
+        "kind": "uninstalled-production-trial-capture.v1_seal",
+        "count": 6
+      },
+      {
+        "kind": "uninstalled-production-trial-journal.v1",
+        "count": 1
+      },
+      {
+        "kind": "uninstalled-production-trial-journal.v1.quota",
+        "count": 1
+      },
+      {
+        "kind": "uninstalled-production-trial-journal.v1.quota_seal",
+        "count": 1
+      },
+      {
+        "kind": "uninstalled-production-trial-journal.v1_seal",
+        "count": 1
+      }
+    ]
+  },
+  "no_state_repair": true,
+  "no_resume": true
+}
