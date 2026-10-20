@@ -1,0 +1,144 @@
+{
+  "decision": "FINAL_ACK_BLOCKED_BUILD_ONLY_NOT_START_ACK",
+  "open_p1_in_blocked_build_scope": 0,
+  "open_p2_in_blocked_build_scope": 0,
+  "source_sha256": {
+    "scripts/diagnostics/g0_guard.py": "7c19f5543b2a1f0a4edcae8152b038e7ce25a44db4b3c67405c6278eabd20f75",
+    "scripts/diagnostics/g0_prefix.py": "012d8274f0e6b8de27f5eb78c48f61ba5f2ecfbe29613398b203ae603fae97e6",
+    "scripts/diagnostics/g0_bounded.py": "2cdbc40550d29c48f02a0c92655f1765d3577eb93485fc3cc8fc7991c24103f6",
+    "scripts/diagnostics/g0_vfs.c": "7c18f20b738ba96b108cb175a4f5b3f8cd05609c7ec39a981517a864676c61ae",
+    "scripts/diagnostics/test_g0_guard.py": "7ecfb75821ace24aadbf5e2ecce69586d273ff26fce347ff31d913d2df874d72"
+  },
+  "prior_build_review_retained": {
+    "BUILD-ACK.md": "0557cce42f293b41e5ace3058adf2119c422a9d8f8b87ed1e374c410df2b280a",
+    "BUILD-ACK.json": "0cc94ad3cf6d309af2f8a57d30013776b3ff2ab2f29a47b836e7dece2b1b0ee7"
+  },
+  "fixed_start_gate": {
+    "name": "require_start_qualification",
+    "unconditional": "raise Boundary(BLOCKED_BUILD_ONLY)",
+    "public_path": "main → execute → describe → same_sqlite_api → require_start_qualification before grant/root/Popen/product",
+    "internal_path": "main --child → child → validate_child_parent → same_sqlite_api → require_start_qualification before output/resource/fixture imports",
+    "result": "An operator grant or alternate interpreter cannot enable the supported launcher paths of this frozen build; code change/review is required."
+  },
+  "final_actual_validation": {
+    "commands": [
+      {
+        "name": "compile",
+        "argv": [
+          "cc",
+          "-shared",
+          "-fPIC",
+          "-O2",
+          "-Wall",
+          "-Wextra",
+          "-Werror",
+          "-Wno-misleading-indentation",
+          "-pthread",
+          "scripts/diagnostics/g0_vfs.c",
+          "-o",
+          "/tmp/sim2act-g0-protection-unit-build/g0_vfs.so"
+        ],
+        "returncode": 0,
+        "expected": 0,
+        "wall_seconds": 0.0875416029994085,
+        "stdout_stderr": "compile.log"
+      },
+      {
+        "name": "ruff",
+        "argv": [
+          ".venv/bin/ruff",
+          "check",
+          "scripts/diagnostics/g0_guard.py",
+          "scripts/diagnostics/g0_prefix.py",
+          "scripts/diagnostics/g0_bounded.py",
+          "scripts/diagnostics/test_g0_guard.py"
+        ],
+        "returncode": 0,
+        "expected": 0,
+        "wall_seconds": 0.006292111000220757,
+        "stdout_stderr": "ruff.log"
+      },
+      {
+        "name": "pure-units",
+        "argv": [
+          ".venv/bin/python",
+          "-B",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "scripts/diagnostics",
+          "-p",
+          "test_g0_guard.py",
+          "-v"
+        ],
+        "returncode": 0,
+        "expected": 0,
+        "wall_seconds": 0.3243300319991249,
+        "stdout_stderr": "pure-units.log"
+      },
+      {
+        "name": "blocked-preflight",
+        "argv": [
+          ".venv/bin/python",
+          "-B",
+          "scripts/diagnostics/g0_bounded.py",
+          "--describe",
+          "/tmp/sim2act-g0-protection-unit-build/g0_vfs.so"
+        ],
+        "returncode": 2,
+        "expected": 2,
+        "wall_seconds": 0.028873113998997724,
+        "stdout_stderr": "blocked-preflight.log"
+      }
+    ],
+    "unit_passed": 22,
+    "unit_failures": 0,
+    "unit_skips": 0,
+    "unit_seconds": 0.233,
+    "unit_command_wall_seconds": 0.3243300319991249,
+    "native_pure_units": 4,
+    "native_unit_runtime_reported": "/usr/bin/python3 3.13.5 / SQLite 3.46.1; pure VFS tests only, never a fallback product runtime",
+    "describe_exit": 2,
+    "describe_output": {
+      "classification": "BLOCKED",
+      "boundary": "loaded SQLite has no public VFS API; native disk closure BLOCKED"
+    },
+    "native_binary_sha256": "4a8719fe117c635f725f0811df929c36e51c33bc7e0de1333f9e79d5b7d21c26"
+  },
+  "evidence_sha256": {
+    "README.md": "a56a48b4bfb39fc17b04b88a85c2fd901c536417fee441e98bff6b1259012e91",
+    "VALIDATION.json": "099339078cea03830dbdef7fdc0a6371a75815246861c6447a7b91f54248c62d",
+    "compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ruff.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "pure-units.log": "24e48b71c7b55774806ed03ff6da82daa8f06277b9d7c6128cc7c24eda1c7ac0",
+    "blocked-preflight.log": "71abe1262fd25baf98c8b9a031ecffb9a930965b13f1f1b02db810bb07946913"
+  },
+  "future_conditions_unchanged": [
+    "No real six-exchange prefix or G0 or product fixture has been run under this harness; no once-only new execution grant is supplied.",
+    "Specified .venv built-in SQLite cannot expose same-engine VFS API. No alternate library/interpreter/extension/security-permission fallback is approved for the product path.",
+    "Four native tests use a separate dynamic Python/SQLite reported as3.13.5/3.46.1; they do not validate3.12.14/builtin3.53.1 or complete VFS filecontrol/atomic/SHM/open-inode lifecycle.",
+    "Before any runnable branch ACK, review/test exact approved interpreter+same library ABI, parent/native VFS SHM side effects, allowed file roles/active inode accounting and all writer paths. Do not assert64MiB whole-product hard-bound from current units.",
+    "Future source/dependency continuity must also close new/deleted files, exact HEAD/index/working tree and complete required lock/OS-library inputs; current verify_sources rehashes listed files rather than regenerating complete manifests.",
+    "Future full-exception finalization still requires independent best-effort receipt across FD-close/stat/hash failures, and actual one-budget cleanup/shutdown proof; current tests do not certify whole launcher610-second hard wall in adversarial I/O.",
+    "Actual context same connection/body/closure/lease gates, original five function identity/code, heartbeat and original second commit must be observed only in a separately authorized run; pure stand-ins cannot prove runtime reachability."
+  ],
+  "qualification_enable_requirement": "Fixed gate itself must be changed in a separately reviewed implementation before a new explicit run authorization could be used; same SQLite API alone is insufficient.",
+  "reviewer_executions": {
+    "product_imports": 0,
+    "fixtures": 0,
+    "tests": 0,
+    "database_opens": 0,
+    "Worker": 0,
+    "Mock": 0,
+    "PB": 0,
+    "G0": 0,
+    "launcher": 0,
+    "compilation": 0
+  },
+  "limits": [
+    "This is only blocked build delivery and pure protection-unit evidence, not product-prefix/G0/full-PB/64MiB aggregate-hardlimit/610s integrated qualification.",
+    "Four native units on separate system Python remain independent guard units, never a fallback product runtime.",
+    "Source inspection is a limited trusted fixed-code review; arbitrary mutation/import and malicious native code are not a sandbox guarantee."
+  ]
+}

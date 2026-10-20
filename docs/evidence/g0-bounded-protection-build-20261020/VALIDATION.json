@@ -1,0 +1,93 @@
+{
+  "scope": "Construction/static/pure protection units only; no production-shaped prefix/G0/window",
+  "commands": [
+    {
+      "name": "compile",
+      "argv": [
+        "cc",
+        "-shared",
+        "-fPIC",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-misleading-indentation",
+        "-pthread",
+        "scripts/diagnostics/g0_vfs.c",
+        "-o",
+        "/tmp/sim2act-g0-protection-unit-build/g0_vfs.so"
+      ],
+      "returncode": 0,
+      "expected": 0,
+      "wall_seconds": 0.0875416029994085,
+      "stdout_stderr": "compile.log"
+    },
+    {
+      "name": "ruff",
+      "argv": [
+        ".venv/bin/ruff",
+        "check",
+        "scripts/diagnostics/g0_guard.py",
+        "scripts/diagnostics/g0_prefix.py",
+        "scripts/diagnostics/g0_bounded.py",
+        "scripts/diagnostics/test_g0_guard.py"
+      ],
+      "returncode": 0,
+      "expected": 0,
+      "wall_seconds": 0.006292111000220757,
+      "stdout_stderr": "ruff.log"
+    },
+    {
+      "name": "pure-units",
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/diagnostics",
+        "-p",
+        "test_g0_guard.py",
+        "-v"
+      ],
+      "returncode": 0,
+      "expected": 0,
+      "wall_seconds": 0.3243300319991249,
+      "stdout_stderr": "pure-units.log"
+    },
+    {
+      "name": "blocked-preflight",
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "scripts/diagnostics/g0_bounded.py",
+        "--describe",
+        "/tmp/sim2act-g0-protection-unit-build/g0_vfs.so"
+      ],
+      "returncode": 2,
+      "expected": 2,
+      "wall_seconds": 0.028873113998997724,
+      "stdout_stderr": "blocked-preflight.log"
+    }
+  ],
+  "code_sha256": {
+    "scripts/diagnostics/g0_guard.py": "7c19f5543b2a1f0a4edcae8152b038e7ce25a44db4b3c67405c6278eabd20f75",
+    "scripts/diagnostics/g0_prefix.py": "012d8274f0e6b8de27f5eb78c48f61ba5f2ecfbe29613398b203ae603fae97e6",
+    "scripts/diagnostics/g0_bounded.py": "2cdbc40550d29c48f02a0c92655f1765d3577eb93485fc3cc8fc7991c24103f6",
+    "scripts/diagnostics/g0_vfs.c": "7c18f20b738ba96b108cb175a4f5b3f8cd05609c7ec39a981517a864676c61ae",
+    "scripts/diagnostics/test_g0_guard.py": "7ecfb75821ace24aadbf5e2ecce69586d273ff26fce347ff31d913d2df874d72"
+  },
+  "native_unit_library_sha256": "4a8719fe117c635f725f0811df929c36e51c33bc7e0de1333f9e79d5b7d21c26",
+  "actual_business_prefix_exchanges": 0,
+  "actual_product_imports": 0,
+  "actual_business_G0": 0,
+  "actual_fixture_creation": 0,
+  "actual_real_model": 0,
+  "actual_product_database_opens": 0,
+  "new_execution_windows": 0,
+  "unit_tests": 22,
+  "native_unit_runtime": "/usr/bin/python3 3.13.5 / SQLite 3.46.1; pure VFS tests only, never a fallback product runtime",
+  "application_runtime": ".venv CPython3.12.14 builtin SQLite3.53.1: BLOCKED before product import or run directory allocation",
+  "build_start_gate": "BLOCKED_BUILD_ONLY even if an interpreter exposes VFS API; enabling requires future reviewed code change"
+}

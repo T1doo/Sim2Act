@@ -1,0 +1,62 @@
+{
+  "decision": "IMPLEMENT_GUARDS_AND_PURE_UNITS_ONLY_EXECUTION_GATE_FAIL_CLOSED_UNTIL_NATIVE_IO_CLOSED",
+  "reviewer_executions": {
+    "tests": 0,
+    "product_imports": 0,
+    "fixtures": 0,
+    "database_opens": 0,
+    "Worker": 0,
+    "Mock": 0,
+    "PB": 0,
+    "G0": 0,
+    "launcher": 0,
+    "services": 0
+  },
+  "sql_recommendations": [
+    "Exact same raw SQLite driver connection; keep real five semantic functions unchanged.",
+    "Install fresh authorizer at G0 entry rather than merely toggling flag under cached prepared writes; pure-unit warm cache mandatory.",
+    "Whitelist READ/SELECT, exact pure functions needed, ROLLBACK transaction control; deny writes/DDL/ATTACH/DETACH/PRAGMA/unknown opcodes and dangerous functions.",
+    "No SQL, I/O or callback into business code from authorizer; SQLITE_DENY plus capped scalar observation, not SQLITE_IGNORE or raised synthetic DomainError.",
+    "Keep authorizer armed through original transaction rollback; restoration only afterward with known original ownership.",
+    "Static exclude active write VM/RETURNING/writable Blob/backup/deserialize/extensions/side-effect UDF bypasses; authorizer alone is not general readonly API sandbox."
+  ],
+  "disk_recommendations": [
+    "Four fixed DB names each12MiB plus RLIMIT_FSIZE and Python writer whitelist do not prove64MiB aggregate bound.",
+    "SQLite native VFS may create statement journals and temporary query files not visible to Python open audit.",
+    "If no previously approved real aggregate quota or reviewed native VFS write/create closure exists, return BLOCKED before importing fixtures/creating runtime directory/starting child.",
+    "Do not add mounts, quotas, new security permissions, ptrace/LD_PRELOAD/native VFS or alter journal/temp-store production settings merely to force execution.",
+    "Bounded parent receipt may explain missing closure; no product/Mock prefix can run."
+  ],
+  "stop_recommendations": [
+    "One exact first Cold original context, original enter/body/exit all retained.",
+    "Successful context exits completely before unique BaseException, before first W5 statement.",
+    "Original DomainError unfolds fully then becomes same-object cause; other error/resource/observer/cleanup failure staysUNKNOWN.",
+    "Store.tx rollback on BaseException; native ROLLBACK must remain permitted.",
+    "Heartbeat natural routing ends in text_workflows finally stopped.set/join2; separately prove thread stopped or classify UNKNOWN.",
+    "Outer lifecycle owns original client/Store cleanup and owned PGID, shared monotonic cleanup deadlines5+5 with no retry/reset."
+  ],
+  "suggested_root_only_pure_units": [
+    "In-memory standalone sqlite SELECT+JSON reads unchanged; INSERT/UPDATE/DELETE/REPLACE/DDL/ATTACH/write-PRAGMA/direct cursor/executescript/CTE/comment/mixedcase blocked with rows/total_changes unchanged.",
+    "Warm cached update pre-install and retry under freshly installed authorizer; query cache reuse with phase-only demonstrates why install required.",
+    "ROLLBACK still works, COMMIT/BEGIN/SAVEPOINT policy explicit; callback failure returns DENY/UNKNOWN.",
+    "Separate connection remains writable to model permitted heartbeat, guarded same connection remains denied.",
+    "Pure fake-context enter/body/exit DomainError and success preserve exact cause/order, W5 counter0; unrelated BaseException not misclassified.",
+    "Pure capped-writer allocator tests exact limits/file count/links/path escape, no claim it enforces SQLite native VFS.",
+    "Failclosed CLI import/DB/child-start tripwires demonstrate missing disk proof refuses before all three.",
+    "Fake clock and fake owned-process cleanup test shared budgets; real tiny synthetic child only if root deems necessary, no fixture/model."
+  ],
+  "official_references": {
+    "authorizer": "https://www.sqlite.org/c3ref/set_authorizer.html",
+    "authorizer_current_source": "https://raw.githubusercontent.com/sqlite/sqlite/master/src/auth.c",
+    "sqlite_tempfiles": "https://www.sqlite.org/tempfiles.html",
+    "python_audit": "https://docs.python.org/3.12/library/sys.html#sys.addaudithook",
+    "file_limit": "https://docs.python.org/3.12/library/resource.html#resource.RLIMIT_FSIZE",
+    "thread_join": "https://docs.python.org/3.12/library/threading.html#threading.Thread.join",
+    "blob_write": "https://www.sqlite.org/c3ref/blob_write.html",
+    "backup": "https://www.sqlite.org/backup.html"
+  },
+  "notes": [
+    "Official current sqlite source invalidates prepared statements on set_authorizer; installed-library behavior still needs pure unit verification.",
+    "No implementation file existed or was executed by reviewer for this strategy review."
+  ]
+}

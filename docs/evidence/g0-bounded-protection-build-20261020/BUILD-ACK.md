@@ -1,0 +1,13 @@
+# 最终冻结构建补充 ACK：固定 BLOCKED_BUILD_ONLY
+
+结论：**FINAL_ACK_BLOCKED_BUILD_ONLY_NOT_START_ACK**，在固定禁止启动的构建交付范围内无未闭合P1/P2。原BUILD-ACK.md/.json保留作初审，不覆盖。
+
+最终五份源码SHA与VALIDATION.json及根冻结值逐一一致；guard/prefix/C三个文件不变。bounded最终SHA为 `2cdbc40550d29c48f02a0c92655f1765d3577eb93485fc3cc8fc7991c24103f6`，单元文件为 `7ecfb75821ace24aadbf5e2ecce69586d273ff26fce347ff31d913d2df874d72`。
+
+新增require_start_qualification只有无条件raise Boundary，文本为BLOCKED_BUILD_ONLY。静态核两个受支持入口：execute首先调用describe，它在same_sqlite_api之后立即命中固定门、早于grant消费/目录/Popen/产品；child首先调用validate_child_parent，同样在API检查之后立即命中固定门、早于输出文件/fixture。换解释器或提供grant不能越过这份冻结构建的启动门。以后不仅要解决同SQLite API，还必须经过新的代码变更、独审和明确执行授权才能考虑启动；当前不批准。
+
+只读核最终原日志：22项全部ok、0skip，unittest报0.233秒，外层命令wall0.324330秒；cc/ruff exit0；指定解释器describe exit2，原件仍首先报告loaded SQLite has no public VFS API，故没有谎称这次describe实际走到后面的固定门。裸child既有单元现在循环指定解释器和已有动态API系统解释器，仍为同一测试项；动态系统环境可过API检查后由固定门拒绝，不新增业务运行。四项C代理单元仍仅是独立系统Python保护验证，不是产品环境替代。native二进制SHA不变4a8719fe117c635f725f0811df929c36e51c33bc7e0de1333f9e79d5b7d21c26。
+
+README准确保留初审七项可运行分支未证条件，说明当前没有原Mock生产前缀/G0/fixture/Worker/业务DB执行或新窗口。完整VFS/活inode/SHM/所有writer闭合、实际64MiB和610秒全链、首末新增/删除/HEAD连续性、异常回执收尾及真实context/五函数/心跳等都未由当前单元验证。它们是未来解除固定门前的独立条件，本ACK不将其转成通过。
+
+本人仅仅读取源码/归档并解析AST/计算SHA，未执行脚本、测试、编译、产品/SQLite导入、DB、Mock/PB/G0或launcher。只写原/tmp独审目录的这两份补充报告。最终原件完整SHA及命令元数据见FINAL-BUILD-ACK.json。
