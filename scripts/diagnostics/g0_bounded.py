@@ -19,7 +19,16 @@ import sys
 import time
 from pathlib import Path
 
-from g0_guard import FILES, LIMITS, MIB, Boundary, Budget, DiskMonitor, Files
+from g0_guard import (
+    FILES,
+    LIMITS,
+    MIB,
+    SELECTOR_TIMEOUT_CAP_SECONDS,
+    Boundary,
+    Budget,
+    DiskMonitor,
+    Files,
+)
 
 REPO = Path(__file__).resolve().parents[2]
 SCOPE = "fresh-synthetic-six-mock-first-g0-sampled-disk-once-20261020-v2"
@@ -152,6 +161,15 @@ def cleanup(process, identity, started, clock=time.monotonic):
 
 def owned_group_empty(pgid):
     return not group_members(pgid)
+
+
+def supervised_select(selector, budget, disk, pid, clock=time.monotonic):
+    """Same per-iteration scan; ready events can wake sooner than the cap."""
+    budget.check()
+    disk.sample(pid)
+    return selector.select(
+        timeout=min(SELECTOR_TIMEOUT_CAP_SECONDS, max(0, budget.deadline - clock()))
+    )
 
 
 def verify_sources(description):
@@ -293,11 +311,7 @@ def execute(grant_path, output_parent):
         pending = b""
         finished = None
         while selector.get_map():
-            budget.check()
-            disk.sample(process.pid)
-            for key, _ in selector.select(
-                timeout=min(0.05, max(0, budget.deadline - time.monotonic()))
-            ):
+            for key, _ in supervised_select(selector, budget, disk, process.pid):
                 chunk = os.read(key.fd, 8192)
                 if not chunk:
                     selector.unregister(key.fileobj)

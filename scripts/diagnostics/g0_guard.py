@@ -43,6 +43,7 @@ FILES = {
     "receipt.json": MIB,
 }
 DB_FILES = ("fixture.db", "fixture.db-journal", "fixture.db-wal", "fixture.db-shm")
+SELECTOR_TIMEOUT_CAP_SECONDS = 0.05
 # Output writers retain their byte caps. SQLite files instead use the explicit
 # parent-side sampled budget: this is not an aggregate filesystem hard quota.
 
@@ -54,6 +55,8 @@ class DiskMonitor:
         self.root, self.clock = Path(root).resolve(strict=True), clock
         self.samples = self.peak_logical = self.peak_allocated = 0
         self.last = None
+        self.first_sample_at = None
+        self.min_interval = self.max_interval = None
 
     def sample(self, pid=None):
         logical = allocated = 0
@@ -103,7 +106,14 @@ class DiskMonitor:
         self.samples += 1
         self.peak_logical = max(self.peak_logical, logical)
         self.peak_allocated = max(self.peak_allocated, allocated)
-        self.last = dict(at=self.clock(), logical_bytes=logical, allocated_bytes=allocated)
+        at = self.clock()
+        if self.last is None:
+            self.first_sample_at = at
+        else:
+            interval = at - self.last["at"]
+            self.min_interval = interval if self.min_interval is None else min(self.min_interval, interval)
+            self.max_interval = interval if self.max_interval is None else max(self.max_interval, interval)
+        self.last = dict(at=at, logical_bytes=logical, allocated_bytes=allocated)
         if max(logical, allocated) > LIMITS["directory_bytes"]:
             raise Boundary("sampled 64MiB disk budget exceeded; not a hard quota")
         return self.last
@@ -113,9 +123,21 @@ class DiskMonitor:
         raise Boundary("disk budget scan failed") from error
 
     def report(self):
+        intervals = max(0, self.samples - 1)
+        span = self.last["at"] - self.first_sample_at if intervals else 0
         return dict(
             mode="SAMPLED_BUDGET_NOT_HARD_QUOTA",
-            interval_seconds=LIMITS["disk_sample_seconds"],
+            configured_interval_seconds=LIMITS["disk_sample_seconds"],
+            configured_interval_is_scheduled=False,
+            scheduling_policy="EVERY_SUPERVISOR_ITERATION_AND_FINALIZATION",
+            selector_timeout_cap_seconds=SELECTOR_TIMEOUT_CAP_SECONDS,
+            sample_completion_intervals=dict(
+                count=intervals,
+                minimum=self.min_interval,
+                maximum=self.max_interval,
+                mean=span / intervals if intervals else None,
+            ),
+            observed_completion_rate_hz=intervals / span if span > 0 else None,
             samples=self.samples,
             peak_logical_bytes=self.peak_logical,
             peak_allocated_bytes=self.peak_allocated,

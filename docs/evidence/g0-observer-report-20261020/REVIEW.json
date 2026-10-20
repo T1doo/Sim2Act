@@ -1,0 +1,73 @@
+{
+  "decision": "ACCEPT_TRUTHFUL_DISK_REPORT_AND_OFFLINE_DESIGN_ONLY_NO_PRODUCT_OPTIMIZATION_OR_NEW_WINDOW",
+  "baseline_head": "337569ed731bb806a25f29328a8119e7b40cf2b4",
+  "reviewed_hashes": {
+    "scripts/diagnostics/g0_guard.py": "c4155fcad0291042891c9583ca50a418964e4ddc9c181894072ab6b36693dfa4",
+    "scripts/diagnostics/g0_bounded.py": "9239ead5706481d202838b8aca7ea62722475f3d1ca7eb170492ef19624325d3",
+    "scripts/diagnostics/test_g0_observer.py": "76a57bbd7ec6d42acfe9391677732e661ba158a094d46972614b1ed6c281f793",
+    "scripts/diagnostics/cold_scan_standin.py": "f8a1766e13b87e9a5c33c85c804aa967f7c4b9b53e622ad84d42fdb42af313dd",
+    "scripts/diagnostics/test_cold_scan_standin.py": "d25c9e336056283f2fb3248179c56ba3cb680cdabf6f82382d6c4adf24dac187",
+    "scripts/diagnostics/test_cold_storage_mechanism.py": "dd3ca80961635b206200983b618a3ed06ee30b727f314236b4bf5044bc6f5c1d",
+    "docs/evidence/g0-observer-report-20261020/DESIGN.md": "d001b53c007d3d09362c961ed816560e5129f2373a8b94f5962075d84a022fc4",
+    "docs/evidence/g0-observer-report-20261020/STANDIN-MEASUREMENT.json": "a88bf915fe350e1850ff97be5fe99c3af194d1d9b449754f231ee97763f969dc"
+  },
+  "blocking_findings": [],
+  "independent_test": {
+    "command": "PYTHONPATH=scripts/diagnostics .venv/bin/python -B -m unittest test_g0_observer test_cold_scan_standin -v",
+    "python": "3.12.14",
+    "exit_code": 0,
+    "passed": 9,
+    "skipped": 0,
+    "raw_log": "UNITS-INDEPENDENT.log"
+  },
+  "parent_checks_not_rerun": {
+    "pure_tests_total": 42,
+    "passed": 38,
+    "skipped": 4,
+    "ruff": "passed"
+  },
+  "historical_evidence": {
+    "g0_seconds": 31.125279530002445,
+    "whole_window_seconds": 342.20003135500156,
+    "end_minus_lease_seconds": 1.109071969985962,
+    "stop": false,
+    "g0_authorizer_denials": 0,
+    "samples": 6795,
+    "old_interval_field": ".1 is not an actual scheduling interval",
+    "exact_historical_sampling_distribution": "NOT_RECORDED"
+  },
+  "preserved": [
+    "sample every supervisor iteration and finalization",
+    "budget.check before sample before selector.select",
+    "selector timeout cap .05; events may return earlier",
+    "64MiB sampled budget and existing byte caps",
+    "all src paths and tracked original failure/window evidence unchanged"
+  ],
+  "design_boundaries": [
+    "Original G0 still fails lease deadline; report fix is not a deadline fix",
+    "No measured background-heartbeat blocking duration",
+    "BEGIN IMMEDIATE prevents another writer; no production optimization proven",
+    "ColdGraphRead transaction/driver/total_changes/thread/token/epoch cannot be reused across transactions",
+    "Complete owned immutable snapshots and non-bypassable atomic DB/read-set/phantom/memory change witnesses remain unimplemented prerequisites",
+    "Original error order, deadline semantics and atomic commit/CAS need proof before product change",
+    "Primitive calibration cannot predict production G0 speedup",
+    "Cold RUNNING/RECEIVED retained by diagnostic BaseException; not evidence of production missing cleanup"
+  ],
+  "reviewer_actions": {
+    "repository_edits": 0,
+    "database_opens": 0,
+    "database_decompressions": 0,
+    "storage_mechanism_test_runs": 0,
+    "product_runs": 0,
+    "mock_runs": 0,
+    "g0_runs": 0,
+    "launcher_execute_runs": 0,
+    "authorized_pure_test_runs": 1,
+    "official_readonly_web_sources": [
+      "https://www.sqlite.org/lang_transaction.html",
+      "https://www.sqlite.org/isolation.html"
+    ]
+  },
+  "old_evidence_check": "git diff --exit-code against baseline returned 0 for src and original once/path-fix/second-window/PB-envelope evidence"
+}
+
