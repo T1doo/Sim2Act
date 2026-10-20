@@ -293,7 +293,7 @@ def mount(app, store, limits, identity):
         return csv_logic_reuse.inspect_plan(store, user, lid, aid, key, limits)
 
     @app.post("/api/internal/releases/{rid}/csv-material-plans", status_code=201)
-    def material_plan(rid: str, body: csv_material_reuse.MaterialInput, user=user_dependency):
+    def material_plan(rid: str, body: csv_material_reuse.MaterialInput | csv_material_reuse.TwoSumMaterialInput, user=user_dependency):
         return csv_material_reuse.propose(store, user, rid, body, limits)
 
     @app.get("/api/internal/releases/{rid}/csv-material-plans/{aid}/{key}")

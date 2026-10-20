@@ -539,9 +539,9 @@ function dagReuseButtons(c=csvDagContext) {
   $("dag-reuse-switch-prepare").disabled=locked||!r.instance||active||!$("dag-reuse-switch-target").value;
   $("dag-reuse-switch-confirm").disabled=locked||!approval;
   $("dag-reuse-switch-commit").disabled=locked||!approval||approval.expires_at*1000<=Date.now()||!$("dag-reuse-switch-confirm").checked;
-  for(const id of ["options","target","column","confirm","plan","open"])$("dag-material-"+id).disabled=locked;
+  for(const id of ["options","target","column","column-second","confirm","plan","open"])$("dag-material-"+id).disabled=locked;
   $("dag-material-options").disabled=locked||!r.release||!dagMaterialSupported(r.release);
-  $("dag-material-plan").disabled=locked||!r.release||!r.materials?.items.some(v=>v.target_app_id===$("dag-material-target").value)||!$("dag-material-column").value||!$("dag-material-confirm").checked;
+  $("dag-material-plan").disabled=locked||!r.release||!r.materials?.items.some(v=>v.target_app_id===$("dag-material-target").value)||!$("dag-material-column").value||(r.release?.snapshot.execution_source.version===dagReuseTwoSumVersion&&!$("dag-material-column-second").value)||!$("dag-material-confirm").checked;
   $("dag-material-open").disabled=locked||!r.material;
   for(const command of ["pause","resume","cancel"])$("dag-reuse-"+command).disabled=r.busy||!r.job||!(command==="pause"?["QUEUED","RUNNING"]:command==="resume"?["PAUSED","WAITING_RESOURCE"]:["QUEUED","RUNNING","PAUSED","WAITING_RESOURCE","PAUSE_REQUESTED"]).includes(r.job.status);
 }
@@ -555,7 +555,11 @@ async function dagReuseReleaseSeal(rel,c) {
     const plan=await api(csvDagBase(c)+"/"+encodeURIComponent(e.plan_key));if(!csvDagCurrent(c))return false;
     if(proof.id!==e.run_id||proof.status!=="SUCCEEDED"||proof.version!==e.run_version||proof.plan_fingerprint!==e.plan_fingerprint||plan.plan_fingerprint!==e.plan_fingerprint||!await csvDagPlanSeal(plan,c)||!await csvDagJobSeal(proof,c,plan))return false;
     if(plan.request_key.match(/^(material|logic)-plan-/)){
-      if(![dagReuseVersion,dagReuseReportVersion].includes(e.version)||typeof e.default_column!=="string"||!e.columns.includes(e.default_column)||plan.input?.[e.aggregate_step+"_column"]!==e.default_column||dagReuseAggregate(proof.result,e).column!==e.default_column)return false;
+      if(e.version===dagReuseTwoSumVersion){
+        if(!plan.request_key.startsWith("material-plan-")||!dagReuseExecutionMatches(e,plan,{columns:e.default_columns}))return false;
+        const values=dagReuseAggregate(proof.result,e);
+        if(e.aggregate_steps.some(sid=>values[sid].column!==e.default_columns[sid]))return false;
+      } else if(![dagReuseVersion,dagReuseReportVersion].includes(e.version)||typeof e.default_column!=="string"||!e.columns.includes(e.default_column)||plan.input?.[e.aggregate_step+"_column"]!==e.default_column||dagReuseAggregate(proof.result,e).column!==e.default_column)return false;
     }
   }
   if(!csvDagCurrent(c))return false;
@@ -691,6 +695,7 @@ async function dagReuseRead(c=csvDagContext, iid=$("dag-reuse-instance").value, 
   $("dag-reuse-column-second-label").textContent=dual?`${e.aggregate_steps[1]} 的数值列`:"第二节点数值列";
   for(const [i,id] of ["dag-reuse-column","dag-reuse-column-second"].entries())$(id).replaceChildren(...(dual?e.aggregate_nodes[e.aggregate_steps[i]].columns:i?[]:e.columns).map(value=>new Option(value,value)));
   if(e.default_column)$("dag-reuse-column").value=e.default_column;
+  if(dual&&e.default_columns)for(const [i,sid] of e.aggregate_steps.entries())$(i?"dag-reuse-column-second":"dag-reuse-column").value=e.default_columns[sid];
   for(const record of detail.data) {
     const row=document.createElement("p");
     const values=dual?Object.entries(record.data.result):[["求和",record.data.result]];
@@ -724,7 +729,10 @@ async function dagReuseSubmit(kind,retry=false) {
     if(kind==="material") {
       const t=r.materials?.items.find(v=>v.target_app_id===$("dag-material-target").value);
       if(!r.release||!t||!$("dag-material-confirm").checked||!t.columns.includes($("dag-material-column").value))throw Error("请核对新材料、数值列及预算");
-      intent={kind,path:`/api/internal/releases/${r.release.id}/csv-material-plans`,release:r.release,target:t,body:{expected_release_fingerprint:r.release.fingerprint,target_app_id:t.target_app_id,expected_candidate_fingerprint:t.candidate_fingerprint,expected_graph_fingerprint:t.graph_fingerprint,expected_resource_id:t.resource_id,expected_source_hash:t.source_hash,column:$("dag-material-column").value,request_key:crypto.randomUUID()}};
+      const dual=r.release.snapshot.execution_source.version===dagReuseTwoSumVersion;
+      const input=dual?{columns:Object.fromEntries(r.release.snapshot.execution_source.aggregate_steps.map((sid,i)=>[sid,$(i?"dag-material-column-second":"dag-material-column").value]))}:{column:$("dag-material-column").value};
+      if(dual&&Object.values(input.columns).some(v=>!t.columns.includes(v)))throw Error("请分别选择两个节点的数值列");
+      intent={kind,path:`/api/internal/releases/${r.release.id}/csv-material-plans`,release:r.release,target:t,body:{expected_release_fingerprint:r.release.fingerprint,target_app_id:t.target_app_id,expected_candidate_fingerprint:t.candidate_fingerprint,expected_graph_fingerprint:t.graph_fingerprint,expected_resource_id:t.resource_id,expected_source_hash:t.source_hash,...input,request_key:crypto.randomUUID()}};
     }
     if(!intent)return;dagReuseIntents.set(key,intent);
   }
@@ -860,33 +868,44 @@ $("dag-reuse-switch-prepare").onclick=()=>dagReuseAction(async c=>{
 });
 
 const dagMaterialVersion="internal.csv-material-reuse.v1";
-function dagMaterialSupported(rel){const e=rel?.snapshot?.execution_source;return !!e&&[dagReuseVersion,dagReuseReportVersion,dagReuseFixedVersion].includes(e.version)&&!e.plan_key.match(/^(material|logic)-plan-/)&&(e.version!==dagReuseFixedVersion||rel.snapshot.column_overlay?.column_binding?.value===e.default_column&&e.columns.includes(e.default_column));}
-function dagMaterialClear(){for(const id of ["target","column"])$("dag-material-"+id).replaceChildren();$("dag-material-confirm").checked=false;$("dag-material-proof").textContent="";$("dag-material-status").textContent="";}
+const dagTwoSumMaterialVersion="internal.csv-two-sum-material-reuse.v1";
+function dagMaterialNamespace(e){return e.version===dagReuseTwoSumVersion?dagTwoSumMaterialVersion:dagMaterialVersion;}
+function dagMaterialSupported(rel){const e=rel?.snapshot?.execution_source;return !!e&&[dagReuseVersion,dagReuseReportVersion,dagReuseTwoSumVersion,dagReuseFixedVersion].includes(e.version)&&!e.plan_key.match(/^(material|logic)-plan-/)&&(e.version!==dagReuseFixedVersion||rel.snapshot.column_overlay?.column_binding?.value===e.default_column&&e.columns.includes(e.default_column));}
+function dagMaterialClear(){for(const id of ["target","column","column-second"])$("dag-material-"+id).replaceChildren();$("dag-material-second-label").hidden=true;$("dag-material-confirm").checked=false;$("dag-material-proof").textContent="";$("dag-material-status").textContent="";}
 async function dagMaterialReceipt(m,intent){
   const b=m?.binding,p=m?.plan,t=intent.target,e=intent.release.snapshot.execution_source,s=dagReuseShape(p);
   if(!p||!b)return false;
   const exactKey="material-plan-"+(await deliveryDigest([intent.release.id,intent.body.request_key])).slice(0,48);
+  const dual=e.version===dagReuseTwoSumVersion,namespace=dagMaterialNamespace(e);
+  const column=dual?intent.body.columns?.[e.aggregate_steps[0]]:intent.body.column;
   const {cached,plan_fingerprint,...value}=p;
-  if(p.request_key!==exactKey||!deliveryHash(plan_fingerprint)||plan_fingerprint!==await deliveryDigest(value)||b.principal_id!==intent.release.principal_id||!deliverySame(p.definition?.manifest?.runtime_limits,e.limits)||p.graph_revision!==t.graph_revision||p.authorization_fingerprint!==t.authorization_fingerprint||!deliverySame(b.plan_input,{expected_candidate_fingerprint:t.candidate_fingerprint,expected_graph_fingerprint:t.graph_fingerprint,column:intent.body.column,composition:p.composition?.definition,request_key:exactKey}))return false;
+  if(p.request_key!==exactKey||!deliveryHash(plan_fingerprint)||plan_fingerprint!==await deliveryDigest(value)||b.principal_id!==intent.release.principal_id||!deliverySame(p.definition?.manifest?.runtime_limits,e.limits)||p.graph_revision!==t.graph_revision||p.authorization_fingerprint!==t.authorization_fingerprint||!deliverySame(b.plan_input,{expected_candidate_fingerprint:t.candidate_fingerprint,expected_graph_fingerprint:t.graph_fingerprint,column,composition:p.composition?.definition,request_key:exactKey}))return false;
   if(e.version===dagReuseFixedVersion&&intent.body.column!==e.default_column)return false;
-  if(!b||!p||m.namespace!==dagMaterialVersion||m.source_release_id!==intent.release.id||m.model_requests!==0||m.formal_publication_enabled!==false||b.version!==dagMaterialVersion||b.source_release_id!==intent.release.id||b.source_release_fingerprint!==intent.release.fingerprint||!deliverySame(b.source_execution,e)||!deliverySame(b.target,t)||!deliverySame(b.limits,e.limits)||b.column!==intent.body.column||b.request_key!==intent.body.request_key||b.model_requests!==0||b.semantic_status!=="UNKNOWN"||b.owner_acceptance!=="PENDING"||b.formal_publication_enabled!==false||m.binding_fingerprint!==await deliveryDigest(b)||!s||s.version!==(e.version===dagReuseFixedVersion?dagReuseReportVersion:e.version)||s.aggregate!==e.aggregate_step||s.report!==(e.report_step||null)||p.app_id!==t.target_app_id||p.project_id!==t.project_id||p.runtime_id!==t.runtime_id||p.source_hash!==t.source_hash||p.candidate_fingerprint!==t.candidate_fingerprint||p.graph_fingerprint!==t.graph_fingerprint||p.input[s.aggregate+"_column"]!==intent.body.column||!deliverySame(p.material_reuse,{version:dagMaterialVersion,source_release_id:intent.release.id,binding_fingerprint:m.binding_fingerprint})||!/^material-plan-[a-f0-9]{48}$/.test(p.request_key))return false;
+  if(m.namespace!==namespace||m.source_release_id!==intent.release.id||m.model_requests!==0||m.formal_publication_enabled!==false||b.version!==namespace||b.source_release_id!==intent.release.id||b.source_release_fingerprint!==intent.release.fingerprint||!deliverySame(b.source_execution,e)||!deliverySame(b.target,t)||!deliverySame(b.limits,e.limits)||b.request_key!==intent.body.request_key||b.model_requests!==0||b.semantic_status!=="UNKNOWN"||b.owner_acceptance!=="PENDING"||b.formal_publication_enabled!==false||m.binding_fingerprint!==await deliveryDigest(b)||!s||s.version!==(e.version===dagReuseFixedVersion?dagReuseReportVersion:e.version)||s.report!==(e.report_step||null)||p.app_id!==t.target_app_id||p.project_id!==t.project_id||p.runtime_id!==t.runtime_id||p.source_hash!==t.source_hash||p.candidate_fingerprint!==t.candidate_fingerprint||p.graph_fingerprint!==t.graph_fingerprint||!deliverySame(p.material_reuse,{version:namespace,source_release_id:intent.release.id,binding_fingerprint:m.binding_fingerprint})||!/^material-plan-[a-f0-9]{48}$/.test(p.request_key))return false;
+  if(dual){
+    if(Object.hasOwn(b,"column")||!deliverySame(b.columns,intent.body.columns)||!dagReuseExecutionMatches(e,p)||!deliverySame(Object.keys(intent.body.columns).sort(),[...e.aggregate_steps].sort())||e.aggregate_steps.some(sid=>!t.columns.includes(intent.body.columns[sid])||p.input[sid+"_column"]!==intent.body.columns[sid]))return false;
+  } else if(Object.hasOwn(b,"columns")||b.column!==intent.body.column||s.aggregate!==e.aggregate_step||p.input[s.aggregate+"_column"]!==intent.body.column)return false;
   return true;
 }
 function dagMaterialPick(c){
   const t=c.reuse.materials?.items.find(v=>v.target_app_id===$("dag-material-target").value);
   c.reuse.material=null;$("dag-material-confirm").checked=false;$("dag-material-proof").textContent="";
   const e=c.reuse.release?.snapshot.execution_source,columns=e?.version===dagReuseFixedVersion?(t?.columns.includes(e.default_column)?[e.default_column]:[]):(t?.columns||[]);
-  $("dag-material-column").replaceChildren(...columns.map(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;return o;}));dagReuseButtons(c);
+  const dual=e?.version===dagReuseTwoSumVersion;
+  $("dag-material-second-label").hidden=!dual;
+  $("dag-material-column-label").textContent=dual?`${e.aggregate_steps[0]} 的数值列`:"本次数值列";
+  $("dag-material-column-second-label").textContent=dual?`${e.aggregate_steps[1]} 的数值列`:"第二个求和节点";
+  for(const id of ["column","column-second"])$("dag-material-"+id).replaceChildren(...columns.map(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;return o;}));dagReuseButtons(c);
 }
 $("dag-material-options").onclick=()=>dagReuseAction(async c=>{
   const rel=c.reuse.release;if(!dagMaterialSupported(rel))return;
   c.reuse.materials=null;c.reuse.material=null;dagMaterialClear();
   const m=await api(`/api/internal/releases/${rel.id}/csv-materials`);if(!csvDagCurrent(c))return;
-  if(m.namespace!==dagMaterialVersion||m.source_release_id!==rel.id||m.source_release_fingerprint!==rel.fingerprint||!deliverySame(m.limits,rel.snapshot.execution_source.limits)||!Array.isArray(m.items)||m.model_requests!==0||m.formal_publication_enabled!==false||m.items.some(t=>t.project_id!==c.parent.project||!/^app_[a-f0-9]{32}$/.test(t.target_app_id)||!/^res_[a-f0-9]{32}$/.test(t.resource_id)||!Array.isArray(t.columns)||!t.columns.length))throw Error("VERIFICATION_FAILED");
+  if(m.namespace!==dagMaterialNamespace(rel.snapshot.execution_source)||m.source_release_id!==rel.id||m.source_release_fingerprint!==rel.fingerprint||!deliverySame(m.limits,rel.snapshot.execution_source.limits)||!Array.isArray(m.items)||m.model_requests!==0||m.formal_publication_enabled!==false||m.items.some(t=>t.project_id!==c.parent.project||!/^app_[a-f0-9]{32}$/.test(t.target_app_id)||!/^res_[a-f0-9]{32}$/.test(t.resource_id)||!Array.isArray(t.columns)||!t.columns.length))throw Error("VERIFICATION_FAILED");
   c.reuse.materials=m;$("dag-material-target").replaceChildren(...m.items.map(t=>{const o=document.createElement("option");o.value=t.target_app_id;o.textContent=`${t.name} · ${t.resource_id} · ${t.source_hash}`;return o;}));dagMaterialPick(c);$("dag-material-status").textContent=`${m.items.length} 份当前可用材料；预算 ${JSON.stringify(m.limits)}。先在现有注册入口授权并核查图；旧来源仍须可核查。`;
 });
 $("dag-material-target").onchange=()=>{if(csvDagContext)dagMaterialPick(csvDagContext);};
-$("dag-material-column").onchange=()=>{const c=csvDagContext;if(c){c.reuse.material=null;$("dag-material-proof").textContent="";}$("dag-material-confirm").checked=false;dagReuseButtons();};
+for(const id of ["dag-material-column","dag-material-column-second"])$(id).onchange=()=>{const c=csvDagContext;if(c){c.reuse.material=null;$("dag-material-proof").textContent="";}$("dag-material-confirm").checked=false;dagReuseButtons();};
 $("dag-material-confirm").onchange=()=>dagReuseButtons();
 $("dag-material-open").onclick=()=>dagReuseAction(async c=>{
   const m=c.reuse.material;if(!m)return;

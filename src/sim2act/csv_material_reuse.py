@@ -5,12 +5,14 @@ remain separate confirmations on the existing worker/lifecycle paths.
 """
 
 import copy
+from typing import Annotated
 
 from pydantic import Field
 from sqlalchemy import select
 
 from . import csv_dag as dag
 from . import csv_dag_instances as instances
+from . import csv_reports as report
 from . import delivery_graph_apps as graph
 from . import lifecycle
 from .column_patches import KeyInput, read_pair, require_capacity
@@ -21,18 +23,27 @@ from .tools import csv_column_options
 
 KIND = "csv_dag_material_plan"
 VERSION = "internal.csv-material-reuse.v1"
+TWO_SUM_VERSION = "internal.csv-two-sum-material-reuse.v1"
 PREFIX = "material-plan-"
 
 
-class MaterialInput(KeyInput):
+class _MaterialTargetInput(KeyInput):
     expected_release_fingerprint: str = Field(pattern=graph.HASH)
     target_app_id: str = Field(pattern=r"^app_[a-f0-9]{32}$")
     expected_candidate_fingerprint: str = Field(pattern=graph.HASH)
     expected_graph_fingerprint: str = Field(pattern=graph.HASH)
     expected_resource_id: str = Field(pattern=r"^res_[a-f0-9]{32}$")
     expected_source_hash: str = Field(pattern=graph.HASH)
-    column: str = Field(min_length=1, max_length=200)
     request_key: str = Field(pattern=r"^[A-Za-z0-9_-]{1,100}$")
+
+
+class MaterialInput(_MaterialTargetInput):
+    column: str = Field(min_length=1, max_length=200)
+
+
+class TwoSumMaterialInput(_MaterialTargetInput):
+    columns: dict[str, Annotated[str, Field(min_length=1, max_length=200)]] = Field(
+        min_length=2, max_length=2)
 
 
 def plan_key(rid, body):
@@ -47,7 +58,8 @@ def read_origin(c, user, aid, key):
     instances.require(
         set(value) == {"request", "response"} and fingerprint(value) == fingerprint(seal)
     )
-    body = MaterialInput.model_validate(value["request"])
+    model = TwoSumMaterialInput if 'columns' in value['request'] else MaterialInput
+    body = model.model_validate(value["request"])
     binding = value["response"]
     instances.require(
         all(row["request_fingerprint"] == fingerprint(body.model_dump()) for row in rows)
@@ -71,8 +83,6 @@ def recipe(store, c, user, rid, limits):
         raise DomainError("PERMISSION_DENIED")
     store.lock_project(c, user, row["project_id"])
     execution = row["snapshot"].get("execution_source", {})
-    if execution.get("version") == instances.TWO_SUM_VERSION:
-        raise DomainError("UNSUPPORTED_CAPABILITY", "Two-sum versions reuse per-node inputs on their original material only")
     instances.require(execution.get("version") in instances.VERSIONS)
     # One material transfer, not a recursive chain of source-release interpreters.
     if execution["plan_key"].startswith((PREFIX, "logic-plan-", "logic-instance-plan-")):
@@ -103,8 +113,17 @@ def recipe(store, c, user, rid, limits):
 
 
 def target(store, c, user, rel, aid, cap):
+    schema = rel['snapshot']['data_schema']
+    e = rel['snapshot']['execution_source']
+    if e['version'] == instances.TWO_SUM_VERSION:
+        # A registered target draft describes one full aggregate tuple. Both
+        # frozen source sinks must have precisely that schema, not a relaxed
+        # arbitrary nested object. read_release has rebuilt their real proof.
+        instances.require(schema == report.obj({'result': report.obj({
+            sid: copy.deepcopy(report.INPUT) for sid in e['aggregate_steps']})}))
+        schema = report.obj({'result': copy.deepcopy(report.INPUT)})
     return target_for_schema(store, c, user, rel["project_id"], aid, cap,
-        rel["snapshot"]["data_schema"], excluded_id=rel["snapshot"]["draft"]["candidate"]["manifest"]["data_bindings"][0]["resource_ref"],
+        schema, excluded_id=rel["snapshot"]["draft"]["candidate"]["manifest"]["data_bindings"][0]["resource_ref"],
         excluded_hash=rel["snapshot"]["execution_source"]["source_hash"])
 
 
@@ -170,26 +189,38 @@ def definition(store, c, user, rid, body, limits, key):
         and t["resource_id"] == body.expected_resource_id
         and t["source_hash"] == body.expected_source_hash
     )
-    if body.column not in t["columns"]:
-        raise DomainError("INVALID_INPUT", "Choose a numeric column of the new CSV")
     e = rel["snapshot"]["execution_source"]
-    if e["version"] == instances.FIXED_REPORT_VERSION and body.column != e["default_column"]:
-        raise DomainError("INVALID_INPUT", "Keep the exact approved column; authorize data-free logic separately to choose another")
-    composition["nodes"][1]["column"] = body.column
+    dual = e['version'] == instances.TWO_SUM_VERSION
+    if dual:
+        if (type(body) is not TwoSumMaterialInput
+                or set(body.columns) != set(e['aggregate_steps'])
+                or any(v not in t['columns'] for v in body.columns.values())):
+            raise DomainError('INVALID_INPUT', 'Choose one target numeric column for each frozen sum node')
+        for node in composition['nodes'][1:]:
+            node['column'] = body.columns[node['step_id']]
+        column = body.columns[e['aggregate_steps'][0]]
+    else:
+        if type(body) is not MaterialInput or body.column not in t['columns']:
+            raise DomainError('INVALID_INPUT', 'Choose a numeric column of the new CSV')
+        if e["version"] == instances.FIXED_REPORT_VERSION and body.column != e["default_column"]:
+            raise DomainError("INVALID_INPUT", "Keep the exact approved column; authorize data-free logic separately to choose another")
+        column = body.column
+        composition["nodes"][1]["column"] = column
     plan_body = dag.PlanInput(
         expected_candidate_fingerprint=t["candidate_fingerprint"],
         expected_graph_fingerprint=t["graph_fingerprint"],
-        column=body.column,
+        column=column,
         composition=composition,
         request_key=key,
     )
+    selection: dict[str, object] = dict(columns=dict(body.columns)) if dual else dict(column=column)
     binding = dict(
-        version=VERSION,
+        version=TWO_SUM_VERSION if dual else VERSION,
         source_release_id=rid,
         source_release_fingerprint=rel["fingerprint"],
         source_execution=copy.deepcopy(rel["snapshot"]["execution_source"]),
         target=t,
-        column=body.column,
+        **selection,
         limits=cap.model_dump(),
         plan_input=plan_body.model_dump(exclude_none=True),
         principal_id=user,
@@ -268,7 +299,7 @@ def propose(store, user, rid, body, limits):
                 graph.remember(c, user, aid, kind, key, body, binding)
         plan = dag.propose_tx(store, c, user, pid, aid, plan_body, cap)
         return dict(
-            namespace=VERSION,
+            namespace=binding['version'],
             source_release_id=rid,
             binding=binding,
             binding_fingerprint=fingerprint(binding),
@@ -288,7 +319,7 @@ def inspect(store, user, rid, aid, key, limits):
         instances.require(fingerprint(binding) == fingerprint(value))
         plan = dag.load_plan(store, c, user, binding["target"]["project_id"], aid, key, cap)
         return dict(
-            namespace=VERSION,
+            namespace=binding['version'],
             source_release_id=rid,
             binding=binding,
             binding_fingerprint=fingerprint(binding),
@@ -317,7 +348,7 @@ def options(store, user, rid, limits):
             except DomainError:
                 continue
         return dict(
-            namespace=VERSION,
+            namespace=TWO_SUM_VERSION if rel['snapshot']['execution_source']['version'] == instances.TWO_SUM_VERSION else VERSION,
             source_release_id=rid,
             source_release_fingerprint=rel["fingerprint"],
             items=items,

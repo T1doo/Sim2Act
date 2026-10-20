@@ -157,9 +157,16 @@ def source_snapshot(store, c, user, rid, limits, *, fixed=False):
     # Preserve the target's explicitly bound default for this finite adaptation.
     # It comes from the new plan and its real receipt, never the old overlay.
     if "material_reuse" in plan or "logical_reuse" in plan:
-        chosen = plan["input"][sid + "_column"]
-        require(not dual and chosen in columns and actual["column"] == chosen)
-        execution["default_column"] = chosen
+        if dual:
+            require('material_reuse' in plan and 'logical_reuse' not in plan)
+            chosen_columns = {step: plan['input'][step + '_column'] for step in sid}
+            require(all(column in columns and actual[step]['column'] == column
+                for step, column in chosen_columns.items()))
+            execution['default_columns'] = chosen_columns
+        else:
+            chosen = plan["input"][sid + "_column"]
+            require(chosen in columns and actual["column"] == chosen)
+            execution["default_column"] = chosen
     validate_value(schema, {"result": actual})
     return dict(namespace=lifecycle.NAMESPACE, draft=frozen,
         dependency_lock=frozen["candidate"]["manifest"]["dependency_lock"], data_schema=schema,

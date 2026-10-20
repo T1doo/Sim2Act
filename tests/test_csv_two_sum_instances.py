@@ -237,7 +237,8 @@ def test_cancel_and_cross_owner_project_and_single_input_reuse_gates(env):
     assert detail.status_code == 200 and detail.json()["data_version"] == 0
     assert detail.json()["runs"][0]["status"] == "CANCELLED"
     before = fingerprint(snapshot(env))
-    assert env[2].get(f"/api/internal/releases/{rel['id']}/csv-materials").status_code == 400
+    options = env[2].get(f"/api/internal/releases/{rel['id']}/csv-materials")
+    assert options.status_code == 200 and options.json()["items"] == []
     assert fingerprint(snapshot(env)) == before
 
 

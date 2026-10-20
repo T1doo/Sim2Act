@@ -35,7 +35,20 @@ from sim2act.worker import Worker
     ],
 )
 def test_actual_new_material_page_cold_result_and_safe_recovery(env, tmp_path, lost, with_report):
-    rel, old, rid, target, body = setup_material(env, with_report)
+    run_material_page(env, tmp_path, lost, with_report)
+
+
+@pytest.mark.parametrize("lost", ["post", "late", "invalid-budget"])
+def test_actual_dual_new_material_page_cold_result_and_safe_recovery(env, tmp_path, lost):
+    run_material_page(env, tmp_path, lost, False, dual=True)
+
+
+def run_material_page(env, tmp_path, lost, with_report, *, dual=False):
+    if dual:
+        from test_csv_two_sum_material_reuse import setup_material as setup_dual
+        rel, old, rid, target, body = setup_dual(env)
+    else:
+        rel, old, rid, target, body = setup_material(env, with_report)
     aid = rel["snapshot"]["draft"]["id"]
     app = create_app(env[0], env[1])
     worker = Worker(env[0], env[1], NoModel())
@@ -77,7 +90,8 @@ def test_actual_new_material_page_cold_result_and_safe_recovery(env, tmp_path, l
                 targetapp=target["id"],
                 targetresource=body_target,
                 lost=lost,
-                nodes=3 if with_report else 2,
+                dual=dual,
+                nodes=3 if with_report or dual else 2,
             )
         )
     )
