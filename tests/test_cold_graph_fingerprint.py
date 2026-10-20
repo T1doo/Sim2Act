@@ -8,6 +8,8 @@ The private helper must first be applied by the repository's sole writer.
 
 import copy
 import hashlib
+import pickle
+import pickletools
 import threading
 import time
 from collections.abc import Mapping
@@ -16,6 +18,7 @@ import httpx
 import pytest
 from sqlalchemy import Column, MetaData, Table, create_engine, insert, select
 from sqlalchemy.engine import RowMapping
+from sqlalchemy.engine.result import SimpleResultMetaData
 from sqlalchemy.sql.elements import quoted_name
 from test_natural_spec_apps import recipe
 from test_pb_live_source_contract import material
@@ -123,6 +126,76 @@ def test_native_memo_per_call_reads_exact_limits_without_instance_serializer(mon
     full.max_output_tokens -= 1
     assert runtime._cold_graph_inputs(value) != first
     assert calls == []
+
+
+@pytest.mark.parametrize("size", [0, 255, 65535, 65536, 65537, 579257])
+def test_envelope_matches_independent_chunk_stream_across_frames_and_aliases(size):
+    full = limits()
+    shared = dict(wire=b"x" * size, limits=full)
+    data = (shared, dict(hidden=[full, shared]))
+    row = RowMapping(SimpleResultMetaData([quoted_name("visible", True)]), None,
+        {"visible": 0, "unused": 1}, data)
+    value = dict(first=row, again=row, shared=shared, complete_data=data)
+    chunks = []
+
+    class ChunkSink:
+        def write(self, chunk):
+            chunks.append(chunk)
+
+    # The oracle has no BytesIO position or prefix. Only parse pickle opcodes;
+    # the fingerprint-only marker must never be loaded or executed.
+    runtime._ColdGraphPickler(ChunkSink(), protocol=5).dump(value)
+    payload = b"".join(chunks)
+    operations = list(pickletools.genops(payload))
+    assert operations[0][0].name == "PROTO" and operations[0][1] == 5
+    assert operations[-1][0].name == "STOP"
+    encoded = runtime._cold_graph_bytes(value)
+    assert type(encoded) is bytes
+    assert encoded == b"SIM2ACT_COLD_GRAPH_PICKLE_V2\x00" + payload
+    digest = hashlib.sha256(encoded).hexdigest()
+    full.max_output_tokens -= 1
+    assert runtime._cold_graph_bytes(value) != encoded
+    assert hashlib.sha256(encoded).hexdigest() == digest
+
+
+def test_envelope_preserves_pickle_import_failure_translation(monkeypatch):
+    import builtins
+
+    original_import = builtins.__import__
+    error = ValueError("synthetic marker import failure")
+    calls = []
+
+    def importing(name, *args, **kwargs):
+        if name == runtime.__name__:
+            calls.append(name)
+            raise error
+        return original_import(name, *args, **kwargs)
+
+    value = limits()
+    output = runtime._ColdGraphBytesIO()
+    with monkeypatch.context() as patch:
+        patch.setattr(builtins, "__import__", importing)
+        with pytest.raises(pickle.PicklingError) as reference:
+            runtime._ColdGraphPickler(output, protocol=5).dump(value)
+        with pytest.raises(pickle.PicklingError) as caught:
+            runtime._cold_graph_bytes(value)
+    assert str(caught.value) == str(reference.value)
+    assert calls == [runtime.__name__, runtime.__name__]
+
+
+def test_envelope_keeps_original_reducer_exception_identity(monkeypatch):
+    error = DomainError("VERSION_CONFLICT", "synthetic Limits reducer failure")
+    calls = []
+
+    def refusing(value):
+        calls.append(value)
+        raise error
+
+    value = limits()
+    monkeypatch.setattr(runtime, "_cold_graph_limit_values", refusing)
+    with pytest.raises(DomainError) as caught:
+        runtime._cold_graph_bytes(value)
+    assert caught.value is error and len(calls) == 1 and calls[0] is value
 
 
 def test_key_order_is_a_stricter_local_pin_with_complete_alias_graph():

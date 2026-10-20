@@ -1736,8 +1736,11 @@ def _cold_graph_bytes(values):
     Hoisting the class/imports does not cache bytes, fingerprints or permissions.
     """
     output = _ColdGraphBytesIO()
+    # The fixed envelope is outside pickle's own frames/memo. Seed this fresh
+    # private stream to avoid concatenating another complete output afterward.
+    output.write(b"SIM2ACT_COLD_GRAPH_PICKLE_V2\x00")
     _ColdGraphPickler(output, protocol=5).dump(values)
-    return b"SIM2ACT_COLD_GRAPH_PICKLE_V2\x00" + output.getvalue()
+    return output.getvalue()
 
 def _cold_graph_inputs(values):
     return hashlib.sha256(_cold_graph_bytes(values)).hexdigest()
