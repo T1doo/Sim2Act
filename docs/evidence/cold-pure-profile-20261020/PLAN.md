@@ -1,0 +1,9 @@
+# 诊断修复方案与风险：该窄修复已在实施前预审
+
+基线7da1c2a46b04d3e3e12f6d04acd0539b175a9bc2。预审ACK仅针对下述后续诊断Pickler修复；真实profile的精确脚本和原件是在执行后由独审只读复核，并非声称精确脚本在执行前经审。对真实纯函数建立离线cProfile及无插桩wall/process CPU记录，不启动业务fixture、DB、Worker、producer、模型、Mock或G0。已存contract先用固定schema做本地结构构造；Binding和CGR只作object.__new__无权限壳，禁止构造器和check/add/producer，只调用input_*；RowMapping用纯内存构造器保留隐藏_data和别名。
+
+结果未支持可接受的生产优化。roots名单复用虽减少构造，却跳过nested_classes导入之后的再次新鲜读取；导入hook可变schema绑定，且对应成本小，不实施。不重复已否决validator、单删SHA、类型分派和前缀分配方向；不减pin、不缓存完整验证结果，不拆事务，不变任何期限/授权。
+
+必要修复仅为诊断替身：encode从纯Python pickle._Pickler换为公共pickle.Pickler（本环境断言等于_pickle.Pickler，生产基类也相同），保留header/protocol5/每次完整fresh编码和SHA；measure新增实现标签。隔离子进程以10组精确primitive/别名/多frame向量和生产_cold_graph_bytes逐字节对照，同时阻断Pythonfallback、Store/Worker/Model构造与全部运输路径，10秒上限，父纯测试不导入产品。
+
+风险：primitive一致不覆盖生产自定义reducer或typed/CGR资格；旧Python替身成本与真实C生产profile不可直接比较，原旧记录不覆盖。新的真实pure profile也不包含全G0、SQL、完整原图或权限检查，不能外推5685次调用收益或声称30秒lease通过。CAS测试的单谓词覆盖缺口与跨事务见证均未解决；本轮不依赖或实现CAS/拆锁设计，因此不增加无关验证。

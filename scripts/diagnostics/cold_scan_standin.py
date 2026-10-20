@@ -1,4 +1,8 @@
-"""Offline primitive-data cost split, NOT a production graph/profile/optimizer."""
+"""C-Pickler primitive calibration, NOT a typed graph/profile/optimizer.
+
+Primitive bytes can match the production codec, but this helper has none of its
+custom reducer handling. Never use its cost split to select a G0 optimization.
+"""
 
 import hashlib
 import io
@@ -9,7 +13,7 @@ import time
 def encode(values):
     output = io.BytesIO()
     output.write(b"SIM2ACT_COLD_GRAPH_PICKLE_V2\x00")
-    pickle._Pickler(output, protocol=5).dump(values)
+    pickle.Pickler(output, protocol=5).dump(values)
     return output.getvalue()
 
 
@@ -32,6 +36,7 @@ def measure(values, iterations):
         digest_seconds += ended - encoded
     return dict(
         scope="STORED_PRIMITIVE_STANDIN_NOT_PRODUCTION_CPU_PROFILE",
+        implementation="pickle.Pickler; primitive path only, no production custom reducers",
         iterations=iterations,
         serialized_bytes=size,
         sha256=digest,
