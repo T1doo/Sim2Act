@@ -556,7 +556,7 @@ async function dagReuseReleaseSeal(rel,c) {
     if(proof.id!==e.run_id||proof.status!=="SUCCEEDED"||proof.version!==e.run_version||proof.plan_fingerprint!==e.plan_fingerprint||plan.plan_fingerprint!==e.plan_fingerprint||!await csvDagPlanSeal(plan,c)||!await csvDagJobSeal(proof,c,plan))return false;
     if(plan.request_key.match(/^(material|logic)-plan-/)){
       if(e.version===dagReuseTwoSumVersion){
-        if(!plan.request_key.startsWith("material-plan-")||!dagReuseExecutionMatches(e,plan,{columns:e.default_columns}))return false;
+        if(!plan.request_key.match(/^(material|logic)-plan-/)||!dagReuseExecutionMatches(e,plan,{columns:e.default_columns}))return false;
         const values=dagReuseAggregate(proof.result,e);
         if(e.aggregate_steps.some(sid=>values[sid].column!==e.default_columns[sid]))return false;
       } else if(![dagReuseVersion,dagReuseReportVersion].includes(e.version)||typeof e.default_column!=="string"||!e.columns.includes(e.default_column)||plan.input?.[e.aggregate_step+"_column"]!==e.default_column||dagReuseAggregate(proof.result,e).column!==e.default_column)return false;

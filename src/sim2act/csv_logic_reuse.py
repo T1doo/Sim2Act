@@ -1,4 +1,4 @@
-"""Explicit, revocable data-free authority for two fixed closed CSV recipes.
+"""Explicit, revocable data-free authority for finite closed CSV recipes.
 
 Original data grants are never substituted by this authority. Only canonical
 structure and frozen caps are reusable; immutable source JSON is hash-audited,
@@ -10,7 +10,7 @@ import hashlib
 import math
 import time
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field
 from sqlalchemy import insert, select, update
@@ -35,6 +35,8 @@ PREFIX = "logic-plan-"
 INSTANCE_PREFIX = "logic-instance-plan-"
 LOGIC_ID = r"^csvlogic_[a-f0-9]{32}$"
 CONSENT = "AUTHORIZE_DATA_FREE_CSV_LOGIC_IN_THIS_PROJECT"
+TWO_SUM_CONSENT = "AUTHORIZE_DATA_FREE_TWO_SUM_CSV_LOGIC_IN_THIS_PROJECT"
+SUM_STEPS = ["total_a", "total_b"]
 SCOPE = "EXISTING_AUTHORIZED_CSV_DRAFTS_SAME_OWNER_PROJECT"
 TTL = 86400
 SCHEMA = report.obj({"result": report.INPUT})
@@ -42,7 +44,8 @@ SCHEMA = report.obj({"result": report.INPUT})
 
 class AuthorizeInput(KeyInput):
     expected_release_fingerprint: str = Field(pattern=graph.HASH)
-    consent: Literal["AUTHORIZE_DATA_FREE_CSV_LOGIC_IN_THIS_PROJECT"]
+    consent: Literal["AUTHORIZE_DATA_FREE_CSV_LOGIC_IN_THIS_PROJECT",
+                     "AUTHORIZE_DATA_FREE_TWO_SUM_CSV_LOGIC_IN_THIS_PROJECT"]
     request_key: str = Field(pattern=r"^[A-Za-z0-9_-]{1,100}$")
 
 
@@ -52,15 +55,36 @@ class RevokeInput(KeyInput):
     request_key: str = Field(pattern=r"^[A-Za-z0-9_-]{1,100}$")
 
 
-class MaterialInput(KeyInput):
+class _MaterialTargetInput(KeyInput):
     expected_logic_fingerprint: str = Field(pattern=graph.HASH)
     target_app_id: str = Field(pattern=r"^app_[a-f0-9]{32}$")
     expected_candidate_fingerprint: str = Field(pattern=graph.HASH)
     expected_graph_fingerprint: str = Field(pattern=graph.HASH)
     expected_resource_id: str = Field(pattern=r"^res_[a-f0-9]{32}$")
     expected_source_hash: str = Field(pattern=graph.HASH)
-    column: str = Field(min_length=1, max_length=200)
     request_key: str = Field(pattern=r"^[A-Za-z0-9_-]{1,100}$")
+
+
+class MaterialInput(_MaterialTargetInput):
+    column: str = Field(min_length=1, max_length=200)
+
+
+class TwoSumMaterialInput(_MaterialTargetInput):
+    columns: dict[str, Annotated[str, Field(min_length=1, max_length=200)]] = Field(
+        min_length=2, max_length=2)
+
+
+def result_schema(version, steps=None):
+    if version != instances.TWO_SUM_VERSION:
+        return copy.deepcopy(SCHEMA)
+    steps = SUM_STEPS if steps is None else steps
+    instances.require(isinstance(steps, list) and len(steps) == 2
+        and all(type(sid) is str for sid in steps) and len(set(steps)) == 2)
+    return report.obj({'result': report.obj({sid: copy.deepcopy(report.INPUT) for sid in steps})})
+
+
+def consent_for(version):
+    return TWO_SUM_CONSENT if version == instances.TWO_SUM_VERSION else CONSENT
 
 
 def implementation():
@@ -70,6 +94,20 @@ def implementation():
 
 
 def canonical(version, column=None):
+    if version == instances.TWO_SUM_VERSION:
+        if column is not None:
+            instances.require(type(column) is dict and set(column) == set(SUM_STEPS)
+                and all(type(v) is str for v in column.values()))
+        nodes = [dict(step_id='read', action='resource.read', depends_on=[],
+            inputs={'resource_id': dict(source='data', ref='source', field='resource_id')})]
+        for sid in SUM_STEPS:
+            node = dict(step_id=sid, action='data.aggregate_csv', depends_on=['read'],
+                inputs={'resource_id': dict(source='step', ref='read', field='resource_id'),
+                        'column': dict(source='input', field=sid + '_column')})
+            if column is not None:
+                node['column'] = column[sid]
+            nodes.append(node)
+        return dict(version=dag.COMPOSITION_VERSION, nodes=nodes)
     instances.require(version in (instances.VERSION, instances.REPORT_VERSION, instances.FIXED_REPORT_VERSION))
     nodes = [dict(step_id="read", action="resource.read", depends_on=[],
                   inputs={"resource_id": dict(source="data", ref="source", field="resource_id")}),
@@ -91,6 +129,8 @@ def pair(c, user, aid, kind, key, model):
     instances.require(all(rows), "Missing independent logic authority/origin")
     left, right = [graph.checked(r) for r in rows]
     instances.require(set(left) == {"request", "response"} and fingerprint(left) == fingerprint(right))
+    if model is MaterialInput and 'columns' in left['request']:
+        model = TwoSumMaterialInput
     body = model.model_validate(left["request"])
     instances.require(all(r["request_fingerprint"] == fingerprint(body.model_dump()) for r in rows))
     return body, left["response"]
@@ -116,7 +156,8 @@ def audit(c, user, pid, a):
     e = s["execution_source"]
     instances.require(e["version"] in instances.VERSIONS
         and not e["plan_key"].startswith((material.PREFIX, PREFIX, INSTANCE_PREFIX))
-        and s["namespace"] == lifecycle.NAMESPACE and s["data_schema"] == SCHEMA
+        and s["namespace"] == lifecycle.NAMESPACE
+        and s["data_schema"] == result_schema(e["version"], e.get("aggregate_steps"))
         and s["draft"]["id"] == a["app_id"] and e["run_id"] == a["run_id"]
         and s["draft"]["project_id"] == pid and s["model_requests"] == 0
         and s["formal_publication_enabled"] is False)
@@ -153,7 +194,8 @@ def load(store, c, user, lid, limits, *, active=True):
     cap = Limits(**src["execution_source"]["limits"])
     expected = dict(namespace=VERSION, id=lid, owner_id=user, project_id=row["project_id"],
         expires_at=p["expires_at"], scope=SCOPE, execution_version=src["execution_source"]["version"],
-        recipe=canonical(src["execution_source"]["version"]), data_schema=SCHEMA,
+        recipe=canonical(src["execution_source"]["version"]),
+        data_schema=result_schema(src["execution_source"]["version"]),
         limits=cap.model_dump(), implementation_fingerprint=implementation(), audit_ref=lid,
         model_requests=0, semantic_status="UNKNOWN", owner_acceptance="PENDING",
         formal_publication_enabled=False)
@@ -161,7 +203,8 @@ def load(store, c, user, lid, limits, *, active=True):
     body, frozen = pair(c, user, p["private_audit"]["app_id"], AUTH_KIND, lid, AuthorizeInput)
     instances.require(lid == "csvlogic_" + fingerprint([user, p["private_audit"]["release_id"], body.request_key])[:32]
         and fingerprint(frozen) == fingerprint(p)
-        and body.expected_release_fingerprint == p["private_audit"]["release_fingerprint"])
+        and body.expected_release_fingerprint == p["private_audit"]["release_fingerprint"]
+        and body.consent == consent_for(src["execution_source"]["version"]))
     revoke_rows = [graph.lookup(c, user, p["private_audit"]["app_id"], kind, lid)
                    for kind in (REVOKE, REVOKE + "_seal")]
     revoked = bool(row["consumed"] or any(revoke_rows))
@@ -187,12 +230,13 @@ def authorize(store, user, rid, body, limits):
         instances.require(rel["fingerprint"] == body.expected_release_fingerprint)
         s = rel["snapshot"]
         e = s["execution_source"]
-        instances.require(not e["plan_key"].startswith((PREFIX, INSTANCE_PREFIX)) and s["data_schema"] == SCHEMA)
+        instances.require(not e["plan_key"].startswith((PREFIX, INSTANCE_PREFIX)) and s["data_schema"] == result_schema(e["version"], e.get("aggregate_steps")))
+        instances.require(body.consent == consent_for(e["version"]), "Confirm this exact logic family")
         a = c.execute(select(internal_approvals).where(internal_approvals.c.id == rel["approval_id"])).mappings().one()
         require_capacity(c, user, s["draft"]["id"], AUTH_KIND)
         payload = dict(namespace=VERSION, id=lid, owner_id=user, project_id=rel["project_id"],
             expires_at=time.time() + TTL, scope=SCOPE, execution_version=e["version"],
-            recipe=canonical(e["version"]), data_schema=copy.deepcopy(SCHEMA), limits=cap.model_dump(),
+            recipe=canonical(e["version"]), data_schema=result_schema(e["version"]), limits=cap.model_dump(),
             implementation_fingerprint=implementation(), audit_ref=lid, model_requests=0,
             semantic_status="UNKNOWN", owner_acceptance="PENDING", formal_publication_enabled=False,
             private_audit=dict(release_id=rid, release_fingerprint=rel["fingerprint"],
@@ -280,12 +324,21 @@ def definition(store, c, user, lid, body, limits, key):
     instances.require(t["candidate_fingerprint"] == body.expected_candidate_fingerprint
         and t["graph_fingerprint"] == body.expected_graph_fingerprint
         and t["resource_id"] == body.expected_resource_id and t["source_hash"] == body.expected_source_hash)
-    if body.column not in t["columns"]:
-        raise DomainError("INVALID_INPUT", "Choose a current target numeric column")
+    dual = obj['execution_version'] == instances.TWO_SUM_VERSION
+    if dual:
+        instances.require(type(body) is TwoSumMaterialInput and set(body.columns) == set(SUM_STEPS)
+            and all(v in t['columns'] for v in body.columns.values()), 'Choose each canonical sum target column')
+        selected = body.columns
+        column = selected[SUM_STEPS[0]]
+    else:
+        if type(body) is not MaterialInput or body.column not in t['columns']:
+            raise DomainError('INVALID_INPUT', 'Choose a current target numeric column')
+        selected = column = body.column
+    selection: dict[str, object] = dict(columns=selected) if dual else dict(column=column)
     plan_body = dag.PlanInput(expected_candidate_fingerprint=t["candidate_fingerprint"],
-        expected_graph_fingerprint=t["graph_fingerprint"], column=body.column,
-        composition=canonical(obj["execution_version"], body.column), request_key=key)
-    b = dict(version=VERSION, logic=obj, target=t, column=body.column, limits=cap.model_dump(),
+        expected_graph_fingerprint=t["graph_fingerprint"], column=column,
+        composition=canonical(obj["execution_version"], selected), request_key=key)
+    b = dict(version=VERSION, logic=obj, target=t, **selection, limits=cap.model_dump(),
              plan_input=plan_body.model_dump(exclude_none=True), principal_id=user,
              request_key=body.request_key, model_requests=0, formal_publication_enabled=False)
     return b, plan_body, cap
@@ -305,6 +358,22 @@ def base_origin(store, c, user, aid, key, limits):
     return binding, expected, cap
 
 
+def validate_instance_input(binding, body):
+    instances.require(body.composition is not None)
+    version = binding['logic']['execution_version']
+    if version == instances.TWO_SUM_VERSION:
+        selected = {node.step_id: node.column for node in body.composition.nodes
+                    if node.step_id in SUM_STEPS}
+        instances.require(set(selected) == set(SUM_STEPS)
+            and all(type(v) is str and v in binding['target']['columns'] for v in selected.values())
+            and body.column == selected[SUM_STEPS[0]])
+    else:
+        selected = body.column
+        instances.require(selected in binding['target']['columns'])
+    instances.require(body.composition.model_dump(exclude_none=True) == canonical(version, selected)
+        and body.branch_patch is None and body.wiring_patch is None)
+
+
 def plan_origin(store, c, user, pid, aid, body, limits):
     prior = graph.lookup(c, user, aid, "csv_dag_plan", body.request_key)
     marked = prior is not None and "logical_reuse" in graph.checked(prior).get("response", {})
@@ -320,10 +389,8 @@ def plan_origin(store, c, user, pid, aid, body, limits):
         instances.require(fingerprint(ref) == fingerprint(origin) == fingerprint(marker(origin["origin_key"], binding)) and fingerprint(body.model_dump()) == fingerprint(old_body.model_dump())
             and pid == binding["target"]["project_id"]
             and body.expected_candidate_fingerprint == binding["target"]["candidate_fingerprint"]
-            and body.expected_graph_fingerprint == binding["target"]["graph_fingerprint"]
-            and body.column in binding["target"]["columns"]
-            and body.composition.model_dump(exclude_none=True) == canonical(binding["logic"]["execution_version"], body.column)
-            and body.branch_patch is None and body.wiring_patch is None)
+            and body.expected_graph_fingerprint == binding["target"]["graph_fingerprint"])
+        validate_instance_input(binding, body)
         return origin, cap
     return None
 
@@ -334,8 +401,7 @@ def prepare_instance_plan(store, c, user, pid, aid, source_plan, body, cap):
     instances.require(fingerprint(ref) == fingerprint(marker(ref["origin_key"], binding)) and cap == frozen
         and body.request_key.startswith(INSTANCE_PREFIX) and pid == binding["target"]["project_id"])
     body = body.model_copy(update={"logic_origin": dag.LogicOrigin(**ref)})
-    instances.require(body.column in binding["target"]["columns"]
-        and body.composition.model_dump(exclude_none=True) == canonical(binding["logic"]["execution_version"], body.column))
+    validate_instance_input(binding, body)
     dag.build(store, c, user, pid, aid, body.model_copy(update={"request_key": "logic-preflight-" + body.request_key[-48:], "logic_origin": None}), cap)
     old = graph.lookup(c, user, aid, DERIVED, body.request_key)
     if old:

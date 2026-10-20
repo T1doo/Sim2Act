@@ -38,7 +38,20 @@ from sim2act.worker import Worker
     ],
 )
 def test_actual_data_free_logic_page_cold_result_and_safe_recovery(env, tmp_path, lost, with_report):
-    aid, rid, _, _, rel = release(env, with_report=with_report)
+    run_logic_page(env, tmp_path, lost, with_report)
+
+
+@pytest.mark.parametrize("lost", ["mint-post", "post", "identity-late", "invalid-budget", "invalid-node-budget", "invalid-second-schema"])
+def test_actual_dual_data_free_logic_page(env, tmp_path, lost):
+    run_logic_page(env, tmp_path, lost, False, dual=True)
+
+
+def run_logic_page(env, tmp_path, lost, with_report, *, dual=False):
+    if dual:
+        from test_csv_two_sum_instances import release as dual_release
+        aid, rid, _, _, rel = dual_release(env)
+    else:
+        aid, rid, _, _, rel = release(env, with_report=with_report)
     aid = rel["snapshot"]["draft"]["id"]
     app = create_app(env[0], env[1])
     worker = Worker(env[0], env[1], NoModel())
@@ -82,7 +95,8 @@ def test_actual_data_free_logic_page_cold_result_and_safe_recovery(env, tmp_path
                 resource=rid,
                 release=rel["id"],
                 lost=lost,
-                nodes=3 if with_report else 2,
+                nodes=3 if with_report or dual else 2,
+                dual=dual,
             )
         )
     )

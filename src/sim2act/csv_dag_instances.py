@@ -158,7 +158,7 @@ def source_snapshot(store, c, user, rid, limits, *, fixed=False):
     # It comes from the new plan and its real receipt, never the old overlay.
     if "material_reuse" in plan or "logical_reuse" in plan:
         if dual:
-            require('material_reuse' in plan and 'logical_reuse' not in plan)
+            require(('material_reuse' in plan) != ('logical_reuse' in plan))
             chosen_columns = {step: plan['input'][step + '_column'] for step in sid}
             require(all(column in columns and actual[step]['column'] == column
                 for step, column in chosen_columns.items()))
