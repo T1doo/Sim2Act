@@ -22,11 +22,13 @@ def run_prefix(root, patch, files, notify, healthy):
         install_mock_counter,
         install_network_denials,
     )
+    from g0_stage_observer import StageObserver
     from test_pb_spec_production_controller import prepare_pb
     from test_pb_trial_dispatch import approve_stage
     from test_spec_production_controller import configured
 
     from sim2act import model
+    from sim2act import natural_live_admission as gate
     from sim2act import natural_source_archives as archive
     from sim2act import natural_spec_runtime as runtime
     from sim2act import natural_specs as natural
@@ -60,6 +62,11 @@ def run_prefix(root, patch, files, notify, healthy):
         runtime._ColdCommitDiagnostics,
         "__init__",
         boundary.observe_init(runtime._ColdCommitDiagnostics.__init__),
+    )
+    observer = StageObserver()
+    observer.install(
+        patch, runtime, gate,
+        lambda instance: boundary.entered and instance is boundary.instance,
     )
     iterator = env.__wrapped__(root)
     fixture = None
@@ -252,6 +259,7 @@ def run_prefix(root, patch, files, notify, healthy):
             worker.once()
         except G0Stop as stop:
             diagnostic = boundary.diagnostic(stop)
+            diagnostic["stage_observer"] = observer.report()
             # Preserve the original refusal before any client/heartbeat cleanup
             # can independently fail; never truncate or overwrite this record.
             files.writer("diagnostic.json").json(
@@ -278,6 +286,7 @@ def run_prefix(root, patch, files, notify, healthy):
                 g0_entered=boundary.entered,
                 mock_exchanges=mocks.exchanges,
                 mock_methods=mocks.methods,
+                stage_observer=observer.report(),
             )
         )
         raise
