@@ -69,6 +69,8 @@ from .tools import definitions, reconcile_readback, write_text_artifact
 VERSION = "local-record-app.v1"
 EVENT_VERSION = "local-record-event.v1"
 MAPPING = "local-record-input.v1"
+EDIT_MAPPING = "local-record-input.v2"
+EDIT_EVENT_VERSION = "local-record-event.v2"
 DEF, CREATE, PREPARE, RELEASED, RELEASE_SEAL, INSTANCE, PREVIEW, ACCEPTED, RUN_SCOPE = (
     VERSION + "." + v for v in
     ("definition", "create", "release-preview", "release-commit", "release-seal", "instance", "preview", "accepted", "run-scope")
@@ -95,6 +97,8 @@ class CreateApp(Key):
     name: str = Field(min_length=1, max_length=200)
     goal: str = Field(min_length=1, max_length=4000)
     consent: Literal["SAVE_LOCAL_RECORD_FORM"]
+    content_edits: Literal["OPEN_RECORD_CONTENT_V1"] | None = Field(
+        default=None, exclude_if=lambda value: value is None)
 
 
 class ReleaseInput(Key):
@@ -134,6 +138,15 @@ class SetState(CommandBase):
     reason: str = Field(min_length=1, max_length=500)
 
 
+class EditContent(CommandBase):
+    command: Literal["EDIT_CONTENT"]
+    record_id: str = Field(pattern=r"^record_[a-f0-9]{32}$")
+    expected_record_revision: int = Field(strict=True, ge=1)
+    title: str = Field(min_length=1, max_length=200)
+    details: str = Field(max_length=2000)
+    reason: str = Field(min_length=1, max_length=500)
+
+
 class Confirm(Strict):
     expected_preview_fingerprint: str = Field(pattern=HASH)
     consent: Literal["WRITE_THIS_EXACT_LOCAL_RECORD_EVENT"]
@@ -145,11 +158,15 @@ class Control(Strict):
 
 
 def command(value):
-    model = CreateRecord if value.get("command") == "CREATE" else SetState
+    model: type[CreateRecord] | type[EditContent] | type[SetState]
+    model = CreateRecord if value.get("command") == "CREATE" else (
+        EditContent if value.get("command") == "EDIT_CONTENT" else SetState)
     body = model.model_validate(value).model_dump()
     require(fingerprint(body) == fingerprint(value), "Typed command is not canonical")
     if not (body["title"] if body["command"] == "CREATE" else body["reason"]).strip():
         raise DomainError("INVALID_INPUT", "Explicit nonblank record title or transition reason required")
+    if body["command"] == "EDIT_CONTENT" and not body["title"].strip():
+        raise DomainError("INVALID_INPUT", "Explicit nonblank corrected title required")
     return body
 
 
@@ -262,7 +279,7 @@ def candidate(aid, action_id, goal_id, pid, limits):
 
 
 def definition(aid, action_id, goal_id, user, project, body, limits):
-    return dict(namespace=VERSION, id=aid, name=body["name"], principal_id=user,
+    value = dict(namespace=VERSION, id=aid, name=body["name"], principal_id=user,
         project_id=project["id"], runtime_id=project["runtime_id"], purpose=body["goal"], goal_id=goal_id,
         candidate=candidate(aid, action_id, goal_id, project["id"], limits),
         typed_mapping_version=MAPPING,
@@ -271,6 +288,17 @@ def definition(aid, action_id, goal_id, user, project, body, limits):
             "Immutable events and exact record/data CAS; no history overwrite", "No model or semantic acceptance"],
         limits=dict(max_events=MAX_EVENTS, max_records=MAX_RECORDS),
         derived_read_grants_per_event=2, formal_publication_enabled=False)
+    if body.get("content_edits") == "OPEN_RECORD_CONTENT_V1":
+        value["typed_mapping_version"] = EDIT_MAPPING
+        value["typed_command_schemas"]["EDIT_CONTENT"] = EditContent.model_json_schema()
+        value["hard_conditions"].append(
+            "EDIT_CONTENT replaces OPEN title/details with an explicit reason; identity/state and immutable history remain")
+    return value
+
+
+def allows_content_edits(value):
+    return (value["typed_mapping_version"] == EDIT_MAPPING
+        and value["typed_command_schemas"].get("EDIT_CONTENT") == EditContent.model_json_schema())
 
 
 def public_app(value):
@@ -562,10 +590,11 @@ def run_contract(i, value, rid, limits):
         resources=[], limits=Limits(**bounds(limits)), mode="mock", request_model="intern-s2").model_dump()
 
 
-def apply_event(current, event, previous, version, i):
+def apply_event(current, event, previous, version, i, *, allow_content_edit=False):
     keys = {"namespace", "app_id", "instance_id", "release_id", "principal_id", "kind", "collection_version",
         "record_id", "record_revision", "previous_event_fingerprint", "previous_collection_fingerprint", "title", "details", "state", "reason"}
-    require(set(event) == keys and event["namespace"] == EVENT_VERSION and event["app_id"] == i["source_app_id"]
+    namespace = EDIT_EVENT_VERSION if event.get("kind") == "EDIT_CONTENT" else EVENT_VERSION
+    require(set(event) == keys and event["namespace"] == namespace and event["app_id"] == i["source_app_id"]
         and event["instance_id"] == i["id"] and event["release_id"] == i["release_id"]
         and event["principal_id"] == i["principal_id"] and type(event["collection_version"]) is int
         and event["collection_version"] == version and event["previous_collection_fingerprint"] == previous
@@ -578,11 +607,15 @@ def apply_event(current, event, previous, version, i):
         require(old is None and len(current) < MAX_RECORDS and event["record_revision"] == 1
             and event["state"] == "OPEN" and event["previous_event_fingerprint"] is None and event["reason"] == "")
     else:
-        require(event["kind"] == "SET_STATE" and old is not None and old["state"] == "OPEN"
-            and event["state"] == "DONE" and event["record_revision"] == old["record_revision"] + 1
+        require(event["kind"] in {"SET_STATE", "EDIT_CONTENT"} and old is not None and old["state"] == "OPEN"
+            and event["record_revision"] == old["record_revision"] + 1
             and event["previous_event_fingerprint"] == old["last_event_fingerprint"]
-            and event["title"] == old["title"] and event["details"] == old["details"]
             and isinstance(event["reason"], str) and 1 <= len(event["reason"]) <= 500 and event["reason"].strip())
+        if event["kind"] == "SET_STATE":
+            require(event["state"] == "DONE" and event["title"] == old["title"] and event["details"] == old["details"])
+        else:
+            require(allow_content_edit and event["state"] == old["state"]
+                and (event["title"], event["details"]) != (old["title"], old["details"]))
     fp = fingerprint(event)
     current[event["record_id"]] = {k: event[k] for k in ("record_id", "record_revision", "title", "details", "state")} | dict(last_event_fingerprint=fp)
     return fp
@@ -672,7 +705,8 @@ def projection(store, c, user, i, limits):
             and fingerprint(event) == fingerprint(preview["event"]) == preview["event_fingerprint"])
         intent = c.execute(select(operation_intents.c.request).where(operation_intents.c.operation_id == op["id"])).scalar_one()
         require(fingerprint(intent) == fingerprint(dict(tool="artifact.save_text", args=dict(text=canonical(event)))))
-        previous = apply_event(current, event, previous, version, i)
+        previous = apply_event(current, event, previous, version, i,
+            allow_content_edit=allows_content_edits(release["snapshot"]["definition"]))
         require(fingerprint(job["result"]) == fingerprint(run_result(i, a, event, output, version)))
         committed = c.execute(select(events.c.data).where(events.c.run_id == rid,
             events.c.kind == "LOCAL_RECORD_COMMITTED")).scalars().all()
@@ -705,6 +739,9 @@ def no_pending(c, iid):
 
 def build_preview(i, release, body, records, history):
     body = command(body)
+    allow_edit = allows_content_edits(release["snapshot"]["definition"])
+    if body["command"] == "EDIT_CONTENT" and not allow_edit:
+        raise DomainError("UNSUPPORTED_CAPABILITY", "This exact record Release does not permit content edits")
     require(body["expected_revision"] == i["revision"] and body["expected_data_version"] == i["data_version"]
         and body["expected_release_fingerprint"] == release["fingerprint"] and i["data_version"] < MAX_EVENTS,
         "Record baseline or capacity changed")
@@ -718,17 +755,24 @@ def build_preview(i, release, body, records, history):
             and old["state"] == "OPEN", "Record identity, version or allowed state changed")
         assert old is not None  # require above rejects before field access.
         record_id, revision = old["record_id"], old["record_revision"] + 1
-        title, details, reason, state = old["title"], old["details"], body["reason"], body["target_state"]
-    event = dict(namespace=EVENT_VERSION, app_id=i["source_app_id"], instance_id=i["id"], release_id=i["release_id"],
+        if body["command"] == "EDIT_CONTENT":
+            title, details, reason, state = body["title"], body["details"], body["reason"], old["state"]
+            if (title, details) == (old["title"], old["details"]):
+                raise DomainError("INVALID_INPUT", "A content edit must change title or details")
+        else:
+            title, details, reason, state = old["title"], old["details"], body["reason"], body["target_state"]
+    event = dict(namespace=EDIT_EVENT_VERSION if body["command"] == "EDIT_CONTENT" else EVENT_VERSION,
+        app_id=i["source_app_id"], instance_id=i["id"], release_id=i["release_id"],
         principal_id=i["principal_id"], kind=body["command"], collection_version=i["data_version"] + 1,
         record_id=record_id, record_revision=revision, previous_event_fingerprint=old["last_event_fingerprint"] if old else None,
         previous_collection_fingerprint=history[-1]["event_fingerprint"] if history else None,
         title=title, details=details, state=state, reason=reason)
-    apply_event(copy.deepcopy(current), event, event["previous_collection_fingerprint"], i["data_version"] + 1, i)
+    apply_event(copy.deepcopy(current), event, event["previous_collection_fingerprint"], i["data_version"] + 1, i,
+        allow_content_edit=allow_edit)
     validate_action_input(validate_action(canonical(release["snapshot"]["definition"]["candidate"]["actions"][0])), dict(text=canonical(event)))
     return dict(event=event, event_fingerprint=fingerprint(event), input=body, instance_revision=i["revision"],
         data_version=i["data_version"], release_id=i["release_id"], release_fingerprint=release["fingerprint"],
-        expires_at=time.time() + 900, typed_mapping_version=MAPPING)
+        expires_at=time.time() + 900, typed_mapping_version=release["snapshot"]["definition"]["typed_mapping_version"])
 
 
 def request_state(store, c, user, iid, key, limits):
@@ -843,7 +887,9 @@ def process_job(worker, run):
         records, history = projection(worker.store, c, job["principal_id"], i, limits)
         current = {r["record_id"]: r for r in records}
         event = frozen["event"]
-        apply_event(current, event, history[-1]["event_fingerprint"] if history else None, i["data_version"] + 1, i)
+        require(frozen["typed_mapping_version"] == release["snapshot"]["definition"]["typed_mapping_version"])
+        apply_event(current, event, history[-1]["event_fingerprint"] if history else None, i["data_version"] + 1, i,
+            allow_content_edit=allows_content_edits(release["snapshot"]["definition"]))
         args = dict(text=canonical(event))
         action = validate_action(canonical(release["snapshot"]["definition"]["candidate"]["actions"][0]))
         validate_action_input(action, args)
@@ -1056,7 +1102,7 @@ def mount(app, store, limits, identity):
         return inspect_instance(store, user, iid, limits)
 
     @app.post("/api/internal/record-instances/{iid}/previews", status_code=201)
-    def post_preview(iid: str, body: Annotated[CreateRecord | SetState, Field(discriminator="command")], user=user_dependency):
+    def post_preview(iid: str, body: Annotated[CreateRecord | SetState | EditContent, Field(discriminator="command")], user=user_dependency):
         return preview(store, user, iid, body.model_dump(), limits)
 
     @app.get("/api/internal/record-instances/{iid}/record-requests/{key}")

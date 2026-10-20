@@ -55,7 +55,7 @@ async function open(iid=instance_id){
  await select('local-records-instance-select',iid);check(view().instance?.id===iid,'explicit selected local-record instance is read through family API');check(posts().length===n,'app/instance opening performs only GET');
 }
 async function createLifecycle(){
- check(posts().length===0,'cold discovery creates no app, version, instance or Run');await click('local-records-new');input('local-records-name',info.app_name);input('local-records-goal',info.goal);ack('local-records-create-ack');
+ check(posts().length===0,'cold discovery creates no app, version, instance or Run');await click('local-records-new');input('local-records-name',info.app_name);input('local-records-goal',info.goal);ack('local-records-create-ack');if(info.scenario==='content-edit')ack('local-records-content-edits');
  let n=posts().length;await click('local-records-save-app',true);const saved=posts().at(-1);assert.equal(saved.status,201,saved.response_text);app_id=JSON.parse(saved.response_text).id;
  check(posts().length===n+1&&saved.path===`/api/projects/${info.project}/record-apps`&&view().savedApp?.id===app_id,'double click saves exactly one explicit fixed typed-form app');
  check(!view().app&&!view().instance&&view().savedApp.input_guidance.mode==='LOCAL_RECORDS','saving app does not automatically open or create delivery state');
@@ -74,13 +74,14 @@ async function createLifecycle(){
 async function write(command,version,lost=false){
  await select('local-records-command',command);
  if(command==='CREATE'){input('local-records-title',version===1?info.title_a:info.title_b);input('local-records-details',version===1?info.details_a:info.details_b);}
- else{await select('local-records-record-select',record_a);input('local-records-reason',info.done_reason);}
+ else{await select('local-records-record-select',record_a);input('local-records-reason',command==='EDIT_CONTENT'?info.edit_reason:info.done_reason);if(command==='EDIT_CONTENT'){check($('local-records-title').value===info.title_a&&$('local-records-details').value===info.details_a,'explicit OPEN selection preloads exact original content');input('local-records-title',info.correct_title);input('local-records-details',info.correct_details);}}
  let n=posts().length;await click('local-records-preview',true);const post=posts().at(-1),prepared=JSON.parse(post.response_text);assert.equal(post.status,201,post.response_text);
  check(posts().length===n+1&&post.path===base()+'/previews'&&!prepared.run,'double click creates one immutable preview without a business Run');
  const event=prepared.preview.event,key=prepared.request_key;request_keys.push(key);
  check(prepared.preview.input.command===command&&prepared.preview.input.expected_data_version===version-1&&event.collection_version===version,'exact typed request and proposed event bind the existing data version');
  if(command==='CREATE')check(event.state==='OPEN'&&event.record_revision===1&&event.title===(version===1?info.title_a:info.title_b)&&event.details===(version===1?info.details_a:info.details_b),'CREATE preview preserves full user title/details and proposes OPEN revision one');
- else check(event.record_id===record_a&&event.record_revision===2&&event.state==='DONE'&&event.title===info.title_a&&event.details===info.details_a&&event.reason===info.done_reason,'SET_STATE preview targets stable A, preserves fields and includes explicit DONE reason');
+ else if(command==='EDIT_CONTENT')check(event.namespace==='local-record-event.v2'&&event.record_id===record_a&&event.record_revision===2&&event.state==='OPEN'&&event.title===info.correct_title&&event.details===info.correct_details&&event.reason===info.edit_reason,'EDIT preview binds stable OPEN A, complete corrected content and explicit reason');
+ else check(event.record_id===record_a&&event.record_revision===(info.scenario==='content-edit'?3:2)&&event.state==='DONE'&&event.title===(info.scenario==='content-edit'?info.correct_title:info.title_a)&&event.details===(info.scenario==='content-edit'?info.correct_details:info.details_a)&&event.reason===info.done_reason,'SET_STATE preview targets stable A, preserves fields and includes explicit DONE reason');
  check($('local-records-confirm').disabled&&!$('local-records-run-ack').checked,'preview never automatically confirms a write');
  ack('local-records-run-ack');n=posts().length;const offset=actions.length;if(lost)lose={path:base()+'/previews/'+encodeURIComponent(key)+'/commit'};await click('local-records-confirm',true);
  const accepted=posts().at(-1);assert.equal(accepted.status,202,accepted.response_text);
@@ -119,6 +120,21 @@ async function flow(){
  await select('local-records-recovery-stage','RUN');input('local-records-recovery-key',request_keys[0]);n=posts().length;await click('local-records-recover');
  check(posts().length===n&&view().acceptedRun.run_id===run_ids[0]&&JSON.parse($('local-records-recovery-proof').textContent).request_key===request_keys[0],'cold original-key GET recovers the original write without creating a new Run');
  check(posts().filter(r=>r.path===`/api/projects/${info.project}/record-apps`).length===1&&posts().filter(r=>r.path.endsWith('/record-release-approvals')).length===1&&posts().filter(r=>r.path.includes('/record-release-requests/')&&r.path.endsWith('/commit')).length===1&&posts().filter(r=>r.path===`/api/internal/record-releases/${release_id}/instances`).length===1&&posts().filter(r=>r.path===base()+'/previews').length===3&&posts().filter(r=>r.path.includes('/previews/')&&r.path.endsWith('/commit')).length===3,'all page writes are bounded to explicit app, Release, instance and three preview/confirm pairs');
+}
+async function contentEdit(){
+ await createLifecycle();check(view().app.definition.typed_mapping_version==='local-record-input.v2','explicit creation binds the new typed editing contract');
+ await write('CREATE',1);await write('CREATE',2);const before=JSON.stringify(view().instance.history),b=JSON.stringify(view().instance.records.find(r=>r.record_id===record_b));
+ await write('EDIT_CONTENT',3,true);
+ check(JSON.stringify(view().instance.history.slice(0,2))===before&&JSON.stringify(view().instance.records.find(r=>r.record_id===record_b))===b,'content correction preserves both original event rows and all unrelated B fields');
+ const key=request_keys[2],n=posts().length;await boot();await open();
+ await select('local-records-recovery-stage','RUN');input('local-records-recovery-key',key);await click('local-records-recover');
+ check(posts().length===n&&view().preview.preview.event.kind==='EDIT_CONTENT'&&$('local-records-title').value===info.correct_title&&$('local-records-details').value===info.correct_details&&$('local-records-confirm').disabled,'cold original-key GET recovers the exact committed EDIT and cannot repeat it');
+ await held(original(key),()=>click('local-records-recover'),async()=>{input('local-records-details','temporary edit');input('local-records-details',info.correct_details);},'EDIT recovery after edit-and-revert');
+ check(view().preview===null&&!view().previewCurrent,'late EDIT recovery cannot reinstate a stale preview after edit ABA');
+ const state=await write('SET_STATE',4),a=state.records.find(r=>r.record_id===record_a);
+ check(a.record_revision===3&&a.state==='DONE'&&a.title===info.correct_title&&a.details===info.correct_details,'existing state transition preserves corrected content and advances the same record');
+ await boot();await open();check(view().instance.data_version===4&&JSON.stringify(view().instance.history.slice(0,2))===before,'cold independent page validates mixed v1/v2 history without writes');
+ check(![...$('local-records-record-select').options].some(o=>o.value===record_a),'DONE record is not offered for content correction');
 }
 async function privatePreview(){
  await open();const business=instance_id;check(view().instance.records[0].title==='Synthetic business anchor A','existing real business A is present before private creation');
@@ -276,14 +292,14 @@ async function revocation(){
 }
 (async()=>{
  let status='FAIL',error;
- try{await boot();if(info.scenario==='navigation')await navigation();else if(info.scenario==='revocation')await revocation();else if(info.scenario==='project-history')await projectHistory();else if(info.scenario==='controls')await controls();else if(info.scenario==='private-preview')await privatePreview();else if(info.scenario==='collection-export')await collectionExport();else await flow();status='PASS';}
+ try{await boot();if(info.scenario==='content-edit')await contentEdit();else if(info.scenario==='navigation')await navigation();else if(info.scenario==='revocation')await revocation();else if(info.scenario==='project-history')await projectHistory();else if(info.scenario==='controls')await controls();else if(info.scenario==='private-preview')await privatePreview();else if(info.scenario==='collection-export')await collectionExport();else await flow();status='PASS';}
  catch(e){error=e.stack;process.stderr.write(error+'\n');process.exitCode=1;}
  finally{
   if(releaseRead){releaseRead();releaseRead=null;}
   try{await close();}catch(e){status='FAIL';error=error||e.stack;process.exitCode=1;}
   const files=await Promise.all(downloads.map(async file=>{const bytes=Buffer.from(await file.blob.arrayBuffer());return {filename:file.filename,type:file.blob.type,bytes:bytes.length,base64:bytes.toString('base64'),sha256:crypto.createHash('sha256').update(bytes).digest('hex'),revoked:file.revoked};}));
   fs.writeFileSync(info.output,JSON.stringify({status,error,scenario:info.scenario,checks,actions,static_resource_loads,boots,app_id,release_id,instance_id,run_ids,request_keys,first_history,downloads:files,
-   classification:info.scenario==='private-preview'?'ACTUAL_HTTP_JSDOM_PRIVATE_RECORD_PREVIEW':info.scenario==='collection-export'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_CURRENT_COLLECTION_EXPORT':info.scenario==='controls'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_SAME_RUN_CONTROLS':info.scenario==='project-history'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_PROJECT_HISTORY_NO_PAGE_WORKER':info.scenario==='navigation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_NAVIGATION_NO_WORKER':info.scenario==='revocation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_REVOCATION_NO_WORKER':'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_FLOW',qualification_role:'UI_AUTHOR',scope:'Actual served JavaScript and ASGI HTTP; only receipt delivery is controlled, synthetic typed inputs and NoModel Worker',native_browser:'NOT_RUN',pg:'NOT_RUN',real_model:'NOT_RUN',real_semantic_acceptance:'NOT_RUN'},null,2)+'\n');
+   classification:info.scenario==='content-edit'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_CONTENT_EDIT':info.scenario==='private-preview'?'ACTUAL_HTTP_JSDOM_PRIVATE_RECORD_PREVIEW':info.scenario==='collection-export'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_CURRENT_COLLECTION_EXPORT':info.scenario==='controls'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_SAME_RUN_CONTROLS':info.scenario==='project-history'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_PROJECT_HISTORY_NO_PAGE_WORKER':info.scenario==='navigation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_NAVIGATION_NO_WORKER':info.scenario==='revocation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_REVOCATION_NO_WORKER':'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_FLOW',qualification_role:'UI_AUTHOR',scope:'Actual served JavaScript and ASGI HTTP; only receipt delivery is controlled, synthetic typed inputs and NoModel Worker',native_browser:'NOT_RUN',pg:'NOT_RUN',real_model:'NOT_RUN',real_semantic_acceptance:'NOT_RUN'},null,2)+'\n');
   process.stdout.write(JSON.stringify({done:true})+'\n');
  }
 })();

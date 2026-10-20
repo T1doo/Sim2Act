@@ -125,11 +125,12 @@ def ok(response, status=200):
     return response.json()
 
 
-def ready(env, pid=None, key="local-form"):
+def ready(env, pid=None, key="local-form", *, content_edits=False):
     client, pid = env[2], pid or env[5]
     app = ok(client.post(f"/api/projects/{pid}/record-apps", json=dict(
         name="Synthetic local collection", goal="Collect independent work items and explicitly mark one DONE",
-        request_key=key, consent="SAVE_LOCAL_RECORD_FORM")), 201)
+        request_key=key, consent="SAVE_LOCAL_RECORD_FORM",
+        **({"content_edits": "OPEN_RECORD_CONTENT_V1"} if content_edits else {}))), 201)
     public = ok(client.get(f"/api/apps/{app['id']}"))
     assert public["namespace"] == "local-record-app.v1"
     assert public["project_id"] == pid and public["principal_id"] == env[3]

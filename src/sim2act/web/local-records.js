@@ -4,6 +4,7 @@ let localRecordsView=null,localRecordsEpoch=0;
 const localRecordsIntents=new Map();
 const localRecordsControlIntents=new Map();
 const localRecordsVersion="local-record-app.v1";
+const localRecordsCanEdit=a=>a?.definition?.typed_mapping_version==="local-record-input.v2"&&!!a.definition.typed_command_schemas?.EDIT_CONTENT;
 const localRecordsPrivate="local-record-private-preview.v1";
 const localRecordsInstances=v=>[...(v.delivery?.instances||[]),...(v.delivery?.preview_instances||[])];
 const localRecordsLabelScope=i=>i?.preview_scope?"PREVIEW 私有试写 · ":"业务实例 · ";
@@ -36,6 +37,7 @@ function localRecordsBuild(app,generation,selectionCurrent=()=>true){
  v.name=localRecordsInput("local-records-name",{maxLength:200,required:true});v.name.value="本地记录与状态";
  v.goal=localRecordsInput("local-records-goal",{maxLength:4000,multiline:true,required:true});v.goal.value="保存本项目的本地记录，保留标题与正文，并明确将 OPEN 状态修改为 DONE；保留每条记录的修订和历史。";
  v.createAck=localRecordsInput("local-records-create-ack",{type:"checkbox"});v.create=localRecordsButton("明确保存本地记录应用","local-records-save-app",()=>localRecordsCreate(v));
+ v.contentEdits=localRecordsInput("local-records-content-edits",{type:"checkbox"});creation.append(localRecordsLabel("允许有依据地更正 OPEN 记录标题和正文；不改变状态、不覆盖历史。",v.contentEdits));
  creation.append(localRecordsLabel("应用名称 ",v.name),localRecordsLabel("用途与约束 ",v.goal),localRecordsLabel("我确认保存本项目的固定本地记录表单应用；不自动创建版本或运行。",v.createAck),v.create);
  v.savedAppOpen=localRecordsButton("打开已保存的本地记录应用","local-records-open-saved-app",()=>localRecordsOpenSaved(v));creation.append(v.savedAppOpen);panel.append(creation);
  const lifecycle=localRecordsNode("section","local-records-lifecycle");lifecycle.hidden=!app;lifecycle.append(localRecordsNode("h3",null,"2. 单独保存内部 Release"));
@@ -48,7 +50,7 @@ function localRecordsBuild(app,generation,selectionCurrent=()=>true){
  lifecycle.append(localRecordsLabel("已保存版本 ",v.releaseSelect),localRecordsLabel("明确创建独立记录集合实例；不会自动写入业务记录。",v.instanceAck),v.createInstance,localRecordsNode("p",null,"私有试写会真实保存到独立预览空间，不进入业务材料目录、不新增授权；不自动晋升为业务结果。"),localRecordsLabel("明确创建私有试写空间；后续每次试写仍须分别预览和确认。",v.privateAck),v.createPrivate,localRecordsLabel("明确选择业务或私有试写空间 ",v.instanceSelect),v.deliveryRefresh);panel.append(lifecycle);
  const operations=localRecordsNode("section","local-records-operations");operations.hidden=true;v.operations=operations;operations.append(localRecordsNode("h3",null,"4. 填写并预览本次变更"));
  v.instanceInfo=localRecordsNode("p","local-records-instance-info");operations.append(v.instanceInfo);
- v.command=localRecordsSelect("local-records-command",[["创建记录","CREATE"],["修改记录状态","SET_STATE"]]);operations.append(localRecordsLabel("本次操作 ",v.command));
+ v.command=localRecordsSelect("local-records-command",[["创建记录","CREATE"],["修改记录状态","SET_STATE"],...(localRecordsCanEdit(app)?[["更正 OPEN 记录内容","EDIT_CONTENT"]]:[])]);operations.append(localRecordsLabel("本次操作 ",v.command));
  v.createFields=localRecordsNode("fieldset");v.createFields.append(localRecordsNode("legend",null,"新记录"));v.title=localRecordsInput("local-records-title",{maxLength:200,required:true});v.details=localRecordsInput("local-records-details",{maxLength:2000,multiline:true,required:true});v.createFields.append(localRecordsLabel("标题 ",v.title),localRecordsLabel("记录正文 ",v.details),localRecordsNode("p",null,"新记录初始状态为 OPEN；保存后使用稳定 record_id 和 revision=1。"));
  v.stateFields=localRecordsNode("fieldset");v.stateFields.hidden=true;v.stateFields.append(localRecordsNode("legend",null,"更新已有记录"));v.recordSelect=localRecordsSelect("local-records-record-select",[["请选择当前记录",""]]);v.state=localRecordsSelect("local-records-state",[["完成（仅 OPEN → DONE）","DONE"]]);v.reason=localRecordsInput("local-records-reason",{multiline:true,maxLength:500,required:true});v.stateFields.append(localRecordsLabel("记录及当前修订 ",v.recordSelect),localRecordsLabel("目标状态 ",v.state),localRecordsLabel("本次变更依据 ",v.reason));operations.append(v.createFields,v.stateFields);
  v.previewButton=localRecordsButton("预览本次精确变更","local-records-preview",()=>localRecordsPreview(v));operations.append(v.previewButton);v.previewText=localRecordsNode("div","local-records-preview-summary");operations.append(v.previewText);v.previewProof=localRecordsProof(operations,"local-records-preview-proof","本次合同、输入、权限与版本指纹");
@@ -61,13 +63,18 @@ function localRecordsBuild(app,generation,selectionCurrent=()=>true){
  v.exportCollection=localRecordsButton("下载当前集合 JSON 快照","local-records-export",()=>localRecordsExportCollection(v));v.exportStatus=localRecordsNode("p","local-records-export-status");v.exportStatus.setAttribute("role","status");
  result.append(localRecordsNode("h3",null,"当前记录集合"),localRecordsNode("p",null,"下载前重新核对当前权限与已保存集合；JSON 保留记录 ID、修订和事件来源，仅代表该集合版本的观察快照。"),v.exportCollection,v.exportStatus,v.records);v.history=localRecordsNode("div","local-records-history");result.append(localRecordsNode("h3",null,"所选记录的不可变历史"),v.history);panel.append(result);
  const recovery=localRecordsNode("section","local-records-recovery");recovery.append(localRecordsNode("h3",null,"原请求恢复"),localRecordsNode("p",null,"未知结果不重发写入。保留或输入原请求 key，选择原阶段后仅 GET 核对；冷页需先重新打开同一应用、版本或实例。"));v.recoveryStage=localRecordsSelect("local-records-recovery-stage",[["保存应用","CREATE_APP"],["准备内部版本","PREPARE_RELEASE"],["保存内部版本","COMMIT_RELEASE"],["创建实例","CREATE_INSTANCE"],["创建私有试写空间","CREATE_PRIVATE"],["本次变更预览","PREVIEW"],["提交写入 Run","RUN"]]);v.recoveryKey=localRecordsInput("local-records-recovery-key",{maxLength:100});v.recover=localRecordsButton("仅 GET 读取原 key 回执","local-records-recover",()=>localRecordsRecover(v));recovery.append(localRecordsLabel("原阶段 ",v.recoveryStage),localRecordsLabel("原 key ",v.recoveryKey),v.recover);v.recoveryProof=localRecordsProof(recovery,"local-records-recovery-proof","原请求与恢复回执");panel.append(recovery);
- for(const input of [v.name,v.goal,v.createAck,v.releaseAck,v.instanceAck,v.privateAck,v.runAck,v.recoveryKey])for(const event of ["input","change"])input.addEventListener(event,()=>{if(localRecordsCurrent(v))localRecordsButtons(v);});
- for(const input of [v.name,v.goal,v.recoveryKey,v.recoveryStage])for(const event of ["input","change"])input.addEventListener(event,()=>{if(localRecordsCurrent(v)){v.edit++;localRecordsButtons(v);}});
- for(const input of [v.command,v.title,v.details,v.recordSelect,v.state,v.reason])for(const event of ["input","change"])input.addEventListener(event,()=>{v.createFields.hidden=v.command.value!=="CREATE";v.stateFields.hidden=v.command.value!=="SET_STATE";localRecordsEdited(v);});
+ for(const input of [v.name,v.goal,v.contentEdits,v.createAck,v.releaseAck,v.instanceAck,v.privateAck,v.runAck,v.recoveryKey])for(const event of ["input","change"])input.addEventListener(event,()=>{if(localRecordsCurrent(v))localRecordsButtons(v);});
+ for(const input of [v.name,v.goal,v.contentEdits,v.recoveryKey,v.recoveryStage])for(const event of ["input","change"])input.addEventListener(event,()=>{if(localRecordsCurrent(v)){v.edit++;localRecordsButtons(v);}});
+ for(const input of [v.command,v.title,v.details,v.recordSelect,v.state,v.reason])for(const event of ["input","change"])input.addEventListener(event,()=>{localRecordsEditFields(v,(input===v.command||input===v.recordSelect)&&event==="change");localRecordsEdited(v);});
  v.releaseSelect.onchange=()=>{v.selection++;v.releaseAck.checked=v.instanceAck.checked=v.privateAck.checked=false;localRecordsButtons(v);};
  v.instanceSelect.onchange=safe(()=>localRecordsSelectInstance(v,v.instanceSelect.value));
  v.runSelect.onchange=()=>{v.read++;localRecordsClearControl(v);v.run=null;v.runStatus.textContent="已改变 Run 选择，请明确读取该 Run。";v.runProof.textContent="";localRecordsButtons(v);};
  return v;
+}
+function localRecordsEditFields(v,load=false){
+ const edit=v.command.value==="EDIT_CONTENT";v.createFields.hidden=v.command.value==="SET_STATE";v.stateFields.hidden=v.command.value==="CREATE";v.state.parentElement.hidden=edit;
+ v.createFields.querySelector("legend").textContent=edit?"更正后的完整标题和正文（保留原状态与历史）":"新记录";
+ if(load&&edit){const old=v.instance?.records.find(r=>r.record_id===v.recordSelect.value);if(old){v.title.value=old.title;v.details.value=old.details;}}
 }
 const localRecordsHash=value=>ownerHash(value);
 const localRecordsHashShape=value=>typeof value==="string"&&/^[a-f0-9]{64}$/.test(value);
@@ -86,19 +93,20 @@ function localRecordsButtons(v){
  v.commitRelease.disabled=busy||blocked||!v.approval||!!v.approval.release||!v.releaseAck.checked||v.approval.approval.expires_at*1000<=Date.now();
  v.createInstance.disabled=busy||blocked||!v.releaseSelect.value||!v.instanceAck.checked;
  v.createPrivate.disabled=busy||blocked||!v.releaseSelect.value||!v.privateAck.checked;
- v.previewButton.disabled=busy||blocked||!v.instance||(v.acceptedRun&&!localRecordsTerminal(v.acceptedRun.status))||(v.command.value==="CREATE"?!v.title.value.trim():!v.recordSelect.value||!v.reason.value.trim());
+ v.previewButton.disabled=busy||blocked||!v.instance||(v.acceptedRun&&!localRecordsTerminal(v.acceptedRun.status))||(v.command.value==="CREATE"?!v.title.value.trim():!v.recordSelect.value||!v.reason.value.trim()||(v.command.value==="EDIT_CONTENT"&&!v.title.value.trim()));
  v.confirm.disabled=busy||blocked||!v.preview||!v.previewCurrent?.()||!v.instance||v.preview.preview.data_version!==v.instance.data_version||v.preview.preview.instance_revision!==v.instance.revision||v.preview.preview.release_fingerprint!==v.instance.release_fingerprint||!!v.preview.run||!v.runAck.checked||v.preview.preview.expires_at*1000<=Date.now();
  v.deliveryRefresh.disabled=busy||!v.app;v.refresh.disabled=busy||!v.selectedIid;v.runRead.disabled=busy||!v.selectedIid||!v.runSelect.value;
  v.exportCollection.disabled=busy||!v.instance;v.metadataRead.disabled=busy||!v.metadataTarget;
  v.recover.disabled=busy||!v.recoveryKey.value.trim();
  localRecordsControlButtons(v);
- for(const input of [v.name,v.goal,v.createAck,v.releaseAck,v.instanceAck,v.privateAck,v.command,v.title,v.details,v.recordSelect,v.state,v.reason,v.runAck])input.disabled=busy||blocked;
+ for(const input of [v.name,v.goal,v.contentEdits,v.createAck,v.releaseAck,v.instanceAck,v.privateAck,v.command,v.title,v.details,v.recordSelect,v.state,v.reason,v.runAck])input.disabled=busy||blocked;
 }
 function localRecordsRemember(v,intent){v.recoveryStage.value=intent.stage;v.recoveryKey.value=intent.key;v.recoveryProof.textContent=JSON.stringify({stage:intent.stage,request_key:intent.key,request_fingerprint:intent.requestFingerprint,state:intent.state},null,2);}
 async function localRecordsValidateApp(v,app,intent,current){
  if(!localRecordsApp(app)||app.project_id!==v.project||typeof app.id!=="string"||typeof app.principal_id!=="string"||typeof app.runtime_id!=="string"||!app.definition||!localRecordsHashShape(app.fingerprint))localRecordsError();
  if(["id","name","principal_id","project_id","runtime_id"].some(key=>app[key]!==app.definition[key])||!localRecordsSame(app.candidate,app.definition.candidate))localRecordsError();
  if(intent?.originalInput?.name&&(app.name!==intent.originalInput.name||app.definition.purpose!==intent.originalInput.goal))localRecordsError();
+ if(intent?.originalInput&&localRecordsCanEdit(app)!==(intent.originalInput.content_edits==="OPEN_RECORD_CONTENT_V1"))localRecordsError();
  const hash=await localRecordsHash(app.definition);if(!current())return false;if(hash!==app.fingerprint)localRecordsError();
  if(intent&&app.request_fingerprint!==undefined&&app.request_fingerprint!==intent.originFingerprint)localRecordsError();
  return current();
@@ -124,7 +132,7 @@ async function localRecordsValidateInstanceReceipt(v,reply,intent,current){
 }
 async function localRecordsValidatePreview(v,reply,intent,current){
  localRecordsEnvelope(reply,intent.scope);const p=reply.preview,e=p?.event;
- if(reply.principal_id!==intent.scope.principal||reply.project_id!==intent.scope.project||reply.instance_id!==intent.scope.instance||reply.app_id!==intent.scope.app||reply.request_key!==intent.key||reply.request_fingerprint!==intent.originFingerprint||!p||!localRecordsHashShape(reply.preview_fingerprint)||!localRecordsHashShape(p.event_fingerprint)||!Number.isFinite(p.expires_at)||p.instance_revision!==intent.originalInput.expected_revision||p.data_version!==intent.originalInput.expected_data_version||p.release_fingerprint!==intent.originalInput.expected_release_fingerprint||p.release_id!==intent.scope.release||!localRecordsSame(p.input,intent.originalInput)||e?.namespace!=="local-record-event.v1"||e.app_id!==intent.scope.app||e.instance_id!==intent.scope.instance||e.principal_id!==intent.scope.principal||e.release_id!==intent.scope.release||e.kind!==intent.originalInput.command||e.collection_version!==p.data_version+1||typeof e.record_id!=="string"||!e.record_id||!localRecordsInteger(e.record_revision)||e.record_revision<1)localRecordsError();
+ if(reply.principal_id!==intent.scope.principal||reply.project_id!==intent.scope.project||reply.instance_id!==intent.scope.instance||reply.app_id!==intent.scope.app||reply.request_key!==intent.key||reply.request_fingerprint!==intent.originFingerprint||!p||!localRecordsHashShape(reply.preview_fingerprint)||!localRecordsHashShape(p.event_fingerprint)||!Number.isFinite(p.expires_at)||p.instance_revision!==intent.originalInput.expected_revision||p.data_version!==intent.originalInput.expected_data_version||p.release_fingerprint!==intent.originalInput.expected_release_fingerprint||p.release_id!==intent.scope.release||!localRecordsSame(p.input,intent.originalInput)||e?.namespace!==(intent.originalInput.command==="EDIT_CONTENT"?"local-record-event.v2":"local-record-event.v1")||e.app_id!==intent.scope.app||e.instance_id!==intent.scope.instance||e.principal_id!==intent.scope.principal||e.release_id!==intent.scope.release||e.kind!==intent.originalInput.command||e.collection_version!==p.data_version+1||typeof e.record_id!=="string"||!e.record_id||!localRecordsInteger(e.record_revision)||e.record_revision<1)localRecordsError();
  const ph=await localRecordsHash(p);if(!current())return false;if(ph!==reply.preview_fingerprint)localRecordsError();
  const eh=await localRecordsHash(e);if(!current())return false;if(eh!==p.event_fingerprint)localRecordsError();
  const body=intent.originalInput;
@@ -132,6 +140,10 @@ async function localRecordsValidatePreview(v,reply,intent,current){
  if(body.command==="SET_STATE"){
   const old=intent.originalRecord;
   if(!old||e.record_id!==body.record_id||old.record_id!==body.record_id||old.record_revision!==body.expected_record_revision||e.record_revision!==body.expected_record_revision+1||old.state!=="OPEN"||e.state!=="DONE"||e.title!==old.title||e.details!==old.details||e.reason!==body.reason||e.previous_event_fingerprint!==old.last_event_fingerprint)localRecordsError();
+ }
+ if(body.command==="EDIT_CONTENT"){
+  const old=intent.originalRecord;
+  if(!localRecordsCanEdit(v.app)||p.typed_mapping_version!=="local-record-input.v2"||!old||old.state!=="OPEN"||e.state!=="OPEN"||e.record_id!==body.record_id||old.record_id!==body.record_id||old.record_revision!==body.expected_record_revision||e.record_revision!==old.record_revision+1||e.previous_event_fingerprint!==old.last_event_fingerprint||e.title!==body.title||e.details!==body.details||e.reason!==body.reason||!e.title.trim()||!e.reason.trim()||(e.title===old.title&&e.details===old.details))localRecordsError();
  }
  if(reply.run&&(typeof reply.run.run_id!=="string"||typeof reply.run.app_run_id!=="string"||typeof reply.run.status!=="string"||!localRecordsInteger(reply.run.version)))localRecordsError();
  return current();
@@ -158,7 +170,7 @@ async function localRecordsPost(v,stage,url,body,recoveryUrl,check,{key=body.req
 }
 async function localRecordsCreate(v){
  if(!localRecordsCurrent(v)||v.create.disabled)return;
- const body={name:v.name.value,goal:v.goal.value,request_key:crypto.randomUUID(),consent:"SAVE_LOCAL_RECORD_FORM"},current=localRecordsFence(v);
+ const body={name:v.name.value,goal:v.goal.value,request_key:crypto.randomUUID(),consent:"SAVE_LOCAL_RECORD_FORM",...(v.contentEdits.checked?{content_edits:"OPEN_RECORD_CONTENT_V1"}:{})},current=localRecordsFence(v);
  const saved=await localRecordsPost(v,"CREATE_APP",`/api/projects/${v.project}/record-apps`,body,`/api/projects/${v.project}/record-app-requests/${encodeURIComponent(body.request_key)}`,localRecordsValidateApp);
  if(!current()||!saved)return;v.savedApp=saved.reply;localRecordsStatus(v,"固定本地记录应用已保存；请单独打开后准备内部版本，尚未写入记录。");localRecordsButtons(v);
 }
@@ -279,12 +291,14 @@ async function localRecordsValidateProjection(v,reply,iid,current){
  const keys=["namespace","app_id","instance_id","release_id","principal_id","kind","collection_version","record_id","record_revision","previous_event_fingerprint","previous_collection_fingerprint","title","details","state","reason"].sort().join(),fold=new Map(),runIds=new Set(),appRunIds=new Set();
  for(const [index,row]of reply.history.entries()){
   const e=row.event,old=fold.get(e?.record_id);
-  if(row.version!==index+1||!localRecordsHashShape(row.event_fingerprint)||typeof row.run_id!=="string"||typeof row.app_run_id!=="string"||runIds.has(row.run_id)||appRunIds.has(row.app_run_id)||typeof row.artifact?.resource_id!=="string"||!localRecordsHashShape(row.artifact.hash)||!e||Object.keys(e).sort().join()!==keys||e.namespace!=="local-record-event.v1"||e.app_id!==v.app.id||e.instance_id!==iid||e.release_id!==reply.release_id||e.principal_id!==v.app.principal_id||e.collection_version!==row.version||typeof e.record_id!=="string"||!e.record_id||!localRecordsInteger(e.record_revision)||e.record_revision<1||typeof e.title!=="string"||!e.title.trim()||Array.from(e.title).length>200||typeof e.details!=="string"||Array.from(e.details).length>2000||typeof e.reason!=="string"||(index===0?e.previous_collection_fingerprint!==null:!localRecordsHashShape(e.previous_collection_fingerprint)))localRecordsError();
+  if(row.version!==index+1||!localRecordsHashShape(row.event_fingerprint)||typeof row.run_id!=="string"||typeof row.app_run_id!=="string"||runIds.has(row.run_id)||appRunIds.has(row.app_run_id)||typeof row.artifact?.resource_id!=="string"||!localRecordsHashShape(row.artifact.hash)||!e||Object.keys(e).sort().join()!==keys||e.namespace!==(e.kind==="EDIT_CONTENT"?"local-record-event.v2":"local-record-event.v1")||e.app_id!==v.app.id||e.instance_id!==iid||e.release_id!==reply.release_id||e.principal_id!==v.app.principal_id||e.collection_version!==row.version||typeof e.record_id!=="string"||!e.record_id||!localRecordsInteger(e.record_revision)||e.record_revision<1||typeof e.title!=="string"||!e.title.trim()||Array.from(e.title).length>200||typeof e.details!=="string"||Array.from(e.details).length>2000||typeof e.reason!=="string"||(index===0?e.previous_collection_fingerprint!==null:!localRecordsHashShape(e.previous_collection_fingerprint)))localRecordsError();
   const hash=await localRecordsHash(e);if(!current())return false;if(hash!==row.event_fingerprint||row.artifact.hash!==row.event_fingerprint||e.previous_collection_fingerprint!==(index?reply.history[index-1].event_fingerprint:null))localRecordsError();
   if(e.kind==="CREATE"){
    if(old||e.record_revision!==1||e.state!=="OPEN"||e.previous_event_fingerprint!==null||e.reason!=="")localRecordsError();
   }else if(e.kind==="SET_STATE"){
    if(!old||old.state!=="OPEN"||e.state!=="DONE"||e.record_revision!==old.record_revision+1||e.previous_event_fingerprint!==old.last_event_fingerprint||e.title!==old.title||e.details!==old.details||!e.reason.trim()||Array.from(e.reason).length>500)localRecordsError();
+  }else if(e.kind==="EDIT_CONTENT"){
+   if(!localRecordsCanEdit(v.app)||!old||old.state!=="OPEN"||e.state!=="OPEN"||e.record_revision!==old.record_revision+1||e.previous_event_fingerprint!==old.last_event_fingerprint||!e.reason.trim()||Array.from(e.reason).length>500||(e.title===old.title&&e.details===old.details))localRecordsError();
   }else localRecordsError();
   fold.set(e.record_id,{record_id:e.record_id,record_revision:e.record_revision,title:e.title,details:e.details,state:e.state,last_event_fingerprint:row.event_fingerprint});runIds.add(row.run_id);appRunIds.add(row.app_run_id);
  }
@@ -313,7 +327,7 @@ function localRecordsRenderProjection(v){
  const selected=v.runSelect.value;v.runSelect.replaceChildren(new Option("请明确选择已接受 Run",""),...i.runs.map(r=>new Option(`${r.id} · ${r.status} · 结果 ${r.result_version??"尚无"}`,r.id)));if(i.runs.some(r=>r.id===selected))v.runSelect.value=selected;
 }
 async function localRecordsSelectInstance(v,iid){
- if(!localRecordsCurrent(v))return;v.selection++;v.read++;v.edit++;localRecordsClearInstance(v);v.privateAck.checked=false;v.selectedIid=iid||null;v.title.value=v.details.value=v.reason.value="";v.command.value="CREATE";v.createFields.hidden=false;v.stateFields.hidden=true;v.selectedRelease=localRecordsInstances(v).find(i=>i.id===iid)?.release_id||null;localRecordsButtons(v);
+ if(!localRecordsCurrent(v))return;v.selection++;v.read++;v.edit++;localRecordsClearInstance(v);v.privateAck.checked=false;v.selectedIid=iid||null;v.title.value=v.details.value=v.reason.value="";v.command.value="CREATE";localRecordsEditFields(v);v.selectedRelease=localRecordsInstances(v).find(i=>i.id===iid)?.release_id||null;localRecordsButtons(v);
  if(!iid)return;if(!v.selectedRelease)localRecordsError();const pending=localRecordsPending(v)[0];if(pending)localRecordsRemember(v,pending);await localRecordsRefresh(v,true);
 }
 async function localRecordsRunValue(v,run,rid,current){
@@ -344,7 +358,7 @@ async function localRecordsReadRun(v){if(!localRecordsCurrent(v)||!v.selectedIid
 async function localRecordsPreview(v){
  if(!localRecordsCurrent(v)||v.previewButton.disabled)return;
  const i=v.instance,base={command:v.command.value,expected_revision:i.revision,expected_data_version:i.data_version,expected_release_fingerprint:i.release_fingerprint,request_key:crypto.randomUUID()},old=i.records.find(r=>r.record_id===v.recordSelect.value);
- const body=base.command==="CREATE"?{...base,title:v.title.value,details:v.details.value}:{...base,record_id:v.recordSelect.value,expected_record_revision:old?.record_revision,target_state:"DONE",reason:v.reason.value};
+ const body=base.command==="CREATE"?{...base,title:v.title.value,details:v.details.value}:{...base,record_id:v.recordSelect.value,expected_record_revision:old?.record_revision,reason:v.reason.value,...(base.command==="EDIT_CONTENT"?{title:v.title.value,details:v.details.value}:{target_state:"DONE"})};
  const current=localRecordsFence(v),saved=await localRecordsPost(v,"PREVIEW",`/api/internal/record-instances/${i.id}/previews`,body,`/api/internal/record-instances/${i.id}/record-requests/${encodeURIComponent(body.request_key)}`,localRecordsValidatePreview,{originalRecord:old||null});
  if(!current()||!saved)return;localRecordsAcceptPreview(v,saved.reply,saved.intent);
 }
@@ -358,7 +372,7 @@ async function localRecordsConfirm(v){
  if(![...v.runSelect.options].some(o=>o.value===run.run_id))v.runSelect.append(new Option(`${run.run_id} · ${run.status} · 只读刷新核对结果`,run.run_id));v.runSelect.value=run.run_id;v.runStatus.textContent=`${localRecordsLabelScope(v.instance)}已接受同一 Run ${run.run_id} · ${run.status}；尚未读取实际结果。请手动刷新，不会自动轮询或再次提交。`;localRecordsStatus(v,"本次写入 Run 已接受；后台状态与最终记录须手动读取。新点击不会重发已接受请求。");localRecordsButtons(v);
 }
 function localRecordsOriginalRecord(v,input){
- if(input.command!=="SET_STATE")return null;const rows=v.instance?.history.filter(h=>h.version<=input.expected_data_version&&h.event.record_id===input.record_id)||[];const last=rows.at(-1);if(!last)return null;const e=last.event;return {record_id:e.record_id,record_revision:e.record_revision,title:e.title,details:e.details,state:e.state,last_event_fingerprint:last.event_fingerprint};
+ if(!["SET_STATE","EDIT_CONTENT"].includes(input.command))return null;const rows=v.instance?.history.filter(h=>h.version<=input.expected_data_version&&h.event.record_id===input.record_id)||[];const last=rows.at(-1);if(!last)return null;const e=last.event;return {record_id:e.record_id,record_revision:e.record_revision,title:e.title,details:e.details,state:e.state,last_event_fingerprint:last.event_fingerprint};
 }
 function localRecordsAcceptedRun(v,reply){
  const run=reply.run;if(!run)localRecordsError();v.preview=reply;v.runAck.checked=false;v.acceptedRun=run;v.run=null;v.runProof.textContent="";
@@ -381,7 +395,7 @@ async function localRecordsRecover(v){
   if(!intent){
    if(stage==="CREATE_APP"){
     if(!await localRecordsValidateApp(v,reply,null,current)||!current())return;if(!localRecordsHashShape(reply.request_fingerprint))localRecordsError();
-    const originalInput={name:reply.name,goal:reply.definition.purpose,request_key:key,consent:"SAVE_LOCAL_RECORD_FORM"};const originFingerprint=await localRecordsHash(originalInput);if(!current())return;if(originFingerprint!==reply.request_fingerprint)localRecordsError();
+    const originalInput={name:reply.name,goal:reply.definition.purpose,request_key:key,consent:"SAVE_LOCAL_RECORD_FORM",...(localRecordsCanEdit(reply)?{content_edits:"OPEN_RECORD_CONTENT_V1"}:{})};const originFingerprint=await localRecordsHash(originalInput);if(!current())return;if(originFingerprint!==reply.request_fingerprint)localRecordsError();
     intent={stage,key,scope,anchor,originalInput,originFingerprint,recoveryUrl:path,state:"ACCEPTED",reply};
    }else{
     if(["PREVIEW","RUN"].includes(stage)){if(!v.instance||reply.preview?.input?.request_key!==key)localRecordsError();body=reply.preview.input;}
@@ -401,7 +415,7 @@ async function localRecordsRecover(v){
   else if(["PREPARE_RELEASE","COMMIT_RELEASE"].includes(stage)){v.approval=reply;v.approvalIntent=intent;v.releaseAck.checked=false;v.releaseProof.textContent=JSON.stringify(reply,null,2);localRecordsStatus(v,reply.release?"原内部版本已保存；请读取目录，明确选择后单独创建实例。":"已恢复原版本预览，请阅读并另行确认保存。");}
   else if(["CREATE_INSTANCE","CREATE_PRIVATE"].includes(stage)){v.instanceAck.checked=v.privateAck.checked=false;localRecordsStatus(v,`已只读恢复实例 ${reply.instance.id}；请读取目录，再明确选择实例。`);}
   else{
-   const input=reply.preview.input;v.command.value=input.command;v.title.value=input.title||"";v.details.value=input.details||"";if(input.command==="SET_STATE")v.recordSelect.value=input.record_id;v.reason.value=input.reason||"";v.createFields.hidden=input.command!=="CREATE";v.stateFields.hidden=input.command!=="SET_STATE";
+   const input=reply.preview.input;v.command.value=input.command;v.title.value=input.title||"";v.details.value=input.details||"";if(input.command!=="CREATE")v.recordSelect.value=input.record_id;v.reason.value=input.reason||"";localRecordsEditFields(v);
    localRecordsAcceptPreview(v,reply,intent);if(reply.run)localRecordsAcceptedRun(v,reply);
   }
  }catch(error){if(current()){localRecordsClearPrivate(v);localRecordsStatus(v,`原 key 读取未确认：${error.detail||error.message}。不会重发写入；已有原请求仍保留。`);}}

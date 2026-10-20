@@ -96,7 +96,7 @@ def final_flow_readback(env, page, worker_log, before_identities):
         native_browser="NOT_RUN", real_semantic_acceptance="NOT_RUN")
 
 
-@pytest.mark.parametrize("scenario", ["flow-recovery", "navigation", "revocation", "project-history", "controls", "collection-export", "private-preview"])
+@pytest.mark.parametrize("scenario", ["flow-recovery", "navigation", "revocation", "project-history", "controls", "collection-export", "private-preview", "content-edit"])
 def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, tmp_path, scenario):
     root = Path.cwd().resolve()
     raw_http, ipc, worker_log = [], [], []
@@ -124,7 +124,7 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
         info = dict(scenario=scenario, project=env[5], other=other,
             app_name="Actual page local records", goal="Collect independent work items and explicitly mark only A DONE",
             title_a=TITLE_A, details_a=DETAILS_A, title_b=TITLE_B, details_b=DETAILS_B,
-            done_reason=DONE_REASON, output=str(tmp_path / "page-result.json"))
+            done_reason=DONE_REASON, correct_title="A corrected title", correct_details="A corrected complete content; B must remain unchanged.", edit_reason="Correct an explicit data entry error.", output=str(tmp_path / "page-result.json"))
         if scenario in {"navigation", "revocation", "project-history"}:
             data = ready(env)
             first = execute(env, data, create_body(current(env, data)))
@@ -220,7 +220,7 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
                 if request.get("done"):
                     break
                 if request.get("command") == "worker":
-                    assert scenario in {"flow-recovery", "private-preview"}, "Read-only page scenarios cannot invoke Worker"
+                    assert scenario in {"flow-recovery", "private-preview", "content-edit"}, "Read-only page scenarios cannot invoke Worker"
                     cold = Store(env[1].database_url, test_only=True)
                     stores.append(cold)
                     before = states(cold)
@@ -336,6 +336,19 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
             write_json(tmp_path / "actual-page-delivery.json", delivered)
             proof.update(page_worker_calls=3, fixture_worker_calls=0, actual_no_model_runs=3,
                 page_creation_release_instance_covered=True)
+        elif scenario == "content-edit":
+            assert page["classification"] == "ACTUAL_HTTP_JSDOM_LOCAL_RECORD_CONTENT_EDIT"
+            assert len(worker_log) == 4 and all(row["status"] == "SUCCEEDED" for row in worker_log)
+            state = ok(env[2].get(f"/api/internal/record-instances/{page['instance_id']}"))
+            a, b = state["records"]
+            assert (a["title"], a["details"], a["state"], a["record_revision"]) == (
+                info["correct_title"], info["correct_details"], "DONE", 3)
+            assert (b["title"], b["details"], b["state"], b["record_revision"]) == (TITLE_B, DETAILS_B, "OPEN", 1)
+            assert [r["event"]["kind"] for r in state["history"]] == ["CREATE", "CREATE", "EDIT_CONTENT", "SET_STATE"]
+            assert [r["run_id"] for r in state["history"]] == page["run_ids"]
+            assert state["history"][0] == page["first_history"]
+            assert len(page["request_keys"]) == 4 and len(set(page["request_keys"])) == 4
+            proof.update(page_worker_calls=4, fixture_worker_calls=0, actual_no_model_runs=4, final_state=state)
         elif scenario == "private-preview":
             import base64
             assert page["classification"] == "ACTUAL_HTTP_JSDOM_PRIVATE_RECORD_PREVIEW"
