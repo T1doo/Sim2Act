@@ -1,0 +1,41 @@
+{
+  "classification": "READ_ONLY_DIAGNOSTIC_PATCH_REVIEW_CHANGES_REQUESTED",
+  "reviewer_product_or_test_executions": 0,
+  "source_sha256": {
+    "src/sim2act/natural_spec_runtime.py": "dd2eaff6dcb362fce4c1408f8df6dc76dc31a4c427e2ec7c8d34328bbf73c934",
+    "tests/test_spec_production_controller.py": "4a9d6856b05304f3d16614db7f8b4ed92d58481c8d344aadb763bd2216dd53c3",
+    "tests/test_cold_admission_diagnostics.py": "2f872ba5d782c7965b84261e28e0f62e7a2d528f3e6619e79b4cbbb77a806d1e"
+  },
+  "author_junit": {
+    "path": "/tmp/sim2act-cold-admission-diagnostic-units-v2-20261020.xml",
+    "sha256": "4fccc8a0d1c2051fd1a929ef9c4f480dadee98742c7f2996b17b4b43935c14d4",
+    "suite": {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "7",
+      "time": "0.541",
+      "timestamp": "2026-10-20T06:08:20.159598+00:00",
+      "hostname": "effa1dcb1344"
+    }
+  },
+  "findings": [
+    {
+      "severity": "P2",
+      "target": "src/sim2act/natural_spec_runtime.py:_ColdGraphRead.input_key/check",
+      "issue": "Diagnostic count increments are unprotected; check increment precedes original try/invalidate, so corrupted diagnostic state such as counts[0]=None raises TypeError before original proof and can bypass sticky invalidation.",
+      "derivation": "Static source analysis only; not a run/probe.",
+      "minimum_fix": "Isolate both increments with narrow Exception handling so original input_key/check executes normally even if diagnostics are damaged. Keep all full graph checks and original exception order. Existing stage sampling may mark incomplete when counters unusable.",
+      "validation": "One local existing-CGR synthetic case with unusable diagnostic counter should still serialize full original bytes for valid input, then reject mutated original input with DomainError and sticky invalidation."
+    }
+  ],
+  "accepted_boundaries": [
+    "end=time.time then original pin then one stop read; min remains short-circuited when stopped",
+    "finite expressions retain original ordering and parallel constant labels",
+    "five stage spans only local monotonic snapshots and count deltas; no new SQL/hash/full graph walk",
+    "RunCheck/actual row scalar snapshot captured before later mutation",
+    "rejection annotation private; DomainError.public and message unchanged",
+    "first-admission diagnostic only; no PB performance or qualification claim"
+  ]
+}
