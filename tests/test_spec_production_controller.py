@@ -30,6 +30,15 @@ from sim2act.errors import DomainError
 from sim2act.worker import Worker
 
 
+def failure_observation(run, error):
+    """Existing local test receipt plus private scalar admission diagnostics."""
+    observation = dict(run_id=run["id"], error=error.public(),
+        traceback=traceback.format_exception(error))
+    if hasattr(error, '_cold_admission_diagnostic'):
+        observation['cold_admission_diagnostic'] = error._cold_admission_diagnostic
+    return observation
+
+
 @pytest.fixture(autouse=True)
 def no_real_http(monkeypatch):
     def denied(*args, **kwargs):
@@ -95,8 +104,7 @@ def configured(env, tmp_path, monkeypatch, *, revoke_received=False, prepare_cas
     original_fail = runtime.fail_owned
     def record_failure(worker, run, error):
         with (tmp_path / "failure-observations.jsonl").open("a") as stream:
-            stream.write(json.dumps(dict(run_id=run["id"], error=error.public(),
-                traceback=traceback.format_exception(error))) + "\n")
+            stream.write(json.dumps(failure_observation(run, error)) + "\n")
         return original_fail(worker, run, error)
     monkeypatch.setattr(runtime, "fail_owned", record_failure)
     original_async = httpx.AsyncClient

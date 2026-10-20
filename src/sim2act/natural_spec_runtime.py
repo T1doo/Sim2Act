@@ -19,6 +19,7 @@ from io import BytesIO as _ColdGraphBytesIO
 from pickle import Pickler as _ColdGraphPicklerBase
 from sqlite3 import Connection as SQLiteConnection
 from threading import Event, get_ident
+from time import monotonic as _cold_diagnostic_clock
 from typing import TYPE_CHECKING, Any, cast
 
 import httpx
@@ -1773,6 +1774,9 @@ class _ColdGraphRead:
         self.scope, self.nonce = scope, scope[0]
         self.inputs, self.role_limits, self.phase = inputs, role_limits, phase
         self.active = True
+        # Counts of existing method entries, including failed/short-circuited
+        # calls. Not graph inputs, authority, a cache, or extra graph checks.
+        self._diagnostic_counts = [0, 0]
         self.key = self.input_key(_validate=True)
         self.check(self.store, c)
 
@@ -1799,11 +1803,19 @@ class _ColdGraphRead:
         return _cold_graph_bytes(values)
 
     def input_key(self, *, _validate=False):
+        try:
+            self._diagnostic_counts[1] += 1
+        except Exception:
+            pass  # Broken diagnostic state must not replace the original work.
         return hashlib.sha256(self.input_bytes(_validate=_validate)).hexdigest()
 
     def check(self, store, c):
         from .pb_natural_specs import _source_reads_current
 
+        try:
+            self._diagnostic_counts[0] += 1
+        except Exception:
+            pass
         try:
             w = self.worker
             require(type(self.inputs) is dict and bool(self.inputs)
@@ -2310,6 +2322,64 @@ def _cold_generated_model_facet(worker, c, completed):
         raise
 
 
+class _ColdCommitDiagnostics:
+    """Bounded local first-admission evidence, outside all graph/permit inputs.
+
+    Only five existing outer calls are timed. No callbacks, I/O, model dumps,
+    row copies, graph walks or payload/fingerprint/identity values are read.
+    Diagnostic failures cannot replace a business result or exception.
+    """
+
+    def __init__(self, guard):
+        self.guard = guard
+        self.stages = []
+        self.run_context = None
+        self.incomplete = False
+
+    def _snapshot(self):
+        try:
+            return (_cold_diagnostic_clock(), *self.guard._diagnostic_counts)
+        except Exception:
+            self.incomplete = True
+            return None
+
+    @contextmanager
+    def stage(self, name):
+        before = self._snapshot()
+        try:
+            yield
+        finally:
+            after = self._snapshot()
+            if before is not None and after is not None:
+                try:
+                    if len(self.stages) < 5:
+                        self.stages.append(dict(stage=name, wall_seconds=after[0] - before[0],
+                            check_calls=after[1] - before[1], input_key_calls=after[2] - before[2]))
+                except Exception:
+                    self.incomplete = True
+
+    def capture_run_context(self, context, actual):
+        try:
+            self.run_context = dict(checked_at=context.checked_at, deadline=context.deadline,
+                # This is the already-read _graph_run_context row used by
+                # RunCheck, not a new row read at the rejection time.
+                actual_run=dict(lease_until=actual['lease_until'],
+                    version=actual['version'], fence=actual['fence']))
+        except Exception:
+            self.incomplete = True
+
+    def rejected(self, error, names, finite, end, stopped):
+        try:
+            error._cold_admission_diagnostic = dict(
+                kind='cold-first-admission-rejection.v1',
+                run_context_basis='_graph_run_context_existing_row',
+                run_context=self.run_context,
+                finite=[dict(name=name, value=value) for name, value in zip(names, finite, strict=True)],
+                end=end, stop=stopped, stages=self.stages, incomplete=self.incomplete)
+        except Exception:
+            pass
+
+
 class _ColdTrialGraph:
     """Fixed ordinary production P-B trial guard continuation for one read epoch.
 
@@ -2744,6 +2814,7 @@ class _ColdTrialGraph:
         from .contracts import AppManifest, FrozenRunContract
         _models: list[tuple[type, object, dict]] = []
         pin = gate._trial_typed_guard(self.check, _models)
+        diagnostic = None
         try:
             require(type(prefix) is spec._ColdCommitPrefix and prefix.guard is self.guard)
             self.current_boundary = prefix.key
@@ -2765,18 +2836,23 @@ class _ColdTrialGraph:
                 pin()
                 require(current_binding is b)
                 if first:
-                    self._prepare(job)
+                    diagnostic = _ColdCommitDiagnostics(g)
+                    with diagnostic.stage('_prepare'):
+                        self._prepare(job)
                     pin()
                     self.phase = 'BUSY'
-                    approval, phase, actual, at = gate._graph_run_context(g, store, c, user, b.contract, b.approval_key, 'cold', job['id'], job['version'], job['fence'], self.cold_stage_facts)
+                    with diagnostic.stage('_graph_run_context'):
+                        approval, phase, actual, at = gate._graph_run_context(g, store, c, user, b.contract, b.approval_key, 'cold', job['id'], job['version'], job['fence'], self.cold_stage_facts)
                     gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, gate.Approval, approval)
                     gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, gate.StageAuthority, phase)
                     pin()
                     require(actual['worker_id'] == self.worker.id)
                     context = policy._run_check_from_facts(self.original, self.expected, approval, phase, actual, at, 'cold', actual['id'], actual['version'], actual['fence'], self.worker.id, _guard=pin)
+                    diagnostic.capture_run_context(context, actual)
                     self._context(prefix.key, context)
                     pin()
-                    source_id = dispatch._graph_pb_accounting(g, store, c, b, self.trial.generation_reader.run, self.journal[0])
+                    with diagnostic.stage('_graph_pb_accounting'):
+                        source_id = dispatch._graph_pb_accounting(g, store, c, b, self.trial.generation_reader.run, self.journal[0])
                     pin()
                     require(source_id == self.source_accounted[0]['id'])
                     source_bound = self.trial.source_binding
@@ -2785,9 +2861,11 @@ class _ColdTrialGraph:
                     pin()
                     validate_value(manifest.input_schema, source_bound['snapshot']['input'])
                     pin()
-                    self.resolved = archive._graph_resolve_trial_source(g, store, c, user, b.contract, b.approval_key, self.journal[0], self.source_stage_facts, self.source_proof, self.source_accounted, self.extraction)
+                    with diagnostic.stage('_graph_resolve_trial_source'):
+                        self.resolved = archive._graph_resolve_trial_source(g, store, c, user, b.contract, b.approval_key, self.journal[0], self.source_stage_facts, self.source_proof, self.source_accounted, self.extraction)
                     pin()
-                    dispatch._graph_pb_archive_chain(g, store, c, b, self.journal[0], self.resolved, self.source_accounted)
+                    with diagnostic.stage('_graph_pb_archive_chain'):
+                        dispatch._graph_pb_archive_chain(g, store, c, b, self.journal[0], self.resolved, self.source_accounted)
                     pin()
                     source_entity = gate.entity(b.contract, _guard=pin)
                     pin()
@@ -2808,10 +2886,12 @@ class _ColdTrialGraph:
                     self._context(prefix.key, context)
                     pin()
                 finite = [self.context.deadline, source.expires_at, self.trial.binding['snapshot']['natural_spec_clock']['deadline']]
+                finite_names = ['run_check.deadline', 'source.expires_at', 'natural_spec_clock.deadline']
                 for role in ('source', 'generate', 'platform', 'trial', 'per_use'):
                     role_limits = g.role_limits[role]
                     if role_limits is not None:
                         finite.append(job['created_at'] + role_limits.run_seconds)
+                        finite_names.append('role.' + role + '.run_seconds')
                 final_frozen = store._frozen_contract_after_scope(c, job)
                 gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, FrozenRunContract, final_frozen)
                 pin()
@@ -2819,9 +2899,16 @@ class _ColdTrialGraph:
                 finite.append(job['created_at'] + self.trial.binding['draft']['candidate']['manifest']['runtime_limits']['run_seconds'])
                 finite.append(g.inputs['call']['meta']['deadline'])
                 finite.append(job['created_at'] + g.inputs['call']['node'].run_seconds)
+                finite_names.extend(('frozen.run_seconds', 'draft.run_seconds', 'call.meta.deadline', 'call.node.run_seconds'))
                 end = time.time()
                 pin()
-                require(not self.worker.stop.is_set() and end < min(finite), 'Production admission expired during verification')
+                stopped = self.worker.stop.is_set()
+                try:
+                    require(not stopped and end < min(finite), 'Production admission expired during verification')
+                except DomainError as error:
+                    if diagnostic is not None:
+                        diagnostic.rejected(error, finite_names, finite, end, stopped)
+                    raise
                 pin()
                 source_identity = _model_source_key(source)
                 pin()
