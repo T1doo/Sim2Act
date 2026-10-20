@@ -1,5 +1,6 @@
 """Pure guard units: no Sim2Act, fixture imports, transport or business G0."""
 
+import builtins
 import contextlib
 import io
 import os
@@ -20,6 +21,7 @@ from g0_guard import (
     BoundedWriter,
     Budget,
     DiskMonitor,
+    Files,
     G0Stop,
     MockBudget,
     StopBoundary,
@@ -30,6 +32,158 @@ from g0_guard import (
 class FakeDomainError(Exception):
     code = "ORIGINAL"
     message = "exact original refusal"
+
+
+class FixtureOpenInterfaces(unittest.TestCase):
+    """Real pathlib/io interfaces and temporary files; no fixture or transport."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="g0-path-open-interface-")
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.files = Files(
+            self.root, names={"mock-exchanges.jsonl", "failure-observations.jsonl"}
+        )
+        self.addCleanup(self.files.close)
+        self.enterContext(patch.object(io, "open", self.files.fixture_open))
+        self.enterContext(patch.object(builtins, "open", self.files.fixture_open))
+        self.path = self.root / "mock-exchanges.jsonl"
+
+    def tearDown(self):
+        self.assertFalse(any(k == "sim2act" or k.startswith("sim2act.") for k in sys.modules))
+
+    def test_actual_path_open_default_and_explicit_text_defaults(self):
+        calls = (
+            lambda p: p.open("a"),
+            lambda p: p.open("a", -1, None, None, None),
+            lambda p: p.open("a", buffering=-1, encoding=None, errors=None, newline=None),
+            lambda p: p.open("a", -1, "utf-8", "strict", None),
+            lambda p: p.open("a", encoding="UTF8"),
+            lambda p: p.open("a", encoding="locale"),
+            lambda p: open(p, "a"),
+            lambda p: io.open(p, "a", -1, None, None, None, True, None),
+        )
+        text = "本地🙂\r\nnext\n"
+        for name in self.files.writers:
+            path = self.root / name
+            for call in calls:
+                with self.subTest(name=name, call=call):
+                    with call(path) as stream:
+                        self.assertEqual(stream.write(text), len(text))
+            self.assertEqual(path.read_bytes(), text.encode("utf-8") * len(calls))
+            self.assertEqual(self.files.writer(name).used, len(path.read_bytes()))
+
+    def test_real_text_and_binary_reads_delegate_with_standard_errors(self):
+        raw = b"line\r\n\xff"
+        with self.files.real_open(self.path, "wb") as stream:
+            stream.write(raw)
+        with self.path.open("rb") as stream:
+            self.assertEqual(stream.read(), raw)
+        with self.path.open("r", -1, "latin-1", "strict", "") as stream:
+            self.assertEqual(stream.read(), "line\r\nÿ")
+        with self.path.open("r", encoding="utf-8", errors="replace") as stream:
+            self.assertEqual(stream.read(), "line\n�")
+        with self.assertRaises(UnicodeDecodeError):
+            with self.path.open("r", encoding="utf-8") as stream:
+                stream.read()
+        with self.assertRaises(ValueError):
+            self.path.open("rb", encoding="utf-8")
+        with self.assertRaises(FileNotFoundError):
+            (self.root / "absent").open("rb")
+        self.assertEqual(self.files.writer(self.path.name).used, 0)
+
+    def test_binary_other_write_modes_and_paths_remain_denied(self):
+        for mode in ("ab", "wb", "a+", "r+", "w", "x", "at"):
+            with self.subTest(mode=mode), self.assertRaises(Boundary):
+                self.path.open(mode)
+        for path in (self.root / "unknown", self.root / "nested" / self.path.name):
+            with self.subTest(path=path), self.assertRaises(Boundary):
+                path.open("a")
+            self.assertFalse(path.exists())
+        self.assertEqual(self.path.read_bytes(), b"")
+        self.assertEqual(self.files.writer(self.path.name).used, 0)
+
+    def test_nondefault_writer_options_fail_before_any_bytes(self):
+        for options in (
+            {"buffering": 0}, {"buffering": 1}, {"buffering": 8192},
+            {"encoding": "latin-1"}, {"errors": "replace"}, {"errors": "ignore"},
+            {"newline": ""}, {"newline": "\r\n"},
+        ):
+            with self.subTest(options=options), self.assertRaises(Boundary):
+                self.path.open("a", **options)
+        called = []
+
+        def opener(*args):
+            called.append(args)
+            raise AssertionError("custom opener must not run")
+        for options in ({"closefd": False}, {"opener": opener}):
+            with self.subTest(options=options), self.assertRaises(Boundary):
+                open(self.path, "a", **options)
+        with self.assertRaises(TypeError):
+            io.open(self.path, "a", unknown_option=True)
+        with self.assertRaises(LookupError):
+            self.path.open("a", encoding="unknown-encoding")
+        self.assertEqual(called, [])
+        self.assertEqual(self.path.read_bytes(), b"")
+        self.assertEqual(self.files.writer(self.path.name).used, 0)
+
+    def test_non_utf8_locale_is_rejected_instead_of_silently_reencoded(self):
+        import locale
+
+        with patch.object(locale, "getencoding", lambda: "ANSI_X3.4-1968"):
+            with self.assertRaises(Boundary):
+                self.path.open("a", encoding="locale")
+            if io.text_encoding(None) == "locale":
+                with self.assertRaises(Boundary):
+                    self.path.open("a")
+            with self.path.open("a", encoding="utf-8") as stream:
+                stream.write("本地")
+        self.assertEqual(self.path.read_bytes(), "本地".encode())
+
+    def test_text_type_and_strict_encoding_errors_do_not_consume_budget(self):
+        with self.path.open("a") as stream:
+            with self.assertRaises(TypeError):
+                stream.write(b"binary")
+            with self.assertRaises(UnicodeEncodeError):
+                stream.write("\ud800")
+        self.assertEqual(self.path.read_bytes(), b"")
+        self.assertEqual(self.files.writer(self.path.name).used, 0)
+
+    def test_context_exception_and_byte_budget_are_preserved(self):
+        error = RuntimeError("original caller error")
+        with self.assertRaises(RuntimeError) as stopped:
+            with self.path.open("a") as stream:
+                stream.write("é")
+                raise error
+        self.assertIs(stopped.exception, error)
+        writer = self.files.writer(self.path.name)
+        writer.limit = 3
+        with self.path.open("a") as stream:
+            with self.assertRaises(Boundary):
+                stream.write("é")
+            self.assertEqual(stream.write("!"), 1)
+        self.assertEqual(self.path.read_bytes(), "é!".encode())
+        self.assertEqual(writer.used, 3)
+
+    def test_underlying_io_error_propagates_with_reserved_bytes(self):
+        error = OSError("local injected write failure")
+
+        class Broken:
+            def write(self, raw):
+                raise error
+
+        writer = self.files.writer(self.path.name)
+        real_stream = writer.stream
+        writer.stream = Broken()
+        try:
+            with self.assertRaises(OSError) as stopped:
+                with self.path.open("a") as stream:
+                    stream.write("é")
+            self.assertIs(stopped.exception, error)
+            self.assertEqual(writer.used, 2)
+        finally:
+            writer.stream = real_stream
+        self.assertEqual(self.path.read_bytes(), b"")
 
 
 class ProtectionUnits(unittest.TestCase):

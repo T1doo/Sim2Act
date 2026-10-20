@@ -6,10 +6,12 @@ local stand-ins, never the production-shaped fixture or its Mock prefix.
 
 from __future__ import annotations
 
+import codecs
 import contextlib
 import hashlib
 import io
 import json
+import locale
 import math
 import os
 import socket
@@ -233,10 +235,20 @@ class Files:
         for writer in self.writers.values():
             writer.stream.close()
 
-    def fixture_open(self, file, mode="r", *args, **kwargs):
+    def fixture_open(
+        self,
+        file,
+        mode="r",
+        buffering=-1,
+        encoding=None,
+        errors=None,
+        newline=None,
+        closefd=True,
+        opener=None,
+    ):
         writing = any(c in mode for c in "wax+")
         if not writing:
-            return self.real_open(file, mode, *args, **kwargs)
+            return self.real_open(file, mode, buffering, encoding, errors, newline, closefd, opener)
         path = Path(file).absolute()
         if (
             path.parent != self.root
@@ -244,7 +256,20 @@ class Files:
             or mode != "a"
         ):
             raise Boundary("unexpected fixture file write")
-        if args or set(kwargs) - {"encoding"} or kwargs.get("encoding", "utf-8") != "utf-8":
+        # Path.open forwards these defaults positionally, with None encoding
+        # resolved by io.text_encoding to "locale" or "utf-8". Accept only
+        # equivalent UTF-8/strict/default-newline writes to the bounded stream.
+        encoding = io.text_encoding(encoding)
+        if encoding == "locale":
+            encoding = locale.getencoding()
+        if (
+            buffering != -1
+            or codecs.lookup(encoding).name != "utf-8"
+            or errors not in (None, "strict")
+            or newline is not None
+            or closefd is not True
+            or opener is not None
+        ):
             raise Boundary("unexpected fixture writer options")
         writer = self.writer(path.name)
 
@@ -256,6 +281,8 @@ class Files:
                 return False
 
             def write(self, text):
+                if not isinstance(text, str):
+                    raise TypeError("text writer requires str")
                 writer.write(text.encode("utf-8"))
                 return len(text)
 
