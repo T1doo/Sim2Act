@@ -30,6 +30,9 @@ CLEANUP_FINAL_STATUS_SECONDS = 5
 OPERATION_SECONDS = 450
 TEST_WATCHDOG_SECONDS = 100
 TEST_SHUTDOWN_RESERVE_SECONDS = 18
+REPORT_COMPRESSED_BYTES = 2000000
+REPORT_CORE_FILES = ("setup.json", "test-summary.json", "restart.json", "run-budget.json", "cleanup.json",
+    "junit.xml", "test-process-cleanup.json", "startup-diagnostics.json", "tool-failure-diagnostics.json")
 
 
 def selected_nodes():
@@ -478,23 +481,44 @@ def report():
         for p in files if p != receipt}
     if observed != cleanup_receipt.get("sanitized_files"):
         raise ValueError("Evidence changed after sanitization: raw evidence withheld")
-    # No additional artifact storage; the bounded bundle contains sanitized data.
+    # Plan before printing: core receipts must never sit behind large UI traces.
+    # Optional attachments retain hashes and explicit omission status at the cap.
     total = 0
     manifest = []
-    for path in sorted(EVIDENCE.rglob("*")):
-        if path.is_file() and path.suffix in {".json", ".xml", ".log", ".stderr"}:
-            raw = path.read_bytes()
-            packed = gzip.compress(raw, mtime=0)
+    bundles = []
+
+    def priority(path):
+        name = str(path.relative_to(EVIDENCE)).replace("\\", "/")
+        if name in REPORT_CORE_FILES:
+            return 0, REPORT_CORE_FILES.index(name), name
+        return (1 if name.startswith("fixture-scopes/") else 2), 0, name
+
+    for path in sorted(files, key=priority):
+        raw = path.read_bytes()
+        packed = gzip.compress(raw, mtime=0)
+        name = str(path.relative_to(EVIDENCE)).replace("\\", "/")
+        entry = dict(path=name, bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest(),
+            compressed_bytes=len(packed), chunks=0)
+        if total + len(packed) > REPORT_COMPRESSED_BYTES:
+            if priority(path)[0] < 2:
+                raise ValueError("Core evidence exceeds fixed compressed envelope: all bundles withheld")
+            entry["export_status"] = "OMITTED_ENVELOPE_LIMIT"
+        else:
             total += len(packed)
-            if total > 2000000:
-                raise ValueError("Evidence exceeds fixed two-megabyte compressed log envelope")
             encoded = base64.b64encode(packed).decode()
-            name = str(path.relative_to(EVIDENCE)).replace("\\", "/")
             chunks = [encoded[i:i + 40000] for i in range(0, len(encoded), 40000)]
-            manifest.append(dict(path=name, bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest(), chunks=len(chunks)))
-            for index, chunk in enumerate(chunks):
-                print("RECORD_PG_FILE " + json.dumps(dict(path=name, index=index, data=chunk)))
+            entry.update(export_status="INCLUDED", chunks=len(chunks))
+            bundles.append((name, chunks))
+        manifest.append(entry)
+    for name, chunks in bundles:
+        for index, chunk in enumerate(chunks):
+            print("RECORD_PG_FILE " + json.dumps(dict(path=name, index=index, data=chunk)))
     print("RECORD_PG_MANIFEST " + json.dumps(manifest))
+    omitted = sum(entry["export_status"] != "INCLUDED" for entry in manifest)
+    print("RECORD_PG_EXPORT_SUMMARY " + json.dumps(dict(
+        status="PARTIAL_OPTIONAL_OMISSIONS" if omitted else "FULL_EXPORT",
+        included_files=len(manifest) - omitted, omitted_files=omitted,
+        compressed_bytes=total, compressed_limit=REPORT_COMPRESSED_BYTES)))
     for name in ["setup.json", "test-summary.json", "restart.json", "cleanup.json"]:
         path = EVIDENCE / name
         if path.exists():

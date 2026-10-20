@@ -1,0 +1,143 @@
+{
+  "verdict": "PG_TEN_CASES_AND_RESTART_HOOK_PASS_WITH_PARTIAL_ORIGINAL_EVIDENCE_REPORT_STEP_FAILED",
+  "P1": [],
+  "P2": [
+    {
+      "target": "scripts/record_pg_ci.py:report",
+      "finding": "Alphabetic streaming emits large optional pytest files before setup/restart/summary and detects 2MB overflow only after partial output, losing 19 files and final manifest. This is an evidence packaging defect; no third CI is authorized."
+    }
+  ],
+  "review_mode": "READ_ONLY_LOG_DECODE_HASH_AND_SOURCE_REVIEW_NO_TEST_DATABASE_OR_CI_EXECUTION",
+  "run": {
+    "id": 39369709238,
+    "attempt": 1,
+    "source_sha": "7f47c74487e794f95ca362b3396b5e0d33a6cd72",
+    "job_id": 118454583086,
+    "job_status": "failure",
+    "job_seconds": 213.0,
+    "prior_job_seconds": 238,
+    "both_actual_jobs_seconds": 451.0,
+    "tests_step": "success",
+    "cleanup_step": "success",
+    "report_step": "failure"
+  },
+  "raw_log": {
+    "path": "/tmp/record-pg-retry-39369709238.log",
+    "bytes": 2440155,
+    "sha256": "4daa32568eeae1b8f34b770de31e19649a7db099103e25ac650d455054163c03"
+  },
+  "bundle": {
+    "complete_gzip_files": 34,
+    "hash_matches_against_cleanup_sanitized_files": 33,
+    "gzip_integrity_and_contiguous_indices": true,
+    "cleanup_sha256": "ba86e68854cc44f52516b1ad7ef2a6cb2841e39cc726fa57d3d9be81bc42e388",
+    "manifest_output_present": false,
+    "missing_files_count": 19,
+    "missing_files": [
+      "pytest.log",
+      "pytest/test_local_record_page_explici1/http-trace.json",
+      "pytest/test_local_record_page_explici1/info.json",
+      "pytest/test_local_record_page_explici1/ipc.json",
+      "pytest/test_local_record_page_explici1/node.stderr",
+      "pytest/test_local_record_page_explici1/page-result.json",
+      "pytest/test_local_record_page_explici1/run-summary.json",
+      "pytest/test_local_record_page_explici1/source-after.json",
+      "pytest/test_local_record_page_explici1/source-before.json",
+      "pytest/test_local_record_page_explici1/source-changes.json",
+      "pytest/test_local_record_page_explici1/worker-log.json",
+      "pytest/test_real_json_helper_fault_ro0/local-record-http.json",
+      "pytest/test_real_json_helper_fault_ro0/local-record-proof.json",
+      "restart.json",
+      "run-budget.json",
+      "setup.json",
+      "startup-diagnostics.json",
+      "test-process-cleanup.json",
+      "test-summary.json"
+    ],
+    "basis": "Each complete base64/gzip stream decodes without error; all non-cleanup decoded bytes SHA256 equal the full cleanup.sanitized_files map. Cleanup itself is validated from its complete stream and CI source/control flow, not by a self-hash."
+  },
+  "tests": {
+    "junit_tests": 10,
+    "passed": 10,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "junit_seconds": 80.318,
+    "stdout_seconds": 80.32,
+    "exact_scope": "Ten original PG-compatible nodes, excluding the SQLite-only read-revoke barrier",
+    "fixture_receipts": 10,
+    "each_schema_dropped": true,
+    "runtime_role_five_elevated_flags_all_false": true,
+    "runtime_schema_create": "Source fixture asserts false in each environment, but this value is not directly stored in recovered fixture receipts"
+  },
+  "restart": {
+    "hook_result": "PASS_INFERRED_FROM_FROZEN_EXECUTION_PATH_AND_SUCCESSFUL_TEST_STEP",
+    "attached_node_passed": true,
+    "count_gate": "Child returns success only if restart_count==1; wrapper raises for nonzero child exit",
+    "assertions_covered": "same directory pg_ctl fast-stop/status3/start; changed postmaster start time; same runtime user; complete source/cold table snapshots identical; cold authorized record projection/history/data_version==5",
+    "restart_json_original_available": false,
+    "actual_before_after_values": "UNAVAILABLE",
+    "actual_elapsed_seconds": "UNAVAILABLE",
+    "limitation": "Success supports executed assertions, not independent recovery/recalculation of unavailable restart receipt/snapshots."
+  },
+  "setup": {
+    "step": "success",
+    "sql_full_server_version": "UNAVAILABLE_SETUP_JSON_NOT_OUTPUT",
+    "app_role_original_flags": "Available in ten fixture receipts, all five false",
+    "setup_public_create_original_value": "UNAVAILABLE_SETUP_JSON_NOT_OUTPUT",
+    "port": "UNAVAILABLE_SETUP_JSON_NOT_OUTPUT",
+    "note": "Do not substitute Windows runner label, PGBIN directory, source intent, or inferred major version for an actual SQL version string."
+  },
+  "cleanup": {
+    "status": "PASS",
+    "post_stop_status_exit": 3,
+    "owned_cluster_deleted": true,
+    "private_config_deleted": true,
+    "initdb_password_deleted": true,
+    "owned_root_deleted": true,
+    "container_used": false,
+    "volume_used": false,
+    "redaction_complete": true,
+    "shared_command_budget_seconds": 45,
+    "command_phase_seconds": 0.4840000000000373,
+    "tool_calls": [
+      {
+        "operation": "initial_status",
+        "timeout_seconds": 5
+      },
+      {
+        "operation": "stop",
+        "timeout_seconds": 35
+      },
+      {
+        "operation": "final_status",
+        "timeout_seconds": 5
+      }
+    ],
+    "workflow_step_seconds": 60,
+    "file_cleanup_margin_seconds": 15
+  },
+  "cleanup_inference": "Receipt lists initial_status, stop, final_status; frozen code records stop only after initial status returned0, checks successful stop, final status3, deletes root and verifies absence before PASS. Thus running-before-stop is source/control-flow supported this time; individual raw pg_ctl stdout remains unavailable.",
+  "secret_scan": {
+    "report": "bounded-secret-scan.json",
+    "unresolved_matches": 0,
+    "triaged_false_positives": "12 literal JS ${token} / ${ctx.token} template expressions; concrete Bearer values are synthetic-test-A",
+    "scope": "Raw CI log and 34 complete decoded files; postgres credential URI, GitHub token, JWT, concrete bearer, add-mask and password assignment patterns",
+    "limitation": "No access to deleted randomized passwords for exact comparison; this is bounded screening, not an absolute no-secret claim."
+  },
+  "minimal_local_report_fix_design": [
+    "Keep cleanup/redaction/hash gates before any bundle output.",
+    "Precompute all candidate hashes, raw sizes, compressed sizes and chunk counts before emitting; select essential core receipts/JUnit/fixture proofs first under the unchanged 2000000-byte compressed cap.",
+    "Reserve bounded final manifest/summary space; optional omitted files must appear explicitly as OMITTED with original sanitized SHA256/raw size/compressed size, never pretend full bundle complete.",
+    "Do not split a gzip file across inclusion/omission; print complete chosen streams and final manifest plus explicit selection status.",
+    "Local synthetic report tests only: oversized optional data, exact hash/byte/chunk checks, explicit omissions, unchanged gate failures. No DB/CI/third trigger."
+  ],
+  "remaining_conditions": [
+    "Archive raw log byte-for-byte and all 34 complete decoded files plus missing list and bounded scan.",
+    "Fix report packaging locally if desired, marked never executed in Windows CI; it cannot recover deleted/missing originals.",
+    "No additional PG run is permitted; full measured version and original restart receipt remain an evidence limitation."
+  ],
+  "reviewer_repo_edits": false,
+  "reviewer_tests_executed": 0,
+  "reviewer_database_or_ci_runs": 0
+}

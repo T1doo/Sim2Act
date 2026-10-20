@@ -1,5 +1,8 @@
 """Local Python process shims only: no Windows/PG emulation or database calls."""
 
+import base64
+import gzip
+import hashlib
 import importlib.util
 import json
 import os
@@ -243,3 +246,49 @@ def test_expired_operation_budget_prevents_setup_but_cannot_block_cleanup(harnes
     module.cleanup()
     assert not owned.exists()
     assert json.loads((evidence / "cleanup.json").read_text())["status"] == "PASS"
+
+
+def prepare_report_receipt(module, evidence):
+    digests = {str(path.relative_to(evidence)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in evidence.rglob("*") if path.is_file()}
+    module.write("cleanup.json", dict(status="PASS", redaction_complete=True, sanitized_files=digests))
+
+
+def test_report_exports_core_first_and_explicitly_omits_large_optional_trace(harness, monkeypatch, capsys):
+    module, cfg, owned, evidence = harness
+    monkeypatch.setattr(module, "REPORT_COMPRESSED_BYTES", 4096)
+    module.write("setup.json", dict(version="SYNTHETIC_PYTHON_SHIM_VERSION_NOT_POSTGRESQL"))
+    module.write("test-summary.json", dict(pytest_exit=0, restart_count=1))
+    module.write("restart.json", dict(status="SYNTHETIC_NOT_A_REAL_RESTART"))
+    optional = evidence / "pytest" / "large-trace.log"
+    optional.parent.mkdir()
+    optional.write_bytes(base64.b64encode(os.urandom(8192)))
+    prepare_report_receipt(module, evidence)
+    module.report()
+    lines = capsys.readouterr().out.splitlines()
+    manifest = json.loads(next(line.split("RECORD_PG_MANIFEST ", 1)[1]
+        for line in lines if line.startswith("RECORD_PG_MANIFEST ")))
+    by_name = {entry["path"]: entry for entry in manifest}
+    assert all(by_name[name]["export_status"] == "INCLUDED" for name in
+        ["setup.json", "test-summary.json", "restart.json", "cleanup.json"])
+    assert by_name["pytest/large-trace.log"]["export_status"] == "OMITTED_ENVELOPE_LIMIT"
+    assert by_name["pytest/large-trace.log"]["chunks"] == 0
+    assert sum(entry["compressed_bytes"] for entry in manifest if entry["export_status"] == "INCLUDED") <= 4096
+    summary = json.loads(next(line.split("RECORD_PG_EXPORT_SUMMARY ", 1)[1]
+        for line in lines if line.startswith("RECORD_PG_EXPORT_SUMMARY ")))
+    assert summary["status"] == "PARTIAL_OPTIONAL_OMISSIONS" and summary["omitted_files"] == 1
+    emitted = [json.loads(line.split("RECORD_PG_FILE ", 1)[1]) for line in lines if line.startswith("RECORD_PG_FILE ")]
+    assert emitted[0]["path"] == "setup.json"
+    for part in emitted:
+        raw = gzip.decompress(base64.b64decode(part["data"]))
+        assert hashlib.sha256(raw).hexdigest() == by_name[part["path"]]["sha256"]
+
+
+def test_report_core_overflow_withholds_all_bundles(harness, monkeypatch, capsys):
+    module, cfg, owned, evidence = harness
+    monkeypatch.setattr(module, "REPORT_COMPRESSED_BYTES", 4096)
+    module.write("setup.json", dict(synthetic_large_core=base64.b64encode(os.urandom(8192)).decode()))
+    prepare_report_receipt(module, evidence)
+    with pytest.raises(ValueError, match="Core evidence exceeds"):
+        module.report()
+    assert capsys.readouterr().out == ""
