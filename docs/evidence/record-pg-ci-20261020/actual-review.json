@@ -1,0 +1,124 @@
+{
+  "verdict": "ACTUAL_CI_FAIL_NOT_ACCEPTED_AND_LIMITED_ADAPTER_PATCH_REVIEW_PASS",
+  "run": {
+    "id": 39367188323,
+    "attempt": 1,
+    "source_sha": "ba5c6d107acdcd42b89a219c49882b113fae5739",
+    "job_id": 118446595042,
+    "conclusion": "failure",
+    "seconds": 238,
+    "setup_seconds": 120,
+    "reached": "pg_ctl start",
+    "observed": "35-second TimeoutExpired then unbounded post-kill communicate/stdout_thread join interrupted by setup timeout",
+    "complete_postgresql_version": "NOT_CAPTURED",
+    "directory_only": "C:/Program Files/PostgreSQL/17/bin",
+    "exact_handle_holder": "NOT_CAPTURED",
+    "initial_server_readiness": "UNKNOWN",
+    "requested_database_creation": "NOT_REACHED",
+    "restricted_runtime_role_creation": "NOT_REACHED",
+    "role_measurements": "NOT_REACHED",
+    "schema_grants": "NOT_REACHED",
+    "selected_pg_tests_executed": 0,
+    "selected_pg_tests_passed": 0,
+    "restart_checks": 0,
+    "junit": "ABSENT"
+  },
+  "cleanup": {
+    "receipt": {
+      "status": "PASS",
+      "post_stop_status_exit": 3,
+      "owned_cluster_deleted": true,
+      "private_config_deleted": true,
+      "initdb_password_deleted": true,
+      "owned_root_deleted": true,
+      "container_used": false,
+      "volume_used": false,
+      "redaction_complete": true,
+      "sanitized_files": {}
+    },
+    "manifest_verified": true,
+    "decoded_bytes": 303,
+    "sha256": "8f14a0d16b315eeae4636a8abee5e413487c48c27e31b3d2a0ff8995ac94bd34",
+    "observed_final_state": "pg_ctl status 3; owned cluster/root and private files absent",
+    "pre_cleanup_running_status": "NOT_RECORDED",
+    "stop_command_needed_or_successfully_executed": "NOT_PROVEN"
+  },
+  "log_archive": {
+    "path": "docs/evidence/record-pg-ci-20261020/run.log",
+    "bytes": 72973,
+    "sha256": "4324db64a8b67e2ff612c40b237ee4d823e5283cfaf99eb5afdafc8d1f05e67d",
+    "pattern_counts": {
+      "database_credential_url": 0,
+      "unmasked_bearer": 0,
+      "github_token_shape": 0,
+      "jwt_shape": 0,
+      "password_assignment": 0,
+      "raw_add_mask_command": 0
+    },
+    "only_64hex_is_manifest_sha": true,
+    "checkout_auth_masked": true,
+    "model_token_values_empty": true,
+    "verdict": "Accept unchanged raw log for evidence archive within bounded pattern/manual review; no absolute secret-absence claim"
+  },
+  "previous_review": {
+    "verdict": "Prior limited static design approval is superseded for startup readiness by the actual failure; it never certified a runtime pass",
+    "miss": "Reviewer missed pg_ctl/server descendant inherited output-pipe retention, despite reviewing test/Node descendants",
+    "responsibility": "This was a real gap in the previous static review; prior design pass does not certify startup or PG behavior"
+  },
+  "patch": {
+    "path": "scripts/record_pg_ci.py",
+    "sha256": "53a1444970e857448ec2c1170e3974617da8cff905c03bdfea98a3d1354812da",
+    "P1": [],
+    "P2": [],
+    "changes": [
+      "Replace capture_output PIPE with random regular stdout/stderr files under owned root",
+      "stdin DEVNULL",
+      "Keep fixed default 35-second timeout",
+      "Read regular files as UTF-8 replacement text into prior return interface",
+      "Keep files private until entire root is deleted after cleanup"
+    ],
+    "scope": "Only tool adapter; no role/selection/workflow marker/product changes",
+    "static_conclusion": "Addresses the observed PIPE EOF waiting mechanism; no descendant EOF is required for regular-file readback",
+    "windows_postgresql_validation": "NOT_RUN"
+  },
+  "author_local_adapter_check": {
+    "evidence": {
+      "mode": "LOCAL_LINUX_PROCESS_ADAPTER_NOT_POSTGRESQL_NOT_WINDOWS",
+      "runner_script_sha256": "53a1444970e857448ec2c1170e3974617da8cff905c03bdfea98a3d1354812da",
+      "ruff": "PASS",
+      "compileall": "PASS",
+      "git_diff_check": "PASS",
+      "inherited_output_descendant": {
+        "wrapper_exits_after_launching_two_second_child": true,
+        "wrapper_return_seconds": 0.016,
+        "wrapper_return_required_under_seconds": 1,
+        "stdout_readback": "wrapper returned",
+        "result": "PASS"
+      },
+      "watchdog": {
+        "child_sleep_seconds": 2,
+        "adapter_timeout_seconds": 0.2,
+        "exception": "RuntimeError fixed watchdog",
+        "returned_under_seconds": 1,
+        "result": "PASS"
+      },
+      "actual_pg_tests": 0,
+      "additional_ci_runs": 0,
+      "limits": "No validation of Windows handle semantics or PostgreSQL readiness; only actual local descendant/file-output and bounded-timeout behavior."
+    },
+    "script_and_stdout": "local-handle-probe.txt",
+    "provenance": "After-execution transcription of original inline tool command/stdout; no original standalone log; not rerun",
+    "classification": "Actual local Linux Python subprocess adapter, not Windows or PostgreSQL",
+    "reviewer_rerun": false
+  },
+  "remaining": [
+    "A newly authorized single Windows/PG execution would be required to measure full PG version, restricted role, ten original PG cases, same-cluster restart/cold equality and cleanup",
+    "Consumed one-run permission does not authorize a second marked push or rerun; never reuse original marker",
+    "Current failure, absent PG tests and unknown initial readiness remain unchanged; original PB/G0 and Win11 gates remain unresolved"
+  ],
+  "actions_denied": [],
+  "startup_outcome_initially_uncertain": true,
+  "final_cleanup_confirmed": true,
+  "reviewer_repository_edits": false,
+  "reviewer_database_or_ci_executions": 0
+}

@@ -1,0 +1,25 @@
+Original execution: functions.exec -> exec_command -> .venv/bin/python stdin,
+Linux /workspace/Sim2Act, after the file-output adapter change.
+No standalone probe/log file existed at execution; this is the exact script and
+observed stdout transcribed from that tool result, not an extra execution.
+
+import importlib.util, os, pathlib, subprocess, sys, tempfile, time
+s=importlib.util.spec_from_file_location('r','scripts/record_pg_ci.py'); m=importlib.util.module_from_spec(s); s.loader.exec_module(m)
+with tempfile.TemporaryDirectory(prefix='record-pg-file-handles-') as d:
+ root=pathlib.Path(d); m.root=lambda:root
+ (root/'python.exe').symlink_to(sys.executable)
+ cfg={'pgbin':d}
+ # The descendant inherits stdout and remains alive after the wrapper exits.
+ code='import subprocess,sys; subprocess.Popen([sys.executable,"-c","import time; time.sleep(2)"], stdout=sys.stdout, stderr=sys.stderr); print("wrapper returned")'
+ start=time.monotonic(); result=m.tool(cfg,'python',['-c',code],timeout=1)
+ elapsed=time.monotonic()-start
+ assert result.stdout.strip()=='wrapper returned' and elapsed<1, elapsed
+ start=time.monotonic()
+ try: m.tool(cfg,'python',['-c','import time; time.sleep(2)'],timeout=0.2)
+ except RuntimeError as e: assert 'watchdog' in str(e)
+ else: raise AssertionError('watchdog did not fire')
+ assert time.monotonic()-start<1
+ print(f'PASS: inherited output descendant does not block (wrapper {elapsed:.3f}s); fixed timeout remains bounded')
+
+Observed stdout (exit 0):
+PASS: inherited output descendant does not block (wrapper 0.016s); fixed timeout remains bounded

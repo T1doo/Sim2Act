@@ -68,8 +68,19 @@ def tool(cfg, program, args, *, password=None, timeout=35, ok=(0,)):
     env["PGCLIENTENCODING"] = "UTF8"
     if password is not None:
         env["PGPASSWORD"] = password
-    result = subprocess.run([str(Path(cfg["pgbin"]) / (program + ".exe")), *args],
-        env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+    # Windows pg_ctl can leave standard handles inherited by the server. A
+    # PIPE would keep communicate() waiting for EOF even after pg_ctl exits or
+    # is killed on timeout. Owned regular files do not require descendant EOF.
+    nonce = secrets.token_hex(16)
+    output, errors = (root() / ("tool-" + nonce + suffix) for suffix in (".stdout", ".stderr"))
+    with output.open("wb") as out, errors.open("wb") as err:
+        try:
+            result = subprocess.run([str(Path(cfg["pgbin"]) / (program + ".exe")), *args],
+                env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=err, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"{program} exceeded its fixed {timeout}-second watchdog") from None
+    result.stdout = output.read_text(encoding="utf-8", errors="replace")
+    result.stderr = errors.read_text(encoding="utf-8", errors="replace")
     if result.returncode not in ok:
         raise RuntimeError(f"{program} exit {result.returncode}: " + clean_text(result.stdout + result.stderr))
     return result
