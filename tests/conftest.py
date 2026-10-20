@@ -14,6 +14,11 @@ from sim2act.db import Store, new_id
 
 @pytest.fixture
 def env(tmp_path):
+    if os.environ.get("SIM2ACT_RECORD_PG_CONFIG"):
+        from record_pg_fixture import environment
+
+        yield from environment(tmp_path, os.environ["SIM2ACT_RECORD_PG_CONFIG"])
+        return
     url = os.environ.get("SIM2ACT_TEST_DATABASE_URL", "sqlite:///" + str(tmp_path / "fixture.db"))
     store = Store(url, test_only=True)
     schema = new_id("test")

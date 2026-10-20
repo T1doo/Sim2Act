@@ -1,0 +1,108 @@
+{
+  "verdict": "LIMITED_ONE_TIME_CI_DESIGN_PASS",
+  "P1": [],
+  "P2": [],
+  "mode": "READ_ONLY_STATIC_REVIEW_NO_CI_EXECUTION",
+  "sha256": {
+    ".github/workflows/records-pg-once.yml": "f5fd6faf80a0ff91645284cd1dd42c570a6180d0187e5d5b98b078ca2ae21992",
+    "scripts/record_pg_ci.py": "5c14c3ef00fb637d42b1c56cc3a744b80b58a377912007658dbc0373e23b14cd",
+    "tests/record_pg_fixture.py": "004c2d747984a1e8bf3c416727ee4f73a1ec8ac90e197572cc75bfd66e6573cd",
+    "tests/conftest.py": "c63d4b8cf7dd58a9a9c864e7c25e978a0cb9d94f5d762d32d8972922948a5e20"
+  },
+  "scope": "One authorized public windows-2025 run, ten PG-compatible existing record nodes and one attached same-cluster restart oracle",
+  "resolved_findings": [
+    {
+      "id": "cleanup_interpreter",
+      "resolution": "Workflow uses installed venv interpreter for cleanup; base fallback applies when no venv exists, before owned PG creation"
+    },
+    {
+      "id": "report_before_sanitization",
+      "resolution": "Report emits no bundles until PASS cleanup/redaction receipt and complete post-redaction hashes match; missing/failed/modified evidence fails closed"
+    },
+    {
+      "id": "sqlite_only_node_in_pg_selection",
+      "resolution": "Exactly one SQLite-only row-cell barrier explicitly excluded; frozen 11 provenance retained and current expected selection is 10, no weakened assertions"
+    },
+    {
+      "id": "port_comparison",
+      "resolution": "Separate equality, exact int, positive range and cfg port/database checks"
+    },
+    {
+      "id": "orphan_stdout_pipe",
+      "resolution": "Child finally kills only own descendants and asserts all reaped; parent timeout kills its recorded pid/create_time tree and asserts no survivors"
+    }
+  ],
+  "trigger": {
+    "branch": "dev/production-trial-stages-20261018",
+    "repository": "T1doo/Sim2Act",
+    "public_required": true,
+    "run_attempt": 1,
+    "marker": "[record-pg-once-20261020]",
+    "permissions": "contents:read",
+    "job_minutes": 15,
+    "note": "run_attempt prevents reruns of the same run; it is not a cross-push durable spent marker. Approval covers one designated marked push only; never reuse marker or initiate a second marked push."
+  },
+  "authority": {
+    "owned_runner_temp_root": true,
+    "loopback_only": true,
+    "random_passwords_ports_names": true,
+    "runtime_flags": [
+      "NOSUPERUSER",
+      "NOCREATEDB",
+      "NOCREATEROLE",
+      "NOREPLICATION",
+      "NOBYPASSRLS"
+    ],
+    "owner_limited_to_ephemeral_cluster_bootstrap_and_test_schema_DDL": true,
+    "runtime_schema_privileges": [
+      "USAGE",
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE"
+    ],
+    "runtime_schema_create": false,
+    "current_user_and_flags_measured": true,
+    "api_worker_and_cold_store_use_runtime_url": true,
+    "production_authority_added": false
+  },
+  "execution": {
+    "pytest_watchdog_seconds": 300,
+    "workflow_test_step_minutes": 6,
+    "descendant_kill_wait_seconds": 8,
+    "selected_existing_pg_nodes": 10,
+    "excluded_sqlite_only_node": "tests/test_local_record_apps.py::test_referenced_json_read_revoke_blocks_current_recovery_and_commit_before_bodies",
+    "restart": "Only after the designated original content-edit node call succeeds; same cluster stop/status3/start; existing and cold pool full-table snapshots and authorized current projection compared"
+  },
+  "cleanup": {
+    "always": true,
+    "owned_cluster_pg_ctl_only": true,
+    "status3_before_delete": true,
+    "owned_root_and_passwords_deleted": true,
+    "evidence_redacted_before_private_deletion": true,
+    "hash_receipt_required_before_bundle": true,
+    "max_compressed_log_bytes": 2000000,
+    "artifact_upload": false
+  },
+  "prohibited_paths_absent": [
+    "G0",
+    "Full PB",
+    "Real model",
+    "External PG connection",
+    "New paid runner or storage",
+    "Shared security permission changes",
+    "Administration API retries"
+  ],
+  "product_diff": [],
+  "actual_ci": "NOT_RUN",
+  "actual_postgresql": "NOT_RUN",
+  "runtime_cleanup": "NOT_RUN",
+  "reviewer_tests_run": 0,
+  "reviewer_repository_edits": false,
+  "limitations": [
+    "Static review approves only the exact four listed file bytes and one designated marked push",
+    "No PG or Windows runtime result has yet been observed",
+    "Future new pushes could satisfy the marker gate; once-only restriction remains an execution authorization condition",
+    "SQLite-only row-cell evaluation barrier is not certified on PostgreSQL"
+  ]
+}

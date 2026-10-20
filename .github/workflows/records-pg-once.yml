@@ -1,0 +1,80 @@
+name: One-time record PostgreSQL verification
+
+on:
+  push:
+    branches: [dev/production-trial-stages-20261018]
+    paths:
+      - .github/workflows/records-pg-once.yml
+      - scripts/record_pg_ci.py
+      - tests/record_pg_fixture.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sim2act-record-pg-once-20261020
+  cancel-in-progress: false
+
+jobs:
+  records-pg:
+    if: >-
+      github.repository == 'T1doo/Sim2Act' &&
+      github.event.repository.private == false &&
+      github.run_attempt == 1 &&
+      contains(github.event.head_commit.message, '[record-pg-once-20261020]')
+    runs-on: windows-2025
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      SIM2ACT_MODEL_MODE: mock
+      SIM2ACT_LIVE_ENABLED: 'false'
+      SIM2ACT_INTERN_TOKEN: ''
+      INTERN_API_TOKEN: ''
+      PYTHONUTF8: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      PIP_NO_CACHE_DIR: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12.10'
+          architecture: x64
+      - name: Install original locked test tools
+        timeout-minutes: 3
+        run: |
+          python -m venv .venv
+          ./.venv/Scripts/python.exe -m pip install --no-input -r requirements-windows.lock
+          if ($LASTEXITCODE -ne 0) { throw 'Locked tools installation failed' }
+      - name: Set up only the owned temporary PostgreSQL
+        timeout-minutes: 2
+        run: ./.venv/Scripts/python.exe scripts/record_pg_ci.py setup
+      - name: Install original locked DOM tools
+        timeout-minutes: 1
+        run: |
+          $Root = Join-Path $env:RUNNER_TEMP "sim2act-record-pg-$env:GITHUB_RUN_ID-1"
+          $Node = Join-Path $Root 'node'
+          New-Item -ItemType Directory -Path $Node -Force | Out-Null
+          Copy-Item scripts/engineering-ci/package.json,scripts/engineering-ci/package-lock.json $Node
+          npm ci --prefix $Node --ignore-scripts --no-audit --no-fund --fetch-retries=0 --fetch-timeout=30000 --cache (Join-Path $Root 'npm-cache')
+          if ($LASTEXITCODE -ne 0) { throw 'Locked DOM tools installation failed' }
+      - name: Original ten PG-compatible record nodes and one restart oracle
+        timeout-minutes: 6
+        run: ./.venv/Scripts/python.exe scripts/record_pg_ci.py test
+      - name: Stop and delete owned cluster and private files
+        if: always()
+        timeout-minutes: 1
+        run: |
+          if (Test-Path .venv/Scripts/python.exe) {
+            ./.venv/Scripts/python.exe scripts/record_pg_ci.py cleanup
+          } else {
+            python scripts/record_pg_ci.py cleanup
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Owned PostgreSQL cleanup failed' }
+      - name: Report sanitized actual evidence without artifact storage
+        if: always()
+        timeout-minutes: 1
+        run: python scripts/record_pg_ci.py report
