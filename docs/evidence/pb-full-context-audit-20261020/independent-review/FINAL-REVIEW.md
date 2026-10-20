@@ -1,0 +1,11 @@
+原永久取消窗口与指定完整PB用例不是同一执行目标。
+
+取消记录cancellation-20261012.json在2026-10-12T10:16:43Z明确指向“Old/new precise candidate installation digest concurrency comparison”，状态CANCELLED_PERMANENTLY_UNVERIFIED，禁止改名/换框架、代理、工具或环境重试。它具体是原key首latest200→精确安装candidate GET与真实SHA→第二actor实际prepare201→最后latest409/拒旧安装，并以同谓词对照旧/新JS。此前精确委派平台拒绝已停，后来用户永久取消；不是现在仍待解除后自动恢复。
+
+独立按字节核两份原trace SHA与baseline-trace-audit吻合：作者candidate4 dea91b11…、独审extra-latest56219652…，均latest_reads0，仅一个require_latest409及另一actor prepare201。它们证明较早supersession拒绝，未证明精确安装窗口到达。原FINAL_REVIEW的该具体时序动态PASS推论已由后续README撤回；不覆盖旧原件/历史计数，也不据缺证断定当前产品仍有漏洞。三次候选撤回分开：C1身份绑定、C2真实最后GET后await缺口、C3实际65来源预算；不能全部称同一窗口取消。
+
+当前tests/test_pb_spec_production_controller.py:274的test_pb_production_original_source_extraction_explicit_use_and_cold是服务器API/正常Worker/Mock的生成3→来源2→冷2、原始来源归档/抽取重放/逐次使用审批/冷Store/新结果/七槽账链。没有浏览器candidate安装、真实WebCrypto安装digest等待、第二actor prepare或旧新JS对照，故不同目标。该事实仅划清对象，不赋予本轮或未来PB新执行权；永久取消仍保持。本轮0PB/producer/test/DB/model/权限写入。
+
+只列一个可独立原计划代码缺口：F2-T03/AT10–11中，已有read→two sums应用仍无法换另一份既有授权单CSV。csv_material_reuse.py74–75显式拒TWO_SUM_VERSION，173–178仍单column/nodes[1]；csv_dag_instances.py189–211已有严格双节点columns映射、87–99已有两完整tuple回执核验，原CsvTwoSumInstances合同7也明确这个限制。它不是双CSV对照或新增算子。后续最小条件是明确双列material intent/结果schema合同与既有同项目授权目标，再以独立Fraction/冷新Run/旧历史保持/输入拒绝/一条旧单列回归验证；本轮不实现或运行。已完成记录采纳等不重列，未明确要求的更多修改深度不为凑第二项扩张。
+
+精确来源、SHA、撤回差别及对象对照见FINAL-REVIEW.json。仓库只读，无当前执行阻塞动作或未知运行结果。
