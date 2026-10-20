@@ -209,3 +209,37 @@ def test_missing_cluster_version_preserves_diagnostics_without_deletion_or_pass(
         module.cleanup()
     assert owned.exists() and not (evidence / "cleanup.json").exists()
     assert "synthetic incomplete initialization" in (evidence / "startup-diagnostics.json").read_text()
+
+
+def test_operation_budget_clamps_watchdog_and_never_extends_short_connection_time(harness, monkeypatch):
+    module, cfg, owned, evidence = harness
+    now = [20.0]
+    monkeypatch.setattr(module, "time", SimpleNamespace(time=lambda: 1000.0, monotonic=lambda: now[0]))
+    monkeypatch.setenv("SIM2ACT_RECORD_OPERATION_UNTIL", "1450")
+    deadline = module.operation_deadline()
+    assert deadline == 470.0
+    assert module.remaining_timeout(deadline, 100, reserve=18) == 100
+    now[0] = 450.0
+    assert module.remaining_timeout(deadline, 100, reserve=18) == 2
+    assert module.connection_timeout(deadline) == 10
+    now[0] = 468.1
+    with pytest.raises(RuntimeError, match="cannot cover a PG connection"):
+        module.connection_timeout(deadline)
+    with pytest.raises(RuntimeError, match="budget exhausted"):
+        module.remaining_timeout(deadline, 100, reserve=18)
+
+
+def test_expired_operation_budget_prevents_setup_but_cannot_block_cleanup(harness, monkeypatch):
+    module, cfg, owned, evidence = harness
+    monkeypatch.setenv("SIM2ACT_RECORD_OPERATION_UNTIL", str(time.time() - 1))
+    with monkeypatch.context() as guarded:
+        def setup_must_not_reach_owned_root():
+            raise AssertionError("Expired setup must create no owned resources")
+
+        guarded.setattr(module, "root", setup_must_not_reach_owned_root)
+        with pytest.raises(RuntimeError, match="operation budget expired"):
+            module.setup()
+    install_pg_named_python_shim(cfg)
+    module.cleanup()
+    assert not owned.exists()
+    assert json.loads((evidence / "cleanup.json").read_text())["status"] == "PASS"

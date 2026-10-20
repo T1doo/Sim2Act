@@ -27,6 +27,9 @@ DIAGNOSTIC_SCAN_FILES = 64
 DIAGNOSTIC_OUTPUT_BYTES = 262144
 CLEANUP_COMMAND_SECONDS = 45
 CLEANUP_FINAL_STATUS_SECONDS = 5
+OPERATION_SECONDS = 450
+TEST_WATCHDOG_SECONDS = 100
+TEST_SHUTDOWN_RESERVE_SECONDS = 18
 
 
 def selected_nodes():
@@ -144,6 +147,24 @@ def remaining_timeout(deadline, limit, *, reserve=0):
     return min(limit, remaining)
 
 
+def operation_deadline():
+    """Convert the workflow's common UTC cutoff to this process's monotonic clock."""
+    try:
+        remaining = float(os.environ["SIM2ACT_RECORD_OPERATION_UNTIL"]) - time.time()
+    except (KeyError, ValueError):
+        raise RuntimeError("Workflow operation cutoff is missing or invalid") from None
+    if not 0 < remaining <= OPERATION_SECONDS:
+        raise RuntimeError("Workflow operation budget expired or invalid; cleanup still permitted")
+    return time.monotonic() + remaining
+
+
+def connection_timeout(deadline):
+    seconds = remaining_timeout(deadline, 10)
+    if seconds < 2:
+        raise RuntimeError("Operation budget cannot cover a PG connection")
+    return int(seconds)
+
+
 def tool(cfg, program, args, *, password=None, timeout=35, ok=(0,), deadline=None):
     allowed = {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "COMSPEC", "PATHEXT"}
     env = {key: value for key, value in os.environ.items() if key.upper() in allowed}
@@ -183,6 +204,9 @@ def setup():
     import psycopg
     from psycopg import sql
 
+    deadline = operation_deadline()
+    if remaining_timeout(deadline, 35) < 2:
+        raise RuntimeError("Operation budget cannot cover safe PG initialization")
     owned = root()
     if owned.exists():
         raise ValueError("This run's directory must be fresh; no instance recovery")
@@ -204,21 +228,27 @@ def setup():
         cfg[kind + "_url"] = f"postgresql+psycopg://{role}:{password}@127.0.0.1:{port}/{cfg['database']}"
     save_private(cfg)
     SECRET_VALUES.extend([cfg["owner_url"], cfg["runtime_url"]])
+    write("run-budget.json", dict(operation_until_utc_epoch=float(os.environ["SIM2ACT_RECORD_OPERATION_UNTIL"]),
+        operation_seconds=OPERATION_SECONDS, job_limit_seconds=600, previous_job_seconds=238,
+        combined_job_upper_bound_seconds=838, cleanup_command_seconds=CLEANUP_COMMAND_SECONDS,
+        test_watchdog_seconds=TEST_WATCHDOG_SECONDS, test_shutdown_reserve_seconds=TEST_SHUTDOWN_RESERVE_SECONDS))
     password_file = owned / "initdb-password.txt"
     password_file.write_text(owner_pw, encoding="utf-8")
     try:
         tool(cfg, "initdb", ["-D", cfg["cluster"], "-U", cfg["owner"], "--auth=scram-sha-256",
-            "--encoding=UTF8", "--locale=C", "--pwfile=" + str(password_file)])
+            "--encoding=UTF8", "--locale=C", "--pwfile=" + str(password_file)], deadline=deadline)
     finally:
         password_file.unlink(missing_ok=True)
     with (Path(cfg["cluster"]) / "postgresql.conf").open("a", encoding="utf-8") as handle:
         handle.write(f"\nlisten_addresses='127.0.0.1'\nport={port}\nmax_connections=40\nshared_buffers='64MB'\n"
             "log_statement='none'\nlog_min_error_statement='panic'\n")
-    tool(cfg, "pg_ctl", ["-D", cfg["cluster"], "-l", str(owned / "postgres.log"), "-w", "-t", "30", "start"])
-    tool(cfg, "createdb", ["-h", "127.0.0.1", "-p", str(port), "-U", cfg["owner"], "--no-password", cfg["database"]], password=owner_pw)
-    with psycopg.connect(host="127.0.0.1", port=port, user=cfg["owner"], password=owner_pw, dbname=cfg["database"]) as conn:
+    tool(cfg, "pg_ctl", ["-D", cfg["cluster"], "-l", str(owned / "postgres.log"), "-w", "-t", "30", "start"], deadline=deadline)
+    tool(cfg, "createdb", ["-h", "127.0.0.1", "-p", str(port), "-U", cfg["owner"], "--no-password", cfg["database"]], password=owner_pw, deadline=deadline)
+    with psycopg.connect(host="127.0.0.1", port=port, user=cfg["owner"], password=owner_pw, dbname=cfg["database"],
+            connect_timeout=connection_timeout(deadline)) as conn:
         conn.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS").format(sql.Identifier(cfg["app"]), sql.Literal(app_pw)))
-    with psycopg.connect(host="127.0.0.1", port=port, user=cfg["app"], password=app_pw, dbname=cfg["database"]) as conn:
+    with psycopg.connect(host="127.0.0.1", port=port, user=cfg["app"], password=app_pw, dbname=cfg["database"],
+            connect_timeout=connection_timeout(deadline)) as conn:
         version = conn.execute("SELECT version(), current_setting('server_version'), pg_postmaster_start_time(), current_user").fetchone()
         flags = conn.execute("SELECT rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls FROM pg_roles WHERE rolname=current_user").fetchone()
         public_create = conn.execute("SELECT has_schema_privilege(current_user,'public','CREATE')").fetchone()[0]
@@ -239,6 +269,7 @@ def restart_oracle(env):
     from sim2act.api import create_app
 
     cfg = config()
+    deadline = operation_deadline()
     store, settings = env[:2]
     with store.tx() as conn:
         before_server = conn.execute(text("SELECT pg_postmaster_start_time(), pg_backend_pid(), current_user")).one()
@@ -246,9 +277,9 @@ def restart_oracle(env):
         assert pending == 0
     before = snapshot(store)
     started = time.monotonic()
-    tool(cfg, "pg_ctl", ["-D", cfg["cluster"], "-m", "fast", "-w", "-t", "30", "stop"])
-    stopped = tool(cfg, "pg_ctl", ["-D", cfg["cluster"], "status"], ok=(3,))
-    tool(cfg, "pg_ctl", ["-D", cfg["cluster"], "-l", str(root() / "postgres.log"), "-w", "-t", "30", "start"])
+    tool(cfg, "pg_ctl", ["-D", cfg["cluster"], "-m", "fast", "-w", "-t", "30", "stop"], deadline=deadline)
+    stopped = tool(cfg, "pg_ctl", ["-D", cfg["cluster"], "status"], ok=(3,), deadline=deadline)
+    tool(cfg, "pg_ctl", ["-D", cfg["cluster"], "-l", str(root() / "postgres.log"), "-w", "-t", "30", "start"], deadline=deadline)
     # Existing pool must recover as well as an independently created cold pool.
     with store.tx() as conn:
         after_server = conn.execute(text("SELECT pg_postmaster_start_time(), pg_backend_pid(), current_user")).one()
@@ -352,6 +383,8 @@ def kill_owned_test(cfg, *, deadline=None):
 def test():
     import psutil
     cfg = config()
+    deadline = operation_deadline()
+    watchdog = remaining_timeout(deadline, TEST_WATCHDOG_SECONDS, reserve=TEST_SHUTDOWN_RESERVE_SECONDS)
     child_env = dict(os.environ)
     for key in list(child_env):
         if any(word in key.upper() for word in ["TOKEN", "SECRET", "PASSWORD", "DATABASE_URL"]):
@@ -363,12 +396,12 @@ def test():
     cfg.update(test_pid=process.pid, test_created=psutil.Process(process.pid).create_time())
     save_private(cfg)
     try:
-        stdout, _ = process.communicate(timeout=300)
+        stdout, _ = process.communicate(timeout=watchdog)
     except subprocess.TimeoutExpired:
         kill_owned_test(cfg)
         stdout, _ = process.communicate(timeout=10)
         (EVIDENCE / "pytest.log").write_text(clean_text(stdout), encoding="utf-8")
-        raise RuntimeError("Original record selection exceeded the fixed 300-second watchdog") from None
+        raise RuntimeError("Original record selection exceeded its bounded workflow watchdog") from None
     (EVIDENCE / "pytest.log").write_text(clean_text(stdout), encoding="utf-8")
     print(clean_text(stdout))
     if process.returncode:

@@ -1,0 +1,84 @@
+{
+  "verdict": "LIMITED_ONE_CAUSAL_RETRY_DESIGN_PASS",
+  "P1": [],
+  "P2": [],
+  "mode": "READ_ONLY_NO_CI_DATABASE_OR_TEST_EXECUTION",
+  "baseline": "5e2775fd921afbb6456f284dc9da1ca7cd9e83b4",
+  "sha256": {
+    ".github/workflows/records-pg-once.yml": "2a7bd3fdbec95eacf52fcf1ffff66f5bd3d95cacc53a79c4535a49e52b000c31",
+    "scripts/record_pg_ci.py": "7606243ed3ef79cd422422b31b33d7c071043e5595361acd55e97119acd67c4b",
+    "tests/test_record_pg_ci_diagnostics.py": "75246973ac280ea9340316eb63012f8ec327e36b0431ad183ee8c2fbb826d9de",
+    "tests/record_pg_fixture.py": "004c2d747984a1e8bf3c416727ee4f73a1ec8ac90e197572cc75bfd66e6573cd",
+    "tests/conftest.py": "c63d4b8cf7dd58a9a9c864e7c25e978a0cb9d94f5d762d32d8972922948a5e20"
+  },
+  "authorization_scope": "Parent explicitly rechecked existing user permission and authorized one causal retry; this design approval adds no execution authority and does not permit a third execution",
+  "trigger": {
+    "repository": "T1doo/Sim2Act",
+    "public_required": true,
+    "branch": "dev/production-trial-stages-20261018",
+    "marker": "[record-pg-retry-20261020]",
+    "run_attempt": 1,
+    "permissions": "contents:read",
+    "one_designated_new_push_only": true,
+    "no_marker_reuse": true,
+    "no_third_execution": true,
+    "persistent_cross_push_deduplication": false
+  },
+  "budget": {
+    "job_cap_seconds": 600,
+    "prior_measured_job_seconds": 238,
+    "configured_sum_seconds": 838,
+    "original_budget_seconds": 900,
+    "operation_cutoff": "First native step UTC+450 seconds, converted separately to each process monotonic deadline",
+    "setup_deadline_checked_before_root": true,
+    "setup_tools_clamped_to_remaining_and_default35": true,
+    "pg_connect_timeout_max_seconds": 10,
+    "insufficient_connection_seconds": 2,
+    "connection_timeout_never_rounded_up": true,
+    "restart_tools_use_remaining_operation_budget": true,
+    "test_watchdog_max_seconds": 100,
+    "test_shutdown_reserve_seconds": 18,
+    "test_watchdog": "min(100, remaining operation budget minus 18)",
+    "test_step_seconds": 120,
+    "cleanup_independent_command_seconds": 45,
+    "cleanup_step_seconds": 60,
+    "report_step_seconds": 60,
+    "cleanup_not_blocked_by_expired_operation_budget": true,
+    "note": "838 is prior measured time plus the configured new job cap, not an advance measurement of the retry or a claim about queue/controller overhead"
+  },
+  "unchanged_boundaries": [
+    "Ten PG-compatible original nodes and same-cluster restart oracle",
+    "No SQLite-only row-cell barrier recertification on PG",
+    "Fresh owned loopback PG cluster and temporary bootstrap owner/restricted app role",
+    "Schema USAGE plus table CRUD; no runtime schema CREATE or elevated runtime flags",
+    "Bounded sanitized diagnostic allowlist and stop/status3/root deletion gates",
+    "No real model, PB/G0, paid runner/storage, shared permissions or persistent credentials"
+  ],
+  "author_local_evidence": {
+    "junit": "/tmp/record-pg-retry-local-junit.xml",
+    "stdout": "/tmp/record-pg-retry-local-pytest.log",
+    "tests": 8,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 3.639,
+    "extra_cases": [
+      "test_operation_budget_clamps_watchdog_and_never_extends_short_connection_time",
+      "test_expired_operation_budget_prevents_setup_but_cannot_block_cleanup"
+    ],
+    "classification": "LOCAL_POSIX_PYTHON_SHIMS_AND_TEMP_FILES_NOT_WINDOWS_OR_POSTGRESQL"
+  },
+  "unchanged_product_or_role_fixture_diff": [],
+  "original_failed_ci_log_sha256": "4324db64a8b67e2ff612c40b237ee4d823e5283cfaf99eb5afdafc8d1f05e67d",
+  "actual_retry": "NOT_RUN",
+  "actual_postgresql_acceptance": "NOT_RUN",
+  "actual_runtime_cleanup": "NOT_RUN",
+  "reviewer_repository_edits": false,
+  "reviewer_test_executions": 0,
+  "limitations": [
+    "Static design review approves only listed bytes and the explicitly scoped single retry",
+    "The first failure and zero prior PG cases/restarts remain unchanged",
+    "Future runtime results and real cleanup require their own original CI evidence",
+    "No third attempt or automatic marker reuse"
+  ]
+}
