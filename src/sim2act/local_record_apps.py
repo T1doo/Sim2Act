@@ -102,6 +102,8 @@ class CreateApp(Key):
 
 
 class ReleaseInput(Key):
+    content_edits: Literal["OPEN_RECORD_CONTENT_V1"] | None = Field(
+        default=None, exclude_if=lambda value: value is None)
     expected_definition_fingerprint: str = Field(pattern=HASH)
     consent: Literal["FREEZE_RECORD_FORM_AND_WRITE_BOUNDARY"]
 
@@ -296,6 +298,30 @@ def definition(aid, action_id, goal_id, user, project, body, limits):
     return value
 
 
+def release_definition(value, body):
+    value = copy.deepcopy(value)
+    if body.get("content_edits") == "OPEN_RECORD_CONTENT_V1" and not allows_content_edits(value):
+        value["typed_mapping_version"] = EDIT_MAPPING
+        value["typed_command_schemas"]["EDIT_CONTENT"] = EditContent.model_json_schema()
+        value["hard_conditions"].append(
+            "EDIT_CONTENT replaces OPEN title/details with an explicit reason; identity/state and immutable history remain")
+    return value
+
+
+def release_origin(c, user, aid, approval_id):
+    keys = c.execute(select(journal.c.request_key).where(journal.c.app_id == aid,
+        journal.c.principal_id == user, journal.c.kind.in_([PREPARE, PREPARE + "_seal"]),
+        journal.c.snapshot["response"]["id"].as_string() == approval_id)).scalars().all()
+    require(len(keys) == 2 and len(set(keys)) == 1, "Original Release proposal missing")
+    saved = pair(c, user, aid, PREPARE, keys[0])
+    require(saved is not None)
+    body = ReleaseInput.model_validate(saved["request"]).model_dump()
+    require(body == saved["request"] and body["request_key"] == keys[0]
+        and saved["response"] == dict(id=approval_id, fingerprint=c.execute(
+            select(approvals.c.fingerprint).where(approvals.c.id == approval_id, approvals.c.principal_id == user)).scalar_one()))
+    return body
+
+
 def allows_content_edits(value):
     return (value["typed_mapping_version"] == EDIT_MAPPING
         and value["typed_command_schemas"].get("EDIT_CONTENT") == EditContent.model_json_schema())
@@ -387,7 +413,9 @@ def read_release(store, c, user, rid, limits):
     header = release_header(store, c, user, rid)
     row = dict(c.execute(select(releases).where(releases.c.id == rid)).mappings().one())
     value = checked_app(store, c, user, header["app_id"], limits)
-    require(fingerprint(row["snapshot"]) == row["fingerprint"] == fingerprint(release_snapshot(value)))
+    body = release_origin(c, user, header["app_id"], row["approval_id"])
+    require(body["expected_definition_fingerprint"] == fingerprint(value))
+    require(fingerprint(row["snapshot"]) == row["fingerprint"] == fingerprint(release_snapshot(release_definition(value, body))))
     approval = lifecycle.approval(c, user, row["approval_id"],
         c.execute(select(approvals.c.fingerprint).where(approvals.c.id == row["approval_id"])).scalar_one(),
         VERSION, allow_consumed=True)
@@ -397,7 +425,7 @@ def read_release(store, c, user, rid, limits):
 
 def release_metadata(row):
     return dict(id=row["id"], fingerprint=row["fingerprint"], project_id=row["project_id"],
-        source_app_id=row["snapshot"]["app_id"])
+        source_app_id=row["snapshot"]["app_id"], definition=copy.deepcopy(row["snapshot"]["definition"]))
 
 
 def release_request(store, c, user, aid, key, limits):
@@ -406,7 +434,7 @@ def release_request(store, c, user, aid, key, limits):
     if not saved:
         raise DomainError("OUTCOME_UNKNOWN", "Original record Release request not found")
     body = ReleaseInput.model_validate(saved["request"]).model_dump()
-    require(body["expected_definition_fingerprint"] == fingerprint(value))
+    require(body == saved["request"] and body["expected_definition_fingerprint"] == fingerprint(value))
     # Recovery is a read of the original receipt, including an expired proposal.
     # Commit below still uses the original approval expiry/consumption guard.
     approval = c.execute(select(approvals).where(approvals.c.id == saved["response"]["id"],
@@ -420,12 +448,12 @@ def release_request(store, c, user, aid, key, limits):
         and payload["principal_id"] == user and payload["project_id"] == approval["project_id"]
         and payload["expires_at"] == approval["expires_at"]
         and fingerprint(payload) == approval["fingerprint"] == saved["response"]["fingerprint"]
-        and fingerprint(payload["snapshot"]) == fingerprint(release_snapshot(value)))
+        and fingerprint(payload["snapshot"]) == fingerprint(release_snapshot(release_definition(value, body))))
     committed = pair(c, user, aid, RELEASED, key)
     release = read_release(store, c, user, committed["response"]["id"], limits) if committed else None
     require(bool(approval["consumed"]) == bool(committed))
     return dict(namespace=VERSION, app_id=aid, request_key=key, request_fingerprint=fingerprint(body),
-        approval=approval, release=release_metadata(release) if release else None, formal_publication_enabled=False)
+        request=body, approval=approval, release=release_metadata(release) if release else None, formal_publication_enabled=False)
 
 
 def prepare_release(store, user, aid, body, limits):
@@ -437,7 +465,7 @@ def prepare_release(store, user, aid, body, limits):
             require(fingerprint(old["request"]) == fingerprint(body))
         else:
             require(body["expected_definition_fingerprint"] == fingerprint(value))
-            approval = lifecycle.new_approval(c, user, value["project_id"], VERSION, dict(snapshot=release_snapshot(value)))
+            approval = lifecycle.new_approval(c, user, value["project_id"], VERSION, dict(snapshot=release_snapshot(release_definition(value, body))))
             remember(c, user, aid, PREPARE, body["request_key"], body, dict(id=approval["id"], fingerprint=approval["fingerprint"]))
         return release_request(store, c, user, aid, body["request_key"], limits)
 
@@ -453,7 +481,8 @@ def commit_release(store, user, aid, key, body, limits):
         approval = lifecycle.approval(c, user, current["approval"]["id"], body["fingerprint"], VERSION)
         snapshot = approval["payload"]["snapshot"]
         value = checked_app(store, c, user, aid, limits)
-        require(fingerprint(snapshot) == fingerprint(release_snapshot(value)))
+        origin = release_origin(c, user, aid, approval["id"])
+        require(fingerprint(snapshot) == fingerprint(release_snapshot(release_definition(value, origin))))
         store.authorize(c, user, value["runtime_id"], value["project_id"], value["project_id"], "artifact.save_text")
         rid = new_id("irelease")
         c.execute(insert(releases).values(id=rid, project_id=value["project_id"], principal_id=user,
@@ -477,27 +506,33 @@ def instance_header(store, c, user, iid):
     release = release_header(store, c, user, row["release_id"])
     require(row["runtime_id"] == project["runtime_id"] == release["runtime_id"]
         and row["source_app_id"] == release["app_id"] and row["project_id"] == release["project_id"]
-        and type(row["revision"]) is int and row["revision"] == 1
+        and type(row["revision"]) is int and row["revision"] in {1, 2}
         and type(row["data_version"]) is int and 0 <= row["data_version"] <= MAX_EVENTS)
     from . import record_preview_storage as private
     anchors = c.execute(select(journal.c.app_id, journal.c.request_key,journal.c.kind).where(
         journal.c.principal_id == user, journal.c.kind.in_([INSTANCE, INSTANCE + "_seal",private.INSTANCE,private.INSTANCE + "_seal"]),
         journal.c.snapshot["response"]["id"].as_string() == iid)).all()
-    require(len(anchors) == 2 and len({(r[0],r[1]) for r in anchors}) == 1 and anchors[0][0] == row["release_id"],
+    require(len(anchors) == 2 and len({(r[0],r[1]) for r in anchors}) == 1,
         "Original instance creation receipt missing or rebound")
     kind=private.INSTANCE if any(r[2] == private.INSTANCE for r in anchors) else INSTANCE
     require({r[2] for r in anchors} == {kind,kind + "_seal"})
-    created = pair(c, user, row["release_id"], kind, anchors[0][1])
+    origin = release_header(store, c, user, anchors[0][0])
+    created = pair(c, user, origin["id"], kind, anchors[0][1])
     require(created is not None and created["response"] == dict(id=iid))
     request = created["request"]
     if kind == private.INSTANCE:
         request = PrivateInstanceInput.model_validate(request).model_dump()
     else:
         request = InstanceInput.model_validate(request).model_dump()
-    require(request["expected_release_fingerprint"] == release["fingerprint"]
+    require(request["expected_release_fingerprint"] == origin["fingerprint"]
         and request["request_key"] == anchors[0][1])
     result=dict(row)
+    from . import record_adoption
+    lineage = record_adoption.lineage(store, c, user, result, origin, release)
+    if lineage:
+        result["release_adoption"] = lineage
     if kind == private.INSTANCE:
+        require(lineage is None and result["revision"] == 1 and origin["id"] == release["id"])
         result["preview_scope"]=private.scope(result,release,request)
     return result, release
 
@@ -539,6 +574,9 @@ def scope_job(store, c, user, rid, iid=None):
     if row is None or (iid is not None and row["iid"] != iid):
         raise DomainError("PERMISSION_DENIED")
     i, release = instance_header(store, c, user, row["iid"])
+    from .record_adoption import historical_view
+    i = historical_view(i, row["release_id"])
+    release = release_header(store, c, user, i["release_id"])
     expected = dict(namespace=VERSION, run_id=rid, app_run_id=row["app_run_id"], instance_id=i["id"],
         principal_id=user, project_id=i["project_id"], runtime_id=i["runtime_id"], release_id=row["release_id"], app_id=i["source_app_id"])
     if "preview_scope" in i:
@@ -629,6 +667,8 @@ def accepted_binding(store, c, user, rid, limits):
     s = b["snapshot"]
     require(s.get("preview_scope_fingerprint") == i.get("preview_scope",{}).get("fingerprint"))
     job = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user)).mappings().one()
+    from .record_adoption import binding_boundary
+    binding_boundary(i, s)
     require(all(job["context"].get(k) == v for k, v in execution_scope(i).items()))
     a = c.execute(select(app_runs).where(app_runs.c.id == aid)).mappings().one()
     require(s["namespace"] == VERSION and fingerprint(s) == b["fingerprint"] == job["fingerprint"]
@@ -673,10 +713,15 @@ def projection(store, c, user, i, limits):
     rows = c.execute(select(typed).where(typed.c.instance_id == i["id"]).order_by(typed.c.version)).mappings().all()
     require(len(rows) == i["data_version"])
     current: dict = {}
-    history, previous = [], None
+    history: list = []
+    previous = None
     verified = set()
+    from .record_adoption import event_view, verify_prefix
+    verify_prefix(i, current, history)
     for version, row in enumerate(rows, 1):
-        require(type(row["version"]) is int and row["version"] == version and row["release_id"] == i["release_id"]
+        event_i = event_view(i, version)
+        release = read_release(store, c, user, event_i["release_id"], limits)
+        require(type(row["version"]) is int and row["version"] == version and row["release_id"] == event_i["release_id"]
             and row["schema_version"] == 1 and fingerprint(row["data"]) == row["fingerprint"])
         validate_value(release["snapshot"]["data_schema"], row["data"])
         rid = c.execute(select(bindings.c.run_id).where(bindings.c.app_run_id == row["run_id"])).scalar_one()
@@ -693,7 +738,7 @@ def projection(store, c, user, i, limits):
             and row["data"]["release_ref"] == release["id"] and a["result_version"] == version
             and a["status"] == job["status"] == "SUCCEEDED" and a["error"] is None and job["error"] is None
             and not job["cancel_intent"] and job["context"]["tools"] == 1
-            and snapshot["expected_data_version"] == version - 1 and snapshot["expected_revision"] == i["revision"])
+            and snapshot["expected_data_version"] == version - 1 and snapshot["expected_revision"] == event_i["revision"])
         if "preview_scope" in i:
             resource=private.artifact(store,c,user,i,output["resource_id"])
         else:
@@ -705,7 +750,7 @@ def projection(store, c, user, i, limits):
             and fingerprint(event) == fingerprint(preview["event"]) == preview["event_fingerprint"])
         intent = c.execute(select(operation_intents.c.request).where(operation_intents.c.operation_id == op["id"])).scalar_one()
         require(fingerprint(intent) == fingerprint(dict(tool="artifact.save_text", args=dict(text=canonical(event)))))
-        previous = apply_event(current, event, previous, version, i,
+        previous = apply_event(current, event, previous, version, event_i,
             allow_content_edit=allows_content_edits(release["snapshot"]["definition"]))
         require(fingerprint(job["result"]) == fingerprint(run_result(i, a, event, output, version)))
         committed = c.execute(select(events.c.data).where(events.c.run_id == rid,
@@ -714,6 +759,7 @@ def projection(store, c, user, i, limits):
             artifact_resource=output["resource_id"], event_fingerprint=previous, result_version=version)]))
         history.append(dict(version=version, event=event, event_fingerprint=previous, artifact=output,
             run_id=rid, app_run_id=a["id"]))
+        verify_prefix(i, current, history)
         verified.add(a["id"])
     ar = c.execute(select(app_runs.c.id, app_runs.c.status, app_runs.c.output,
         app_runs.c.result_version).where(app_runs.c.instance_id == i["id"])).mappings().all()
@@ -724,6 +770,7 @@ def projection(store, c, user, i, limits):
         require(a["output"] is None and a["result_version"] is None, "Uncommitted record output residue")
         job = c.execute(select(runs.c.id, runs.c.result, runs.c.status).join(bindings,
             bindings.c.run_id == runs.c.id).where(bindings.c.app_run_id == a["id"])).mappings().one()
+        accepted_binding(store, c, user, job["id"], limits)
         require((job["status"] == a["status"] or (a["status"] == "QUEUED" and job["status"] == "RUNNING"))
             and job["result"] is None
             and not c.execute(select(operations.c.id).where(operations.c.run_id == job["id"])).first()
@@ -882,6 +929,9 @@ def process_job(worker, run):
         deadline = job["created_at"] + min(worker.s.run_seconds,
             release["snapshot"]["definition"]["candidate"]["manifest"]["runtime_limits"]["run_seconds"])
         require(time.time() < deadline, "Original record Run deadline ended")
+        live_i, _ = instance_header(worker.store, c, job["principal_id"], i["id"])
+        require(live_i["release_id"] == i["release_id"] and live_i["revision"] == i["revision"],
+            "Historical Run cannot write after Release adoption")
         require(i["revision"] == snapshot["expected_revision"] and i["data_version"] == snapshot["expected_data_version"]
             and time.time() < frozen["expires_at"], "Record version or original preview expired")
         records, history = projection(worker.store, c, job["principal_id"], i, limits)
@@ -963,8 +1013,8 @@ def inspect_instance(store, user, iid, limits):
         result_runs = []
         for row in c.execute(select(bindings.c.run_id).join(app_runs, app_runs.c.id == bindings.c.app_run_id)
                 .where(app_runs.c.instance_id == iid)).mappings():
-            _, _, job, a, _, _ = accepted_binding(store, c, user, row["run_id"], limits)
-            result_runs.append(dict(id=job["id"], app_run_id=a["id"], status=job["status"], version=job["version"], result_version=a["result_version"]))
+            run_i, run_release, job, a, _, _ = accepted_binding(store, c, user, row["run_id"], limits)
+            result_runs.append(dict(release_id=run_release["id"], instance_revision=run_i["revision"], id=job["id"], app_run_id=a["id"], status=job["status"], version=job["version"], result_version=a["result_version"]))
         return dict(namespace=VERSION, **i, release_fingerprint=release["fingerprint"], records=records, history=history,
             runs=result_runs, **{k:v for k,v in execution_scope(i).items() if k != "preview_scope"}, formal_publication_enabled=False)
 
@@ -976,7 +1026,8 @@ def inspect_job(store, user, iid, rid, limits):
 
 def _inspect_job(store, c, user, iid, rid, limits):
     i, _, _ = scope_job(store, c, user, rid, iid)
-    _, history = projection(store, c, user, i, limits)
+    current_i, _ = instance_header(store, c, user, iid)
+    _, history = projection(store, c, user, current_i, limits)
     _, release, job, a, _, _ = accepted_binding(store, c, user, rid, limits)
     value = next((v for v in history if v["run_id"] == rid), None)
     op = c.execute(select(operations.c.receipt).where(operations.c.run_id == rid)).scalar_one_or_none()
@@ -1126,5 +1177,6 @@ def mount(app, store, limits, identity):
     def post_control(iid: str, rid: str, body: Control, user=user_dependency):
         return control(store, user, iid, rid, body.model_dump(), limits)
 
-    from . import record_preview_storage
+    from . import record_adoption, record_preview_storage
+    record_adoption.mount(app, store, limits, identity)
     record_preview_storage.mount(app, store, limits, identity)

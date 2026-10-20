@@ -88,3 +88,5 @@ Server CI可复现性收敛已完成：独立完整Windows版本锁、pip check/
 
 
 2026-10-08受控分支＋所有权P2修复整合：父线程独审source6181bf7限定闭合（双端各28P、39拒绝轨迹）；原dev5bbc快进AEA，产品字节同已审版本，无新逻辑。冻结必要整合/三种真实旧源码升级40例每端40P0F0S，历史JSON字节保留，旧证明失效并重新精确确认；旧候选/失败证据保留，不机械重跑757/跨源码认证。额外旧清理目录查询失败限制及最低角色/原生/真实并发转移独审缺口保留；LIVE0、原900/240/150、新权限/部署/新CI均不变。开发整合不等于业务/人工/F1/P-B验收。[最新范围与指南](F2/ControlledOwnerIntegrationLog.md)。
+
+2026-10-20 原F2-T08/AT-16有限接续：[本地记录实例显式兼容采纳](F2/LocalRecordReleaseAdoption20261020.md)补上本补丁新建v1实例一次明确采用同应用v2内容更正能力；同iid/record ID、旧事件/typed/Run/制品/工具回执和Grant保留，批准前缀指纹每次全投影重算，旧Run只读不能写。最终10后端+4实际HTTP/JSDOM页面PASS，源码独审两P2已闭合；原件及失败史见[证据](evidence/record-release-adoption-20261020/README.md)。旧软件迁移、新切片PG/Windows/native/真实模型语义、完整PB/G0与F2/R0及正式发布仍开放；无新CI/权限/部署。

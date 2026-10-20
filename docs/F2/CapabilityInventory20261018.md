@@ -33,3 +33,5 @@
 ## 本轮独立功能接续
 
 上述 T06 当前集合 JSON 导出已随后实现，复用原鉴权 GET 和完整投影验证，不新增服务端写入。新实际窗口首次 **1PASS/29.66秒**，23页面检查、34GET、54资产、2次真实 Blob 导出；两文件各4957字节且SHA一致，明确核当前A DONE@2/B OPEN@1和排队意图排除。三次合法NoModel夹具Worker的对象ID/领取/心跳在页面前独立捕获；页面0POST/Worker，55表只允许唯一明确fixture撤权。这个通过不改签前两片的 wrapper失败和纯JSON核对。详见[当前集合导出](LocalRecordCollectionExport20261018.md)及其原件；其余表列缺口仍保留。
+
+2026-10-20 原F2-T08/AT-16有限接续：[本地记录实例显式兼容采纳](LocalRecordReleaseAdoption20261020.md)补上本补丁新建v1实例一次明确采用同应用v2内容更正能力；同iid/record ID、旧事件/typed/Run/制品/工具回执和Grant保留，批准前缀指纹每次全投影重算，旧Run只读不能写。最终10后端+4实际HTTP/JSDOM页面PASS，源码独审两P2已闭合；原件及失败史见[证据](../evidence/record-release-adoption-20261020/README.md)。旧软件迁移、新切片PG/Windows/native/真实模型语义、完整PB/G0与F2/R0及正式发布仍开放；无新CI/权限/部署。

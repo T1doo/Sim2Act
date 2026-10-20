@@ -97,7 +97,7 @@ def final_flow_readback(env, page, worker_log, before_identities):
         native_browser="NOT_RUN", real_semantic_acceptance="NOT_RUN")
 
 
-@pytest.mark.parametrize("scenario", ["flow-recovery", "navigation", "revocation", "project-history", "controls", "collection-export", "private-preview", "content-edit"])
+@pytest.mark.parametrize("scenario", ["flow-recovery", "navigation", "revocation", "project-history", "controls", "collection-export", "private-preview", "content-edit", "release-adoption"])
 def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, tmp_path, scenario):
     root = Path.cwd().resolve()
     raw_http, ipc, worker_log = [], [], []
@@ -221,7 +221,7 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
                 if request.get("done"):
                     break
                 if request.get("command") == "worker":
-                    assert scenario in {"flow-recovery", "private-preview", "content-edit"}, "Read-only page scenarios cannot invoke Worker"
+                    assert scenario in {"flow-recovery", "private-preview", "content-edit", "release-adoption"}, "Read-only page scenarios cannot invoke Worker"
                     cold = reopen_record_test_store(env[0])
                     stores.append(cold)
                     before = states(cold)
@@ -337,6 +337,21 @@ def test_local_record_page_explicit_flow_and_fenced_navigation_actual_http(env, 
             write_json(tmp_path / "actual-page-delivery.json", delivered)
             proof.update(page_worker_calls=3, fixture_worker_calls=0, actual_no_model_runs=3,
                 page_creation_release_instance_covered=True)
+        elif scenario == "release-adoption":
+            assert page["classification"] == "ACTUAL_HTTP_JSDOM_RECORD_RELEASE_ADOPTION"
+            assert len(worker_log) == 3 and all(row["status"] == "SUCCEEDED" for row in worker_log)
+            state = ok(env[2].get(f"/api/internal/record-instances/{page['instance_id']}"))
+            a, b = state["records"]
+            assert state["revision"] == 2 and state["data_version"] == 3
+            assert state["release_adoption"]["data_version"] == 2
+            assert (a["title"], a["details"], a["state"], a["record_revision"]) == (
+                info["correct_title"], info["correct_details"], "OPEN", 2)
+            assert (b["title"], b["details"], b["state"], b["record_revision"]) == (TITLE_B, DETAILS_B, "OPEN", 1)
+            assert [r["event"]["release_id"] for r in state["history"]] == [
+                state["release_adoption"]["source_release_id"], state["release_adoption"]["source_release_id"], state["release_id"]]
+            assert [r["run_id"] for r in state["history"]] == page["run_ids"]
+            assert state["history"][0] == page["first_history"]
+            proof.update(page_worker_calls=3, fixture_worker_calls=0, actual_no_model_runs=3, final_state=state)
         elif scenario == "content-edit":
             assert page["classification"] == "ACTUAL_HTTP_JSDOM_LOCAL_RECORD_CONTENT_EDIT"
             assert len(worker_log) == 4 and all(row["status"] == "SUCCEEDED" for row in worker_log)

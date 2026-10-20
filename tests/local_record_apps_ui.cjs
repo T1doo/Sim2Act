@@ -65,6 +65,10 @@ async function createLifecycle(){
  check($('local-records-release-commit').disabled&&!$('local-records-release-ack').checked,'Release commit requires a separate fresh acknowledgement');
  ack('local-records-release-ack');n=posts().length;await click('local-records-release-commit',true);const committed=posts().at(-1);assert.equal(committed.status,200,committed.response_text);release_id=JSON.parse(committed.response_text).release.id;
  check(posts().length===n+1&&committed.path.endsWith('/commit')&&view().approval.release.id===release_id,'separate double click commits one exact internal Release');
+ if(info.scenario==='release-adoption'){
+  const firstId=release_id,firstFp=view().approval.release.fingerprint;$('local-records-release-edits').dispatchEvent(new w.Event('change',{bubbles:true}));await click('local-records-release-prepare');ack('local-records-release-ack');await click('local-records-release-commit');release_id=view().approval.release.id;
+  check(release_id!==firstId&&view().approval.release.fingerprint===firstFp,'same app can have two immutable v1 Release IDs with equal snapshot fingerprints; instance deliberately uses the second');
+ }
  n=posts().length;await click('local-records-delivery-read');check(posts().length===n,'explicit delivery refresh is read-only');await select('local-records-release-select',release_id);ack('local-records-instance-ack');
  n=posts().length;await click('local-records-instance-create',true);const made=posts().at(-1);assert.equal(made.status,201,made.response_text);instance_id=JSON.parse(made.response_text).instance.id;
  check(posts().length===n+1&&made.path===`/api/internal/record-releases/${release_id}/instances`&&!view().instance,'explicit create saves one empty independent instance without auto-selecting it');
@@ -135,6 +139,34 @@ async function contentEdit(){
  check(a.record_revision===3&&a.state==='DONE'&&a.title===info.correct_title&&a.details===info.correct_details,'existing state transition preserves corrected content and advances the same record');
  await boot();await open();check(view().instance.data_version===4&&JSON.stringify(view().instance.history.slice(0,2))===before,'cold independent page validates mixed v1/v2 history without writes');
  check(![...$('local-records-record-select').options].some(o=>o.value===record_a),'DONE record is not offered for content correction');
+}
+async function releaseAdoption(){
+ await createLifecycle();await write('CREATE',1);await write('CREATE',2);
+ const oldRelease=release_id,oldHistory=JSON.stringify(view().instance.history),oldB=JSON.stringify(view().instance.records.find(r=>r.record_id===record_b));
+ check(![...$('local-records-command').options].some(o=>o.value==='EDIT_CONTENT'),'v1 instance offers no correction before explicit adoption');
+ ack('local-records-release-edits');await click('local-records-release-prepare',true);
+ check(view().approval?.request.content_edits==='OPEN_RECORD_CONTENT_V1'&&view().app.definition.typed_mapping_version==='local-record-input.v1','new v2 proposal leaves the original application definition unchanged');
+ ack('local-records-release-ack');await click('local-records-release-commit',true);release_id=view().approval.release.id;
+ await click('local-records-delivery-read');await select('local-records-release-select',release_id);
+ check(view().instance.release_id===oldRelease&&view().instance.revision===1,'new Release never automatically switches an existing instance');
+ let n=posts().length;await click('local-records-adoption-prepare',true);
+ check(posts().length===n+1&&view().adoption?.approval.payload.snapshot.data_version===2&&$('local-records-adoption-commit').disabled,'prepare freezes the exact old collection and requires a separate acknowledgement');
+ const key=view().adoption.request_key,path=base()+'/release-adoptions/'+encodeURIComponent(key);ack('local-records-adoption-ack');lose={path:path+'/commit'};n=posts().length;await click('local-records-adoption-commit',true);
+ check(posts().length===n+1&&posts().at(-1).status===200&&$('local-records-recovery-key').value===key&&$('local-records-recovery-stage').value==='COMMIT_ADOPTION'&&!view().instance,'lost actual adoption receipt retains the original key and clears stale content');
+ n=posts().length;await click('local-records-recover');check(posts().length===n&&view().adoption.adoption.target_release_id===release_id&&actions.at(-1).path===path,'adoption recovery only GETs the same original receipt');
+ await click('local-records-delivery-read');await select('local-records-instance-select',instance_id);
+ check(view().instance.revision===2&&view().instance.data_version===2&&view().instance.release_id===release_id&&JSON.stringify(view().instance.history)===oldHistory,'same iid explicitly adopts v2 while preserving the entire v1 event history');
+ check([...$('local-records-command').options].some(o=>o.value==='EDIT_CONTENT'),'selected current Release now offers content correction');
+ await select('local-records-run-select',run_ids[0]);await click('local-records-run-read');check(view().run.release_id===oldRelease&&view().run.event.title===info.title_a,'old same-Run receipt remains bound to its original v1 Release');
+ await write('EDIT_CONTENT',3,true);check(JSON.stringify(view().instance.records.find(r=>r.record_id===record_b))===oldB&&JSON.stringify(view().instance.history.slice(0,2))===oldHistory,'new Release correction preserves B and both immutable v1 events');
+ n=posts().length;await boot();await open();check(view().instance.revision===2&&view().instance.data_version===3&&view().instance.records.find(r=>r.record_id===record_a).title===info.correct_title,'cold page independently folds mixed Release history and current corrected records');
+ const created=posts().find(r=>r.path===`/api/internal/record-releases/${oldRelease}/instances`);assert(created);await select('local-records-release-select',oldRelease);await select('local-records-recovery-stage','CREATE_INSTANCE');input('local-records-recovery-key',created.body.request_key);await click('local-records-recover');
+ check(posts().length===n&&JSON.parse($('local-records-recovery-proof').textContent).instance.release_id===release_id&&$('local-records-status').textContent.includes('已只读恢复实例'),'cold original creation key remains verifiable through its exact adoption lineage without rebinding the anchor');
+ await select('local-records-recovery-stage','COMMIT_ADOPTION');input('local-records-recovery-key',key);await click('local-records-recover');check(posts().length===n&&view().adoption.adoption.target_release_id===release_id,'cold original-key adoption recovery is read-only and cannot repeat the switch');
+ await held(path,()=>click('local-records-recover'),async()=>{await select('local-records-instance-select','');await select('local-records-instance-select',instance_id);},'adoption original-key recovery versus instance ABA');
+ check(!view().adoption&&!$('local-records-adoption-proof').textContent,'late adoption GET cannot restore a stale approval after instance ABA');
+ await select('local-records-run-select',run_ids[0]);await click('local-records-run-read');check(view().run.release_id===oldRelease&&view().instance.release_id===release_id,'cold old Run read preserves its source version beside the separately current version');
+ check(posts().filter(r=>r.path===path+'/commit').length===1&&posts().filter(r=>r.path===base()+'/release-adoptions').length===1,'one explicit adoption prepare and one commit; lost receipts never cause repeat writes');
 }
 async function privatePreview(){
  await open();const business=instance_id;check(view().instance.records[0].title==='Synthetic business anchor A','existing real business A is present before private creation');
@@ -292,14 +324,14 @@ async function revocation(){
 }
 (async()=>{
  let status='FAIL',error;
- try{await boot();if(info.scenario==='content-edit')await contentEdit();else if(info.scenario==='navigation')await navigation();else if(info.scenario==='revocation')await revocation();else if(info.scenario==='project-history')await projectHistory();else if(info.scenario==='controls')await controls();else if(info.scenario==='private-preview')await privatePreview();else if(info.scenario==='collection-export')await collectionExport();else await flow();status='PASS';}
+ try{await boot();if(info.scenario==='release-adoption')await releaseAdoption();else if(info.scenario==='content-edit')await contentEdit();else if(info.scenario==='navigation')await navigation();else if(info.scenario==='revocation')await revocation();else if(info.scenario==='project-history')await projectHistory();else if(info.scenario==='controls')await controls();else if(info.scenario==='private-preview')await privatePreview();else if(info.scenario==='collection-export')await collectionExport();else await flow();status='PASS';}
  catch(e){error=e.stack;process.stderr.write(error+'\n');process.exitCode=1;}
  finally{
   if(releaseRead){releaseRead();releaseRead=null;}
   try{await close();}catch(e){status='FAIL';error=error||e.stack;process.exitCode=1;}
   const files=await Promise.all(downloads.map(async file=>{const bytes=Buffer.from(await file.blob.arrayBuffer());return {filename:file.filename,type:file.blob.type,bytes:bytes.length,base64:bytes.toString('base64'),sha256:crypto.createHash('sha256').update(bytes).digest('hex'),revoked:file.revoked};}));
   fs.writeFileSync(info.output,JSON.stringify({status,error,scenario:info.scenario,checks,actions,static_resource_loads,boots,app_id,release_id,instance_id,run_ids,request_keys,first_history,downloads:files,
-   classification:info.scenario==='content-edit'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_CONTENT_EDIT':info.scenario==='private-preview'?'ACTUAL_HTTP_JSDOM_PRIVATE_RECORD_PREVIEW':info.scenario==='collection-export'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_CURRENT_COLLECTION_EXPORT':info.scenario==='controls'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_SAME_RUN_CONTROLS':info.scenario==='project-history'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_PROJECT_HISTORY_NO_PAGE_WORKER':info.scenario==='navigation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_NAVIGATION_NO_WORKER':info.scenario==='revocation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_REVOCATION_NO_WORKER':'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_FLOW',qualification_role:'UI_AUTHOR',scope:'Actual served JavaScript and ASGI HTTP; only receipt delivery is controlled, synthetic typed inputs and NoModel Worker',native_browser:'NOT_RUN',pg:'NOT_RUN',real_model:'NOT_RUN',real_semantic_acceptance:'NOT_RUN'},null,2)+'\n');
+   classification:info.scenario==='release-adoption'?'ACTUAL_HTTP_JSDOM_RECORD_RELEASE_ADOPTION':info.scenario==='content-edit'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_CONTENT_EDIT':info.scenario==='private-preview'?'ACTUAL_HTTP_JSDOM_PRIVATE_RECORD_PREVIEW':info.scenario==='collection-export'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_CURRENT_COLLECTION_EXPORT':info.scenario==='controls'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_SAME_RUN_CONTROLS':info.scenario==='project-history'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_PROJECT_HISTORY_NO_PAGE_WORKER':info.scenario==='navigation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_NAVIGATION_NO_WORKER':info.scenario==='revocation'?'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_REVOCATION_NO_WORKER':'ACTUAL_HTTP_JSDOM_LOCAL_RECORD_FLOW',qualification_role:'UI_AUTHOR',scope:'Actual served JavaScript and ASGI HTTP; only receipt delivery is controlled, synthetic typed inputs and NoModel Worker',native_browser:'NOT_RUN',pg:'NOT_RUN',real_model:'NOT_RUN',real_semantic_acceptance:'NOT_RUN'},null,2)+'\n');
   process.stdout.write(JSON.stringify({done:true})+'\n');
  }
 })();
