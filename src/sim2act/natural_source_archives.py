@@ -385,7 +385,7 @@ def _source_extraction_from_facts(contract, source_id, source_proof, extracted, 
     require(extracted.review.source_run_id == source_id and extracted.review.request_key == contract.extraction_request_key and (extracted.review.recipe == contract.extraction_recipe) and (extracted.review.expected_source_proof_fingerprint == gate._trial_result(fingerprint(source_proof), _guard)) and (target['resource_id'] == cold.resource_id) and (target['hash'] == cold.source_hash) and (target['content'] == cold.content) and (goal == dict(card_id=cold.card_id, version=cold.goal_version, fingerprint=cold.goal_fingerprint, snapshot=gate._trial_result(cold.goal_snapshot.model_dump(), _guard))))
 
 
-def _graph_source_bodies(graph, store, c, user, contract, ledger, source_facts):
+def _graph_source_bodies(graph, store, c, user, contract, ledger, source_facts, *, _accounted_test=None):
     """Use full ordered NS reads from the actual accounted Source producer."""
 
     def _parent_pin():
@@ -401,6 +401,10 @@ def _graph_source_bodies(graph, store, c, user, contract, ledger, source_facts):
         gate._graph_trial_journal_models(graph, store, c, _models, ledger)
         gate._graph_trial_accounted_models(graph, store, c, _models, source_facts, 'source')
         _guard()
+        owned = None
+        if _accounted_test is not None:
+            from . import cold_accounted
+            owned = cold_accounted._source_test_family(_accounted_test, graph)
         job, rows, chains, ns_reads = source_facts
         require(type(ledger) is Ledger and gate._trial_result(evidence_mode(c, job), _guard) == 'LIVE')
         slots = gate._trial_result(_source_slots_from_facts(rows, ledger, True, _guard=_guard), _guard)
@@ -420,6 +424,12 @@ def _graph_source_bodies(graph, store, c, user, contract, ledger, source_facts):
             gate._trial_result(_source_row_from_facts(contract, row, slot, True, _guard=_guard), _guard)
             require(chain[3] == row and chain[4] == wire and (chain[5] == received))
             canonical = gate._trial_result(_source_exchange_from_facts(contract, row, slot, request, wire, response, received, True, _guard=_guard), _guard)
+            if owned is not None:
+                cold_accounted._source_slot(owned, ledger, aid)
+                cold_accounted._source_row(owned, aid)
+                candidate = cold_accounted._source_exchange(owned, aid)
+                require(dict(status=candidate.status, bytes=candidate.bytes, sha256=candidate.sha256) == canonical)
+                _guard()
             requests.append(wire)
             responses.append(received)
             public.append(dict(attempt_id=aid, request_bytes=len(wire), request_sha256=request.sha256, decoded_body_bytes=len(received), decoded_body_sha256=response.sha256, canonical_ascii_bytes=canonical['bytes'], canonical_ascii_sha256=canonical['sha256']))
@@ -432,7 +442,7 @@ def _graph_source_bodies(graph, store, c, user, contract, ledger, source_facts):
         raise
 
 
-def _graph_resolve_trial_source(graph, store, c, user, contract, approval_key, ledger, source_stage_facts, source_proof, source_facts, extraction_facts):
+def _graph_resolve_trial_source(graph, store, c, user, contract, approval_key, ledger, source_stage_facts, source_proof, source_facts, extraction_facts, *, _accounted_test=None):
     """Assemble the original receipt from complete Source V + extraction V.
 
     source_stage_facts contains the complete original role facts; Authority is
@@ -477,7 +487,7 @@ def _graph_resolve_trial_source(graph, store, c, user, contract, approval_key, l
             original, _ = gate._trial_result(pair(c, user, draft['id'], pb.EXTRACT, contract.extraction_request_key, pb.ExtractInput), _guard)
             require(original == extracted)
             gate._trial_result(_source_extraction_from_facts(contract, job['id'], source_proof, extracted, target, goal, _guard=_guard), _guard)
-            requests, responses, public = gate._trial_result(_graph_source_bodies(graph, store, c, user, contract, ledger, source_facts), _guard)
+            requests, responses, public = gate._trial_result(_graph_source_bodies(graph, store, c, user, contract, ledger, source_facts, **{'_accounted_test': _accounted_test} if _accounted_test is not None else {}), _guard)
             cold = contract.bindings[1]
             receipt = dict(version=VERSION, verification=gate._trial_result(_source_verification(ledger), _guard), trial_fingerprint=gate._trial_result(fingerprint(gate._trial_result(contract.model_dump(), _guard)), _guard), approval_fingerprint=gate._trial_result(fingerprint(gate._trial_result(approval.model_dump(), _guard)), _guard), source_run_id=job['id'], source_app_id=current.app_id, extraction_app_id=draft['id'], extraction_request_key=contract.extraction_request_key, source_proof_fingerprint=gate._trial_result(fingerprint(source_proof), _guard), extraction_recipe_fingerprint=gate._trial_result(fingerprint(gate._trial_result(contract.extraction_recipe.model_dump(), _guard)), _guard), cold_goal_fingerprint=cold.goal_fingerprint, attempts=public, live_allowed=False, dispatch_authorized=False, new_model_requests=0, new_reservations=0, project_writes=0, formal_publication_enabled=False)
             gate._trial_result(gate._approved(store, c, user, contract, approval_key, **{'_guard': _guard} if _guard is not None else {}), _guard)

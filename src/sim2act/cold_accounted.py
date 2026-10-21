@@ -1,7 +1,7 @@
 """Uninstalled accounted-family component; no guard exemption or send authority.
 
 Only the private graph bridge can issue after the ORIGINAL producer succeeds.
-No current runtime imports/calls this module. Bounds must be supplied explicitly;
+Only explicit additive SQLite test branches import this module. Bounds must be supplied explicitly;
 their product-scale derivation and whole-consumer migration remain prerequisites
 for installation. There is no fallback, post mode, thaw, or digest-as-permission.
 """
@@ -214,6 +214,10 @@ class _AccountedScope:
 
     def _current(self):
         try:
+            # This uninstalled bridge has no guard exemption. In particular an
+            # unchanged binding/settings identity is not a freshness witness.
+            self._full_check()
+            gate.require(not self._graph.worker.stop.is_set(), "Accounted reader stopped")
             gate.require(
                 self._active and _same_frame(self._frame, _frame(self._graph)),
                 "Accounted scope changed",
@@ -296,6 +300,9 @@ def _scope_for_graph(graph, bounds):
         and graph.phase == "pre"
         and graph.store.test_only
         and graph.store.sqlite
+        # Offline SQL integration has no transport. Do not silently admit an
+        # opaque mutable transport whose content the old CGR does not pin.
+        and graph.worker.goal_planner_transport is None
     )
     _ColdGraphRead.check(graph, graph.store, graph.connection)
     contract = graph.binding.contract
@@ -303,6 +310,51 @@ def _scope_for_graph(graph, bounds):
     result = _AccountedScope(graph, bounds, context)
     _ColdGraphRead.check(graph, graph.store, graph.connection)
     return result
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class _SourceTestBridge:
+    """Explicit additive integration only; never skips an original predicate."""
+
+    scope: _AccountedScope
+    handle: _Handle
+
+    def family(self, graph):
+        gate.require(
+            type(self.scope) is _AccountedScope
+            and self.scope._graph is graph
+            and graph.store.test_only
+            and graph.store.sqlite
+            and graph.phase == "pre"
+            and graph.worker.goal_planner_transport is None
+        )
+        family = self.scope.read(self.handle, "source")
+        context = self.scope._context
+        contract = graph.binding.contract
+        gate.require(
+            context.mode == "controller"
+            and type(contract.model) is str
+            and context.model == contract.model
+            and type(contract.caps.max_output_tokens) is int
+            and context.max_output_tokens == contract.caps.max_output_tokens
+        )
+        return family
+
+
+def _source_test_family(bridge, graph):
+    gate.require(type(bridge) is _SourceTestBridge)
+    return bridge.family(graph)
+
+
+def _source_slot(family, state, aid):
+    """Join all Slot/Identity/Outcome fields, including non-aid fields."""
+    gate.require(type(state) is policy.Ledger)
+    _, chain, _ = _source_parts(family, aid)
+    slots = tuple(s for s in state.slots if s.identity.attempt_id == aid)
+    gate.require(len(slots) == 1 and slots[0].identity.stage == "source")
+    raw = gate._trial_typed_storage(policy.Slot, slots[0])
+    gate._trial_typed_values([(policy.Slot, slots[0], raw)])
+    gate.require(_same_native(chain.slot, raw), "Complete Source slot differs")
 
 
 def _fixed(expected, value, schema):

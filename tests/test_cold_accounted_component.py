@@ -10,7 +10,7 @@ import copy
 import hashlib
 import json
 from pathlib import Path
-from threading import get_ident
+from threading import Event, get_ident
 from types import SimpleNamespace
 
 import pytest
@@ -190,6 +190,7 @@ def lifecycle(monkeypatch):
         graph = object.__new__(runtime._ColdGraphRead)
         graph.events, graph.inputs, graph.facts = [], {}, facts
         graph.active, graph.phase, graph.thread = True, "pre", get_ident()
+        graph.worker = SimpleNamespace(stop=Event(), goal_planner_transport=None)
         graph.store = SimpleNamespace(test_only=True, sqlite=True)
         graph.transaction, graph.scope = object(), [object()]
         graph.nonce, graph.epoch, graph.changes = graph.scope[0], 0, 0
@@ -316,7 +317,9 @@ def test_issuer_order_registration_original_pin_and_no_runtime_callers(lifecycle
 
     monkeypatch.setattr(owned, "_capture", observed)
     handle = scope.issue("generate", None, None, facts[0]["id"])
-    assert g.events == ["full-guard", "full-guard", "producer", "copy", "full-guard"]
+    assert [e for e in g.events if e != "full-guard"] == ["producer", "copy"]
+    p, copied = g.events.index("producer"), g.events.index("copy")
+    assert g.events[p - 1] == g.events[copied - 1] == g.events[copied + 1] == "full-guard"
     assert scope.read(handle, "generate").run.id == facts[0]["id"]
     # Different but self-consistent third model after producer must NOT issue.
     scope, g = lifecycle(family("generate"))
@@ -332,6 +335,13 @@ def test_issuer_order_registration_original_pin_and_no_runtime_callers(lifecycle
     assert not scope._active and not scope._issued
     for path in (REPO / "src/sim2act").glob("*.py"):
         if path.name not in ("cold_accounted.py", "_cold_accounted_values.py"):
+            assert "_scope_for_graph(" not in path.read_text()
+        if path.name not in (
+            "cold_accounted.py",
+            "_cold_accounted_values.py",
+            "natural_source_archives.py",
+            "pa_trial_dispatch.py",
+        ):
             assert "import cold_accounted" not in path.read_text()
             assert "from .cold_accounted" not in path.read_text()
 

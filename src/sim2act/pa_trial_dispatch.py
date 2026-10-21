@@ -1661,7 +1661,7 @@ def _graph_pb_accounting(graph, store, c, b, generation, state):
         raise
 
 
-def _graph_pb_archive_chain(graph, store, c, b, state, resolved, source_facts):
+def _graph_pb_archive_chain(graph, store, c, b, state, resolved, source_facts, *, _accounted_test=None):
     """Join full NS/controller byte sets; not only their public digests."""
 
     def _parent_pin():
@@ -1675,6 +1675,10 @@ def _graph_pb_archive_chain(graph, store, c, b, state, resolved, source_facts):
         gate._graph_trial_accounted_models(graph, store, c, _models, source_facts, 'source')
         _guard()
         _archive_chain_from_facts(b, state, resolved, source_facts, _guard=_guard)
+        if _accounted_test is not None:
+            from . import cold_accounted
+            owned = cold_accounted._source_test_family(_accounted_test, graph)
+            cold_accounted._archive_chain(owned, state, resolved)
         _guard()
     except BaseException:
         from .natural_spec_runtime import _ColdGraphRead
