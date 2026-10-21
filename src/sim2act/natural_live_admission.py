@@ -919,7 +919,7 @@ def _graph_trial_pin(graph, store, c):
         raise
 
 
-def _graph_stage_current(graph, store, c, user, contract, stage, stage_facts):
+def _graph_stage_current(graph, store, c, user, contract, stage, stage_facts, *, _owned=None):
     """Original PB stage cross-role predicates after complete graph producers.
 
     No paired Authority is an input. Generate/Source accounting are full actual
@@ -929,13 +929,13 @@ def _graph_stage_current(graph, store, c, user, contract, stage, stage_facts):
 
     def _parent_pin():
         _graph_trial_pin(graph, store, c)
-        _graph_trial_stage_raw(graph, stage_facts)
+        _graph_trial_stage_raw(graph, stage_facts, **{'_owned': _owned} if _owned is not None else {})
     _models: list[tuple[type, object, dict]] = []
     _guard = _trial_typed_guard(_parent_pin, _models)
     try:
         _guard()
         _graph_trial_contract_models(graph, store, c, _models, contract)
-        _graph_trial_stage_models(graph, store, c, _models, stage_facts)
+        _graph_trial_stage_models(graph, store, c, _models, stage_facts, **{'_owned': _owned} if _owned is not None else {})
         _guard()
         require(type(contract) is PBTrialContract and stage in ('source', 'cold'))
         job, bound, raw, metadata, gen, frozen, generated, source, extraction = stage_facts
@@ -943,22 +943,39 @@ def _graph_stage_current(graph, store, c, user, contract, stage, stage_facts):
         draft, release = (bound['draft'], bound['release'])
         inst, current_release, target, gen_id, approval = _trial_result(_graph_stage_before_accounting(graph, store, c, user, contract, stage, job, bound, raw, metadata, gen, frozen, stage_prefix), _guard)
         _graph_trial_produced(graph, store, c, _models, Approval, approval)
-        require(generated[0] == gen and len(generated[1]) == len(generated[2]) == 3)
-        from .pa_trial_dispatch import _stage_usage_from_facts
-        for chain in generated[2]:
-            require(chain[3] in generated[1])
-            _trial_result(_stage_usage_from_facts(chain[3], 'generate', chain[0], chain[2], chain[3], _guard=_guard), _guard)
+        if _owned is not None:
+            from . import cold_accounted
+            _owned.assert_family(graph, generated, 'generate')
+            _owned.assert_run('generate', gen)
+            require(len(generated.actual) == len(generated.chains) == 3)
+            for row in generated.actual:
+                _trial_result(cold_accounted._stage_usage(generated, row.id), _guard)
+        else:
+            require(generated[0] == gen and len(generated[1]) == len(generated[2]) == 3)
+            from .pa_trial_dispatch import _stage_usage_from_facts
+            for chain in generated[2]:
+                require(chain[3] in generated[1])
+                _trial_result(_stage_usage_from_facts(chain[3], 'generate', chain[0], chain[2], chain[3], _guard=_guard), _guard)
         original = draft['candidate']
         if stage == 'cold':
             require(type(extraction) is tuple and len(extraction) == 4)
             extraction_draft, body, extraction_target, extraction_goal = extraction
-            source_run, source_actual, source_chains, source_ns = source
+            if _owned is None:
+                source_run, source_actual, source_chains, source_ns = source
             require(extraction_draft['id'] == draft['id'])
-            _trial_result(_stage_pb_origin_from_facts(contract, body, source_run['id'], _guard=_guard), _guard)
-            require(len(source_actual) == len(source_chains) == len(source_ns) == 2)
-            for chain in source_chains:
-                require(chain[3] in source_actual)
-                _trial_result(_stage_usage_from_facts(chain[3], 'source', chain[0], chain[2], chain[3], _guard=_guard), _guard)
+            if _owned is not None:
+                _owned.assert_family(graph, source, 'source')
+                source_run = source.run
+                _trial_result(_stage_pb_origin_from_facts(contract, body, source_run['id'], _guard=_guard), _guard)
+                require(len(source.actual) == len(source.chains) == len(source.ns_reads) == 2)
+                for row in source.actual:
+                    _trial_result(cold_accounted._stage_usage(source, row.id), _guard)
+            else:
+                _trial_result(_stage_pb_origin_from_facts(contract, body, source_run['id'], _guard=_guard), _guard)
+                require(len(source_actual) == len(source_chains) == len(source_ns) == 2)
+                for chain in source_chains:
+                    require(chain[3] in source_actual)
+                    _trial_result(_stage_usage_from_facts(chain[3], 'source', chain[0], chain[2], chain[3], _guard=_guard), _guard)
         else:
             _trial_result(_stage_plain_origin_from_facts(original, _guard=_guard), _guard)
             if 'spec_binding' in original:
@@ -973,7 +990,7 @@ def _graph_stage_current(graph, store, c, user, contract, stage, stage_facts):
             accepted = _trial_result(_saved(c, user, _trial_result(entity(contract, **{'_guard': _guard} if _guard is not None else {}), _guard), PHASE, 'source', StageApproveInput, **{'_guard': _guard} if _guard is not None else {}), _guard)
             _graph_trial_produced(graph, store, c, _models, StageApproveInput, accepted)
             _trial_result(_stage_source_phase_from_facts(contract, approval, gen_id, accepted, _guard=_guard), _guard)
-            require(accepted.authority.run_id == source[0]['id'])
+            require(accepted.authority.run_id == (source.run.id if _owned is not None else source[0]['id']))
         timing = _trial_result(_stage_deadlines(c, user, contract, stage, gen_id, _guard=_guard), _guard)
         fields = _trial_result(_stage_authority_fields_from_facts(contract, stage, timing, job, bound, inst, draft, release, gen_id, raw, target, _guard=_guard), _guard)
         authority = _trial_result(StageAuthority(**fields, authorization_fingerprint=_trial_result(authorization_fingerprint(c, user, contract.project_id, job['runtime_id'], [x.resource_id for x in contract.bindings], **{'_guard': _guard} if _guard is not None else {}), _guard)), _guard)
@@ -987,18 +1004,18 @@ def _graph_stage_current(graph, store, c, user, contract, stage, stage_facts):
         raise
 
 
-def _graph_run_context(graph, store, c, user, contract, approval_key, stage, run_id, expected_version, fence, stage_facts):
+def _graph_run_context(graph, store, c, user, contract, approval_key, stage, run_id, expected_version, fence, stage_facts, *, _owned=None):
     """Original live edges around complete graph stage reconstruction."""
 
     def _parent_pin():
         _graph_trial_pin(graph, store, c)
-        _graph_trial_stage_raw(graph, stage_facts)
+        _graph_trial_stage_raw(graph, stage_facts, **{'_owned': _owned} if _owned is not None else {})
     _models: list[tuple[type, object, dict]] = []
     _guard = _trial_typed_guard(_parent_pin, _models)
     try:
         _guard()
         _graph_trial_contract_models(graph, store, c, _models, contract)
-        _graph_trial_stage_models(graph, store, c, _models, stage_facts)
+        _graph_trial_stage_models(graph, store, c, _models, stage_facts, **{'_owned': _owned} if _owned is not None else {})
         _guard()
         require(type(contract) is PBTrialContract and stage == 'cold')
         require(stage_facts[0]['id'] == run_id, 'Stage facts belong to another Run')
@@ -1008,7 +1025,7 @@ def _graph_run_context(graph, store, c, user, contract, approval_key, stage, run
         accepted = _trial_result(_saved(c, user, _trial_result(entity(contract, **{'_guard': _guard} if _guard is not None else {}), _guard), PHASE, stage, StageApproveInput, **{'_guard': _guard} if _guard is not None else {}), _guard)
         _graph_trial_produced(graph, store, c, _models, StageApproveInput, accepted)
         require(accepted.approval_key == approval_key)
-        phase, _ = _trial_result(_graph_stage_current(graph, store, c, user, contract, stage, stage_facts), _guard)
+        phase, _ = _trial_result(_graph_stage_current(graph, store, c, user, contract, stage, stage_facts, **{'_owned': _owned} if _owned is not None else {}), _guard)
         _graph_trial_produced(graph, store, c, _models, StageAuthority, phase)
         require(phase.run_id == run_id, 'Reconstructed stage belongs to another Run')
         _trial_result(_stage_accepted_from_facts(phase, accepted, _guard=_guard), _guard)
@@ -1454,15 +1471,20 @@ def _graph_trial_extraction_models_from_raw(models, extraction, raw):
     _trial_typed_hold(models, pb.ExtractInput, body, raw['request'])
 
 
-def _graph_trial_stage_models_from_raw(models, stage_facts, inputs):
+def _graph_trial_stage_models_from_raw(models, stage_facts, inputs, *, _owned=None):
     inputs = _trial_pure_mapping(inputs)
     require((type(stage_facts) is tuple or type(stage_facts) is list) and len(stage_facts) == 9)
     job, bound, raw, metadata, gen, frozen, generated, source, extraction = stage_facts
     facet = _trial_pure_mapping(inputs['trial-generated-model-facet'])
     _graph_trial_frozen_models_from_raw(models, frozen, facet['frozen'])
-    _graph_trial_accounted_models_from_raw(models, generated, inputs['cold-trial:accounted-generate'])
-    if source is not None:
-        _graph_trial_accounted_models_from_raw(models, source, inputs['cold-trial:accounted-source'])
+    if _owned is not None:
+        _owned.assert_family(_owned.graph, generated, 'generate')
+        if source is not None:
+            _owned.assert_family(_owned.graph, source, 'source')
+    else:
+        _graph_trial_accounted_models_from_raw(models, generated, inputs['cold-trial:accounted-generate'])
+        if source is not None:
+            _graph_trial_accounted_models_from_raw(models, source, inputs['cold-trial:accounted-source'])
     if extraction is not None:
         full = _trial_pure_mapping(inputs['cold-trial:complete'])
         _graph_trial_extraction_models_from_raw(models, extraction, full['extraction'])
@@ -1502,9 +1524,13 @@ def _graph_trial_journal_models(graph, store, c, models, state, cursor=None):
     _graph_trial_journal_models_from_raw(models, state, cursor, inputs['cold-trial:journal'])
 
 
-def _graph_trial_accounted_models(graph, store, c, models, value, stage):
+def _graph_trial_accounted_models(graph, store, c, models, value, stage, *, _owned=None):
     _graph_trial_pin(graph, store, c)
     require(type(stage) is str and stage in ('source', 'generate'))
+    if _owned is not None:
+        from .cold_accounted import _prewrite_mode
+        _prewrite_mode(_owned, graph).assert_family(graph, value, stage)
+        return
     key = 'cold-trial:accounted-' + stage
     inputs = _trial_pure_mapping(graph.inputs)
     require(key in inputs, 'Complete accounted stage raw pin required')
@@ -1527,9 +1553,9 @@ def _graph_trial_extraction_models(graph, store, c, models, extraction):
     _graph_trial_extraction_models_from_raw(models, extraction, full['extraction'])
 
 
-def _graph_trial_stage_models(graph, store, c, models, stage_facts):
+def _graph_trial_stage_models(graph, store, c, models, stage_facts, *, _owned=None):
     _graph_trial_pin(graph, store, c)
-    _graph_trial_stage_models_from_raw(models, stage_facts, graph.inputs)
+    _graph_trial_stage_models_from_raw(models, stage_facts, graph.inputs, **{'_owned': _owned} if _owned is not None else {})
 
 
 def _graph_trial_accounted_raw(graph, store, c, value, models):
@@ -1551,12 +1577,16 @@ def _graph_trial_accounted_raw(graph, store, c, value, models):
         chains=tuple(full_chains), ns_reads=tuple(full_ns))
 
 
-def _graph_trial_stage_raw(graph, stage_facts):
+def _graph_trial_stage_raw(graph, stage_facts, *, _owned=None):
     """External boundary retains a full pin before the shared pure joins."""
     from .natural_spec_runtime import _ColdGraphRead
 
     require(type(graph) is _ColdGraphRead)
     _graph_trial_pin(graph, graph.store, graph.connection)
+    if _owned is not None:
+        from .cold_accounted import _prewrite_mode
+        _prewrite_mode(_owned, graph).assert_stage(stage_facts)
+        return
     inputs = _trial_pure_mapping(graph.inputs)
     require('cold-trial:complete' in inputs)
     _graph_trial_stage_raw_from_raw(stage_facts, inputs['cold-trial:complete'])

@@ -2386,6 +2386,7 @@ class _ColdTrialGraph:
     Root retains eligibility, the actual five-write group, and graph lifetime.
     This class neither resolves dependencies dynamically nor supplies a permit.
     """
+    accounted_prewrite: Any = None
     live_source: Any
     source_record: Any
     source_record_key: Any
@@ -2412,7 +2413,7 @@ class _ColdTrialGraph:
     context_record_key: Any
     admission: Any
 
-    def __init__(self, worker, c, guard, *, completed=None, audit_seed=None):
+    def __init__(self, worker, c, guard, *, completed=None, audit_seed=None, _accounted_prewrite=None):
         try:
             require(type(guard) is _ColdGraphRead)
             _ColdGraphRead.check(guard, worker.store, c)
@@ -2425,6 +2426,11 @@ class _ColdTrialGraph:
             if audit_seed is not None:
                 audit_seed.check(worker.store, c, guard)
             self.worker, self.c, self.guard = (worker, c, guard)
+            self.accounted_prewrite = _accounted_prewrite
+            if _accounted_prewrite is not None:
+                from .cold_accounted import _prewrite_mode
+                _prewrite_mode(_accounted_prewrite, guard)
+                require(guard.phase == 'pre')
             self.platform, self.audit_seed = (completed, audit_seed)
             self.trial = None
             self.journal = self.source_accounted = self.generate_accounted = None
@@ -2470,6 +2476,7 @@ class _ColdTrialGraph:
         from .contracts import AppManifest, FrozenRunContract, GoalCardRunSource
 
         g = self.guard
+        owned = getattr(self, 'accounted_prewrite', None)
         inputs = gate._trial_pure_mapping(g.inputs)
         models: list[tuple[type, object, dict]] = []
 
@@ -2484,11 +2491,17 @@ class _ColdTrialGraph:
                 gate._trial_pure_data(journal_raw['revision'])))
             gate._graph_trial_journal_models_from_raw(models, self.journal[0], self.journal[1], journal_raw)
         if self.source_accounted is not None and 'cold-trial:accounted-source' in inputs:
-            gate._graph_trial_accounted_models_from_raw(models, self.source_accounted,
-                raw_slot('cold-trial:accounted-source'))
+            if owned is None:
+                gate._graph_trial_accounted_models_from_raw(models, self.source_accounted,
+                    raw_slot('cold-trial:accounted-source'))
+            else:
+                owned.assert_family(g, self.source_accounted, 'source')
         if self.generate_accounted is not None and 'cold-trial:accounted-generate' in inputs:
-            gate._graph_trial_accounted_models_from_raw(models, self.generate_accounted,
-                raw_slot('cold-trial:accounted-generate'))
+            if owned is None:
+                gate._graph_trial_accounted_models_from_raw(models, self.generate_accounted,
+                    raw_slot('cold-trial:accounted-generate'))
+            else:
+                owned.assert_family(g, self.generate_accounted, 'generate')
         if self.trial is not None:
             t = self.trial
             require(type(t) is _ColdBindingGraph and t.guard is g
@@ -2519,11 +2532,17 @@ class _ColdTrialGraph:
                 origin = gate._trial_pure_mapping(raw_slot(release.key)['origin'])
                 gate._trial_typed_hold(models, AppManifest, release.origin[0], origin['manifest'])
         if self.cold_stage_facts is not None and 'cold-trial:complete' in inputs:
-            gate._graph_trial_stage_raw_from_raw(self.cold_stage_facts, raw_slot('cold-trial:complete'))
-            gate._graph_trial_stage_models_from_raw(models, self.cold_stage_facts, inputs)
+            if owned is None:
+                gate._graph_trial_stage_raw_from_raw(self.cold_stage_facts, raw_slot('cold-trial:complete'))
+            else:
+                owned.assert_stage(self.cold_stage_facts)
+            gate._graph_trial_stage_models_from_raw(models, self.cold_stage_facts, inputs, **{'_owned': owned} if owned is not None else {})
         if self.source_stage_facts is not None and 'cold-trial:complete' in inputs:
-            gate._graph_trial_stage_raw_from_raw(self.source_stage_facts, raw_slot('cold-trial:complete'))
-            gate._graph_trial_stage_models_from_raw(models, self.source_stage_facts, inputs)
+            if owned is None:
+                gate._graph_trial_stage_raw_from_raw(self.source_stage_facts, raw_slot('cold-trial:complete'))
+            else:
+                owned.assert_stage(self.source_stage_facts)
+            gate._graph_trial_stage_models_from_raw(models, self.source_stage_facts, inputs, **{'_owned': owned} if owned is not None else {})
         if self.sealed_fields is not None:
             require(self.source_proof is raw_slot('cold-trial:complete')['source_proof'])
         if 'cold-trial:admission-prefix' in inputs:
@@ -2566,6 +2585,10 @@ class _ColdTrialGraph:
 
     def _accounted_fields(self, value):
         """Concrete complete per-aid models/rows/bytes; preserves multiplicity."""
+        owned = getattr(self, 'accounted_prewrite', None)
+        if owned is not None:
+            owned.assert_family(self.guard, value, value.role)
+            return value
         from . import natural_source_archives as archive
         from . import production_trial_policy as policy
         from . import production_trial_sender as sender
@@ -2584,7 +2607,7 @@ class _ColdTrialGraph:
         b = self.trial
         ledger, cursor, revision = self.journal
         draft, body, target, goal = self.extraction
-        return dict(binding=b.binding, source_binding=b.source_binding, source_facts=self._read_fields(b.source_facts), source_audit=self._read_fields(b.source_audit), native_audit=b.native_audit, source_outputs=b.source_outputs, source_proved=b.source_proved, generation=dict(run=dict(b.generation_reader.run), frozen=self._dump(b.generation_contract), material=b.generation_material, history=b.generation_history, raw=self.raw, metadata=self.metadata, marker=dict(b.generation_marker)), extraction=dict(draft=draft, request=self._dump(body), target=target, goal=goal, prefix=self._read_fields(b.extraction_prefix), review=self._read_fields(b.extraction_review), audit=self._read_fields(b.extraction_audit_prefix), audit_digest=b.extraction_audit), use=dict(prefix=self._read_fields(b.use_prefix), review=self._read_fields(b.use_review), value=dict(draft=b.use_value[0], manifest=self._dump(b.use_value[1]), report=b.use_value[2], material=b.use_value[3], goal=b.use_value[4]), audit=self._read_fields(b.use_audit_prefix)), journal=dict(ledger=self._dump(ledger), cursor=self._dump(cursor), revision=revision), generated=self._accounted_fields(self.generate_accounted), source=self._accounted_fields(self.source_accounted), source_proof=self.source_proof, roles=self.guard.role_limits, cold_job=self.cold_stage_facts[0])
+        return dict(binding=b.binding, source_binding=b.source_binding, source_facts=self._read_fields(b.source_facts), source_audit=self._read_fields(b.source_audit), native_audit=b.native_audit, source_outputs=b.source_outputs, source_proved=b.source_proved, generation=dict(run=(self.generate_accounted.run if getattr(self, 'accounted_prewrite', None) is not None else dict(b.generation_reader.run)), frozen=self._dump(b.generation_contract), material=b.generation_material, history=b.generation_history, raw=self.raw, metadata=self.metadata, marker=dict(b.generation_marker)), extraction=dict(draft=draft, request=self._dump(body), target=target, goal=goal, prefix=self._read_fields(b.extraction_prefix), review=self._read_fields(b.extraction_review), audit=self._read_fields(b.extraction_audit_prefix), audit_digest=b.extraction_audit), use=dict(prefix=self._read_fields(b.use_prefix), review=self._read_fields(b.use_review), value=dict(draft=b.use_value[0], manifest=self._dump(b.use_value[1]), report=b.use_value[2], material=b.use_value[3], goal=b.use_value[4]), audit=self._read_fields(b.use_audit_prefix)), journal=dict(ledger=self._dump(ledger), cursor=self._dump(cursor), revision=revision), generated=self._accounted_fields(self.generate_accounted), source=self._accounted_fields(self.source_accounted), source_proof=self.source_proof, roles=self.guard.role_limits, cold_job=self.cold_stage_facts[0])
 
     def check(self):
         try:
@@ -2594,7 +2617,8 @@ class _ColdTrialGraph:
             require(self.audit_seed is None or (type(self.audit_seed) is _ColdAuditSeed and self.audit_seed.guard is self.guard))
             require(self.phase in {'EMPTY', 'BUILDING', 'COMPLETE', 'BUSY'})
             if self.trial is not None and self.phase in {'COMPLETE', 'BUSY'}:
-                require(self.sealed_fields is self.guard.inputs['cold-trial:complete'])
+                owned = getattr(self, 'accounted_prewrite', None)
+                require(self.sealed_fields is (owned.complete if owned is not None else self.guard.inputs['cold-trial:complete']))
                 if self.authority_fields is not None:
                     require(self.authority_fields is self.guard.inputs['cold-trial:semantic-authorities'] and self.cold_authority is self.authority_fields['cold'] and (self.source_authority is self.authority_fields['source']))
             if self.context_record is not None:
@@ -2691,9 +2715,12 @@ class _ColdTrialGraph:
         pin()
         gate._stage_pb_origin_from_facts(contract, t.extraction_prefix.body, source_id, _guard=pin)
         pin()
-        self.source_accounted = dispatch._graph_stage_accounted(g, store, c, b, ledger, cursor, source_id, 'source')
+        self.source_accounted = dispatch._graph_stage_accounted(g, store, c, b, ledger, cursor, source_id, 'source', **{'_owned': self.accounted_prewrite} if self.accounted_prewrite is not None else {})
         pin()
-        require(self._accounted_fields(self.source_accounted) == g.inputs['cold-trial:accounted-source'])
+        if self.accounted_prewrite is None:
+            require(self._accounted_fields(self.source_accounted) == g.inputs['cold-trial:accounted-source'])
+        else:
+            self.accounted_prewrite.assert_family(g, self.source_accounted, 'source')
         expected_recipe = contract.extraction_recipe.model_dump(exclude_none=True)
         pin()
         gate._stage_recipe_from_facts(expected_recipe, t.binding['draft'], _guard=pin)
@@ -2701,18 +2728,32 @@ class _ColdTrialGraph:
         versions = c.execute(select(attempts.c.parameters['pa_trial_binding']['version'].as_string()).where(attempts.c.run_id == gen_id)).scalars().all()
         pin()
         gate.require(versions == [VERSION] * 3, 'Mixed or unknown actual trial backends cannot prove a stage')
-        self.generate_accounted = dispatch._graph_stage_accounted(g, store, c, b, ledger, cursor, gen_id, 'generate')
+        self.generate_accounted = dispatch._graph_stage_accounted(g, store, c, b, ledger, cursor, gen_id, 'generate', **{'_owned': self.accounted_prewrite} if self.accounted_prewrite is not None else {})
         pin()
-        require(self._accounted_fields(self.generate_accounted) == g.inputs['cold-trial:accounted-generate'])
-        require(self.source_accounted[0]['id'] == t.source_counter_reader.job['id'] and self.generate_accounted[0]['id'] == generation['id'])
+        if self.accounted_prewrite is None:
+            require(self._accounted_fields(self.generate_accounted) == g.inputs['cold-trial:accounted-generate'])
+            require(self.source_accounted[0]['id'] == t.source_counter_reader.job['id'] and self.generate_accounted[0]['id'] == generation['id'])
+        else:
+            self.accounted_prewrite.assert_family(g, self.generate_accounted, 'generate')
+            self.accounted_prewrite.assert_upstream_run('source', t.source_counter_reader.job)
+            self.accounted_prewrite.assert_upstream_run('generate', generation)
         self.extraction = (t.extraction_prefix.draft, t.extraction_prefix.body, t.extraction_review.material, t.extraction_review.goal.model_dump())
         pin()
         self.source_proof = t.source_facts.proof
-        self.cold_stage_facts = (job, t.binding, self.raw, self.metadata, generation, frozen, self.generate_accounted, self.source_accounted, self.extraction)
-        self.source_stage_facts = (t.source_counter_reader.job, t.source_binding, self.raw, self.metadata, generation, frozen, self.generate_accounted, None, None)
+        if self.accounted_prewrite is None:
+            self.cold_stage_facts = (job, t.binding, self.raw, self.metadata, generation, frozen, self.generate_accounted, self.source_accounted, self.extraction)
+            self.source_stage_facts = (t.source_counter_reader.job, t.source_binding, self.raw, self.metadata, generation, frozen, self.generate_accounted, None, None)
+        else:
+            self.cold_stage_facts = (job, t.binding, self.raw, self.metadata, self.generate_accounted.run, frozen, self.generate_accounted, self.source_accounted, self.extraction)
+            self.source_stage_facts = (self.source_accounted.run, t.source_binding, self.raw, self.metadata, self.generate_accounted.run, frozen, self.generate_accounted, None, None)
         complete_raw = self._fields()
-        g.add('cold-trial:complete', complete_raw)
-        self.sealed_fields = complete_raw
+        if self.accounted_prewrite is None:
+            g.add('cold-trial:complete', complete_raw)
+            self.sealed_fields = complete_raw
+        else:
+            self.accounted_prewrite.seal(complete_raw)
+            self.accounted_prewrite.pin_legacy_complete(self.accounted_prewrite.complete)
+            self.sealed_fields = self.accounted_prewrite.complete
         self.phase = 'COMPLETE'
         self.check()
 
@@ -2842,7 +2883,7 @@ class _ColdTrialGraph:
                     pin()
                     self.phase = 'BUSY'
                     with diagnostic.stage('_graph_run_context'):
-                        approval, phase, actual, at = gate._graph_run_context(g, store, c, user, b.contract, b.approval_key, 'cold', job['id'], job['version'], job['fence'], self.cold_stage_facts)
+                        approval, phase, actual, at = gate._graph_run_context(g, store, c, user, b.contract, b.approval_key, 'cold', job['id'], job['version'], job['fence'], self.cold_stage_facts, **{'_owned': self.accounted_prewrite} if self.accounted_prewrite is not None else {})
                     gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, gate.Approval, approval)
                     gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, gate.StageAuthority, phase)
                     pin()
@@ -2852,9 +2893,9 @@ class _ColdTrialGraph:
                     self._context(prefix.key, context)
                     pin()
                     with diagnostic.stage('_graph_pb_accounting'):
-                        source_id = dispatch._graph_pb_accounting(g, store, c, b, self.trial.generation_reader.run, self.journal[0])
+                        source_id = dispatch._graph_pb_accounting(g, store, c, b, self.generate_accounted.run if self.accounted_prewrite is not None else self.trial.generation_reader.run, self.journal[0], **{'_owned': self.accounted_prewrite} if self.accounted_prewrite is not None else {})
                     pin()
-                    require(source_id == self.source_accounted[0]['id'])
+                    require(source_id == (self.source_accounted.run.id if self.accounted_prewrite is not None else self.source_accounted[0]['id']))
                     source_bound = self.trial.source_binding
                     manifest, _, _ = codec.compile_candidate(source_bound['draft']['candidate'], g.role_limits['trial'])
                     gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, AppManifest, manifest)
@@ -2862,10 +2903,10 @@ class _ColdTrialGraph:
                     validate_value(manifest.input_schema, source_bound['snapshot']['input'])
                     pin()
                     with diagnostic.stage('_graph_resolve_trial_source'):
-                        self.resolved = archive._graph_resolve_trial_source(g, store, c, user, b.contract, b.approval_key, self.journal[0], self.source_stage_facts, self.source_proof, self.source_accounted, self.extraction)
+                        self.resolved = archive._graph_resolve_trial_source(g, store, c, user, b.contract, b.approval_key, self.journal[0], self.source_stage_facts, self.source_proof, self.source_accounted, self.extraction, **{'_owned': self.accounted_prewrite} if self.accounted_prewrite is not None else {})
                     pin()
                     with diagnostic.stage('_graph_pb_archive_chain'):
-                        dispatch._graph_pb_archive_chain(g, store, c, b, self.journal[0], self.resolved, self.source_accounted)
+                        dispatch._graph_pb_archive_chain(g, store, c, b, self.journal[0], self.resolved, self.source_accounted, **{'_owned': self.accounted_prewrite} if self.accounted_prewrite is not None else {})
                     pin()
                     source_entity = gate.entity(b.contract, _guard=pin)
                     pin()
@@ -2876,7 +2917,7 @@ class _ColdTrialGraph:
                     g.add('cold-trial:semantic-authorities', raw_authorities)
                     self.authority_fields = raw_authorities
                     self.cold_authority, self.source_authority = (raw_authorities['cold'], raw_authorities['source'])
-                    self.sealed_fields = g.inputs['cold-trial:complete']
+                    self.sealed_fields = self.accounted_prewrite.complete if self.accounted_prewrite is not None else g.inputs['cold-trial:complete']
                     source = dispatch._journal_source(store, c, b, _guard=pin)
                     self._source_value(source)
                     pin()

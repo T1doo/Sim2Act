@@ -341,6 +341,8 @@ def test_issuer_order_registration_original_pin_and_no_runtime_callers(lifecycle
             "_cold_accounted_values.py",
             "natural_source_archives.py",
             "pa_trial_dispatch.py",
+            "natural_live_admission.py",
+            "natural_spec_runtime.py",
         ):
             assert "import cold_accounted" not in path.read_text()
             assert "from .cold_accounted" not in path.read_text()

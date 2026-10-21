@@ -1566,7 +1566,7 @@ def _graph_journal_chain(graph, store, c, b, run, aid, state, cursor, raw=None):
         raise
 
 
-def _graph_stage_accounted(graph, store, c, b, state, cursor, rid, stage):
+def _graph_stage_accounted(graph, store, c, b, state, cursor, rid, stage, *, _owned=None):
     """Complete Generate/Source V accounting, retaining every actual aid.
 
     Returns (full Run, ordered actual Attempts, ordered complete chains,
@@ -1579,6 +1579,9 @@ def _graph_stage_accounted(graph, store, c, b, state, cursor, rid, stage):
     _guard = gate._trial_typed_guard(_parent_pin, _models)
     try:
         _guard()
+        if _owned is not None:
+            from .cold_accounted import _prewrite_mode
+            _prewrite_mode(_owned, graph)._begin(graph, stage)
         gate.require(b is graph.binding)
         gate._graph_trial_journal_models(graph, store, c, _models, state, cursor)
         _guard()
@@ -1624,15 +1627,22 @@ def _graph_stage_accounted(graph, store, c, b, state, cursor, rid, stage):
         else:
             graph.add(key, completed_raw)
         _guard()
+        if _owned is not None:
+            from .cold_accounted import _prewrite_mode
+            return _prewrite_mode(_owned, graph)._completed(graph, stage, completed_value)
         return completed_value
     except BaseException:
+        if _owned is not None:
+            from .cold_accounted import _OwnedPrewriteMode
+            if type(_owned) is _OwnedPrewriteMode and _owned.graph is graph:
+                _owned.close()
         from .natural_spec_runtime import _ColdGraphRead
         if type(graph) is _ColdGraphRead:
             _ColdGraphRead.invalidate(graph)
         raise
 
 
-def _graph_pb_accounting(graph, store, c, b, generation, state):
+def _graph_pb_accounting(graph, store, c, b, generation, state, *, _owned=None):
     """Production J/Generate marker selection with all original fresh edges."""
 
     def _parent_pin():
@@ -1644,6 +1654,9 @@ def _graph_pb_accounting(graph, store, c, b, generation, state):
         gate.require(b is graph.binding)
         gate._graph_trial_journal_models(graph, store, c, _models, state)
         _guard()
+        if _owned is not None:
+            from .cold_accounted import _prewrite_mode
+            _prewrite_mode(_owned, graph).assert_run('generate', generation)
         gate.require(gate._trial_result(_production_binding(b), _guard) and type(b.contract) is gate.PBTrialContract)
         user, contract, key = (b.contract.principal_id, b.contract, b.approval_key)
         gate._trial_result(gate._approved(store, c, user, contract, key, **{'_guard': _guard} if _guard is not None else {}), _guard)
@@ -1661,7 +1674,7 @@ def _graph_pb_accounting(graph, store, c, b, generation, state):
         raise
 
 
-def _graph_pb_archive_chain(graph, store, c, b, state, resolved, source_facts, *, _accounted_test=None):
+def _graph_pb_archive_chain(graph, store, c, b, state, resolved, source_facts, *, _accounted_test=None, _owned=None):
     """Join full NS/controller byte sets; not only their public digests."""
 
     def _parent_pin():
@@ -1672,9 +1685,15 @@ def _graph_pb_archive_chain(graph, store, c, b, state, resolved, source_facts, *
         _guard()
         gate.require(b is graph.binding)
         gate._graph_trial_journal_models(graph, store, c, _models, state)
-        gate._graph_trial_accounted_models(graph, store, c, _models, source_facts, 'source')
+        gate._graph_trial_accounted_models(graph, store, c, _models, source_facts, 'source', **{'_owned': _owned} if _owned is not None else {})
         _guard()
-        _archive_chain_from_facts(b, state, resolved, source_facts, _guard=_guard)
+        if _owned is None:
+            _archive_chain_from_facts(b, state, resolved, source_facts, _guard=_guard)
+        else:
+            from . import cold_accounted
+            gate.require(_accounted_test is None)
+            _owned.assert_archive(b, state, resolved)  # assertion-only legacy comparison
+            cold_accounted._archive_chain(source_facts, state, resolved)
         if _accounted_test is not None:
             from . import cold_accounted
             owned = cold_accounted._source_test_family(_accounted_test, graph)

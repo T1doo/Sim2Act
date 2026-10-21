@@ -11,7 +11,7 @@ import hashlib
 import json
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from types import SimpleNamespace
 
 from sqlalchemy import insert, select, update
@@ -652,27 +652,189 @@ def seed(env):
     return f
 
 
+def seed_cold(f):
+    """Add a synthetic accepted Cold Run, without executing any business step."""
+    draft, _, target, goal = f.extraction
+    ids = [new_id(k) for k in ("iapproval", "irelease", "iinstance", "iapprun", "run")]
+    approval_id, release_id, iid, app_id, rid = ids
+    at = time.time()
+    release_snapshot = dict(draft=draft)
+    approval_payload = dict(snapshot=release_snapshot)
+    release = dict(
+        id=release_id,
+        project_id=f.contract.project_id,
+        principal_id=f.user,
+        approval_id=approval_id,
+        snapshot=release_snapshot,
+        fingerprint=fingerprint(release_snapshot),
+    )
+    instance = dict(
+        id=iid,
+        project_id=f.contract.project_id,
+        principal_id=f.user,
+        source_app_id=draft["id"],
+        runtime_id=draft["runtime_id"],
+        release_id=release_id,
+        revision=1,
+        data_version=1,
+        history=[],
+    )
+    app_run = dict(
+        id=app_id,
+        instance_id=iid,
+        release_id=release_id,
+        principal_id=f.user,
+        request_key=f.contract.stage_keys.cold,
+        fingerprint="a" * 64,
+        input={},
+        status="RUNNING",
+        output=None,
+        error=None,
+        result_version=None,
+    )
+    snap = dict(
+        run_id=rid,
+        instance_id=iid,
+        app_run_id=app_id,
+        release_id=release_id,
+        request_fingerprint=app_run["fingerprint"],
+    )
+    with f.store.tx() as c:
+        c.execute(
+            insert(internal_approvals).values(
+                id=approval_id,
+                principal_id=f.user,
+                project_id=f.contract.project_id,
+                kind="release",
+                payload=approval_payload,
+                fingerprint=fingerprint(approval_payload),
+                expires_at=f.contract.expires_at,
+                consumed=True,
+            )
+        )
+        c.execute(insert(internal_releases).values(**release))
+        c.execute(insert(internal_instances).values(**instance))
+        c.execute(insert(internal_app_runs).values(**app_run))
+        c.execute(
+            insert(runs).values(
+                id=rid,
+                principal_id=f.user,
+                project_id=f.contract.project_id,
+                runtime_id=draft["runtime_id"],
+                goal="Synthetic Cold prewrite context",
+                resource_refs=[f.contract.bindings[1].resource_id],
+                status="RUNNING",
+                request_key="internal:" + app_id,
+                fingerprint="b" * 64,
+                created_at=at,
+                lease_until=at + f.contract.caps.lease_seconds,
+                version=1,
+                fence=1,
+                worker_id=f.worker.id,
+            )
+        )
+        job = dict(c.execute(select(runs).where(runs.c.id == rid)).mappings().one())
+        c.execute(
+            insert(run_contracts).values(
+                run_id=rid, snapshot={"mode": "live"}, fingerprint=fingerprint({"mode": "live"})
+            )
+        )
+        c.execute(
+            insert(internal_run_bindings).values(
+                run_id=rid, app_run_id=app_id, snapshot=snap, fingerprint=fingerprint(snap)
+            )
+        )
+        f.store.event(
+            c,
+            rid,
+            "ACCEPTED",
+            dict(
+                namespace="INTERNAL_APPRUN",
+                app_run_id=app_id,
+                instance_id=iid,
+                release_id=release_id,
+                input_fingerprint=app_run["fingerprint"],
+            ),
+        )
+        spec.seal_job_scope(c, f.user, draft, snap)
+        bound = dict(
+            snapshot=snap, draft=draft, release=release, app_run=app_run, source=target, goal=goal
+        )
+        fields = gate._stage_authority_fields_from_facts(
+            f.contract,
+            "cold",
+            {},
+            job,
+            bound,
+            instance,
+            draft,
+            release,
+            f.gen_id,
+            f.raw,
+            f.contract.bindings[1],
+        )
+        authority = gate.StageAuthority(
+            **fields,
+            authorization_fingerprint=gate.authorization_fingerprint(
+                c,
+                f.user,
+                f.contract.project_id,
+                draft["runtime_id"],
+                [b.resource_id for b in f.contract.bindings],
+            ),
+        )
+        phase = gate.StageApproveInput(
+            authority=authority,
+            expected_authority_fingerprint=fingerprint(authority.model_dump()),
+            approval_key=f.binding.approval_key,
+            request_key="offline-cold-phase",
+            consent="BIND_ONLY_THIS_ACCEPTED_STAGE_RUN_APP_RELEASE_AND_COMPLETE_GOAL_TO_ORIGINAL_TRIAL",
+        )
+        gate._save(c, f.user, gate.entity(f.contract), gate.PHASE, "cold", phase)
+    f.cold_job, f.cold_bound, f.cold_phase = job, bound, phase
+
+
 @contextmanager
-def segment(f, c, phase="pre"):
+def segment(f, c, phase="pre", *, prewrite=False):
     inputs = {"synthetic-offline-integration": True}
     roles = dict.fromkeys(("source", "generate", "platform", "trial", "per_use"))
     with (
         pb._source_reads(f.store, c),
         runtime._cold_graph_read(f.worker, c, inputs, roles, phase) as graph,
+        ExitStack() as stack,
     ):
         state, cursor, _ = dispatch._graph_journal_state(graph, f.store, c, f.binding)
-        generated = dispatch._graph_stage_accounted(
-            graph, f.store, c, f.binding, state, cursor, f.gen_id, "generate"
+        # Finite fixture allowance only, not a general production bound.
+        size = len(WIRE.read_bytes()) * 4
+        fixture_bounds = _Bounds(size, size * 2, size, size * 4, size * 16)
+        mode = (
+            stack.enter_context(owned._owned_prewrite(graph, fixture_bounds)) if prewrite else None
         )
-        source = dispatch._graph_stage_accounted(
-            graph, f.store, c, f.binding, state, cursor, f.source_id, "source"
-        )
+        if mode is not None:
+            source = dispatch._graph_stage_accounted(
+                graph, f.store, c, f.binding, state, cursor, f.source_id, "source", _owned=mode
+            )
+            generated = dispatch._graph_stage_accounted(
+                graph, f.store, c, f.binding, state, cursor, f.gen_id, "generate", _owned=mode
+            )
+        else:
+            generated = dispatch._graph_stage_accounted(
+                graph, f.store, c, f.binding, state, cursor, f.gen_id, "generate"
+            )
+            source = dispatch._graph_stage_accounted(
+                graph, f.store, c, f.binding, state, cursor, f.source_id, "source"
+            )
         full = dict(
-            binding={},
-            cold_job={},
+            binding=getattr(f, "cold_bound", {}),
+            cold_job=getattr(f, "cold_job", {}),
             source_binding=f.bound,
-            source=dict(run=source[0]),
-            generation=dict(raw=f.raw, metadata=f.metadata, run=generated[0]),
+            source=source if mode is not None else dict(run=source[0]),
+            generated=generated if mode is not None else None,
+            generation=dict(
+                raw=f.raw,
+                metadata=f.metadata,
+                run=generated.run if mode is not None else generated[0],
+            ),
             source_proof=f.proof,
             extraction=dict(
                 draft=f.extraction[0],
@@ -681,26 +843,53 @@ def segment(f, c, phase="pre"):
                 goal=f.extraction[3],
             ),
         )
-        graph.add("cold-trial:complete", full)
+        if mode is None:
+            graph.add("cold-trial:complete", full)
+        else:
+            mode.seal(full)
+            mode.pin_legacy_complete(mode.complete)
         graph.add("trial-generated-model-facet", dict(frozen=f.frozen.model_dump()))
         stage = (
-            source[0],
+            source.run if mode is not None else source[0],
             f.bound,
             f.raw,
             f.metadata,
-            generated[0],
+            generated.run if mode is not None else generated[0],
             f.frozen,
             generated,
             None,
             None,
+        )
+        cold_stage = (
+            (
+                f.cold_job,
+                f.cold_bound,
+                f.raw,
+                f.metadata,
+                generated.run if mode is not None else generated[0],
+                f.frozen,
+                generated,
+                source,
+                f.extraction,
+            )
+            if hasattr(f, "cold_job")
+            else None
         )
         # Explicit allowance for THIS finite offline fixture, empirically checked
         # by issuance below. Serialized length is a sizing input, not a proven
         # general node/edge/depth/sidecar bound or product admission qualification.
         size = len(graph.input_bytes())
         bounds = _Bounds(size, size * 2, size, size * 4, size * 16)
-        scope = owned._scope_for_graph(graph, bounds) if phase == "pre" else None
-        if scope is not None:
+        scope = (
+            mode.scope
+            if mode is not None
+            else owned._scope_for_graph(graph, bounds)
+            if phase == "pre"
+            else None
+        )
+        if mode is not None:
+            handle, bridge = source.handle, None
+        elif scope is not None:
             handle = scope.issue("source", state, cursor, f.source_id)
             bridge = owned._SourceTestBridge(scope, handle)
         else:
@@ -718,7 +907,9 @@ def segment(f, c, phase="pre"):
                 bridge=bridge,
                 c=c,
                 f=f,
+                mode=mode,
+                cold_stage=cold_stage,
             )
         finally:
-            if scope is not None:
+            if scope is not None and mode is None:
                 scope.close()
