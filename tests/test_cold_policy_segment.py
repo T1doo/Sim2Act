@@ -14,6 +14,7 @@ from sqlalchemy import event, update
 from test_cold_accounted_native import native_segment
 from test_cold_accounted_sqlite import forbid_execution as forbid_execution
 from test_cold_accounted_sqlite import sql_facts as sql_facts
+from test_cold_configured_semantic_tail import exact_output
 
 from sim2act import _cold_policy_segment as segment
 from sim2act import natural_live_admission as gate
@@ -82,7 +83,7 @@ def test_two_fixed_segments_full_pins_outputs_and_normal_scope(sql_facts, monkey
                 new = graph._requirements_value(f.user, f.contract,
                     f.binding.approval_key, graph.check)
                 new_count = len(counts) - start
-                assert [v.model_dump() for v in new] == [v.model_dump() for v in old]
+                assert exact_output([v.model_dump() for v in new]) == exact_output([v.model_dump() for v in old])
                 assert new[0] is not f.contract
                 assert (old_count, new_count) == ((6, 2) if single_content else (12, 4))
                 results.append(dict(boundary=boundary, old_codec=old_count, new_codec=new_count))
@@ -93,7 +94,7 @@ def test_two_fixed_segments_full_pins_outputs_and_normal_scope(sql_facts, monkey
                 start = len(counts)
                 new = graph._run_check_value(*args, pin=graph.check)
                 new_count = len(counts) - start
-                assert new.model_dump() == old.model_dump()
+                assert exact_output(new.model_dump()) == exact_output(old.model_dump())
                 assert fingerprint(new.model_dump()) == fingerprint(old.model_dump())
                 assert new.checked_at == args[5] and new.deadline == old.deadline
                 assert (old_count, new_count) == ((7, 2) if single_content else (14, 4))

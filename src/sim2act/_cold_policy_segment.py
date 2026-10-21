@@ -59,6 +59,46 @@ def _schema_shape(value, keep, active=None):
     return 'code-object', id(value)
 
 
+def _schema_matches(value, expected, active=None):
+    """Fresh full schema witness without rebuilding a second shape tree.
+
+    The expected shape is bootstrap-owned. Visit every live child even after a
+    mismatch so the original complete key/cycle gate and its order remain.
+    No completed/PASS memo, user equality or serializer callback is used.
+    """
+    if active is None:
+        active = set()
+    kind = type(value)
+    shape = expected if type(expected) is tuple and len(expected) == 2 else None
+    if kind is str or kind is int or kind is float or kind is bool or kind is type(None):
+        return (shape is not None and shape[0] == kind.__name__
+            and (value is shape[1] or value == shape[1]))
+    if kind is dict or kind is list or kind is tuple:
+        identity = id(value)
+        require(identity not in active)
+        active.add(identity)
+        children = shape[1] if shape is not None and shape[0] == kind.__name__ else ()
+        matching = shape is not None and shape[0] == kind.__name__ and len(value) == len(children)
+        if kind is dict:
+            require(all(type(key) is str for key in value))
+            for index, (key, child) in enumerate(dict.items(value)):
+                prior = children[index] if index < len(children) else None
+                if prior is None or key != prior[0]:
+                    matching = False
+                same = _schema_matches(child, None if prior is None else prior[1], active)
+                matching = same and matching
+        else:
+            for index, child in enumerate(value):
+                same = _schema_matches(child, children[index] if index < len(children) else None, active)
+                matching = same and matching
+        active.remove(identity)
+        return matching
+    return shape is not None and shape[0] == 'code-object' and id(value) == shape[1]
+
+
+_SCHEMA_MATCHER = _schema_matches
+
+
 # Fixed local schema/code configuration at module bootstrap, not permissions or
 # input results. All live schema, serializer and validator metadata are reread
 # for every private snapshot. This does not defend arbitrary process code edits.
@@ -75,7 +115,7 @@ def _fixed_schema(kind):
     validator = namespace.get('__pydantic_validator__')
     trusted = next((entry for entry in _SCHEMAS if entry[0] is kind), None)
     return (trusted is not None and namespace.get('__pydantic_core_schema__') is trusted[1]
-        and _schema_shape(trusted[1], None) == trusted[2]
+        and _schema_matches is _SCHEMA_MATCHER and _schema_matches(trusted[1], trusted[2])
         and validator is trusted[3] and namespace.get('__pydantic_serializer__') is trusted[4]
         and getattr_static(kind, 'model_validate') is _VALIDATE
         and getattr_static(kind, '__init__') is _INIT

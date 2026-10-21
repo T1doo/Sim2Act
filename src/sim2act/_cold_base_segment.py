@@ -21,6 +21,7 @@ _STREAM_CODE = tuple((name, getattr_static(_Comparison, name)) for name in (
     'validate_model', 'model_fields', 'raw_mapping', 'raw_equal', 'equal', 'standard_serializers'))
 _STREAM_VALUES = stream_code._stream_values
 _SCHEMA_SHAPE = schema_code._schema_shape
+_SCHEMA_MATCHES = schema_code._schema_matches
 
 
 def eligible(trial):
@@ -35,6 +36,7 @@ def eligible(trial):
             or any(getattr(gate, name) is not function for name, function in _GATE_CODE)
             or stream_code._stream_values is not _STREAM_VALUES
             or schema_code._schema_shape is not _SCHEMA_SHAPE
+            or schema_code._schema_matches is not _SCHEMA_MATCHES
             or any(getattr_static(_Comparison, name) is not function for name, function in _STREAM_CODE)
             or any(getattr_static(trial, name) is not function
                 for name, function in zip(('_typed_parameter_models',

@@ -261,7 +261,7 @@ def test_unknown_core_exception_preserved_scope_closed(sql_facts, monkeypatch):
         assert rejected.value is error and not s.mode.active and t.phase == 'INVALID'
 
 
-@pytest.mark.parametrize('helper', ['_trial_typed_classes', '_trial_typed_nested_classes', '_schema_shape'])
+@pytest.mark.parametrize('helper', ['_trial_typed_classes', '_trial_typed_nested_classes', '_schema_shape', '_schema_matches'])
 def test_unknown_qualification_helper_restores_original_boundary(sql_facts, monkeypatch, helper):
     f = sql_facts
     seed_cold(f)
@@ -271,11 +271,11 @@ def test_unknown_qualification_helper_restores_original_boundary(sql_facts, monk
         def callback(*args):
             calls.append(True)
             raise AssertionError('unknown qualification helper executed')
-        module = segment.schema_code if helper == '_schema_shape' else gate
+        module = segment.schema_code if helper.startswith('_schema_') else gate
         monkeypatch.setattr(module, helper, callback)
         assert not segment.eligible(t) and calls == []
         s.graph.inputs['cold-trial:complete']['source_proof']['unknown-helper'] = True
-        if helper != '_schema_shape':
+        if not helper.startswith('_schema_'):
             # Those class-list helpers are ALSO used by the original full
             # codec's storage gate. A dynamic refusal happens before either
             # original storage hook; do not claim old codec was callback-free.
