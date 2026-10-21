@@ -117,6 +117,24 @@ def record_candidate(diagnostic, observation):
         diagnostic['candidate'] = dict(diagnostic_incomplete=True, error_type=type(error).__name__)
 
 
+def record_tail(diagnostic, tail):
+    if tail is None:
+        diagnostic['tail_observer'] = dict(status='NOT_ENABLED')
+        return
+    try:
+        report = tail.report()
+        if (type(report) is not dict or len(report) > 16
+                or any(type(key) is not str for key in report)):
+            raise TypeError('unsafe tail report')
+        diagnostic['tail_observer'] = report
+        status = report.get('status')
+        if type(status) is not str or status != 'COMPLETE_OBSERVATION':
+            diagnostic['classification'] = 'UNKNOWN'
+    except BaseException:
+        diagnostic['classification'] = 'UNKNOWN'
+        diagnostic['tail_observer'] = dict(status='INCOMPLETE', detail='tail report unavailable')
+
+
 def _mock_accounted_context(original, config, observation=None):
     """Explicit test selection only; not account evidence or a run grant."""
     if config is None:
@@ -150,6 +168,7 @@ def run_prefix(root, patch, files, notify, healthy, *, _mock_accounted_config=No
         install_network_denials,
     )
     from g0_stage_observer import StageObserver
+    from g0_tail_observer import TailObserver
     from test_pb_spec_production_controller import prepare_pb
     from test_pb_trial_dispatch import approve_stage
     from test_spec_production_controller import configured
@@ -159,6 +178,7 @@ def run_prefix(root, patch, files, notify, healthy, *, _mock_accounted_config=No
     from sim2act import natural_source_archives as archive
     from sim2act import natural_spec_runtime as runtime
     from sim2act import natural_specs as natural
+    from sim2act import pa_spec_apps as spec
     from sim2act import pa_trial_dispatch as trial
     from sim2act import pb_natural_specs as pb
     from sim2act import pb_natural_uses as use
@@ -185,8 +205,11 @@ def run_prefix(root, patch, files, notify, healthy, *, _mock_accounted_config=No
     # its finite config/mode in a new reviewed grant; this option is no grant.
     original_context = runtime._cold_model_before
     observation = None if _mock_accounted_config is None else CandidateObservation()
+    observer = StageObserver(enable_tail=observation is not None)
+    tail = None if observation is None else TailObserver(observer, lambda: observation.trial)
+    target_original = original_context if tail is None else tail.context(original_context)
     selected_context = (None if _mock_accounted_config is None else
-                        _mock_accounted_context(original_context, _mock_accounted_config, observation))
+                        _mock_accounted_context(target_original, _mock_accounted_config, observation))
     if observation is not None:
         patch.setattr(runtime._ColdTrialGraph, 'commit', observation.wrap_commit(runtime._ColdTrialGraph.commit))
     patch.setattr(
@@ -198,11 +221,12 @@ def run_prefix(root, patch, files, notify, healthy, *, _mock_accounted_config=No
         "__init__",
         boundary.observe_init(runtime._ColdCommitDiagnostics.__init__),
     )
-    observer = StageObserver()
     observer.install(
         patch, runtime, gate,
         lambda instance: boundary.entered and instance is boundary.instance,
     )
+    if tail is not None:
+        tail.install(patch, runtime, gate, spec)
     iterator = env.__wrapped__(root)
     fixture = None
     diagnostic = {"classification": "UNKNOWN", "g0": "NOT_REACHED"}
@@ -397,6 +421,7 @@ def run_prefix(root, patch, files, notify, healthy, *, _mock_accounted_config=No
             diagnostic["stage_observer"] = observer.report()
             if observation is not None:
                 record_candidate(diagnostic, observation)
+            record_tail(diagnostic, tail)
             # Preserve the original refusal before any client/heartbeat cleanup
             # can independently fail; never truncate or overwrite this record.
             files.writer("diagnostic.json").json(
@@ -426,6 +451,7 @@ def run_prefix(root, patch, files, notify, healthy, *, _mock_accounted_config=No
             )
         if observation is not None:
             failed['candidate'] = observation.report()
+        record_tail(failed, tail)
         files.writer("diagnostic.json").json(failed)
         raise
     finally:

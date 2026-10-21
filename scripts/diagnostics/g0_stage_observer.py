@@ -1,4 +1,4 @@
-"""Bounded in-memory observation, enabled only inside five owned G0 stages.
+"""Bounded in-memory observation inside five stages and four fixed tail spans.
 
 No product import, extra graph walk, serializer, hash, I/O or authority. CPU
 exclusive means inclusive minus observed child spans, not all child work.
@@ -10,6 +10,7 @@ from time import thread_time_ns
 
 STAGES = ("_prepare", "_graph_run_context", "_graph_pb_accounting",
           "_graph_resolve_trial_source", "_graph_pb_archive_chain")
+TAIL_STAGES = ("second_prefix", "second_commit", "recheck", "scope_exit")
 METRICS = ("codec", "typed_storage", "raw_copy", "typed_equal")
 FIELDS = ("calls", "returns", "raises", "inclusive_cpu_ns",
           "observed_child_exclusive_cpu_ns", "codec_output_bytes",
@@ -18,11 +19,12 @@ FIELDS = ("calls", "returns", "raises", "inclusive_cpu_ns",
 
 
 class StageObserver:
-    def __init__(self, clock=thread_time_ns, thread=get_ident, max_depth=32):
+    def __init__(self, clock=thread_time_ns, thread=get_ident, max_depth=32, *, enable_tail=False):
         self.clock, self.thread = clock, thread
-        self.rows = [[0] * len(FIELDS) for _ in range(20)]
+        self.stages = STAGES + TAIL_STAGES if enable_tail else STAGES
+        self.rows = [[0] * len(FIELDS) for _ in range(len(self.stages) * len(METRICS))]
         self.frames = [[0, 0] for _ in range(max_depth)]  # start, observed children
-        self.seen = [False] * 5
+        self.seen = [False] * len(self.stages)
         self.owner = self.active = None
         self.depth = self.maximum_depth = 0
         self.enabled = True
@@ -50,13 +52,15 @@ class StageObserver:
                 current = self.thread()
                 if self.owner is not None and current != self.owner:
                     pass
-                elif type(name) is not str or name not in STAGES or self.active is not None:
+                elif (type(name) is not str or name not in self.stages
+                      or (self.active is not None and not
+                          (self.stages[self.active] == "second_commit" and name == "recheck"))):
                     self.fault()
                 else:
                     if self.owner is None:
                         self.owner = current
                     if current == self.owner:
-                        index = STAGES.index(name)
+                        index = self.stages.index(name)
                         self.active = index
                         self.seen[index] = entered = True
         except BaseException:
@@ -185,12 +189,13 @@ class StageObserver:
                 overhead="NONZERO; nested observer residual is included; not a G0 speedup proof",
                 input_units="root elements/root bytes only; typed-model input bytes unmeasured",
                 codec_bytes_basis="successful returned bytes, not an observed SHA call",
+                stage_attribution="innermost active stage; recheck excluded from second_commit metric rows",
                 max_stack_frames=len(self.frames),
                 maximum_depth=self.maximum_depth,
                 stages=[dict(stage=stage, reached=self.seen[i],
                              metrics={name: dict(zip(FIELDS, self.rows[i * 4 + j], strict=True))
                                       for j, name in enumerate(METRICS)} if self.seen[i] else None)
-                        for i, stage in enumerate(STAGES)],
+                        for i, stage in enumerate(self.stages)],
             )
         except BaseException:
             self.safe_fault()
