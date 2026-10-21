@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="21" time="31.603" timestamp="2026-10-21T09:56:03.211630+00:00" hostname="e8d6535555c5"><testcase classname="tests.test_cold_accounted_stage_pin" name="test_same_call_one_codec_all_pure_associations_and_public_self_pins" time="1.627" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_original_relation_rejections_and_new_scope_close[generate_family]" time="1.570" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_original_relation_rejections_and_new_scope_close[generate_run]" time="1.507" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_original_relation_rejections_and_new_scope_close[raw]" time="1.507" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_original_relation_rejections_and_new_scope_close[metadata]" time="1.456" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_original_relation_rejections_and_new_scope_close[source_run]" time="1.453" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_original_relation_rejections_and_new_scope_close[cold_job]" time="1.484" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_original_relation_rejections_and_new_scope_close[bound]" time="1.462" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_original_relation_rejections_and_new_scope_close[source_family]" time="1.468" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_original_relation_rejections_and_new_scope_close[draft]" time="1.461" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_original_relation_rejections_and_new_scope_close[target]" time="1.473" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_original_relation_rejections_and_new_scope_close[goal]" time="1.465" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_each_call_rechecks_mutation_authority_transaction_stop[frontier]" time="1.439" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_each_call_rechecks_mutation_authority_transaction_stop[revoke]" time="1.427" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_each_call_rechecks_mutation_authority_transaction_stop[write]" time="1.447" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_each_call_rechecks_mutation_authority_transaction_stop[close]" time="1.432"><failure message="sqlalchemy.exc.ResourceClosedError: This Connection is closed">sql_facts = namespace(store=&lt;sim2act.db.Store object at 0x7f6743fe09e0&gt;, settings=Settings(database_url='sqlite:////tmp/sim2act-co...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=&lt;sim2act.worker.Worker object at 0x7f6743bd3020&gt;)
+damage = 'close'
+
+    @pytest.mark.parametrize('damage', ['frontier', 'revoke', 'write', 'close', 'rollback', 'stop'])
+    def test_each_call_rechecks_mutation_authority_transaction_stop(sql_facts, damage):
+        f = sql_facts
+        with pytest.raises(DomainError), f.store.tx() as c, native_segment(f, c) as s:
+            pin(s, s.stage)
+            if damage == 'frontier': s.graph.inputs['cold-trial:complete']['source_proof']['changed'] = True
+            elif damage == 'revoke': c.execute(update(grants).values(revoked=True))
+            elif damage == 'write': c.execute(update(grants).values(revision=grants.c.revision + 1))
+            elif damage == 'close': c.close()
+            elif damage == 'rollback': c.rollback()
+            else: f.worker.stop.set()
+&gt;           pin(s, s.stage)
+
+tests/test_cold_accounted_stage_pin.py:110: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cold_accounted_stage_pin.py:27: in pin
+    gate._graph_trial_stage_parent_pin(s.graph, s.f.store, s.c, facts, _owned=s.mode)
+src/sim2act/natural_live_admission.py:929: in _graph_trial_stage_parent_pin
+    _owned._pin_stage(graph, store, c, stage_facts)
+src/sim2act/cold_accounted.py:683: in _pin_stage
+    self.assert_current()
+src/sim2act/cold_accounted.py:533: in assert_current
+    self._dynamic()
+src/sim2act/cold_accounted.py:503: in _dynamic
+    _frame(g)
+src/sim2act/cold_accounted.py:152: in _frame
+    gate.require(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+ok = False, message = 'Accounted scope lifecycle changed'
+
+    def require(ok, message="Exact natural trial changed"):
+        if not ok:
+&gt;           raise DomainError("VERSION_CONFLICT", message)
+E           sim2act.errors.DomainError: Accounted scope lifecycle changed
+
+src/sim2act/natural_live_admission.py:47: DomainError
+
+During handling of the above exception, another exception occurred:
+
+sql_facts = namespace(store=&lt;sim2act.db.Store object at 0x7f6743fe09e0&gt;, settings=Settings(database_url='sqlite:////tmp/sim2act-co...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=&lt;sim2act.worker.Worker object at 0x7f6743bd3020&gt;)
+damage = 'close'
+
+    @pytest.mark.parametrize('damage', ['frontier', 'revoke', 'write', 'close', 'rollback', 'stop'])
+    def test_each_call_rechecks_mutation_authority_transaction_stop(sql_facts, damage):
+        f = sql_facts
+&gt;       with pytest.raises(DomainError), f.store.tx() as c, native_segment(f, c) as s:
+                                                            ^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cold_accounted_stage_pin.py:102: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:158: in __exit__
+    self.gen.throw(value)
+tests/test_cold_accounted_native.py:40: in native_segment
+    with pb._source_reads(f.store, c), runtime._cold_graph_read(
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:158: in __exit__
+    self.gen.throw(value)
+src/sim2act/pb_natural_specs.py:570: in _source_reads
+    if c.info.get("pb_source_reads") is token:
+       ^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:690: in info
+    return self.connection.info
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:581: in connection
+    return self._revalidate_connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.engine.base.Connection object at 0x7f6743a2cef0&gt;
+
+    def _revalidate_connection(self) -&gt; PoolProxiedConnection:
+        if self.__can_reconnect and self.invalidated:
+            if self._transaction is not None:
+                self._invalid_transaction()
+            self._dbapi_connection = self.engine.raw_connection()
+            return self._dbapi_connection
+&gt;       raise exc.ResourceClosedError("This Connection is closed")
+E       sqlalchemy.exc.ResourceClosedError: This Connection is closed
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:676: ResourceClosedError
+
+During handling of the above exception, another exception occurred:
+
+sql_facts = namespace(store=&lt;sim2act.db.Store object at 0x7f6743fe09e0&gt;, settings=Settings(database_url='sqlite:////tmp/sim2act-co...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=&lt;sim2act.worker.Worker object at 0x7f6743bd3020&gt;)
+damage = 'close'
+
+    @pytest.mark.parametrize('damage', ['frontier', 'revoke', 'write', 'close', 'rollback', 'stop'])
+    def test_each_call_rechecks_mutation_authority_transaction_stop(sql_facts, damage):
+        f = sql_facts
+&gt;       with pytest.raises(DomainError), f.store.tx() as c, native_segment(f, c) as s:
+                                         ^^^^^^^^^^^^
+
+tests/test_cold_accounted_stage_pin.py:102: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:158: in __exit__
+    self.gen.throw(value)
+src/sim2act/db.py:753: in tx
+    c.info.pop("correction_scope_segment", None)
+    ^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:690: in info
+    return self.connection.info
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:581: in connection
+    return self._revalidate_connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.engine.base.Connection object at 0x7f6743a2cef0&gt;
+
+    def _revalidate_connection(self) -&gt; PoolProxiedConnection:
+        if self.__can_reconnect and self.invalidated:
+            if self._transaction is not None:
+                self._invalid_transaction()
+            self._dbapi_connection = self.engine.raw_connection()
+            return self._dbapi_connection
+&gt;       raise exc.ResourceClosedError("This Connection is closed")
+E       sqlalchemy.exc.ResourceClosedError: This Connection is closed
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:676: ResourceClosedError</failure></testcase><testcase classname="tests.test_cold_accounted_stage_pin" name="test_each_call_rechecks_mutation_authority_transaction_stop[rollback]" time="1.326" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_each_call_rechecks_mutation_authority_transaction_stop[stop]" time="1.459" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_foreign_native_and_extraction_never_execute_callbacks" time="2.430" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_default_parent_order_and_exact_two_callsites" time="0.023" /><testcase classname="tests.test_cold_accounted_stage_pin" name="test_real_source_receipt_and_complete_slot_gate_remain" time="2.273"><failure message="Failed: DID NOT RAISE &lt;class 'sim2act.errors.DomainError'&gt;">sql_facts = namespace(store=&lt;sim2act.db.Store object at 0x7f6743970d10&gt;, settings=Settings(database_url='sqlite:////tmp/sim2act-co...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=&lt;sim2act.worker.Worker object at 0x7f674a505e50&gt;)
+
+    def test_real_source_receipt_and_complete_slot_gate_remain(sql_facts):
+        f = sql_facts
+        with f.store.tx() as c, native_segment(f, c) as s:
+            resolved = resolve(s, _owned=s.mode)
+            assert resolved.public_receipt['source_run_id'] == f.source_id
+            slot = s.state.slots[0]
+            # Same aid but changed non-aid Slot data must still fail the original
+            # full domain equality when source consumers cross the ledger boundary.
+            changed = slot.model_copy(update={'accepted': not slot.accepted})
+            altered = s.state.model_copy(update={'slots': (changed, *s.state.slots[1:])})
+&gt;           with pytest.raises(DomainError):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE &lt;class 'sim2act.errors.DomainError'&gt;
+
+tests/test_cold_accounted_stage_pin.py:168: Failed</failure></testcase></testsuite></testsuites>

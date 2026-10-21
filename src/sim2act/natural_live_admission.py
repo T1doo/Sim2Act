@@ -919,6 +919,19 @@ def _graph_trial_pin(graph, store, c):
         raise
 
 
+def _graph_trial_stage_parent_pin(graph, store, c, stage_facts, *, _owned=None):
+    """Fixed composite for stage parents; independent readers still self-pin."""
+    if _owned is not None:
+        from ._cold_accounted_native import _NativeCandidate
+        from .cold_accounted import _OwnedPrewriteMode
+        if (type(_owned) is _OwnedPrewriteMode and type(_owned._native) is _NativeCandidate
+                and _owned._native.owned_ready is True):
+            _owned._pin_stage(graph, store, c, stage_facts)
+            return
+    _graph_trial_pin(graph, store, c)
+    _graph_trial_stage_raw(graph, stage_facts, **{'_owned': _owned} if _owned is not None else {})
+
+
 def _graph_stage_current(graph, store, c, user, contract, stage, stage_facts, *, _owned=None):
     """Original PB stage cross-role predicates after complete graph producers.
 
@@ -1008,8 +1021,7 @@ def _graph_run_context(graph, store, c, user, contract, approval_key, stage, run
     """Original live edges around complete graph stage reconstruction."""
 
     def _parent_pin():
-        _graph_trial_pin(graph, store, c)
-        _graph_trial_stage_raw(graph, stage_facts, **{'_owned': _owned} if _owned is not None else {})
+        _graph_trial_stage_parent_pin(graph, store, c, stage_facts, **{'_owned': _owned} if _owned is not None else {})
     _models: list[tuple[type, object, dict]] = []
     _guard = _trial_typed_guard(_parent_pin, _models)
     try:

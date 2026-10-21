@@ -641,6 +641,9 @@ class _OwnedPrewriteMode:
 
     def assert_family(self, graph, family, role):
         self.assert_current()
+        self.__family_current(graph, family, role)
+
+    def __family_current(self, graph, family, role):
         gate.require(
             graph is self.graph
             and type(family) is _Family
@@ -653,6 +656,11 @@ class _OwnedPrewriteMode:
     def assert_run(self, role, record):
         family = self.__families[role]
         self.assert_family(self.graph, family, role)
+        self.__run_current(family, record)
+        if self._native is None:
+            self.__oracle.assert_run(role, record)
+
+    def __run_current(self, family, record):
         gate.require(
             type(record) is _Record
             and record._family is family
@@ -660,8 +668,47 @@ class _OwnedPrewriteMode:
             and record._schema == "run"
             and _same(record, family.run)
         )
-        if self._native is None:
-            self.__oracle.assert_run(role, record)
+
+    def _pin_stage(self, graph, store, c, facts):
+        """One native parent boundary, followed only by owned pure joins.
+
+        Lexical to this call: no permission/result token and no guard bypass for
+        other readers. Public assertions below retain their own full checks.
+        """
+        from ._cold_accounted_native import _NativeCandidate
+
+        try:
+            # Preserve the original parent's first full pin, including its
+            # exact graph/connection refusal order, before pure local joins.
+            gate._graph_trial_pin(graph, store, c)
+            gate.require(graph is self.graph and store is graph.store and c is graph.connection
+                         and type(self._native) is _NativeCandidate and self._native.owned_ready is True)
+            self._dynamic()
+            self.__assert_links()
+            gate.require(type(facts) in (tuple, list) and len(facts) == 9 and self.complete is not None)
+            job, bound, raw, metadata, gen, _, generated, source, extraction = facts
+            self.__family_current(graph, generated, 'generate')
+            self.__family_current(graph, self.__families['generate'], 'generate')
+            self.__run_current(self.__families['generate'], gen)
+            full = self.complete
+            if full is None:
+                raise _Rejected('Complete prewrite manifest required')
+            gate.require(raw is full['generation']['raw'] and metadata is full['generation']['metadata'])
+            if bound is full['source_binding']:
+                gate.require(source is None and extraction is None)
+                self.__family_current(graph, self.__families['source'], 'source')
+                self.__run_current(self.__families['source'], job)
+            else:
+                gate.require(bound is full['binding'] and job is full['cold_job'] and extraction is not None)
+                self.__family_current(graph, source, 'source')
+                gate.require(type(extraction) is tuple and len(extraction) == 4)
+                draft, _, target, goal = extraction
+                gate.require(draft is full['extraction']['draft']
+                             and target is full['extraction']['target']
+                             and goal is full['extraction']['goal'])
+        except BaseException:
+            self.close()
+            raise
 
     def assert_upstream_run(self, role, native):
         self.assert_current()

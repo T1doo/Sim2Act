@@ -460,8 +460,7 @@ def _graph_resolve_trial_source(graph, store, c, user, contract, approval_key, l
     """
 
     def _parent_pin():
-        gate._graph_trial_pin(graph, store, c)
-        gate._graph_trial_stage_raw(graph, source_stage_facts, **{'_owned': _owned} if _owned is not None else {})
+        gate._graph_trial_stage_parent_pin(graph, store, c, source_stage_facts, **{'_owned': _owned} if _owned is not None else {})
         gate.require(source_proof is graph.inputs['cold-trial:complete']['source_proof'])
     try:
         from . import natural_live_admission as gate
