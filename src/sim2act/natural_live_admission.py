@@ -941,8 +941,7 @@ def _graph_stage_current(graph, store, c, user, contract, stage, stage_facts, *,
     """
 
     def _parent_pin():
-        _graph_trial_pin(graph, store, c)
-        _graph_trial_stage_raw(graph, stage_facts, **{'_owned': _owned} if _owned is not None else {})
+        _graph_trial_stage_parent_pin(graph, store, c, stage_facts, **{'_owned': _owned} if _owned is not None else {})
     _models: list[tuple[type, object, dict]] = []
     _guard = _trial_typed_guard(_parent_pin, _models)
     try:

@@ -1,6 +1,7 @@
 """Local native parent boundaries; no Worker/model/transport or full G0."""
 
 import ast
+import json
 from pathlib import Path
 
 import pytest
@@ -210,7 +211,7 @@ def test_foreign_native_and_extraction_never_execute_callbacks(sql_facts):
     assert calls == []
 
 
-def test_default_parent_order_and_exact_two_callsites(monkeypatch):
+def test_default_parent_order_and_exact_three_callsites(monkeypatch):
     calls = []
     monkeypatch.setattr(gate, "_graph_trial_pin", lambda *args: calls.append("pin"))
     monkeypatch.setattr(
@@ -220,7 +221,7 @@ def test_default_parent_order_and_exact_two_callsites(monkeypatch):
     assert calls == ["pin", ("stage", {})]
     root = Path(__file__).resolve().parents[1] / "src/sim2act"
     for filename, expected in [
-        ("natural_live_admission.py", ["_graph_run_context"]),
+        ("natural_live_admission.py", ["_graph_stage_current", "_graph_run_context"]),
         ("natural_source_archives.py", ["_graph_resolve_trial_source"]),
     ]:
         tree = ast.parse((root / filename).read_text())
@@ -287,3 +288,116 @@ def test_query_return_revocation_cannot_cross_new_parent(sql_facts, monkeypatch)
         monkeypatch.setattr(gate, "_approved", revoke_after_query)
         resolve(s, _owned=s.mode)
     assert calls == ["approved-return"] and not s.mode.active
+
+
+@pytest.mark.parametrize('stage', ['source', 'cold'])
+def test_real_stage_current_codec_reduction_all_predicates_and_authority(sql_facts, monkeypatch, stage):
+    from sim2act.db import fingerprint
+
+    f = sql_facts
+    seed_cold(f)
+    with f.store.tx() as c, native_segment(f, c) as s:
+        facts = s.stage if stage == 'source' else s.cold_stage
+        codec, families, records, parents, spans = [], [], [], [], []
+        encode = runtime._cold_graph_bytes
+        family = owned._OwnedPrewriteMode._OwnedPrewriteMode__family_current
+        record = owned._OwnedPrewriteMode._OwnedPrewriteMode__run_current
+        composite = gate._graph_trial_stage_parent_pin
+
+        def observe_encode(value):
+            codec.append(1)
+            return encode(value)
+
+        def family_join(self, graph, value, role):
+            families.append(role)
+            return family(self, graph, value, role)
+
+        def run_join(self, value, item):
+            records.append(value.role)
+            return record(self, value, item)
+
+        def old(graph, store, connection, value, *, _owned=None):
+            parents.append(1)
+            start = len(codec)
+            gate._graph_trial_pin(graph, store, connection)
+            gate._graph_trial_stage_raw(graph, value, _owned=_owned)
+            spans.append(len(codec) - start)
+
+        def new(*args, **kwargs):
+            parents.append(1)
+            start = len(codec)
+            result = composite(*args, **kwargs)
+            spans.append(len(codec) - start)
+            return result
+
+        monkeypatch.setattr(runtime, '_cold_graph_bytes', observe_encode)
+        monkeypatch.setattr(owned._OwnedPrewriteMode, '_OwnedPrewriteMode__family_current', family_join)
+        monkeypatch.setattr(owned._OwnedPrewriteMode, '_OwnedPrewriteMode__run_current', run_join)
+        # Prime the original lazy Release pointer with the real stage reader.
+        # Measure its separate two-codec addition instead of attributing that
+        # first-use difference to the replaced parent boundary.
+        additions = []
+        add = runtime._ColdGraphRead.add
+
+        def warm_add(graph, name, value, **kwargs):
+            start = len(codec)
+            result = add(graph, name, value, **kwargs)
+            additions.append((name, len(codec) - start))
+            return result
+
+        with monkeypatch.context() as m:
+            m.setattr(runtime._ColdGraphRead, 'add', warm_add)
+            gate._graph_stage_current(s.graph, f.store, c, f.user, f.contract, stage, facts, _owned=s.mode)
+        expected_key = 'release-pointer:' + f.user + ':' + facts[1]['snapshot']['release_id']
+        assert additions == [(expected_key, 2)]
+        input_keys = tuple(s.graph.inputs)
+        observed, parent_spans = [], []
+        for parent in (old, new):
+            codec.clear()
+            families.clear()
+            records.clear()
+            parents.clear()
+            spans.clear()
+            with monkeypatch.context() as m:
+                m.setattr(gate, '_graph_trial_stage_parent_pin', parent)
+                authority, job = gate._graph_stage_current(
+                    s.graph, f.store, c, f.user, f.contract, stage, facts, _owned=s.mode)
+            assert tuple(s.graph.inputs) == input_keys
+            observed.append((len(codec), tuple(families), tuple(records), len(parents),
+                             fingerprint(authority.model_dump()), job))
+            parent_spans.append(tuple(spans))
+        old_result, new_result = observed
+        assert old_result[3] == new_result[3] > 0
+        assert old_result[0] - new_result[0] == 6 * new_result[3]
+        assert old_result[1:] == new_result[1:]
+        assert parent_spans[0] == (7,) * old_result[3]
+        assert parent_spans[1] == (1,) * new_result[3]
+        print(json.dumps(dict(stage=stage, old_codec=old_result[0], new_codec=new_result[0],
+            parent_calls=new_result[3], family_predicates=len(new_result[1]),
+            run_predicates=len(new_result[2]), parent_codec_each=[7, 1],
+            separately_measured_lazy_add_codecs=additions[0][1],
+            predicate_sequence_and_authority_equal=True)))
+
+
+@pytest.mark.parametrize('stage', ['source', 'cold'])
+@pytest.mark.parametrize('damage', ['mutation', 'revoke'])
+def test_real_stage_current_two_calls_recheck_mutation_and_revocation(sql_facts, stage, damage):
+    f = sql_facts
+    seed_cold(f)
+    second_error = None
+    # The outer catch only preserves the already observed second-call error
+    # through original scope cleanup. An unexpected first-call/entry error
+    # leaves second_error unset and fails the identity assertion below.
+    with pytest.raises(DomainError) as scope_error, f.store.tx() as c, native_segment(f, c) as s:
+        facts = s.stage if stage == 'source' else s.cold_stage
+        gate._graph_stage_current(s.graph, f.store, c, f.user, f.contract, stage, facts, _owned=s.mode)
+        if damage == 'mutation':
+            s.graph.inputs['cold-trial:complete']['source_proof']['between-calls'] = True
+        else:
+            c.execute(update(grants).values(revoked=True))
+        with pytest.raises(DomainError) as refused:
+            gate._graph_stage_current(s.graph, f.store, c, f.user, f.contract, stage, facts, _owned=s.mode)
+        second_error = refused.value
+        raise second_error
+    assert second_error is not None and scope_error.value is second_error
+    assert not s.mode.active and not s.graph.active

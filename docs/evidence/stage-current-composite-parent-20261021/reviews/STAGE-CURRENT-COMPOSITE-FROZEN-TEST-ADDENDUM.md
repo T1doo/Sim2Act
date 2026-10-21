@@ -1,0 +1,7 @@
+# Frozen test-source addendum
+
+Read `/tmp/sim2act-stage-current-parent-20261021/tests/frozen-before.json` and current source without executing code. The frozen product SHA256 remains `84195d0061f965b8f1cc2e1bc385941c2739e09dce02293596b3025f14b4433a`; the updated test SHA256 is `a6bcdedb5f92fa69a662fbee2840cb98f10dfcccbfd09468b28233a928d85627`. Both match the files read.
+
+The updated test now wraps the original CGR.add during the real preliminary stage-current call and requires exactly the snapshot-derived `release-pointer:<user>:<release_id>` key with two codec invocations. It then compares old/new paths on unchanged complete root keys. Besides the aggregate six-times-parent-calls difference, every original parent span must be exactly seven encodings and every composite span exactly one. Complete family/run role sequences and authority/job observations are still compared. This separates the original lazy-root insertion from the replaced parent boundary; it does not weaken the causal count assertion.
+
+The cross-call test refinement described in the earlier report remains pending in this frozen test source. Author says the already-running 115-case batch will finish before that test-only change; its results have not been inspected by this reviewer. No product concern added, no runtime/test success asserted, and no execution/grant created by this addendum. Reviewer product/test/DB/Mock/G0 executions remain zero.
