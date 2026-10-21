@@ -90,7 +90,8 @@ stand-in，仅证明记录合同与故障隔离，**不证明实际两commit／G
 逐字节等于基线，见 `unchanged-protections.json`；本片不删除 pin/扫描/事务或期限。
 
 原始 logs/JUnit、三次哈希清单、profile和独审原件在同目录。独审只静态核作者
-实测范围，最终 closure 报告绑定 final 七SHA；设计 ACK／准备 ACK 不授权运行。
+实测范围，最终 closure 报告绑定 final 七SHA；设计 ACK／准备 ACK 不授权运行。monitor-closure-final 是 reviewer 最后补入11项
+实际重跑及两处文档精度修正的终稿，较早归档的 closure 原件仍保留。
 
 ## 可供一次批准的具体窗口条件（尚未批准／尚未执行）
 
