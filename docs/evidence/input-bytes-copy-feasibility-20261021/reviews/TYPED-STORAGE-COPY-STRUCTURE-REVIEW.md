@@ -1,0 +1,29 @@
+# Typed-storage / pickle copy structure: read-only design review
+
+Baseline reported by the writer: `b9a6bfaa`. Reviewer inspected source only and official CPython 3.12.14 implementation references. No product imports, tests, SQLite, Mock, profiler or G0 were executed; no repository files were changed. No new runtime authorization or implementation ACK.
+
+## Existing contract
+
+`natural_live_admission._trial_typed_storage` (line 1285) validates exact root/nested types, active-path cycle rejection, complete model storage and key types before serialization. Its per-call seen map preserves shared nested objects inside the copied typed projection. It creates a new dict for each first-seen model/dict, a new list and fresh generated tuple, retaining original native scalar and dict-key objects. The two None omissions are applied before visiting the omitted values. A model object's storage dict is projected under the model id; the storage dict is not automatically installed in seen under its own id. Direct reuse of that storage dict therefore changes projection alias relationships.
+
+`_ColdGraphRead.input_bytes` (runtime line 1786) computes that private contract projection, optionally performs the original fixed serializer bridge, then puts the projection alongside the actual `inputs` and `role_limits` in one complete pickle envelope. `_cold_graph_bytes` (1735) creates a fresh C pickler and memo. Thus copied containers isolate the typed projection from raw input containers, while scalar/key references can legitimately share identities across the envelope. `_cold_graph_row_storage` (1681) separately preserves the original row keys/data tuple and builds the trusted string index; hidden positions remain in the pickle. Optimizing typed storage must not project away that independent raw row storage.
+
+## Scratch pooling
+
+Retaining old dict keys to refill values is not equivalent. An equal-but-not-identical string key from a later call can also be referenced by current `inputs`; retaining the previous call's key destroys that cross-envelope alias edge and changes pickle memo/bytes. Retained insertion order can also differ. Reusing a result for a source object before rebuilding the complete invocation-specific seen mapping changes DAG alias semantics.
+
+Clearing containers avoids retained references, but CPython `PyDict_Clear` swaps to the empty-key table and releases the old keys/values storage. `_list_clear` sets allocated storage to zero and frees its item array. Consequently a Python pool does not automatically retain those large backing allocations; additional Python management may cost more than a fresh comprehension. This is a structural limitation, **not an executed benchmark or proof of no possible speedup**. Immutable tuple results cannot be filled in place. Sources: [CPython dictobject.c](https://raw.githubusercontent.com/python/cpython/v3.12.14/Objects/dictobject.c), [CPython listobject.c](https://raw.githubusercontent.com/python/cpython/v3.12.14/Objects/listobject.c).
+
+Recommendation: do not implement the proposed retained-key pool. It has a concrete byte/alias counterexample and no demonstrated payoff for the safe clearing variant.
+
+## Smaller copy-then-patch candidate
+
+For a stable exact source dict, `dict.copy(raw)` followed by full original-order recursive visits can retain current key objects, order and seen-based copied-child aliases. Unknown containers must remain on the old rejecting route, full gates/omission ordering must remain, and no row, serializer or pickle change follows from this observation.
+
+However the proposed optimization `visited = visit(child); if visited is not child: result[key] = visited` has a concrete mutable-read gap. Let source slot contain scalar A at the shallow copy, then let another thread replace it with scalar B before the original source iterator yields that field. The visitor checks/returns B, but `visited is child` and the write is skipped, leaving A in the result. The original comprehension writes B. Traversing the copy instead moves the gating of all direct values to the earlier snapshot and can miss a newly unsupported value the original live iterator would reject. The GIL does not cover the entire recursive Python DFS.
+
+Comparing against the initial copied slot instead, or unconditional assignment, repairs this value example but does not by itself repair key identity/order. Same-size deletion/reinsertion between copy and source iteration can replace a key by an equal different string object or change order; writing a value under an equal key does not replace the copied key object or insertion order. The old comprehension uses the yielded current key/order. These are source-derived counterexample paths, not executed races. They do not assert that the old traversal provides an atomic global snapshot; they show that the candidate's produced projection may differ from its own later traversal and the original source iteration.
+
+Therefore the proposed skip-patch variant is **not ACKed for the full mutable input domain**. A stable-input offline prototype may measure whether there is a component opportunity, but it cannot establish the missing stability property or exact read semantics. Do not add locks, weaken guards, or silently assume ownership solely to justify this optimization. If the required domain cannot close these points within the existing contract, retaining the original comprehension is a valid outcome; this review identifies no mandatory replacement or new surrounding work.
+
+Any subsequent safe candidate still needs actual per-call complete projection and whole-envelope byte/alias differential evidence, especially a model storage dict also present in inputs, shared/distinct equal strings, repeated DAGs, the two omissions, cycles/unknown values and complete hidden RowMapping storage. No fresh runtime window is requested by this review.

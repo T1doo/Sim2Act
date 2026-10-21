@@ -1,0 +1,15 @@
+# Final four-case input-bytes evidence ACK
+
+This supplements, without overwriting, the earlier three-case `INPUT-BYTES-CANDIDATES-FINAL-EVIDENCE-ACK`. Reviewer only read source and author evidence and hashed files. No reviewer product imports, tests, DB, Mock, Worker, profiling, G0 or signals; no repository edits or new execution authorization.
+
+Final test SHA256 **`cdc7f22c43e9233c2b3f691c235dfd55cbf59c51f4d794b57bf8ddcf27f4a9c9`** matches the preserved final source. The preserved initial source is exactly **`ac1182eeb2c216006c7822f9b6e7ac987e06d672ad4922ff2f9c3838e0b8c15e`**. Their textual diff consists solely of the added direct-caps-alias test; the three earlier witnesses were not silently rewritten. The final author log records **4 passed / 1.84s** and Ruff reports all checks passed.
+
+The fourth witness uses the actual prepared contract's caps storage dict as a raw input reference. The original typed projection creates a distinct caps dict. Replacing just that projection node with the original model storage is typed-value equal but merges the input/projection alias, changing original C Pickler bytes. A later normal caps scalar mutation is seen by a new original projection while the already returned old projection remains unchanged. This directly supports the fresh-copy separation obligation; it is not a full G0 authorization/settlement result or a claim about arbitrary process code modification.
+
+The prior retained-key, shallow-snapshot/conditional-write and unconditional-write/key-order negative witnesses remain valid. The two separately reviewed C-buffer experiments remain narrow: actual prepared contract projection showed no benefit; the closed row snapshot's approximately 0.7231% component difference omits production qualification/lifecycle overhead and is not the original G0 graph. This final four-case run does not turn those component measurements into a complete-chain comparison.
+
+Author `postrun.json` records baseline `b9a6bfaad5212c0a8f799975afa4893d613b3308`, empty product src/scripts diff, 0 Mock/Worker/real-model/G0/full-tail pairs, no owned test processes/sidecars, proof directory 5,277,002 bytes and unchanged original read-only DB SHA256 `0d65862f50aa545fb93aa31e15d3f78c74bcca09e57976c3b65e0b04d1fc6b36`. Reviewer separately observed empty source/scripts diff but did not open DB or repeat process checks.
+
+No remaining concrete blocker to the evidence-only conclusion was found: **keep the original production path; the assessed shortcuts are unsafe or do not show enough benefit.** This does not assert that all optimization is impossible. A fresh native projection visitor is one unimplemented technical direction; a specifically proved owned snapshot would likewise require complete consumer/mutation-frontier and byte/alias proof for that root. Neither is a current ready-to-enable replacement or permission to remove mutable checks. No further full chain is required to support the present negative/insufficient-benefit conclusion.
+
+The final README was not yet supplied/read when this supplement was saved; no document-level ACK is implied until its actual text is reviewed.

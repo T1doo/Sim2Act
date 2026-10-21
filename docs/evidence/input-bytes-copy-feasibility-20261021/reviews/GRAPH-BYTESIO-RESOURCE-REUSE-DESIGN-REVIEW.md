@@ -1,0 +1,22 @@
+# Private BytesIO resource reuse: conditional design review
+
+Read-only source/CPython review. Reviewer executed no product imports, tests, DB, Mock, profiler or G0 and edited no repository files. No new runtime authorization; no actual benefit is established.
+
+Unlike typed-container pooling, reuse of a private output stream need not change the input projection or its alias graph. `input_bytes` can retain the complete original typed copy, complete row storage and validations. Every serialization must still construct a new original `_ColdGraphPickler` with protocol 5 and a fresh C memo, visit the same whole envelope and return exact immutable bytes. No prior bytes, digest, authority or PASS may answer a later call.
+
+The proposed sequence is structurally plausible: claim an exclusive private stream, seek to zero, write the same prefix, perform the unchanged fresh dump, truncate at its final position, then obtain bytes. Truncation must precede getvalue, otherwise a shorter result can expose stale suffix bytes. A busy/reentrant checkout takes the fresh original route; it does not bypass or combine any graph/typed/dynamic check. Separate threads need separate resources.
+
+CPython 3.12.14 confirms that held getvalue bytes remain protected by copy-on-write, but getvalue also reduces the internal buffer to its logical length. A later write with an outstanding shared result copies the previous logical contents before overwriting. Thus persistent overallocated capacity is not guaranteed; opportunity is mainly unshared, similarly sized successive outputs. Major shrink can reallocate. These source facts do not establish a speedup, lower RSS, or reduced full traversal. See [CPython BytesIO implementation](https://raw.githubusercontent.com/python/cpython/v3.12.14/Modules/_io/bytesio.c). The [original C pickler](https://raw.githubusercontent.com/python/cpython/v3.12.14/Modules/_pickle.c) still performs its own frame buffering/flushing and serialization work; reusing the destination cannot remove that work.
+
+Minimal conditions for an offline candidate:
+
+- Exact fixed builtin BytesIO factory/type and normal methods; original pickler/reducer/code identities. Unknown factory/helper/codec behavior keeps the fresh original route before using the resource. This is a narrow code qualification, not a process-wide code-integrity framework.
+- The resource never escapes, never exposes getbuffer, and never retains input/model objects, picklers or their memo. Immutable returned bytes may escape, relying only on native copy-on-write.
+- Acquire busy before any resource operation; release it under BaseException-safe finally. Reentrant work receives an independent fresh stream/memo. Never replay a failed serialization using another path.
+- On a failed seek/write/dump/truncate/getvalue, preserve the original exception and discard the affected stream rather than retaining a potentially large half-result or an escaped stream from an exception traceback. Do not mask it with resource cleanup errors.
+- A successful return must remove every stale suffix. Both very large-to-small and small-to-large calls, held previous results, repeated results, exceptions after partial writes, nested serialization and two threads need pure codec differential coverage.
+- Keep original reducer/import error identity and full RowMapping hidden-data/aliases, current envelope prefix and protocol bytes. Actual prepared-contract inputs are necessary; arbitrary small dicts cannot establish the intended cost or domain.
+
+One thread-local stream still keeps its last complete output buffer live after return. This is allocation resource retention, not permission/PASS reuse, but it must not be described as zero cross-call resident data. Its ownership/lifetime and retained-size policy should be explicit. Discarding an unsuitable/oversized resource may choose the fresh route without restricting valid input acceptance. No new product limit or security permission is implied.
+
+No static blocker to a carefully isolated resource-only prototype was found. Benefit remains unproven, particularly when old output bytes are held or stream size changes. If measured management/copy-on-write cost offsets allocation savings, retain the existing implementation. A native typed copier would still have to reproduce the complete original fresh allocation graph, per-call identity memo, key identity/order, omission/error ordering and gates; Pydantic serialization or raw storage reuse is not an equivalent substitute. This review does not require creating such a component.
