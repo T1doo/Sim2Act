@@ -51,3 +51,57 @@ Run300/TTL1800/RPM1/reservation不变。64MiB采样监测非硬配额，logical 
 CPU/RSS界。0真实模型/费用/外网业务/新增权限，禁Cold2/W5、无自动重试。
 必须包括原receipt、第二commit及scope最终期限；首commit或单次wall<30不能
 替代完成证据。实际结果随后归档；不承诺必过或把局部codec收益推广为G0提速。
+
+## 本次实际窗口：更后方原提交前缀拒绝，仍UNKNOWN
+
+执行候选 `a6192df3b5b00cf891792af27ab47890da979ff5`，source/dependency 摘要
+`7cbf3a6a12fb6dcdbef1a80dd8e900028ffd78ae645f21b753b32e6e6ee4405c`。相对前窗
+manifest仅natural_live_admission与stage_pin测试两文件变化，launcher/guard/observer/
+依赖/预算原样。实际父argv为规范绝对解释器/脚本；new grant消费一次，不重试。
+
+| 实测项 | 结果 |
+| --- | --- |
+| parent/child分类、退出码 | **UNKNOWN / 2** |
+| Mock交换/入口/Source delegate | **6 / 8 / 2** |
+| 真正进入G0 / route | 是 / **OWNED**，native:issuance |
+| 总work wall / G0 wall | **341.85972994199983 / 30.122223297003075秒** |
+| 原首次Cold校验commit | **returned=true**，保存11项原deadline |
+| 第二commit前缀 | 已进入，在原Store.guard拒绝 |
+| 第二commit方法本体 | **未进入**；参数前缀先抛异常 |
+| scope返回 / 最终期限 | false / **NOT_PROVEN** |
+| 直接错误 | VERSION_CONFLICT: **Stale worker lease** |
+| child / parent清理 | THREADS_CLIENTS_CONNECTIONS_CLOSED / OWNED_GROUP_EMPTY |
+| 独立进程核实 | 父55992、子56016不存在，56016 PGID为空 |
+| finalization_errors | [] |
+
+实际栈 `advance_model:3720 → _cold_commit_prefix:2055 → _commit_guard_prefix:1985
+→ lock_live:933 → Store.guard:1134`。**Store.guard该消息共享三个OR条件**：fence
+不符、lease_until<=当前时钟、status不在允许集。现场r/now未单独保存；本报告
+不能单凭消息证明唯一为lease到期，也不从G0wall−30计算“超限0.122秒”。first
+return没有时间戳，不能把returned=true当作返回时间或最终期限通过证明。
+
+对冻结源码的直线顺序和上述后续栈，能够**推断**原 `_cold_receipts` 已返回：
+该调用内checked_counters、native begin、pin_receipt_binding、原_receipts、produced、
+record_receipts、finish都在当前后续位置之前；随后原attempt回读、parse/usage/schema、
+receipt_for、settlement-parsed也已走过。没有独立phase计数/root dump，实际m未
+直接记录，因此这是明确的源码控制流推论，非额外运行采样，也不硬编码m=0。
+前窗停在firstcommit，本窗已到其后的原第二前缀；仍未完成整个G0、Cold2/W5或PB。
+
+五阶段本次 **5389 codec / 成功返回3750141856字节 / inclusive线程CPU15.172792443秒**。
+run_context codec892→664（少228），resolver1143→993（少150），恰与局部证明
+对应；合计少378个重复编码。prepare仍3628，accounting95、archive9。
+五阶段wall依次15.386716115、2.690322941、0.392832366、3.996897175、0.032063194秒。
+CPU/返回字节是原仪器口径，不是SHA调用采样，不含全部G0 CPU，仪器非零开销。
+两个窗口停止位置不同，不能把单次总wall差当作受控提速或完整性能验收。
+
+逻辑resident/live458430612、peak478097556、work188404034025305936651508，
+scope后false/0/0；非RSS/CPU界。disk6785次采样，peak logical2256916、allocated
+2273280字节；平均间隔0.05039171621653927秒，配置0.1非计划采样周期/硬配额。
+源before/after/parent-cleanup摘要一致，原件哈希全部核实，DB仅本地保全与Git哈希。
+0真实模型/费用/权限，无自动重试；W5仍为原static stop而非观测counter口径。
+
+最小剩余条件仍是原第二提交前缀/方法及scope最终检查完整返回；先查明该复合
+门具体拒绝条件，继续基于实际成本设计最小等价修复，不能原样再跑碰运气，亦
+不能延租约、删检查或把首commit/回执返回当成全流程成功。
+
+两份最终窗口只读独审均确认UNKNOWN/NOT_PROVEN和上述来源推论边界，原件已封存；reviewer未执行产品、测试、DB或新窗口。
