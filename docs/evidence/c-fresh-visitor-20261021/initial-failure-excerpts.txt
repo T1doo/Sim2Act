@@ -1,0 +1,25 @@
+Transcribed excerpts from actual exec tool returns, before the final freeze.
+These are labelled excerpts, not raw redirected files. The initial binary was
+overwritten during diagnosis. The original complete tool returns remain in the
+task transcript. No initial failure is counted as a successful test.
+
+First test process: exit_code 139
+Fatal Python error: Segmentation fault
+Current thread 0x00007ff3c4dd8740 (most recent call first):
+  File "/workspace/Sim2Act/src/sim2act/_cold_typed_native_candidate.py", line 26 in project
+  File "/workspace/Sim2Act/tests/test_cold_typed_native.py", line 39 in native
+  File "/workspace/Sim2Act/tests/test_cold_typed_native.py", line 51 in <lambda>
+  File "/workspace/Sim2Act/tests/test_cold_typed_storage_alias_contract.py", line 44 in test_reusing_actual_caps_dict_merges_an_originally_separate_graph_alias
+  File "/workspace/Sim2Act/tests/test_cold_typed_native.py", line 52 in test_original_four_counterexamples
+
+Minimal dict with the initial ASAN build: exit_code 1
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==90429==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000008 (pc 0x000001873e9a bp 0x7fffa179dd20 sp 0x7fffa179dd00 T0)
+==90429==The signal is caused by a READ memory access.
+==90429==Hint: address points to the zero page.
+    #0 0x1873e9a in PyDict_GetItem (/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3.12+0x1873e9a) (BuildId: 315f4da692c3ca93b40412ce784bb95fb60a261e)
+    #1 0x446274 in PyDict_GetItemString (/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3.12+0x446274) (BuildId: 315f4da692c3ca93b40412ce784bb95fb60a261e)
+    #2 0x7f25ee118bec in project src/sim2act/_cold_typed_native_impl.c:211
+SUMMARY: AddressSanitizer: SEGV (/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3.12+0x1873e9a) (BuildId: 315f4da692c3ca93b40412ce784bb95fb60a261e) in PyDict_GetItem
+==90429==ABORTING
