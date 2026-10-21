@@ -380,9 +380,13 @@ class _Frontier:
         gate.require(self.mode.active and self.key() == self.expected,
                      'Native mutable frontier changed')
 
-    def added(self, name):
+    def added(self, name, *, run_facts=None):
         gate.require(name in self.mode._native.future_roots and name not in self.projected,
                      'Unexpected native continuation root')
+        from ._cold_accounted_receipts import _receipt_for_frontier
+        receipt = _receipt_for_frontier(self)
+        if receipt is not None and name in receipt.names:
+            receipt.added(name, run_facts, self.graph.inputs[name])
         self.projected[name] = self.graph.inputs[name]
         if name == 'cold-trial:complete':
             full = self.graph.inputs[name]
@@ -413,6 +417,7 @@ class _NativeCandidate:
         self.completed, self.mode, self.result = {}, None, None
         self.upstreams = None
         self.owned_ready = False
+        self.receipt = None
         # Scalar diagnostic state only; never a pin, authority or routing input.
         self.qualification_phase = 'NOT_STARTED'
         self.selection: dict[str, Any] = dict(route='NOT_SELECTED', reason=None, budget=None)
@@ -454,7 +459,7 @@ class _NativeCandidate:
                      and role not in self.completed and type(facts) is tuple)
         self.completed[role] = facts
 
-    def choose(self, state, *, upstreams=None):
+    def choose(self, state, *, upstreams=None, receipt_platform=None):
         gate.require(self.result is None and tuple(self.completed) == ('source', 'generate'))
         ledger = _Ledger(self.config.bounds, self.config.limits)
         self.diagnostic_ledger = ledger
@@ -463,6 +468,7 @@ class _NativeCandidate:
         mode._native = self
         self.state = state
         self.upstreams = upstreams
+        self.receipt_platform = receipt_platform
         try:
             self.result = mode._select_completed(ledger, self.completed, native=self)
             return self.result
@@ -481,6 +487,14 @@ class _NativeCandidate:
         if (not all(type(k) is str for k in self.graph.inputs)
                 or 'cold-trial:complete' in self.graph.inputs):
             raise _Unsupported('native_root_representation')
+        if self.receipt_platform is not None:
+            from ._cold_accounted_receipts import _ReceiptClosure
+            self.observe(phase='native:receipt-preload')
+            ledger.reserve('resident', 4096)
+            self.receipt = _ReceiptClosure(self, self.receipt_platform)
+            self.receipt.preload(ledger)
+            self.observe(phase='native:receipt-budget')
+            self.receipt.budget(ledger, _SizingProjection)
         # Ledger is fixed typed and retains its old full dynamic typed guards.
         # Its entire extent, including non-Source slots, must fit before issue.
         self.observe(phase='native:ledger')
@@ -509,8 +523,11 @@ class _NativeCandidate:
             header = copied.get('cold-trial:bound')
             if type(header) is not dict:
                 raise _Unsupported('missing_native_bound')
-            ledger.reserve('resident', 65536 + 2048 * (len(self.graph.inputs) + len(_FUTURE_ROOTS) + 2))
+            ledger.reserve('resident', 65536 + 2048 * (len(self.graph.inputs) + len(_FUTURE_ROOTS)
+                + 2 + (len(self.receipt.names) if self.receipt is not None else 0)))
             future = set(_FUTURE_ROOTS)
+            if self.receipt is not None:
+                future.update(self.receipt.names)
             user = self.graph.binding.contract.principal_id
             for role in ('binding', 'source_binding'):
                 bound = header.get(role)
@@ -574,6 +591,8 @@ class _NativeCandidate:
         self.frontier = _Frontier(mode, self.raw)
         self.arena.seal()
         self.graph._accounted_frontier = self.frontier
+        if self.receipt is not None:
+            self.receipt.phase = 'READY'
         mode._discard_oracle()
         self.completed.clear()
 
@@ -581,6 +600,12 @@ class _NativeCandidate:
         arena = getattr(self, 'arena', None)
         if arena is not None:
             arena.release()
+        if self.receipt is not None:
+            from ._cold_accounted_receipts import _ReceiptClosure
+            if (type(self.receipt) is _ReceiptClosure and self.receipt.candidate is self
+                    and self.receipt.graph is self.graph):
+                self.receipt.release()
+        self.receipt = self.receipt_platform = None
         self.completed.clear()
 
     def close(self):

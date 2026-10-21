@@ -410,7 +410,7 @@ class _ColdRunFacts:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
             self.check(self.store, self.connection, self.job)
             require(name not in self._raw, "Cold Run raw facts cannot be rebound")
-            self.guard.add(f"{self.key}:{name}", value)
+            self.guard.add(f"{self.key}:{name}", value, _run_facts=self)
             self._raw[name] = value
             return value
         except BaseException:
@@ -1856,7 +1856,7 @@ class _ColdGraphRead:
             self.invalidate()
             raise
 
-    def add(self, name, value):
+    def add(self, name, value, *, _run_facts=None):
         try:
             self.check(self.store, self.connection)
             require(type(name) is str and name not in self.inputs, "Cold graph read inputs cannot be rebound")
@@ -1869,7 +1869,7 @@ class _ColdGraphRead:
             if self._accounted_frontier is None:
                 self.key = self.input_key()
             else:
-                self._accounted_frontier.added(name)
+                self._accounted_frontier.added(name, run_facts=_run_facts)
         except BaseException:
             self.invalidate()
             raise
@@ -2775,7 +2775,8 @@ class _ColdTrialGraph:
             self.accounted_prewrite.assert_upstream_run('generate', generation)
         if getattr(self, 'accounted_candidate', None) is not None:
             self.accounted_candidate.stage('generate', self.generate_accounted)
-            selected = self.accounted_candidate.choose(ledger, upstreams=(t.source_counter_reader.job, generation))
+            selected = self.accounted_candidate.choose(ledger,
+                upstreams=(t.source_counter_reader.job, generation), receipt_platform=self.platform)
             if selected.route == 'OWNED':
                 self.accounted_prewrite = selected.mode
                 self.source_accounted, self.generate_accounted = selected.source, selected.generated

@@ -1666,11 +1666,22 @@ def _cold_receipts(store, c, job, binding, facts, *, pending_id=None, allow_pend
     try:
         _check_run_facts(store, c, job, facts)
         facts.checked_counters()
+        frontier = facts.guard._accounted_frontier
+        continuation = None
+        if frontier is not None:
+            from ._cold_accounted_receipts import _receipt_for_frontier
+            continuation = _receipt_for_frontier(frontier)
+        if continuation is not None:
+            continuation.begin(store, c, job, binding, facts, pending_id, allow_pending)
         facts.pin_receipt_binding(binding)
         result = _receipts(store, c, job, binding, pending_id=pending_id,
             allow_pending=allow_pending, _facts=facts)
         _check_run_facts(store, c, job, facts)
+        if continuation is not None:
+            continuation.produced(result)
         facts.record_receipts(binding, result[0], result[1], pending_id, allow_pending)
+        if continuation is not None:
+            continuation.finish()
         return result
     except BaseException:
         _invalidate_cold_run_facts(facts)

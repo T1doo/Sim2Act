@@ -34,7 +34,7 @@ NATIVE_LIMITS = LIMITS._replace(resident=10**30, peak=10**32, work=10**40)
 
 
 @contextmanager
-def native_segment(f, c, *, limits=NATIVE_LIMITS, middle=None, before_choose=None):
+def native_segment(f, c, *, limits=NATIVE_LIMITS, middle=None, before_choose=None, receipt_setup=None):
     inputs = {'synthetic-native-candidate': True}
     roles = dict.fromkeys(('source', 'generate', 'platform', 'trial', 'per_use'))
     with pb._source_reads(f.store, c), runtime._cold_graph_read(
@@ -59,7 +59,8 @@ def native_segment(f, c, *, limits=NATIVE_LIMITS, middle=None, before_choose=Non
         candidate.stage('generate', generated)
         if before_choose is not None:
             before_choose(graph, source, generated, candidate)
-        selected = candidate.choose(state)
+        platform = receipt_setup(graph) if receipt_setup is not None else None
+        selected = candidate.choose(state, receipt_platform=platform)
         source, generated, mode = selected.source, selected.generated, selected.mode
         full = dict(binding=getattr(f, 'cold_bound', {}), cold_job=getattr(f, 'cold_job', {}),
                     source_binding=f.bound, source=source if mode else dict(run=source[0]),

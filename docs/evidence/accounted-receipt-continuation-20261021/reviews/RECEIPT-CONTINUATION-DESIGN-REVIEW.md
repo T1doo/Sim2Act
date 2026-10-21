@@ -1,0 +1,42 @@
+# One original receipt interval — bounded closure design review
+
+2026-10-21. Source read at HEAD `59bd1b3362f11a95210670d371d621aa89b0546e`. Result: **CONDITIONAL_DESIGN_ACK_SINGLE_RECEIPT_INTERVAL_NOT_START_ACK**. No source edits, product import, tests, database access, Mock, Worker, G0, launcher or receipt execution by reviewer; only source reads and /tmp report writes. The author's read-only old-DB observations are context supplied by the author, not database reads performed by this reviewer.
+
+## Feasibility and smallest supported scope
+
+The proposed fixed original-raw pre-read is feasible for the narrowly selected interval: one VERIFIED resource.read predecessor and the current pending model operation, allow_pending exactly False, pending_id exactly the original meta['operation_id'], one non-model tool already counted, no later operation. The original _receipts code (`pa_spec_apps.py:1681–1773`) reads receipt_operations, intent for each reached operation, and for a verified nonsaved read has_effect, step_anchors and CLAIMED progress_event at the anchor fence. At the pending model it checks intent and breaks on exact pending_id before model proof, SAVE effects, or subsequent steps. Thus there is no reason to call/replay _receipts, prove_pending, prove_node, SAVE or a model consumer in qualification.
+
+Using the existing raw methods once before candidate issuance is close to the minimum closed implementation. Receipt operations currently holds only model IDs at model-operations; reading full receipt operations is necessary to discover the existing random verified-read operation ID and fence-dependent event key. The remaining narrowly selected raw reads let those original data/keys enter the same full continuity and bounded projection before issue. A separate generic read cache, DTO authority, new query layer or broader root migration is unnecessary. Unsupported but legal longer prefixes can stay LEGACY.
+
+## Ordering and authorization boundary
+
+This explicitly changes the timing of the selected raw SELECTs, placing them earlier than their original receipt consumer after first commit. It cannot be described as unchanged global SQL order or identical error ordering for every failed input. Default None and unselected/nonnative paths must remain untouched. Within the selected path use the exact existing self.platform, its original counter_reader, original platform binding, same graph/store/connection/transaction/frame/job; do not substitute self.trial's possibly different Limits facet reader/binding. The original first-bound/current authorization checks still precede the raw reads, and all original later authorization/receipt checks remain mandatory. Raw pre-read is not permission, receipt evidence or approval.
+
+The original methods retain full checkpoints before/after SELECT and pin all original results without rewriting them. Shape incompatibility or insufficient declared capacity may select LEGACY only before any native handle is issued and only while the original guard remains valid. Original DomainError, mutation/cycle/nonfinite or SQL errors must not be swallowed, reset or relabelled unsupported to resurrect a closed scope. Later issuance/receipt failures close without fallback. This keeps the earlier field/order/error constraints honest rather than promising impossible full query-order equivalence.
+
+## Finite selection and exact key derivation
+
+- Classify operation rows by approved plan step_id/call_id, not database return order: receipt_operations uses SELECT without ORDER BY. Require the finite two-operation shape, exact current pending operation ID/model step, approved plan/executor relation and no later operation. meta.ordinal=0 is a model-node ordinal, not necessarily workflow index zero (the read precedes it).
+- Use exact controlled native storage types before extracting IDs, status, fence or constructing keys/SQL parameters. For step_anchors, select only one exact original anchor shape and exact positive integer fence in current job range before choosing the unique CLAIMED raw read. Shape mismatches remain outside the optimized domain; original _receipts later owns business validation.
+- Pre-read only this finite branch's receipt_operations, reached intents, verified-read has_effect/step_anchors/CLAIMED using original methods. Include every complete raw result and key in the existing fresh graph/projection. Do not pre-add receipt-binding/receipts proof roots, precompute intent/receipt fingerprints, or synthesize outputs/proved.
+- Let m be the exact current length of that reader's exact _receipt_proofs list, not a guessed zero, Source-reader index or suffix copied from an old database. Bind the selected m to the exact same reader/epoch and recheck it at native begin, binding insertion and final record. At most one new exact receipt-binding:m / receipts:m pair belongs to this one interval.
+
+## Protocol at the original receipt call
+
+The original _cold_receipts invocation still performs the actual counters/binding/receipt computation once, at its original location. Native begin must validate exact reader/guard/frame/job/store/connection, original platform.binding identity, pending_id=meta['operation_id'] and allow_pending is False. Unknown/foreign types must not execute callbacks while being inspected. Begin is a same-interval state check, never a returned validation token or a cross-call permission cache.
+
+Pass exact reader identity from _put to the native frontier so merely constructing the right text key from another reader, another epoch or another call cannot admit a root. Binding root accepts only the original binding alias. Final receipt root keeps the original exact fields binding/outputs/proved/pending_id/allow_pending and must be tied to the actual original returned outputs/proved objects and the selected m/call state. Original record_receipts list append and checked-receipt semantics stay intact. Foreign insertion, rebind, duplicate begin, repeated pair, reordered/early final record, drift or issued-capacity failure closes.
+
+Both admitted roots remain mutable current inputs to full original validation/fresh hash, not projected owned tokens or skipped aliases. No prefix wildcard, dynamic name-as-authority, blanket run-facts exception or removal of _Frontier membership checks is acceptable.
+
+## Budget conditions
+
+Qualification must account before all new key/protocol/output temporary construction, including job ID and decimal m key text, shallow graph/projected entries, fixed protocol storage and maximum simultaneous original output/proved structures. The original actual _receipts also allocates by_step/step-ID/predecessor structures, intent_for's resolve/input_sources deepcopy/predecessor fingerprints for both reached steps, and receipt_for's receipt/check_results and hashes. A ticket for two dictionary entries alone does not cover this interval. Use the complete already-bounded raw/plan metrics plus the explicit finite predecessor count, preserve overlapping lifetimes and release only after actual use. Numeric proof is required of implementation and the separate budget review; a generous unexplained constant is not proof.
+
+Original SELECT materialization/JSON decoding remains outside the existing logical ledger as previously documented. Do not convert the new pre-read into an RSS/CPU/DB-decode hard-bound claim. Capacity before issue selects LEGACY without issuing proof; capacity after issue cannot fall back.
+
+## Minimum later local checks and review limit
+
+Actual implementation should locally cover the complete selected receipt interval once (no Worker/Mock/G0), strict source/platform/reader distinction, random IDs/fence and unordered SQL rows, nonzero valid m, exact root/payload identities, once-only begin/end, no late fallback and closed scopes. Unsupported longer/SAVE/model-proof paths stay LEGACY; mutations/revocations/invalid raw facts still reject through original gates. Verify original receipt consumer is invoked exactly once at its ordinary position, no native qualification calls _receipts/proof producers and new metadata/selection does not alter guard inputs or swallow errors. None of these local tests proves whole G0 or later not-yet-reached continuation closure.
+
+No design-level blocker remains if these narrow conditions are implemented. This ACK is for implementing/reviewing the bounded design only. It authorizes no new grant, execution window, database reopening or broad root migration.
