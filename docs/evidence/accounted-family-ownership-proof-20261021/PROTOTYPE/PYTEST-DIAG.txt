@@ -1,0 +1,47 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-9.0.2, pluggy-1.6.0
+rootdir: /tmp/sim2act-accounted-proof-20261021
+configfile: pytest.ini
+collected 10 items / 7 deselected / 3 selected
+
+../../tmp/sim2act-accounted-proof-20261021/test_accounted.py FF.         [100%]
+
+=================================== FAILURES ===================================
+___ test_complete_real_schema_owned_values_and_legacy_fingerprints[generate] ___
+
+role = 'generate'
+
+    @pytest.mark.parametrize('role', ['generate', 'source'])
+    def test_complete_real_schema_owned_values_and_legacy_fingerprints(role):
+        facts = family(role)
+        packet = capture_accounted(facts, role, LIMITS)
+        expected = raw_shape(facts)
+        detached = materialize_oracle(packet)['value']
+>       assert gate._trial_typed_equal(expected, detached),first_difference(expected,detached)
+E       AssertionError: (('run',), 'key type', 'quoted_name')
+E       assert False
+E        +  where False = <function _trial_typed_equal at 0x7f88d9a9d080>({'actual': ({'created_at': 1.0, 'elapsed': 0.01, 'error': None, 'id': 'attempt_00000000000000000000000000000001', ...}...: {'cancel_intent': False, 'context': {'retained': ['all', {'columns': True}]}, 'created_at': 1.0, 'error': None, ...}}, {'actual': ({'created_at': 1.0, 'elapsed': 0.01, 'error': None, 'id': 'attempt_00000000000000000000000000000001', ...}...: {'cancel_intent': False, 'context': {'retained': ['all', {'columns': True}]}, 'created_at': 1.0, 'error': None, ...}})
+E        +    where <function _trial_typed_equal at 0x7f88d9a9d080> = gate._trial_typed_equal
+
+/tmp/sim2act-accounted-proof-20261021/test_accounted.py:143: AssertionError
+____ test_complete_real_schema_owned_values_and_legacy_fingerprints[source] ____
+
+role = 'source'
+
+    @pytest.mark.parametrize('role', ['generate', 'source'])
+    def test_complete_real_schema_owned_values_and_legacy_fingerprints(role):
+        facts = family(role)
+        packet = capture_accounted(facts, role, LIMITS)
+        expected = raw_shape(facts)
+        detached = materialize_oracle(packet)['value']
+>       assert gate._trial_typed_equal(expected, detached),first_difference(expected,detached)
+E       AssertionError: (('run',), 'key type', 'quoted_name')
+E       assert False
+E        +  where False = <function _trial_typed_equal at 0x7f88d9a9d080>({'actual': ({'created_at': 4.0, 'elapsed': 0.01, 'error': None, 'id': 'attempt_00000000000000000000000000000004', ...}...: {'cancel_intent': False, 'context': {'retained': ['all', {'columns': True}]}, 'created_at': 1.0, 'error': None, ...}}, {'actual': ({'created_at': 4.0, 'elapsed': 0.01, 'error': None, 'id': 'attempt_00000000000000000000000000000004', ...}...: {'cancel_intent': False, 'context': {'retained': ['all', {'columns': True}]}, 'created_at': 1.0, 'error': None, ...}})
+E        +    where <function _trial_typed_equal at 0x7f88d9a9d080> = gate._trial_typed_equal
+
+/tmp/sim2act-accounted-proof-20261021/test_accounted.py:143: AssertionError
+=========================== short test summary info ============================
+FAILED ../../tmp/sim2act-accounted-proof-20261021/test_accounted.py::test_complete_real_schema_owned_values_and_legacy_fingerprints[generate]
+FAILED ../../tmp/sim2act-accounted-proof-20261021/test_accounted.py::test_complete_real_schema_owned_values_and_legacy_fingerprints[source]
+================== 2 failed, 1 passed, 7 deselected in 0.23s ===================

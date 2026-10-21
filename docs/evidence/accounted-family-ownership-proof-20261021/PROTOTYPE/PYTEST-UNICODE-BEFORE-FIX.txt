@@ -1,0 +1,96 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-9.0.2, pluggy-1.6.0
+rootdir: /tmp/sim2act-accounted-proof-20261021
+configfile: pytest.ini
+collected 11 items / 10 deselected / 1 selected
+
+../../tmp/sim2act-accounted-proof-20261021/test_accounted.py F           [100%]
+
+=================================== FAILURES ===================================
+__________ test_existing_escaped_surrogate_string_domain_is_preserved __________
+
+    def test_existing_escaped_surrogate_string_domain_is_preserved():
+        value=strict_json(b'{"unconsumed_extra":"\\ud800","low":"\\udfff"}',32768)
+        assert _cold_graph_bytes(value)  # exact existing C implementation, no stand-in
+>       packet=freeze(value,LIMITS)
+               ^^^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-accounted-proof-20261021/test_accounted.py:288: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+docs/evidence/accounted-family-ownership-proof-20261021/PROTOTYPE/owned_graph.py:121: in freeze
+    root = visit(value, 0)
+           ^^^^^^^^^^^^^^^
+docs/evidence/accounted-family-ownership-proof-20261021/PROTOTYPE/owned_graph.py:82: in visit
+    node = ('dict', tuple((child(k), child(item[k])) for k in keys))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+docs/evidence/accounted-family-ownership-proof-20261021/PROTOTYPE/owned_graph.py:82: in <genexpr>
+    node = ('dict', tuple((child(k), child(item[k])) for k in keys))
+                                     ^^^^^^^^^^^^^^
+docs/evidence/accounted-family-ownership-proof-20261021/PROTOTYPE/owned_graph.py:74: in child
+    ref = visit(value, depth + 1)
+          ^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+item = '\ud800', depth = 1
+
+    def visit(item, depth):
+        nonlocal edge_count, leaf_bytes
+        if depth > bounds.depth:
+            raise Rejected('depth')
+        kind = type(item)
+        if not (kind is dict or kind is list or kind is tuple or kind is bytes
+                or kind is str or kind is int or kind is bool or kind is float
+                or item is None or kind is RowMapping or kind is quoted_name):
+            raise Rejected('unknown type')
+        identity = id(item)
+        if identity in active:
+            raise Rejected('cycle')
+        if identity in done:
+            original, index = done[identity]
+            assert original is item
+            if depth + heights[index] > bounds.depth:
+                raise Rejected('depth')
+            return index
+        if len(nodes) >= bounds.nodes:
+            raise Rejected('nodes')
+        index = len(nodes)
+        nodes.append(None)
+        active.add(identity)
+    
+        child_refs = []
+        def child(value):
+            nonlocal edge_count
+            edge_count += 1
+            if edge_count > bounds.edges:
+                raise Rejected('edges')
+            ref = visit(value, depth + 1)
+            child_refs.append(ref)
+            return ref
+    
+        if kind is dict:
+            keys = tuple(dict.keys(item))
+            if not all(type(k) is str for k in keys):
+                raise Rejected('mapping keys')
+            node = ('dict', tuple((child(k), child(item[k])) for k in keys))
+        elif kind is list or kind is tuple:
+            node = ('list' if kind is list else 'tuple', tuple(child(v) for v in item))
+        elif kind is RowMapping:
+            # Full keys/data/safe-index payload, including hidden positions.
+            storage = _cold_graph_row_storage(item)
+            names = tuple(str(key) for key in storage[0])
+            if len(set(names)) != len(names):
+                raise Rejected('duplicate row keys')
+            node = ('row', child(storage))
+        elif kind is bytes:
+            leaf_bytes += len(item)
+            node = ('bytes', item)
+        elif kind is str or kind is quoted_name:
+            text = item if kind is str else str(item)
+>           leaf_bytes += len(text.encode('utf-8'))
+                              ^^^^^^^^^^^^^^^^^^^^
+E           UnicodeEncodeError: 'utf-8' codec can't encode character '\ud800' in position 0: surrogates not allowed
+
+docs/evidence/accounted-family-ownership-proof-20261021/PROTOTYPE/owned_graph.py:97: UnicodeEncodeError
+=========================== short test summary info ============================
+FAILED ../../tmp/sim2act-accounted-proof-20261021/test_accounted.py::test_existing_escaped_surrogate_string_domain_is_preserved
+======================= 1 failed, 10 deselected in 0.21s =======================

@@ -1,0 +1,92 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-9.0.2, pluggy-1.6.0
+rootdir: /tmp/sim2act-accounted-proof-20261021
+configfile: pytest.ini
+collected 10 items
+
+../../tmp/sim2act-accounted-proof-20261021/test_accounted.py FF.......F  [100%]
+
+=================================== FAILURES ===================================
+___ test_complete_real_schema_owned_values_and_legacy_fingerprints[generate] ___
+
+role = 'generate'
+
+    @pytest.mark.parametrize('role', ['generate', 'source'])
+    def test_complete_real_schema_owned_values_and_legacy_fingerprints(role):
+        facts = family(role)
+        packet = capture_accounted(facts, role, LIMITS)
+        expected = raw_shape(facts)
+        detached = materialize_oracle(packet)['value']
+>       assert gate._trial_typed_equal(expected, detached)
+E       AssertionError: assert False
+E        +  where False = <function _trial_typed_equal at 0x7f9ec2c75080>({'actual': ({'created_at': 1.0, 'elapsed': 0.01, 'error': None, 'id': 'attempt_00000000000000000000000000000001', ...}...: {'cancel_intent': False, 'context': {'retained': ['all', {'columns': True}]}, 'created_at': 1.0, 'error': None, ...}}, {'actual': ({'created_at': 1.0, 'elapsed': 0.01, 'error': None, 'id': 'attempt_00000000000000000000000000000001', ...}...: {'cancel_intent': False, 'context': {'retained': ['all', {'columns': True}]}, 'created_at': 1.0, 'error': None, ...}})
+E        +    where <function _trial_typed_equal at 0x7f9ec2c75080> = gate._trial_typed_equal
+
+/tmp/sim2act-accounted-proof-20261021/test_accounted.py:125: AssertionError
+____ test_complete_real_schema_owned_values_and_legacy_fingerprints[source] ____
+
+role = 'source'
+
+    @pytest.mark.parametrize('role', ['generate', 'source'])
+    def test_complete_real_schema_owned_values_and_legacy_fingerprints(role):
+        facts = family(role)
+        packet = capture_accounted(facts, role, LIMITS)
+        expected = raw_shape(facts)
+        detached = materialize_oracle(packet)['value']
+>       assert gate._trial_typed_equal(expected, detached)
+E       AssertionError: assert False
+E        +  where False = <function _trial_typed_equal at 0x7f9ec2c75080>({'actual': ({'created_at': 4.0, 'elapsed': 0.01, 'error': None, 'id': 'attempt_00000000000000000000000000000004', ...}...: {'cancel_intent': False, 'context': {'retained': ['all', {'columns': True}]}, 'created_at': 1.0, 'error': None, ...}}, {'actual': ({'created_at': 4.0, 'elapsed': 0.01, 'error': None, 'id': 'attempt_00000000000000000000000000000004', ...}...: {'cancel_intent': False, 'context': {'retained': ['all', {'columns': True}]}, 'created_at': 1.0, 'error': None, ...}})
+E        +    where <function _trial_typed_equal at 0x7f9ec2c75080> = gate._trial_typed_equal
+
+/tmp/sim2act-accounted-proof-20261021/test_accounted.py:125: AssertionError
+______ test_legacy_rejections_remain_and_packet_is_not_semantic_authority ______
+
+    def test_legacy_rejections_remain_and_packet_is_not_semantic_authority():
+        # A snapshot must retain bad/UNKNOWN facts, not normalize them into success.
+        facts=family('source')
+        slot,capture,parsed,checked,wire,payload=facts[2][1]
+        original=checked['usage']['status'];checked['usage']['status']='unknown'
+        packet=capture_accounted(facts,'source',LIMITS)
+        saved=materialize_oracle(packet)['value']
+        assert saved['chains'][1][3]['usage']['status']=='unknown'
+        with pytest.raises(DomainError):dispatch._stage_usage_from_facts(facts[1][1],'source',slot,parsed,checked)
+        with pytest.raises(DomainError):dispatch._stage_usage_from_facts(saved['actual'][1],'source',slot,saved['chains'][1][2],saved['chains'][1][3])
+        checked['usage']['status']=original
+>       capture.raw_sha256='f'*64
+        ^^^^^^^^^^^^^^^^^^
+
+/tmp/sim2act-accounted-proof-20261021/test_accounted.py:281: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/pydantic/main.py:1032: in __setattr__
+    elif (setattr_handler := self._setattr_handler(name, value)) is not None:
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pydantic/main.py:1068: in _setattr_handler
+    _check_frozen(cls, name, value)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+model_cls = <class 'sim2act.production_trial_sender.Capture'>
+name = 'raw_sha256'
+value = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+    def _check_frozen(model_cls: type[BaseModel], name: str, value: Any) -> None:
+        if model_cls.model_config.get('frozen'):
+            error_type = 'frozen_instance'
+        elif getattr(model_cls.__pydantic_fields__.get(name), 'frozen', False):
+            error_type = 'frozen_field'
+        else:
+            return
+    
+>       raise ValidationError.from_exception_data(
+            model_cls.__name__, [{'type': error_type, 'loc': (name,), 'input': value}]
+        )
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for Capture
+E       raw_sha256
+E         Instance is frozen [type=frozen_instance, input_value='ffffffffffffffffffffffff...fffffffffffffffffffffff', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.12/v/frozen_instance
+
+.venv/lib/python3.12/site-packages/pydantic/main.py:89: ValidationError
+=========================== short test summary info ============================
+FAILED ../../tmp/sim2act-accounted-proof-20261021/test_accounted.py::test_complete_real_schema_owned_values_and_legacy_fingerprints[generate]
+FAILED ../../tmp/sim2act-accounted-proof-20261021/test_accounted.py::test_complete_real_schema_owned_values_and_legacy_fingerprints[source]
+FAILED ../../tmp/sim2act-accounted-proof-20261021/test_accounted.py::test_legacy_rejections_remain_and_packet_is_not_semantic_authority
+========================= 3 failed, 7 passed in 0.39s ==========================
