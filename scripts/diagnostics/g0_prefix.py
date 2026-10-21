@@ -5,7 +5,20 @@ Never call the original full PB test or its damaged-copy matrix here.
 """
 
 
-def run_prefix(root, patch, files, notify, healthy):
+def _mock_accounted_context(original, config):
+    """Explicit test selection only; not account evidence or a run grant."""
+    if config is None:
+        return original
+    from functools import partial
+
+    from sim2act._cold_accounted_native import _NativeConfig
+
+    if type(config) is not _NativeConfig:
+        raise ValueError('Exact explicit Mock accounted config required')
+    return partial(original, _mock_accounted_config=config)
+
+
+def run_prefix(root, patch, files, notify, healthy, *, _mock_accounted_config=None):
     import json
     import threading
 
@@ -54,9 +67,14 @@ def run_prefix(root, patch, files, notify, healthy):
     install_network_denials(patch, httpx, model)
     mocks = MockBudget(healthy)
     boundary = StopBoundary(DomainError, mocks, notify)
+    # Default launcher supplies None. An explicit future diagnostic must bind
+    # its finite config/mode in a new reviewed grant; this option is no grant.
     original_context = runtime._cold_model_before
+    selected_context = (None if _mock_accounted_config is None else
+                        _mock_accounted_context(original_context, _mock_accounted_config))
     patch.setattr(
-        runtime, "_cold_model_before", lambda *args: boundary.wrap(original_context, *args)
+        runtime, "_cold_model_before", lambda *args: boundary.wrap(
+            original_context, *args, _target_context=selected_context)
     )
     patch.setattr(
         runtime._ColdCommitDiagnostics,

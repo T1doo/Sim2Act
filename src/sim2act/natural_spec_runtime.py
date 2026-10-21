@@ -2458,7 +2458,9 @@ class _ColdTrialGraph:
                 from ._cold_accounted_native import _NativeCandidate
                 require(type(_accounted_candidate) is _NativeCandidate
                     and _accounted_candidate.graph is guard and _accounted_prewrite is None
-                    and _accounted_candidate.result is None and guard.phase == 'pre')
+                    and _accounted_candidate.result is None and guard.phase == 'pre'
+                    and guard.store.test_only and guard.store.sqlite,
+                    'Native accounted candidate is synthetic prewrite SQLite only')
             if _accounted_prewrite is not None:
                 from .cold_accounted import _prewrite_mode
                 _prewrite_mode(_accounted_prewrite, guard)
@@ -3015,7 +3017,7 @@ class _ColdTrialGraph:
 
 
 def _cold_model_eligible(worker, c, current):
-    """Select only this existing ordinary PB production read path; no permit."""
+    """Select the test-only production-shaped SQLite path, never live eligibility."""
     from .natural_live_admission import PBTrialContract
     from .spec_production import ProductionTrialBinding
 
@@ -3037,28 +3039,47 @@ def _cold_model_roles(worker, platform, *, first):
 
 
 @contextmanager
-def _cold_model_before(worker, c, current, inputs, platform):
-    """Only G0's original first-bound through second complete-guard interval."""
-    if not _cold_model_eligible(worker, c, current):
+def _cold_model_before(worker, c, current, inputs, platform, *, _mock_accounted_config=None):
+    """Original prewrite interval; explicit candidate is synthetic-test-only.
+
+    No Worker/default caller supplies this internal option. It confers no
+    account, software or production-environment qualification. The original
+    configured Mock fixture boundaries, when used, remain separate and visible.
+    """
+    if _mock_accounted_config is not None:
+        from ._cold_accounted_native import _NativeConfig
+        require(type(_mock_accounted_config) is _NativeConfig
+            and worker.store.test_only and worker.store.sqlite,
+            'Explicit Mock accounted selection requires test-only SQLite')
+    eligible = _cold_model_eligible(worker, c, current)
+    if _mock_accounted_config is not None:
+        require(eligible, 'Explicit Mock accounted selection requires the original PB Cold path')
+    if not eligible:
         yield None
         return
     roles = _cold_model_roles(worker, platform, first='platform')
     with _cold_graph_read(worker, c, dict(current=dict(current), call=inputs), roles, 'pre') as guard:
         completed = _cold_first_binding(worker, c, guard, current, platform)
-        trial = _ColdTrialGraph(worker, c, guard, completed=completed)
-        yield trial
-        # Only the completed second original guard can reach the write group.
-        # Capture all its original finite bounds before the final graph check.
-        key = "commit:second:trial-output"
-        record = guard.inputs.get(key)
-        require(type(record) is dict and trial.authority_record is record
-            and trial.authority_record_key == key,
-            "Complete second Cold guard required before settlement writes")
-        deadlines = record["deadlines"]
-        require(type(deadlines) is tuple and bool(deadlines)
-            and all((type(value) is int or type(value) is float)
-                and math.isfinite(value) and value > 0 for value in deadlines),
-            "Complete finite Cold settlement deadlines required")
+        with ExitStack() as candidate_scope:
+            if _mock_accounted_config is None:
+                trial = _ColdTrialGraph(worker, c, guard, completed=completed)
+            else:
+                from ._cold_accounted_native import _native_candidate
+                candidate = candidate_scope.enter_context(_native_candidate(guard, _mock_accounted_config))
+                trial = _ColdTrialGraph(worker, c, guard, completed=completed, _accounted_candidate=candidate)
+            yield trial
+            # Only the completed second original guard can reach the write group.
+            # Capture all its original finite bounds before the final graph check.
+            key = "commit:second:trial-output"
+            record = guard.inputs.get(key)
+            require(type(record) is dict and trial.authority_record is record
+                and trial.authority_record_key == key,
+                "Complete second Cold guard required before settlement writes")
+            deadlines = record["deadlines"]
+            require(type(deadlines) is tuple and bool(deadlines)
+                and all((type(value) is int or type(value) is float)
+                    and math.isfinite(value) and value > 0 for value in deadlines),
+                "Complete finite Cold settlement deadlines required")
     # Scope closure includes one last full graph hash. Read the clock after it,
     # immediately before returning to the unchanged five-write group.
     require(not worker.stop.is_set() and time.time() < min(deadlines),

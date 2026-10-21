@@ -420,7 +420,7 @@ class StopBoundary:
         self.target = (worker, run_id)
 
     @contextlib.contextmanager
-    def wrap(self, original, worker, c, current, inputs, platform):
+    def wrap(self, original, worker, c, current, inputs, platform, *, _target_context=None):
         if self.target is None or worker is not self.target[0]:
             with original(worker, c, current, inputs, platform) as value:
                 yield value
@@ -448,7 +448,10 @@ class StopBoundary:
         raw.arm_g0()
         started = self.clock()
         try:
-            with original(worker, c, current, inputs, platform) as value:
+            # Selection applies only after the original exact-target/budget
+            # checks. Generate/Source and unbound calls always use original.
+            target_context = original if _target_context is None else _target_context
+            with target_context(worker, c, current, inputs, platform) as value:
                 if value is None:
                     raise Boundary("target Cold not eligible")
                 yield value
@@ -457,11 +460,17 @@ class StopBoundary:
                 raise Boundary(
                     "G0 protection failed; original exception retained as cause"
                 ) from error
-            self.signal = G0Stop(self, "G0_ORIGINAL_REJECTION_NO_W5", error)
+            # The selected context can add candidate capacity/protocol errors.
+            # Without causal proof, never relabel those as an original refusal.
+            classification = ("G0_ORIGINAL_REJECTION_NO_W5" if _target_context is None
+                              else "UNKNOWN")
+            self.signal = G0Stop(self, classification, error)
             self.result = {
                 "classification": self.signal.classification,
                 "g0_wall_seconds": self.clock() - started,
             }
+            if _target_context is not None:
+                self.result["error_origin"] = "UNDETERMINED_ORIGINAL_OR_CANDIDATE"
             raise self.signal from error
         else:
             if getattr(raw, "g0_denied_actions", 0) or not self.mocks.healthy():
@@ -491,9 +500,10 @@ class StopBoundary:
         result = dict(self.result)
         if signal.original is not None:
             error = signal.original
-            result["original_error"] = exception_chain(error)
+            key = "selected_context" if "error_origin" in result else "original"
+            result[key + "_error"] = exception_chain(error)
             original = getattr(error, "_cold_admission_diagnostic", None)
-            result["original_diagnostic"] = original if original is not None else "NOT_REACHED"
+            result[key + "_diagnostic"] = original if original is not None else "NOT_REACHED"
         if self.instance is not None:
             result["partial"] = {
                 "stages": self.instance.stages,
