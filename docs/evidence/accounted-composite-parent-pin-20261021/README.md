@@ -55,3 +55,80 @@ Store.tx强制closed清理限制仍保留原栈，不为测试变更生产事务
 64MiB采样监测，不称native硬配额或RSS界。只到首G0，禁Cold2/W5，0真实模型／
 费用／外网业务／新增安全权限，无自动重试。完整计数、OWNED/LEGACY/UNKNOWN、
 两commit、最终期限、逻辑预算和实际清理以随后窗口原件为准。
+
+## 本次实际窗口：首次commit返回，新continuation拒绝
+
+实际执行候选 `ef040cfc780d37d4442327231d21ab500b97a661`，source/dependency摘要
+`dac37ef4adfd9832653ab9ed61d8a131117edcc3bcf17246a2f9e871661f397c`。
+与上轮完整manifest比较，恰好变化3个源文件及1个新增测试，依赖／launcher／保护／
+native核心均不变；profile仍为原f8758c85952d55e8d5ad8e257db62a20ba9cb7365deb15f94cd636da035f227f。
+实际绝对parent argv已只读保存，旧原件哈希和旧进程组均在启动前核验。
+
+| 项目 | 实际结果 |
+| --- | --- |
+| parent／child终态 | **UNKNOWN**，退出码2，business_acceptance=INTERRUPTED |
+| 交换／入口／Source同步delegate | **6 / 8 / 2**，6条实际合成wire归档 |
+| route | **OWNED**，native:issuance，diagnostic_incomplete=false |
+| launcher work wall | **341.4612587740012秒** |
+| G0 wall | **30.078201882999565秒**，带仪器，非性能验收 |
+| 首次commit | **returned=true**，记录成功原authority的11项deadline |
+| 第二次commit | 未进入；只有ordinal1记录 |
+| scope／最终期限 | original_scope_returned=false，complete=false，NOT_PROVEN |
+| 直接错误 | VERSION_CONFLICT：**Unexpected native continuation root** |
+
+此处commit为原Cold校验函数。原首次commit的期限断言曾通过，但观测器没有
+保存首次返回时间戳，不能据此声称返回时仍在lease内。本次新错误没有原admission
+diagnostic/end，不用G0 wall减30秒声称实际量得lease超时，也不推第二次或最终
+期限能够通过。保持原selected UNKNOWN分类，不宣称G0／完整PB通过。
+
+原栈明确经过 `advance_model:3680 → pa_spec_apps._cold_receipts:1669 →
+_ColdRunFacts.pin_receipt_binding:469 → _put:413 → _ColdGraphRead.add:1872 →
+_Frontier.added:384`，在两commit之间原正常回执读位置拒绝。
+runtime源码推导新增key为 `run-facts:<job-id>:receipt-binding:<len receipt proofs>`，
+value是原binding对象别名；诊断未保存实际name，不能把某个后缀当实测值。
+当前native future集合是12个固定commit／settlement根加最多2个精确Release键，
+没有这个正常惰性读根，且没有针对其新增key／浅表entry给出发行前额度见证。
+
+本轮没有追加白名单、通配前缀、删除continuation门或发行后LEGACY回退。
+最小剩余条件是证明同reader／同事务scope内的精确key和原binding关系、发行前
+额外元数据预算，保持新根完整校验、fresh codec和防重绑；不能仅加1个常量或
+放行整个run-facts前缀就声称后续receipt流程闭包。未到达后续仍未知，本片不做
+更多根迁移，不再发起窗口。
+
+### 实际分段成本和范围
+
+| 已观测阶段 | codec调用 | codec线程CPU秒 | wall秒 |
+| --- | ---: | ---: | ---: |
+| _prepare | 3590 | 9.281794468 | 14.803792279 |
+| _graph_run_context | 892 | 2.519207181 | 3.287720152 |
+| _graph_pb_accounting | 95 | 0.274048235 | 0.378141105 |
+| _graph_resolve_trial_source | 1143 | 3.295056682 | 4.410669205 |
+| _graph_pb_archive_chain | 9 | 0.025695145 | 0.032120581 |
+
+五阶段共5729次codec、3989501290累计返回字节、15.395801711线程CPU秒；两目标
+阶段共2035次／5.814263863线程CPU秒。上一窗口两目标为1510+2325=3835次，
+本次为892+1143=2035次，与局部7→1机制一致。两次不同终止点的单轮运行不是
+受控总体性能对照；不把累计返回字节当峰值内存或SHA实测量，不承诺省11秒或
+把首commit返回包装成最终验收。
+
+### 实际资源、清理和封存
+
+逻辑resident/live85803380、peak105470324、work50098473668149788430366，
+退出后active=false、resident=live=0。它们是逻辑账本，非RSS或全进程CPU界。
+磁盘6778次采样，峰logical2257144／allocated2273280字节；实际完成间隔
+min0.000172228／max0.157804755／mean0.050384992秒，约19.84718Hz。
+未触及64MiB，仍是监测预算。child报告THREADS_CLIENTS_CONNECTIONS_CLOSED，
+parent为OWNED_GROUP_EMPTY，finalization_errors=[]；另只读核launcher及child
+PID45056均结束、原PGID无成员。源摘要child前／后及parent清理后相同。
+
+Cold2／W5未到达依据原StopBoundary控制流，原字段明确不是独立W5计数器。
+0真实模型的依据是固定合成Mock归档和网络拒绝路径，diagnostic未另给独立真实
+模型counter。没有复用grant／库、重试或扩大期限／安全权限。
+
+原目录保留于
+`/tmp/sim2act-authorized-composite-g0-59ed1f1cfba542958a5e1f5c67a7e7ec/`。
+window/raw-map.json给原件大小／SHA及gzip无损封存路径；fixture.db仅原地保全
+和封存哈希，不复制Git、不续用。window/reviews为两份只读结果独审，不是新的
+运行授权；先前代码／局部证据ACK与本次未通过结果分开保存。
+测试失败原日志的行尾空白逐字节保留，Git diff-check对此有告警；源、测试和
+脚本diff-check通过，不修剪原证据来制造整树检查通过。
