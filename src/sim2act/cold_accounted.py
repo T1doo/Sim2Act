@@ -685,30 +685,70 @@ class _OwnedPrewriteMode:
                          and type(self._native) is _NativeCandidate and self._native.owned_ready is True)
             self._dynamic()
             self.__assert_links()
-            gate.require(type(facts) in (tuple, list) and len(facts) == 9 and self.complete is not None)
-            job, bound, raw, metadata, gen, _, generated, source, extraction = facts
-            self.__family_current(graph, generated, 'generate')
-            self.__family_current(graph, self.__families['generate'], 'generate')
-            self.__run_current(self.__families['generate'], gen)
-            full = self.complete
-            if full is None:
-                raise _Rejected('Complete prewrite manifest required')
-            gate.require(raw is full['generation']['raw'] and metadata is full['generation']['metadata'])
-            if bound is full['source_binding']:
-                gate.require(source is None and extraction is None)
-                self.__family_current(graph, self.__families['source'], 'source')
-                self.__run_current(self.__families['source'], job)
-            else:
-                gate.require(bound is full['binding'] and job is full['cold_job'] and extraction is not None)
-                self.__family_current(graph, source, 'source')
-                gate.require(type(extraction) is tuple and len(extraction) == 4)
-                draft, _, target, goal = extraction
-                gate.require(draft is full['extraction']['draft']
-                             and target is full['extraction']['target']
-                             and goal is full['extraction']['goal'])
+            self.__stage_current(facts)
         except BaseException:
             self.close()
             raise
+
+    def __stage_current(self, facts):
+        graph = self.graph
+        gate.require(type(facts) in (tuple, list) and len(facts) == 9 and self.complete is not None)
+        job, bound, raw, metadata, gen, _, generated, source, extraction = facts
+        self.__family_current(graph, generated, 'generate')
+        self.__family_current(graph, self.__families['generate'], 'generate')
+        self.__run_current(self.__families['generate'], gen)
+        full = self.complete
+        if full is None:
+            raise _Rejected('Complete prewrite manifest required')
+        gate.require(raw is full['generation']['raw'] and metadata is full['generation']['metadata'])
+        if bound is full['source_binding']:
+            gate.require(source is None and extraction is None)
+            self.__family_current(graph, self.__families['source'], 'source')
+            self.__run_current(self.__families['source'], job)
+        else:
+            gate.require(bound is full['binding'] and job is full['cold_job'] and extraction is not None)
+            self.__family_current(graph, source, 'source')
+            gate.require(type(extraction) is tuple and len(extraction) == 4)
+            draft, _, target, goal = extraction
+            gate.require(draft is full['extraction']['draft']
+                         and target is full['extraction']['target']
+                         and goal is full['extraction']['goal'])
+
+    def _base_parameters_current(self, graph):
+        """Pure member checks only inside _base's two full graph checks.
+
+        No result/token escapes and public readers below still self-pin.
+        The private runtime parameter collector has exactly one caller: _base.
+        """
+        from ._cold_accounted_native import _NativeCandidate
+
+        gate.require(type(self) is _OwnedPrewriteMode and graph is self.graph
+                     and type(self._native) is _NativeCandidate
+                     and self._native.graph is graph and self._native.mode is self
+                     and self._native.owned_ready is True)
+        self._dynamic()
+        self.__assert_links()
+
+    def _base_family_current(self, graph, family, role):
+        self.__family_current(graph, family, role)
+
+    def _base_stage_current(self, facts):
+        self.__stage_current(facts)
+
+    def _base_stage_models(self, models, stage_facts, inputs):
+        # Exact owned branch of the independent stage_models reader, in its
+        # original order. No new copy/view or allocation beyond its old cohort.
+        inputs = gate._trial_pure_mapping(inputs)
+        gate.require((type(stage_facts) is tuple or type(stage_facts) is list) and len(stage_facts) == 9)
+        job, bound, raw, metadata, gen, frozen, generated, source, extraction = stage_facts
+        facet = gate._trial_pure_mapping(inputs['trial-generated-model-facet'])
+        gate._graph_trial_frozen_models_from_raw(models, frozen, facet['frozen'])
+        self.__family_current(self.graph, generated, 'generate')
+        if source is not None:
+            self.__family_current(self.graph, source, 'source')
+        if extraction is not None:
+            full = gate._trial_pure_mapping(inputs['cold-trial:complete'])
+            gate._graph_trial_extraction_models_from_raw(models, extraction, full['extraction'])
 
     def assert_upstream_run(self, role, native):
         self.assert_current()

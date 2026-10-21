@@ -2511,6 +2511,16 @@ class _ColdTrialGraph:
 
         g = self.guard
         owned = getattr(self, 'accounted_prewrite', None)
+        # Sole caller is _base: its two complete CGR checks enclose this fixed
+        # pure cohort. No parameter, reentrant flag, token or cached PASS.
+        native_base = False
+        if owned is not None:
+            from ._cold_accounted_native import _NativeCandidate
+            from .cold_accounted import _OwnedPrewriteMode
+            native_base = (type(owned) is _OwnedPrewriteMode
+                and type(owned._native) is _NativeCandidate and owned._native.owned_ready is True)
+            if native_base:
+                owned._base_parameters_current(g)
         inputs = gate._trial_pure_mapping(g.inputs)
         models: list[tuple[type, object, dict]] = []
 
@@ -2529,13 +2539,19 @@ class _ColdTrialGraph:
                 gate._graph_trial_accounted_models_from_raw(models, self.source_accounted,
                     raw_slot('cold-trial:accounted-source'))
             else:
-                owned.assert_family(g, self.source_accounted, 'source')
+                if native_base:
+                    owned._base_family_current(g, self.source_accounted, 'source')
+                else:
+                    owned.assert_family(g, self.source_accounted, 'source')
         if self.generate_accounted is not None and 'cold-trial:accounted-generate' in inputs:
             if owned is None:
                 gate._graph_trial_accounted_models_from_raw(models, self.generate_accounted,
                     raw_slot('cold-trial:accounted-generate'))
             else:
-                owned.assert_family(g, self.generate_accounted, 'generate')
+                if native_base:
+                    owned._base_family_current(g, self.generate_accounted, 'generate')
+                else:
+                    owned.assert_family(g, self.generate_accounted, 'generate')
         if self.trial is not None:
             t = self.trial
             require(type(t) is _ColdBindingGraph and t.guard is g
@@ -2569,14 +2585,26 @@ class _ColdTrialGraph:
             if owned is None:
                 gate._graph_trial_stage_raw_from_raw(self.cold_stage_facts, raw_slot('cold-trial:complete'))
             else:
-                owned.assert_stage(self.cold_stage_facts)
-            gate._graph_trial_stage_models_from_raw(models, self.cold_stage_facts, inputs, **{'_owned': owned} if owned is not None else {})
+                if native_base:
+                    owned._base_stage_current(self.cold_stage_facts)
+                else:
+                    owned.assert_stage(self.cold_stage_facts)
+            if native_base and owned is not None:
+                owned._base_stage_models(models, self.cold_stage_facts, inputs)
+            else:
+                gate._graph_trial_stage_models_from_raw(models, self.cold_stage_facts, inputs, **{'_owned': owned} if owned is not None else {})
         if self.source_stage_facts is not None and 'cold-trial:complete' in inputs:
             if owned is None:
                 gate._graph_trial_stage_raw_from_raw(self.source_stage_facts, raw_slot('cold-trial:complete'))
             else:
-                owned.assert_stage(self.source_stage_facts)
-            gate._graph_trial_stage_models_from_raw(models, self.source_stage_facts, inputs, **{'_owned': owned} if owned is not None else {})
+                if native_base:
+                    owned._base_stage_current(self.source_stage_facts)
+                else:
+                    owned.assert_stage(self.source_stage_facts)
+            if native_base and owned is not None:
+                owned._base_stage_models(models, self.source_stage_facts, inputs)
+            else:
+                gate._graph_trial_stage_models_from_raw(models, self.source_stage_facts, inputs, **{'_owned': owned} if owned is not None else {})
         if self.sealed_fields is not None:
             require(self.source_proof is raw_slot('cold-trial:complete')['source_proof'])
         if 'cold-trial:admission-prefix' in inputs:
@@ -2591,6 +2619,10 @@ class _ColdTrialGraph:
         if self.context_record is not None:
             gate._trial_typed_hold(models, policy.RunCheck, self.context, self.context_record)
         gate._trial_typed_values(models)
+        if native_base and owned is not None:
+            # Stop and owned registries are not all encoded in CGR inputs.
+            # Recheck those cheap live witnesses before _base's final full pin.
+            owned._base_parameters_current(g)
 
     def _source_value(self, value):
         from . import production_trial_policy as policy

@@ -1,0 +1,13 @@
+# Base cohort end witness: incremental review
+
+No new product P1/P2 identified. Read source SHAs: cold_accounted unchanged `87b0c464866ac038140d615182d1dc552c83dd53cbf629a9bad2b4973bad017e`; runtime `d0140af82c18f1b5181e6ffa929189d7dbd9ac49431a980710792c31d62628c7`; test `8e3a9d0157ad2cca8bd10756160d4b4ee2181a8dd56a91a24da9c46f45ceacf1`. These are incremental review bytes, pending final frozen batch/evidence.
+
+The new exact-native-only second `_base_parameters_current(g)` runs after the unchanged `_trial_typed_values(models)` and before `_base`'s unchanged second full CGR check. It repeats only original cheap dynamic/link predicates, including stop state and owned registries; it adds no codec, reusable token or ambient bypass. Exact type and graph/native/mode linkage are checked again. `_base`, its final full check and exception invalidation are unchanged. Default and nonready paths do not invoke either new fixed witness.
+
+This correctly distinguishes mutable encoded frontier checks from dynamic witnesses. CGR.check itself compares stop-object identity but does not test its current flag. Therefore the injected post-typed stop is now refused by the new end witness while still inside `_base`; the original catch marks INVALID and invalidates the mode. This is not evidence that CGR's final full pin independently checks stop, or that any asynchronous stop race anywhere is eliminated. It is a fixed end-of-cohort dynamic check plus the original final complete mutable-root check.
+
+The comparison now also appends all family/run/typed-hold/typed-values observations to one ordered trace and compares it between old adapter and candidate, closing the earlier cross-category evidence wording refinement. It retains the separate category observations and original 15-versus-2 count assertion. The added real unissued/default test places a tripwire on the pure member gate and uses the original Source/Generate producers; it asserts these modes remain on the old collector path. Trial-prefix scope remains explicit: `trial=None`, complete owned two-stage cohort only, no full prepare/commit/G0.
+
+Read author-produced originals under `/tmp/sim2act-base-cohort-20261021/tests/`: initial.log has 10 passed/1 failed in 16.79 seconds, with post-typed stop refused later by original scope cleanup while Base phase remained COMPLETE. closure-dev.log and closure-dev.xml show 12 passed, zero failures/errors/skips, 16.99 seconds pytest / 16.993 seconds JUnit. Those are author tests read by the reviewer, not reviewer executions or a final broad regression batch.
+
+Reviewer product imports/tests/DB/Worker/Mock/G0/launcher executions remain zero; repository writes remain zero. No grant/window or performance qualification is created by this incremental ACK.
