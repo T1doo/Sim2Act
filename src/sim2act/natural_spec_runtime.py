@@ -30,6 +30,7 @@ from sqlalchemy.engine.cursor import CursorResultMetaData as _ColdGraphCursorMet
 from sqlalchemy.engine.result import SimpleResultMetaData as _ColdGraphSimpleMeta
 from sqlalchemy.sql.elements import quoted_name as _ColdGraphQuotedName
 
+from . import _cold_policy_segment as _policy_segments
 from . import natural_specs as codec
 from .config import Settings
 from .contracts import Limits, strict_json, validate_value
@@ -2649,6 +2650,26 @@ class _ColdTrialGraph:
         self._base()
         return result
 
+    def _requirements_value(self, user, contract, key, pin):
+        try:
+            return _policy_segments._requirements_value(user, contract, key, pin=pin)
+        except BaseException:
+            if type(self.guard) is _ColdGraphRead:
+                _ColdGraphRead.invalidate(self.guard)
+            self.phase = 'INVALID'
+            raise
+
+    def _run_check_value(self, original, expected, approval, phase, run, at,
+                         stage, run_id, version, fence, worker_id, *, pin):
+        try:
+            return _policy_segments._run_check_value(original, expected, approval, phase, run, at,
+                stage, run_id, version, fence, worker_id, pin=pin)
+        except BaseException:
+            if type(self.guard) is _ColdGraphRead:
+                _ColdGraphRead.invalidate(self.guard)
+            self.phase = 'INVALID'
+            raise
+
     def _accounted_fields(self, value):
         """Concrete complete per-aid models/rows/bytes; preserves multiplicity."""
         owned = getattr(self, 'accounted_prewrite', None)
@@ -2717,7 +2738,7 @@ class _ColdTrialGraph:
         _models: list[tuple[type, object, dict]] = []
         pin = gate._trial_typed_guard(self._base, _models)
         self.phase = 'BUILDING'
-        original, expected = policy._requirements(user, contract, key, _guard=pin)
+        original, expected = self._requirements_value(user, contract, key, pin)
         gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, gate.PBTrialContract, original)
         gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, policy.evidence.EvidenceRequirements, expected)
         pin()
@@ -2851,7 +2872,7 @@ class _ColdTrialGraph:
         user = job['principal_id']
         _models: list[tuple[type, object, dict]] = []
         pin = gate._trial_typed_guard(self.check, _models)
-        original, expected = policy._requirements(user, b.contract, b.approval_key, _guard=pin)
+        original, expected = self._requirements_value(user, b.contract, b.approval_key, pin)
         gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, gate.PBTrialContract, original)
         gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, policy.evidence.EvidenceRequirements, expected)
         pin()
@@ -2911,7 +2932,7 @@ class _ColdTrialGraph:
         pin()
         require(not self.worker.stop.is_set() and end < min(deadlines), 'Production scalar continuation expired')
         pin()
-        context = policy._run_check_from_facts(original, expected, approval, accepted.authority, actual, at, 'cold', actual['id'], job['version'], job['fence'], self.worker.id, _guard=pin)
+        context = self._run_check_value(original, expected, approval, accepted.authority, actual, at, 'cold', actual['id'], job['version'], job['fence'], self.worker.id, pin=pin)
         pin()
         return (context, source)
 
@@ -2926,7 +2947,6 @@ class _ColdTrialGraph:
         from . import natural_source_archives as archive
         from . import pa_spec_apps as spec
         from . import pa_trial_dispatch as dispatch
-        from . import production_trial_policy as policy
         from .contracts import AppManifest, FrozenRunContract
         _models: list[tuple[type, object, dict]] = []
         pin = gate._trial_typed_guard(self.check, _models)
@@ -2963,7 +2983,7 @@ class _ColdTrialGraph:
                     gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, gate.StageAuthority, phase)
                     pin()
                     require(actual['worker_id'] == self.worker.id)
-                    context = policy._run_check_from_facts(self.original, self.expected, approval, phase, actual, at, 'cold', actual['id'], actual['version'], actual['fence'], self.worker.id, _guard=pin)
+                    context = self._run_check_value(self.original, self.expected, approval, phase, actual, at, 'cold', actual['id'], actual['version'], actual['fence'], self.worker.id, pin=pin)
                     diagnostic.capture_run_context(context, actual)
                     self._context(prefix.key, context)
                     pin()
