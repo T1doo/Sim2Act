@@ -757,6 +757,7 @@ def test_forged_wrapper_nested_fields_refuse_foreign_callbacks(lifecycle):
         owned._Family(f.scope, foreign, "source"),
     ):
         assert rejects(owned._stage_usage, forged, "aid") == "VERSION_CONFLICT"
+        assert rejects(owned._source_exchange, forged, "aid") == "VERSION_CONFLICT"
     assert called == []
 
 

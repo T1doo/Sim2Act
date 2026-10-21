@@ -3,7 +3,8 @@
 Only the private graph bridge can issue after the ORIGINAL producer succeeds.
 Only explicit additive SQLite test branches import this module. Bounds must be supplied explicitly;
 their product-scale derivation and whole-consumer migration remain prerequisites
-for installation. There is no fallback, post mode, thaw, or digest-as-permission.
+for installation. The separate bounded cohort can choose legacy only before
+issuance; there is no post mode, thaw, or digest-as-permission.
 """
 
 from contextlib import contextmanager
@@ -122,6 +123,7 @@ _NESTED = {
     ("capture", "outcome"): "outcome",
 }
 _TOKENS = ("prompt_tokens", "completion_tokens", "total_tokens")
+_MISSING_ALLOCATION = object()
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,6 +209,7 @@ class _AccountedScope:
         self._graph, self._bounds, self._context = graph, bounds, context
         self._active, self._issued, self._roles = True, {}, set()
         self._prewrite_mode = None
+        self._allocation = None
         self._full_check()
         self._frame = _frame(graph)
 
@@ -240,6 +243,8 @@ class _AccountedScope:
         self._active = False
         self._issued.clear()
         self._roles.clear()
+        if self._allocation is not None:
+            self._allocation.close()
 
     def issue(self, role, state, cursor, run_id):
         """Original full producer -> owned copy -> original guard -> register.
@@ -365,6 +370,11 @@ def _source_slot(family, state, aid):
     _, chain, _ = _source_parts(family, aid)
     slots = tuple(s for s in state.slots if s.identity.attempt_id == aid)
     gate.require(len(slots) == 1 and slots[0].identity.stage == "source")
+    if family.scope._allocation is not None:
+        with _snapshot(family.scope, slots[0], typed=True) as packet:
+            gate.require(_compare(family.scope, chain.slot._node, _node(packet)),
+                         "Complete Source slot differs")
+        return
     raw = gate._trial_typed_storage(policy.Slot, slots[0])
     gate._trial_typed_values([(policy.Slot, slots[0], raw)])
     gate.require(_same_native(chain.slot, raw), "Complete Source slot differs")
@@ -396,7 +406,11 @@ class _LegacyOracle:
         gate._trial_typed_values(models)
 
     def assert_run(self, role, value):
-        gate.require(_same_native(value, dict(self.__facts[role][0])))
+        original = self.__facts[role][0]
+        if value._family.scope._allocation is not None:
+            gate.require(_same_native(value, original, _visible=True))
+        else:
+            gate.require(_same_native(value, dict(original)))
 
     def assert_stage(self, facts):
         # Reconstruct only the OLD comparison tuple from retained original
@@ -457,6 +471,7 @@ class _OwnedPrewriteMode:
         self.__inputs: dict[str, Any] = {}
         self.__families: dict[str, _Family] = {}
         self.__pending = None
+        self.__cohort_started = False
         self.inputs = MappingProxyType(self.__inputs)
         self.complete = None
         self.__oracle = _LegacyOracle(graph)
@@ -535,7 +550,8 @@ class _OwnedPrewriteMode:
             and type(record._node) is _Node
             and type(record._node.ref) is int
             and record._node.packet is packet
-            and record._node.ref == _node(packet).get("value").get("run").ref,
+            and getattr(record._node, 'allocation', _MISSING_ALLOCATION) is self.scope._allocation
+            and record._node.ref == _node(packet, self.scope._allocation).get("value").get("run").ref,
             "Logical generation Run must be the issued Generate record",
         )
 
@@ -615,6 +631,8 @@ class _OwnedPrewriteMode:
     def assert_upstream_run(self, role, native):
         self.assert_current()
         gate.require(
+            _same_native(self.__families[role].run, native, _visible=True)
+            if self.scope._allocation is not None else
             _same_native(self.__families[role].run, dict(gate._trial_pure_mapping(native))),
             "Accounted/upstream complete Run differs",
         )
@@ -673,6 +691,64 @@ class _OwnedPrewriteMode:
         self.__oracle.assert_stage(facts)
 
 
+    def _select_cohort(self, budget, state, cursor, source_id, generate_id):
+        from ._cold_accounted_budget import _Capacity
+        from .pa_trial_dispatch import _graph_stage_accounted
+
+        graph = self.graph
+        self.assert_current()
+        gate.require(not self.__cohort_started and not self.__families and self.__pending is None)
+        self.__cohort_started = True
+        source = _graph_stage_accounted(graph, graph.store, graph.connection, graph.binding,
+                                        state, cursor, source_id, 'source')
+        generated = _graph_stage_accounted(graph, graph.store, graph.connection, graph.binding,
+                                           state, cursor, generate_id, 'generate')
+        completed = {'source': source, 'generate': generated}
+        # Assertion-only legacy oracle, not a second producer or consumer source.
+        for role, facts in completed.items():
+            self.__oracle.remember(role, facts)
+        self.assert_current()
+        packets = {}
+        try:
+            # Fixed routing administration precedes this data ledger. Reserve
+            # owned registry/view scaffolding only after original failures have
+            # had their normal opportunity, and before any data construction.
+            budget.reserve('resident', 65536)
+            for role, facts in completed.items():
+                packet, _ = _capture_bounded(facts, role, self.scope._context, budget)
+                with budget.snapshot(graph.inputs['cold-trial:accounted-' + role]) as expected:
+                    gate.require(budget.equal(_node(packet).get('value'), _node(expected)),
+                                 'Bounded copy differs from original complete producer')
+                packets[role] = packet
+            self.assert_current()
+        except _Capacity:
+            # Capacity must never hide drift/cycle/nonfinite/original validation
+            # errors in parts of the raw graph not reached before an early stop.
+            self.assert_current()
+            packets.clear()
+            budget.close()
+            result = _Cohort('LEGACY', source, generated, None, budget, self)
+        else:
+            # Selection is final before the first handle. Any subsequent failure
+            # closes both roles; it is deliberately OUTSIDE the fallback catch.
+            self.scope._allocation = budget
+            budget.on_failure = self.close
+            for role in ('source', 'generate'):
+                handle = _Handle()
+                self.scope._issued[handle] = role, packets[role]
+                self.scope._roles.add(role)
+                family = _Family(self.scope, handle, role)
+                self.__families[role] = family
+                self.__inputs['cold-trial:accounted-' + role] = family
+            for family in self.__families.values():
+                _associations(family)
+            self.assert_current()
+            result = _Cohort('OWNED', self.__families['source'],
+                             self.__families['generate'], self, budget, self)
+        return result
+
+
+
 def _prewrite_mode(value, graph):
     gate.require(type(value) is _OwnedPrewriteMode and value.graph is graph)
     value.assert_current()
@@ -687,6 +763,80 @@ def _owned_prewrite(graph, bounds):
         mode.assert_current()
     finally:
         mode.close()
+
+
+def _capture_bounded(facts, role, context, ledger):
+    """Copy directly from raw storage; all new allocations have prior reservations."""
+    gate.require(type(facts) is tuple and len(facts) == 4)
+    run, actual, chains, reads = facts
+    count = 2 if role == 'source' else 3
+    gate.require(type(actual) is tuple and type(chains) is tuple and type(reads) is tuple
+                 and len(actual) == len(chains) == count
+                 and len(reads) == (2 if role == 'source' else 0))
+    with ledger.projection() as p:
+        # Fixed 3/2-chain envelope, labels, sidecar wrappers and list/tuple overlap.
+        # This reservation precedes even the small generated wrapper allocations.
+        p.alloc(65536)
+        copied_run = p.row(run, ('run',), _FIELDS['run'])
+        copied_actual = tuple(p.row(row, ('actual', i), _FIELDS['attempt'])
+                              for i, row in enumerate(actual))
+        copied_chains = []
+        for i, chain in enumerate(chains):
+            gate.require(type(chain) is tuple and len(chain) == 6)
+            slot, capture, parsed, checked, wire, body = chain
+            gate.require(type(slot) is policy.Slot and type(capture) is sender.Capture
+                         and type(wire) is bytes and type(body) is bytes)
+            copied_chains.append((p.copy(slot, typed=True), p.copy(capture, typed=True), p.copy(parsed),
+                                  p.row(checked, ('checked', i), _FIELDS['attempt']),
+                                  p.copy(wire), p.copy(body)))
+        copied_reads = []
+        for read in reads:
+            gate.require(type(read) is tuple and len(read) == 5)
+            aid, request, wire, response, body = read
+            gate.require(type(request) is archive.BodyArchive and type(response) is archive.BodyArchive
+                         and type(aid) is str and type(wire) is bytes and type(body) is bytes)
+            copied_reads.append(tuple(p.copy(v, typed=type(v) is archive.BodyArchive) for v in read))
+        prepared = dict(schema='accounted-family.pre.bounded.v2', role=role,
+                        phase='pre', mode=context.mode,
+                        value=dict(run=copied_run, actual=copied_actual,
+                                   chains=tuple(copied_chains), ns_reads=tuple(copied_reads)),
+                        row_storage=tuple(p.sidecars))
+        return ledger.encode(prepared, p, resident=True)
+
+
+@dataclass(frozen=True, slots=True)
+class _Cohort:
+    route: str
+    source: Any
+    generated: Any
+    mode: Any
+    ledger: Any
+    _probe: _OwnedPrewriteMode
+
+    def assert_current(self):
+        self._probe.assert_current()
+
+
+@contextmanager
+def _bounded_cohort(graph, bounds, limits, state, cursor, source_id, generate_id):
+    """Explicit SQLite core test entry. Never installed in native _prepare.
+
+    Original reads/guards happen once per role. Only a private capacity signal
+    before issuance can choose legacy. No catch surrounds installation/yield.
+    """
+    from ._cold_accounted_budget import _Ledger
+
+    budget = _Ledger(bounds, limits)
+    mode = None
+    try:
+        mode = _OwnedPrewriteMode(graph, bounds)
+        result = mode._select_cohort(budget, state, cursor, source_id, generate_id)
+        yield result
+        result.assert_current()
+    finally:
+        if mode is not None:
+            mode.close()
+        budget.close()
 
 
 def _fixed(expected, value, schema):
@@ -799,7 +949,8 @@ class _Value:
         gate.require(
             self._node.packet is packet
             and type(self._node.ref) is int
-            and 0 <= self._node.ref < len(packet.nodes),
+            and 0 <= self._node.ref < len(packet.nodes)
+            and getattr(self._node, 'allocation', _MISSING_ALLOCATION) is self._family.scope._allocation,
             "Accounted view is not from its issued packet",
         )
 
@@ -875,7 +1026,7 @@ class _Family:
             and self.scope._issued[self.handle][0] == self.role,
             "Unissued accounted family",
         )
-        return _node(self.scope._issued[self.handle][1]).get("value")
+        return _node(self.scope._issued[self.handle][1], self.scope._allocation).get("value")
 
     @property
     def run(self):
@@ -923,14 +1074,38 @@ def _same(left, right):
     gate.require(type(left) in (_Value, _Record) and type(right) in (_Value, _Record))
     left._check()
     right._check()
-    return _equal(left._node, right._node)
+    return _compare(left._family.scope, left._node, right._node)
 
 
-def _same_native(value, native):
+def _same_native(value, native, *, _visible=False):
     if type(value) not in (_Value, _Record):
         return False
     value._check()
-    return _equal(value._node, _node(_freeze(native, value._family.scope._bounds)))
+    with _snapshot(value._family.scope, native, visible=_visible) as packet:
+        return _compare(value._family.scope, value._node, _node(packet))
+
+
+@contextmanager
+def _snapshot(scope, value, *, visible=False, typed=False):
+    if scope._allocation is None:
+        yield _freeze(value, scope._bounds)
+    else:
+        try:
+            with scope._allocation.snapshot(value, visible=visible, typed=typed) as packet:
+                yield packet
+        except BaseException:
+            scope._prewrite_mode.close()
+            raise
+
+
+def _compare(scope, left, right):
+    if scope._allocation is None:
+        return _equal(left, right)
+    try:
+        return scope._allocation.equal(left, right)
+    except BaseException:
+        scope._prewrite_mode.close()
+        raise
 
 
 def _scalar_same(left, right):
@@ -1089,6 +1264,21 @@ class _Canonical:
 
 
 def _source_exchange(family, aid):
+    gate.require(type(family) is _Family)
+    gate.require(type(family.scope) is _AccountedScope and type(family.role) is str)
+    ledger = family.scope._allocation
+    if ledger is not None:
+        _, _, read = _source_parts(family, aid)
+        try:
+            with ledger.source_json(len(read.wire) + len(read.payload)):
+                return _source_exchange_value(family, aid)
+        except BaseException:
+            family.scope._prewrite_mode.close()
+            raise
+    return _source_exchange_value(family, aid)
+
+
+def _source_exchange_value(family, aid):
     row, chain, read = _source_parts(family, aid)
     request, response, wire, received = read.request, read.response, read.wire, read.payload
     raw = strict_json(received, archive.MAX_BODY_BYTES)
@@ -1138,6 +1328,16 @@ def _archive_chain(family, state, resolved):
         and family.scope._context.mode == "controller"
         and type(resolved) is archive.ResolvedSourceArchive
     )
+    if family.scope._allocation is not None:
+        # ResolvedSourceArchive is a fixed dataclass. Only these already-public
+        # fields entered this comparison before; no new origin schema is made.
+        with _snapshot(family.scope, state, typed=True) as ledger, _snapshot(
+            family.scope, dict(receipt=resolved.public_receipt,
+                               requests=resolved.request_bodies,
+                               responses=resolved.response_bodies)
+        ) as root:
+            allocation = family.scope._allocation
+            return _archive_chain_nodes(family, _node(ledger, allocation), _node(root, allocation))
     state_raw = gate._trial_typed_storage(policy.Ledger, state)
     gate._trial_typed_values([(policy.Ledger, state, state_raw)])
     bound = family.scope._bounds
@@ -1152,6 +1352,10 @@ def _archive_chain(family, state, resolved):
             bound,
         )
     )
+    return _archive_chain_nodes(family, ledger, root)
+
+
+def _archive_chain_nodes(family, ledger, root):
     receipt = root.get("receipt")
     slots = tuple(
         n
@@ -1171,7 +1375,7 @@ def _archive_chain(family, state, resolved):
         row, chain, _ = _source_parts(family, aid)
         identity, capture = chain.slot.identity, chain.capture
         gate.require(
-            _equal(chain.slot._node, slot)
+            _compare(family.scope, chain.slot._node, slot)
             and any(_same(chain.checked, a) for a in family.actual)
             and row.run_id == identity.run_id == family.run.id
             and identity.attempt_id == aid

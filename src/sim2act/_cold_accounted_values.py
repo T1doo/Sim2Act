@@ -167,6 +167,7 @@ def _freeze(value, bounds):
 class _Node:
     packet: _Packet
     ref: int
+    allocation: Any = None
 
     def __post_init__(self):
         if not (
@@ -176,6 +177,10 @@ class _Node:
             and 0 <= self.ref < len(self.packet.nodes)
         ):
             raise _Rejected("admitted packet and exact node reference required")
+        if self.allocation is not None:
+            from ._cold_accounted_budget import _Ledger
+            if type(self.allocation) is not _Ledger:
+                raise _Rejected("exact allocation ledger required")
 
     def __eq__(self, other):
         raise TypeError("Use explicit domain comparison, not node equality")
@@ -191,32 +196,65 @@ class _Node:
         tag, value = self.packet.nodes[self.ref]
         if tag in ("dict", "list", "tuple", "row"):
             raise _Rejected("scalar required")
+        if self.allocation is not None:
+            if type(value) is str or type(value) is bytes:
+                self.allocation.spend(8 * len(value))
+            elif type(value) is int:
+                self.allocation.spend(1 + value.bit_length() // 8)
         return float.fromhex(value) if tag == "float" else value
 
     def items(self):
         if self.tag != "dict":
             raise _Rejected("mapping required")
+        if self.allocation is not None:
+            body = self.packet.nodes[self.ref][1]
+            self.allocation.spend(8 * len(body))
+            for key, _ in body:
+                self.allocation.spend(8 * len(self.packet.nodes[key][1]) * (len(body) + 1))
+            self.allocation.view(256 * len(body))
         return tuple(
-            (_Node(self.packet, k).scalar(), _Node(self.packet, v))
+            (_node_ref(self.packet, k, self.allocation).scalar(),
+             _node_ref(self.packet, v, self.allocation))
             for k, v in self.packet.nodes[self.ref][1]
         )
 
     def get(self, name):
         if type(name) is not str:
             raise _Rejected("exact field name required")
+        if self.allocation is not None and self.tag == 'dict':
+            body = self.packet.nodes[self.ref][1]
+            self.allocation.spend(8 * len(body))
+            for key, _ in body:
+                self.allocation.spend(4 * (len(name) + len(self.packet.nodes[key][1])))
         for key, value in self.items():
             if key == name:
                 return value
+        if self.allocation is not None:
+            raise _Rejected("missing complete budgeted field")
         raise _Rejected("missing complete field: " + name)
 
     def sequence(self):
         if self.tag not in ("list", "tuple"):
             raise _Rejected("sequence required")
-        return tuple(_Node(self.packet, ref) for ref in self.packet.nodes[self.ref][1])
+        if self.allocation is not None:
+            size = len(self.packet.nodes[self.ref][1])
+            self.allocation.spend(4 * size)
+            self.allocation.view(128 * size)
+        return tuple(_node_ref(self.packet, ref, self.allocation)
+                     for ref in self.packet.nodes[self.ref][1])
 
 
-def _node(packet):
-    return _Node(packet, packet.root)
+def _node_ref(packet, ref, allocation=None):
+    if allocation is not None:
+        from ._cold_accounted_budget import _Ledger
+        if type(allocation) is not _Ledger:
+            raise _Rejected("exact allocation ledger required")
+        allocation.view(128)
+    return _Node(packet, ref, allocation)
+
+
+def _node(packet, allocation=None):
+    return _node_ref(packet, packet.root, allocation)
 
 
 def _equal(left, right):

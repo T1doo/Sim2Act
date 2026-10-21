@@ -795,7 +795,7 @@ def seed_cold(f):
 
 
 @contextmanager
-def segment(f, c, phase="pre", *, prewrite=False):
+def segment(f, c, phase="pre", *, prewrite=False, cohort=None):
     inputs = {"synthetic-offline-integration": True}
     roles = dict.fromkeys(("source", "generate", "platform", "trial", "per_use"))
     with (
@@ -807,10 +807,17 @@ def segment(f, c, phase="pre", *, prewrite=False):
         # Finite fixture allowance only, not a general production bound.
         size = len(WIRE.read_bytes()) * 4
         fixture_bounds = _Bounds(size, size * 2, size, size * 4, size * 16)
+        selected = None
         mode = (
             stack.enter_context(owned._owned_prewrite(graph, fixture_bounds)) if prewrite else None
         )
-        if mode is not None:
+        if cohort is not None:
+            bounds, limits = cohort
+            selected = stack.enter_context(owned._bounded_cohort(
+                graph, bounds, limits, state, cursor, f.source_id, f.gen_id
+            ))
+            source, generated, mode = selected.source, selected.generated, selected.mode
+        elif mode is not None:
             source = dispatch._graph_stage_accounted(
                 graph, f.store, c, f.binding, state, cursor, f.source_id, "source", _owned=mode
             )
@@ -884,7 +891,7 @@ def segment(f, c, phase="pre", *, prewrite=False):
             mode.scope
             if mode is not None
             else owned._scope_for_graph(graph, bounds)
-            if phase == "pre"
+            if phase == "pre" and selected is None
             else None
         )
         if mode is not None:
@@ -909,6 +916,7 @@ def segment(f, c, phase="pre", *, prewrite=False):
                 f=f,
                 mode=mode,
                 cold_stage=cold_stage,
+                cohort=selected,
             )
         finally:
             if scope is not None and mode is None:
