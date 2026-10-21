@@ -764,9 +764,15 @@ class _OwnedPrewriteMode:
             # Fixed routing administration precedes this data ledger. Reserve
             # owned registry/view scaffolding only after original failures have
             # had their normal opportunity, and before any data construction.
+            if native is not None:
+                native.observe(phase='capture:scaffolding')
             budget.reserve('resident', 65536)
             for role, facts in completed.items():
+                if native is not None:
+                    native.observe(phase='capture:', role=role)
                 packet, _ = _capture_bounded(facts, role, self.scope._context, budget)
+                if native is not None:
+                    native.observe(phase='compare:', role=role)
                 with budget.snapshot(graph.inputs['cold-trial:accounted-' + role]) as expected:
                     gate.require(budget.equal(_node(packet).get('value'), _node(expected)),
                                  'Bounded copy differs from original complete producer')
@@ -775,16 +781,20 @@ class _OwnedPrewriteMode:
             if native is not None:
                 native.qualify(self, packets, budget)
             self.assert_current()
-        except _Capacity:
+        except _Capacity as error:
             # Capacity must never hide drift/cycle/nonfinite/original validation
             # errors in parts of the raw graph not reached before an early stop.
             self.assert_current()
+            if native is not None:
+                native.observe(route='LEGACY', error=error, ledger=budget)
             packets.clear()
             budget.close()
             result = _Cohort('LEGACY', source, generated, None, budget, self)
         else:
             # Selection is final before the first handle. Any subsequent failure
             # closes both roles; it is deliberately OUTSIDE the fallback catch.
+            if native is not None:
+                native.observe(phase='native:issuance')
             self.scope._allocation = budget
             budget.on_failure = self.close
             for role in ('source', 'generate'):
@@ -799,6 +809,8 @@ class _OwnedPrewriteMode:
             for family in self.__families.values():
                 _associations(family)
             self.assert_current()
+            if native is not None:
+                native.observe(route='OWNED', ledger=budget)
             result = _Cohort('OWNED', self.__families['source'],
                              self.__families['generate'], self, budget, self)
         return result

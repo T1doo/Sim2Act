@@ -1,0 +1,33 @@
+# Explicit launcher profile and metadata — design review
+
+2026-10-21. Independent read-only design analysis. No repository edits, product import, code/test/database execution, Worker, Mock, G0, launch directory or grant creation. Result: **CONDITIONALLY_ACCEPTABLE_DESIGN_ONLY_NOT_LAUNCH_OR_FROZEN_CODE_ACK**.
+
+## Profile and work formula
+
+The proposed exact profile has per-projected-value Bounds(nodes=60000, edges=120000, depth=128, leaf_bytes=8 MiB, encoded_bytes=64 MiB), logical resident=512 MiB, peak=1 GiB and integer_bits=16000. These are explicit experimental logical allocation/work counters, not process RSS, heap, DB decoding, SQL result materialization or CPU limits. Existing parent wall/disk/Mock/owned-group protection remains separately necessary and unchanged.
+
+`_Arena.classify` in `_cold_accounted_native.py:130–137` computes one charge from both packets: `8*(n+e+leaf+1)**4`, where n, e and leaf are sums across Source and Generate. Therefore N=2*nodes, E=2*edges, B=2*encoded_bytes is the correct profile aggregate for that charge. If work is `2 * 8*(N+E+B+1)**4`, state both factors in the frozen formula and bind the computed exact integer, avoiding ambiguous “8... with twice margin”. The encoded budget is already the complete byte upper bound; do not substitute only leaf_bytes or a single-family B.
+
+This directly bounds the classifier charge and leaves another such amount as configured headroom. It does not, by itself, prove the sum of every other charge is below that headroom. `_Ledger` also charges bounded capture and expected snapshots, visible upstream snapshots, full remaining-root sizing, RowMapping hidden safe-index scans/hash work, temporary encoding, arena views/canonical parse and prepaid continuation work. In particular ignored foreign index entries are counted before copying and their number need not be bounded by visible packet N/E/B (`_cold_accounted_budget.py:411–418`). Any claim of total guaranteed work headroom needs a separate accounting inequality over those charges; otherwise this is a finite selection limit, with normal conservative Capacity behavior.
+
+The resident value likewise does not guarantee OWNED for every value admitted by the per-value Bounds: arena allocation alone reserves `65536+8192*n+1024*e` across both packets, which can exceed 512 MiB at the profile extrema. This is acceptable as a conservative experimental profile if described honestly. Capacity before issue can choose LEGACY only through the existing full-guard catch; after issue remains close-and-reject, with no fallback. Keep nonfinite/cycle/mutation/original errors outside Capacity fallback.
+
+## Launcher configuration binding
+
+`--candidate` should be a selector for a single frozen supported mode/profile, not an arbitrary numeric input. Default describe/execution and default child call remain unselected. Include a versioned mode, exact named Bounds/Limits, aggregate inputs, formula/version and computed work in description; preserve source/dependency hash binding. A grant must exactly match that complete selected description. An old grant cannot acquire the candidate by an extra CLI flag or child inference.
+
+Child reconstructs only the known mode from the frozen description through explicit exact-key/type/value validation, then constructs `_Bounds`, `_Limits` and `_NativeConfig`. Reject unknown modes, extra/missing fields, bool-as-int or nonpositive values, inconsistent formula/results and mode/CLI/description mismatch before prefix work. Ordinary Python `==` alone is insufficient for typed numeric validation because bool equals 0/1. A plain stored description/grant pair is not permission to accept arbitrary mode payload. Parent and child must agree on the selected flag/profile; do not let an explicit child flag bypass the parent exact description or consumed grant checks.
+
+No grant is created or execution authorized by implementing/reading describe. No public/environment/Worker activation is implied. `--candidate` does not satisfy the original account or production-environment gates, and does not hide the original three configured test substitutions.
+
+## Non-authoritative metadata
+
+Candidate phase/route/reason/budget metadata may consist only of a bounded fixed record of enums and exact primitive counters/snapshots: no original raw values, Nodes, graph/Store/connection/model objects, IDs, account or prompt content. Never insert metadata into `guard.inputs`, role limits, persisted evidence/authority inputs or native continuity keys. No callbacks, SQL, model_dump or extra full checks should be added for observation.
+
+Capture a Capacity reason and current numeric ledger counters before `_select_completed` closes/refunds the ledger; otherwise the reported resident/live values describe cleanup rather than selection. Distinguish phase NOT_REACHED / STAGED / SELECTING / LEGACY or OWNED / CLOSED, as actually observed; never infer OWNED from staging. Keep original exception identity and close/fallback order. Observation failure may mark diagnostics incomplete/UNKNOWN but must not change the original route, hide the original exception or return a permit. Preserve the selected-context DomainError=>UNKNOWN rule; metadata is not causal proof that an error is original business rejection.
+
+For two target commits, a diagnostics wrapper can record entry and successful return separately and copy only the already-produced authority deadline tuple at the point it is available. A first commit return is not G0 completion. Preserve original second complete proof, candidate exit, original graph final full check/invalidation and final stop/time check. Only complete normal return from the original `_cold_model_before` context can feed the existing completed/no-W5 stop branch. Errors from either commit or either scope stay UNKNOWN on selected paths. Do not reconstruct unavailable finite/end/stop values or retrospectively apply a recorded authority as current permission.
+
+## Minimum local verification scope
+
+Pure description/grant/profile conversion checks should cover default identity, candidate exact round-trip, old/foreign/extra/missing/bool/inconsistent mode rejection and child selection binding without launching a prefix. Pure/lifecycle stand-in tests can check pre-close budget snapshots, capacity route reasons, metadata absence from guard inputs, observer failure isolation, two commit return markers versus scope closure, and unchanged selected UNKNOWN classification. These establish only configuration and observation plumbing; actual G0, performance, account reachability and native selection remain unverified. No additional execution window is approved by this review.

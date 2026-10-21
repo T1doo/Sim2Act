@@ -5,7 +5,119 @@ Never call the original full PB test or its damaged-copy matrix here.
 """
 
 
-def _mock_accounted_context(original, config):
+class CandidateObservation:
+    """Target-local scalar evidence; never validation, authority or a replay."""
+
+    def __init__(self):
+        self.trial = None
+        self.commits = []
+        self.scope_returned = False
+        self.valid = True
+
+    def context(self, original, *args, **kwargs):
+        from contextlib import contextmanager
+
+        @contextmanager
+        def observe():
+            with original(*args, **kwargs) as trial:
+                try:
+                    self.trial = trial
+                except Exception:
+                    self.valid = False
+                yield trial
+            # Set only after the ORIGINAL context's final hash and stop/clock.
+            self.scope_returned = True
+        return observe()
+
+    def wrap_commit(self, original):
+        def observed(trial, prefix):
+            if trial is not self.trial:
+                return original(trial, prefix)
+            record = None
+            try:
+                if len(self.commits) >= 2:
+                    self.valid = False
+                else:
+                    record = dict(ordinal=len(self.commits) + 1, returned=False, deadlines=None)
+                    self.commits.append(record)
+            except Exception:
+                self.valid = False
+            try:
+                result = original(trial, prefix)
+            except BaseException as error:
+                try:
+                    if record is not None:
+                        record['error_type'] = type(error).__name__
+                except Exception:
+                    self.valid = False
+                raise
+            else:
+                try:
+                    import math
+
+                    if record is None:
+                        self.valid = False
+                        return result
+                    record['returned'] = True
+                    expected = ('commit:first', 'commit:second')[record['ordinal'] - 1]
+                    # Read only the successful original output, never rerun a check.
+                    output = trial.authority_record
+                    deadlines = output.get('deadlines') if type(output) is dict else None
+                    if (prefix.key != expected or trial.authority_record_key != expected + ':trial-output'
+                            or type(deadlines) is not tuple or not deadlines
+                            or not all(type(v) in (int, float) and math.isfinite(v) and v > 0 for v in deadlines)):
+                        self.valid = False
+                    else:
+                        record['deadlines'] = tuple(deadlines)
+                except Exception:
+                    self.valid = False
+                return result
+        return observed
+
+    def report(self):
+        try:
+            return self._report()
+        except Exception:
+            self.valid = False
+            return dict(selection=dict(route='UNKNOWN', phase='UNKNOWN', diagnostic_incomplete=True),
+                        commits=(), complete=False, diagnostic_incomplete=True,
+                        trace_valid=False, original_scope_returned=False,
+                        both_commits_returned=False, final_deadlines=None,
+                        final_deadline_check='NOT_PROVEN')
+
+    def _report(self):
+        selection = dict(route='NOT_REACHED', phase='NOT_REACHED', reason=None, budget=None)
+        if self.trial is not None and self.trial.accounted_candidate is not None:
+            selection = self.trial.accounted_candidate.selection_record()
+        incomplete = selection.get('diagnostic_incomplete', False)
+        complete = (self.valid and not incomplete and self.scope_returned and len(self.commits) == 2
+                    and all(r['returned'] and r['deadlines'] for r in self.commits))
+        return dict(selection=selection, commits=tuple(dict(r) for r in self.commits),
+                    original_scope_returned=self.scope_returned, trace_valid=self.valid,
+                    diagnostic_incomplete=not self.valid or incomplete,
+                    both_commits_returned=len(self.commits) == 2 and all(r['returned'] for r in self.commits),
+                    complete=bool(complete),
+                    deadline_basis='successful_original_authority_record_deadlines',
+                    final_deadlines=self.commits[-1]['deadlines'] if complete else None,
+                    final_deadline_check='PASSED_BY_ORIGINAL_CONTEXT_RETURN' if complete else 'NOT_PROVEN')
+
+
+def record_candidate(diagnostic, observation):
+    try:
+        report = observation.report()
+        diagnostic['candidate'] = report
+        if diagnostic['classification'] == 'G0_COMPLETED_NO_W5':
+            route = report['selection']['route']
+            if not report['complete'] or route not in ('OWNED', 'LEGACY'):
+                diagnostic['classification'] = 'UNKNOWN'
+            elif route == 'LEGACY':
+                diagnostic['classification'] = 'G0_COMPLETED_LEGACY_NO_W5'
+    except Exception as error:
+        diagnostic['classification'] = 'UNKNOWN'
+        diagnostic['candidate'] = dict(diagnostic_incomplete=True, error_type=type(error).__name__)
+
+
+def _mock_accounted_context(original, config, observation=None):
     """Explicit test selection only; not account evidence or a run grant."""
     if config is None:
         return original
@@ -15,6 +127,8 @@ def _mock_accounted_context(original, config):
 
     if type(config) is not _NativeConfig:
         raise ValueError('Exact explicit Mock accounted config required')
+    if observation is not None:
+        return partial(observation.context, original, _mock_accounted_config=config)
     return partial(original, _mock_accounted_config=config)
 
 
@@ -70,8 +184,11 @@ def run_prefix(root, patch, files, notify, healthy, *, _mock_accounted_config=No
     # Default launcher supplies None. An explicit future diagnostic must bind
     # its finite config/mode in a new reviewed grant; this option is no grant.
     original_context = runtime._cold_model_before
+    observation = None if _mock_accounted_config is None else CandidateObservation()
     selected_context = (None if _mock_accounted_config is None else
-                        _mock_accounted_context(original_context, _mock_accounted_config))
+                        _mock_accounted_context(original_context, _mock_accounted_config, observation))
+    if observation is not None:
+        patch.setattr(runtime._ColdTrialGraph, 'commit', observation.wrap_commit(runtime._ColdTrialGraph.commit))
     patch.setattr(
         runtime, "_cold_model_before", lambda *args: boundary.wrap(
             original_context, *args, _target_context=selected_context)
@@ -278,6 +395,8 @@ def run_prefix(root, patch, files, notify, healthy, *, _mock_accounted_config=No
         except G0Stop as stop:
             diagnostic = boundary.diagnostic(stop)
             diagnostic["stage_observer"] = observer.report()
+            if observation is not None:
+                record_candidate(diagnostic, observation)
             # Preserve the original refusal before any client/heartbeat cleanup
             # can independently fail; never truncate or overwrite this record.
             files.writer("diagnostic.json").json(
@@ -295,8 +414,7 @@ def run_prefix(root, patch, files, notify, healthy, *, _mock_accounted_config=No
                 incomplete=boundary.instance.incomplete,
             )
         )
-        files.writer("diagnostic.json").json(
-            dict(
+        failed = dict(
                 event="failure_before_cleanup",
                 classification="UNKNOWN",
                 error_chain=exception_chain(error),
@@ -306,7 +424,9 @@ def run_prefix(root, patch, files, notify, healthy, *, _mock_accounted_config=No
                 mock_methods=mocks.methods,
                 stage_observer=observer.report(),
             )
-        )
+        if observation is not None:
+            failed['candidate'] = observation.report()
+        files.writer("diagnostic.json").json(failed)
         raise
     finally:
         if fixture is not None:

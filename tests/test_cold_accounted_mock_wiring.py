@@ -196,7 +196,9 @@ def test_prefix_selects_exact_private_config_without_grant_or_default_activation
     tree = ast.parse((ROOT / 'scripts/diagnostics/g0_bounded.py').read_text())
     calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
              and isinstance(n.func, ast.Name) and n.func.id == 'run_prefix']
-    assert len(calls) == 1 and not calls[0].keywords
+    assert len(calls) == 1 and [k.arg for k in calls[0].keywords] == ['_mock_accounted_config']
+    assert isinstance(calls[0].keywords[0].value, ast.Call)
+    assert calls[0].keywords[0].value.func.id == 'candidate_config'
     tree = ast.parse((ROOT / 'src/sim2act/natural_spec_runtime.py').read_text())
     post = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_model_settlement_read')
     ctors = [n for n in ast.walk(post) if isinstance(n, ast.Call)

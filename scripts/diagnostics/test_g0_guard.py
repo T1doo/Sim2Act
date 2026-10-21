@@ -678,6 +678,71 @@ assert native.g0_open_handles()==0
 assert not any(k=="sim2act" or k.startswith("sim2act.") for k in sys.modules)
 """)
 
+    def test_monitored_child_io_same_interpreter_without_vfs(self):
+        # Required current monitored path, independent of the optional VFS ABI.
+        code = """
+import pathlib,sqlite3,_sqlite3,sys,io,socket,subprocess
+from g0_guard import install_child_io,Files,Boundary
+root=pathlib.Path(sys.argv[1]);db=root/'fixture.db';files=Files(root)
+class Patch:
+    def setattr(self,owner,name,value): setattr(owner,name,value)
+install_child_io(Patch(),files,db)
+c=sqlite3.connect(str(db));c.execute('create table t(x)');c.execute('insert into t values(1)');c.commit()
+alias=_sqlite3.connect(str(db));alias.close()
+for callback in (lambda:sqlite3.connect('file:'+str(db)+'?vfs=unix',uri=True),
+                 lambda:io.FileIO(root/'extra','w'),
+                 lambda:open(root/'.env','r'),
+                 lambda:socket.getaddrinfo('example.invalid',443),
+                 lambda:subprocess.Popen(['never-start-this-child'])):
+    try: callback()
+    except Boundary: pass
+    else: raise AssertionError('required entry boundary accepted')
+with socket.socket() as s:
+    try: s.connect(('127.0.0.1',9))
+    except Boundary: pass
+    else: raise AssertionError('network audit accepted connect')
+try: c.execute('attach "'+str(root/'other')+'" as other')
+except sqlite3.DatabaseError: pass
+else: raise AssertionError('ATTACH accepted')
+c.execute('update t set x=2');c.rollback()  # Cache the exact SQL before arm.
+c.arm_g0()
+for sql in ('update t set x=2','insert into t values(3)','create table forbidden(x)'):
+    try: sqlite3.Connection.execute(c,sql)
+    except sqlite3.DatabaseError: pass
+    else: raise AssertionError('direct/cached write accepted')
+assert c.execute('select x from t').fetchone()==(1,)
+c.rollback();c.close();files.close()
+assert not any(k=='sim2act' or k.startswith('sim2act.') for k in sys.modules)
+print('REQUIRED_MONITORED_IO_PROTECTIONS_PASSED')
+"""
+        with tempfile.TemporaryDirectory(prefix='g0-required-io-unit-') as root:
+            result = subprocess.run([sys.executable, '-B', '-c', code, root],
+                env={**os.environ, 'PYTHONPATH': str(Path(__file__).parent)},
+                capture_output=True, timeout=20)
+            self.assertEqual(result.returncode, 0, result.stderr.decode())
+            self.assertIn(b'REQUIRED_MONITORED_IO_PROTECTIONS_PASSED', result.stdout)
+
+    def test_raw_dbapi_alias_aborts_its_own_child_without_continuation(self):
+        code = """
+import pathlib,sqlite3,_sqlite3,sys
+from g0_guard import install_child_io,Files
+root=pathlib.Path(sys.argv[1]);db=root/'fixture.db';raw_alias=_sqlite3.connect
+files=Files(root)
+class Patch:
+    def setattr(self,owner,name,value): setattr(owner,name,value)
+install_child_io(Patch(),files,db)
+assert not any(k=='sim2act' or k.startswith('sim2act.') for k in sys.modules)
+raw_alias(str(db))  # Deliberately uncaught: half-initialized handle ends child.
+print('RAW_ALIAS_CONTINUED')
+"""
+        with tempfile.TemporaryDirectory(prefix='g0-raw-alias-unit-') as root:
+            result = subprocess.run([sys.executable, '-B', '-c', code, root],
+                env={**os.environ, 'PYTHONPATH': str(Path(__file__).parent)},
+                capture_output=True, timeout=20)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(b'unprotected DBAPI connection alias', result.stderr)
+            self.assertNotIn(b'RAW_ALIAS_CONTINUED', result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

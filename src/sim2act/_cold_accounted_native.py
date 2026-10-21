@@ -413,6 +413,40 @@ class _NativeCandidate:
         self.completed, self.mode, self.result = {}, None, None
         self.upstreams = None
         self.owned_ready = False
+        # Scalar diagnostic state only; never a pin, authority or routing input.
+        self.qualification_phase = 'NOT_STARTED'
+        self.selection: dict[str, Any] = dict(route='NOT_SELECTED', reason=None, budget=None)
+        self.diagnostic_ledger: Any = None
+        self.diagnostic_incomplete = False
+
+    def observe(self, *, phase=None, role=None, route=None, error=None, ledger=None):
+        """Ordinary observation faults never change routing/cleanup or an error."""
+        try:
+            if phase is not None:
+                self.qualification_phase = phase if role is None else phase + role
+            if route is not None:
+                self.selection = dict(route=route,
+                    reason=error.reason if isinstance(error, _Capacity) else None,
+                    error_type=None if error is None else type(error).__name__,
+                    budget=self.budget_record(ledger))
+        except Exception:
+            self.diagnostic_incomplete = True
+
+    def budget_record(self, ledger):
+        return dict(resident=ledger.resident, live=ledger.live, peak=ledger.peak,
+                    work=ledger.work, active=ledger.active)
+
+    def selection_record(self):
+        try:
+            result = dict(self.selection, phase=self.qualification_phase)
+            if self.diagnostic_ledger is not None:
+                result['after_scope'] = self.budget_record(self.diagnostic_ledger)
+            result['diagnostic_incomplete'] = self.diagnostic_incomplete
+            return result
+        except Exception:
+            self.diagnostic_incomplete = True
+            return dict(route='UNKNOWN', phase='UNKNOWN', reason=None,
+                        diagnostic_incomplete=True)
 
     def stage(self, role, facts):
         self.graph.check(self.graph.store, self.graph.connection)
@@ -423,6 +457,7 @@ class _NativeCandidate:
     def choose(self, state, *, upstreams=None):
         gate.require(self.result is None and tuple(self.completed) == ('source', 'generate'))
         ledger = _Ledger(self.config.bounds, self.config.limits)
+        self.diagnostic_ledger = ledger
         mode = o._OwnedPrewriteMode(self.graph, self.config.bounds)
         self.mode = mode
         mode._native = self
@@ -431,23 +466,31 @@ class _NativeCandidate:
         try:
             self.result = mode._select_completed(ledger, self.completed, native=self)
             return self.result
-        except BaseException:
-            mode.close()
-            ledger.close()
+        except BaseException as error:
+            try:
+                self.observe(route='ERROR', error=error, ledger=ledger)
+            finally:
+                try:
+                    mode.close()
+                finally:
+                    ledger.close()
             raise
 
     def qualify(self, mode, packets, ledger):
+        self.observe(phase='native:representation')
         if (not all(type(k) is str for k in self.graph.inputs)
                 or 'cold-trial:complete' in self.graph.inputs):
             raise _Unsupported('native_root_representation')
         # Ledger is fixed typed and retains its old full dynamic typed guards.
         # Its entire extent, including non-Source slots, must fit before issue.
+        self.observe(phase='native:ledger')
         with ledger.snapshot(self.state, typed=True) as state_packet:
             self.ledger_nodes, self.ledger_edges = len(state_packet.nodes), state_packet.edges
             del state_packet
         if self.upstreams is not None:
             gate.require(type(self.upstreams) is tuple and len(self.upstreams) == 2)
             for role, value in zip(('source', 'generate'), self.upstreams, strict=True):
+                self.observe(phase='native:upstream:', role=role)
                 with ledger.snapshot(value, visible=True) as raw:
                     expected = o._node(packets[role]).get('value').get('run')
                     gate.require(ledger.equal(expected, o._node(raw)), 'Full upstream Run differs')
@@ -455,6 +498,7 @@ class _NativeCandidate:
         ticket = ledger.reserve()
         sizing = copied = header = bound = release = None
         try:
+            self.observe(phase='native:frontier-sizing')
             sizing = _SizingProjection(ledger, ticket)
             copied = sizing.copy(self.graph.inputs, typed=True)
             sizing.copy(self.graph.binding.contract, typed=True)
@@ -486,6 +530,7 @@ class _NativeCandidate:
             # Drop every data-dependent temporary before refunding its ticket.
             sizing = copied = header = bound = release = None
             ticket.close()
+        self.observe(phase='native:arena')
         self.arena = _Arena(ledger, packets)
         # A Slot contains only fixed models and scalar leaves. The conservative
         # full key/value tree is 1+2*5 + (1+2*15) + (1+2*6) = 55 nodes.
@@ -497,15 +542,18 @@ class _NativeCandidate:
         receipt_nodes = 1 + 2 * 18 + 1 + 2 * (1 + 2 * 7) + 2 * 3
         self.text_limit = self.frontier_metrics['leaf'] + sum(len(p.encoded) for p in packets.values()) + 1024
         self.continuation_units = 2 * 1024 * (4 * slot_nodes**2 + receipt_nodes + self.ledger_nodes + 64)
+        self.observe(phase='native:continuation-budget')
         ledger.reserve('resident', self.continuation_units)
         ledger.spend(2 * (4 * slot_nodes**2 + receipt_nodes + self.ledger_edges + 64) * (8 * self.text_limit + 64))
         size = sum(len(chain[4]) + len(chain[5]) for chain in self.completed['source'][2])
         # Both Source strict-json/canonical/usage trees overlap with fixed
         # immutable accessor initialization. Prepay both, never reuse a promise.
+        self.observe(phase='native:source-budget')
         ledger.reserve('resident', 2 * (1024 * size + 65536))
         ledger.spend(2 * (64 * size + 65536))
         self.raw = {role: self.graph.inputs['cold-trial:accounted-' + role]
                     for role in ('source', 'generate')}
+        self.observe(phase='native:classify')
         self.arena.classify(packets)
         ledger._native_arena = self.arena
 

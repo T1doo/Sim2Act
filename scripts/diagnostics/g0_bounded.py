@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import selectors
 import signal
@@ -39,7 +40,92 @@ def git(*args):
     return subprocess.check_output(["git", "-C", str(REPO), *args], text=True).strip()
 
 
-def describe():
+def canonical(value):
+    try:
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    except (TypeError, ValueError):
+        raise Boundary("noncanonical frozen data") from None
+
+
+def candidate_profile():
+    """One finite diagnostic domain, not production/RSS/CPU qualification."""
+    bounds = dict(nodes=60000, edges=120000, depth=128,
+                  leaf_bytes=8 * MIB, encoded_bytes=64 * MIB)
+    # Bounds apply per packet. _Arena.classify charges the SUM of both families.
+    aggregate = {k: 2 * bounds[k] for k in ("nodes", "edges", "encoded_bytes")}
+    classify = 8 * (sum(aggregate.values()) + 1) ** 4
+    return dict(mode="EXPLICIT_SYNTHETIC_NATIVE_ACCOUNTED_V1", bounds=bounds,
+                limits=dict(resident=512 * MIB, peak=1024 * MIB,
+                            work=2 * classify, integer_bits=16000),
+                work_derivation=dict(packet_count=2, aggregate=aggregate,
+                    classify_upper=classify, additional_fuel=classify,
+                    formula="8*(sum_nodes+sum_edges+sum_encoded_bytes+1)^4",
+                    claim="logical fuel only; does not guarantee OWNED or total CPU/RSS"))
+
+
+def protection_profile():
+    import sqlite3
+
+    if not (sys.implementation.name == "cpython" and callable(getattr(sys, "addaudithook", None))
+            and callable(getattr(sqlite3.Connection, "set_authorizer", None))
+            and callable(getattr(os, "killpg", None))
+            and Path("/proc/self/fd").is_dir()):
+        raise Boundary("required audit/SQLite-authorizer/owned-process protections unavailable")
+    return dict(disk="SAMPLED_BUDGET_NOT_HARD_QUOTA", native_vfs_required=False,
+                required="audit+guarded DBAPI+read-only authorizer+network denials+owned cleanup",
+                installation_failure="STOP_BEFORE_PREFIX", cpu_rss_bound=False)
+
+
+def candidate_config(description):
+    if "candidate_profile" not in description:
+        if "candidate_profile_sha256" in description or description.get("scope") != SCOPE:
+            raise Boundary("incomplete candidate selection")
+        return None
+    supplied = description["candidate_profile"]
+    expected = candidate_profile()
+    if (description.get("scope") != SCOPE + "-native-accounted-v1"
+            or canonical(supplied) != canonical(expected)
+            or description.get("candidate_profile_sha256") != hashlib.sha256(canonical(expected).encode()).hexdigest()):
+        raise Boundary("candidate config differs from frozen profile")
+    # Called in the already guarded child; describe/grant validation import no product.
+    from sim2act._cold_accounted_budget import _Limits
+    from sim2act._cold_accounted_native import _NativeConfig
+    from sim2act._cold_accounted_values import _Bounds
+
+    return _NativeConfig(_Bounds(**expected["bounds"]), _Limits(**expected["limits"]))
+
+
+def candidate_completion(summary, classification):
+    """A successful diagnostic needs OWNED plus BOTH original commits/scope.
+
+    LEGACY completion is separately identified, never candidate qualification.
+    These copied scalars do not authorize writes or recheck/extend any deadline.
+    """
+    expected = {"G0_COMPLETED_NO_W5": "OWNED", "G0_COMPLETED_LEGACY_NO_W5": "LEGACY"}
+    if classification not in expected or type(summary) is not dict:
+        return False
+    commits = summary.get("commits")
+    return (summary.get("complete") is True and summary.get("trace_valid") is True
+        and summary.get("diagnostic_incomplete") is False
+        and summary.get("original_scope_returned") is True
+        and summary.get("both_commits_returned") is True
+        and summary.get("final_deadline_check") == "PASSED_BY_ORIGINAL_CONTEXT_RETURN"
+        and type(summary.get("selection")) is dict
+        and summary["selection"].get("route") == expected[classification]
+        and type(commits) is list and len(commits) == 2
+        and all(type(r) is dict and r.get("returned") is True
+                and type(r.get("ordinal")) is int and r["ordinal"] == i
+                for i, r in enumerate(commits, 1))
+        and type(summary.get("final_deadlines")) is list and bool(summary["final_deadlines"])
+        and all(type(v) in (int, float) and math.isfinite(v) and v > 0 for v in summary["final_deadlines"])
+        and summary["final_deadlines"] == commits[1].get("deadlines")
+        and type(summary["selection"].get("after_scope")) is dict
+        and summary["selection"]["after_scope"].get("active") is False
+        and summary["selection"]["after_scope"].get("live") == 0
+        and summary["selection"]["after_scope"].get("resident") == 0)
+
+
+def describe(*, candidate=False):
     if sys.platform != "linux" or sys.version_info[:2] != (3, 12) or sys.flags.optimize:
         raise Boundary("only reviewed Linux CPython 3.12 without optimization")
     if git("branch", "--show-current") != "dev/production-trial-stages-20261018" or git(
@@ -68,7 +154,7 @@ def describe():
     ]
     manifest = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
     digest = hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()
-    return dict(
+    description = dict(
         scope=SCOPE,
         head=git("rev-parse", "HEAD"),
         limits=LIMITS,
@@ -76,14 +162,20 @@ def describe():
         source_manifest_sha256=digest,
         sqlite_version=sqlite3.sqlite_version,
         source_manifest=manifest,
+        protections=protection_profile(),
     )
+    if candidate:
+        profile = candidate_profile()
+        description.update(scope=SCOPE + "-native-accounted-v1", candidate_profile=profile,
+                           candidate_profile_sha256=hashlib.sha256(canonical(profile).encode()).hexdigest())
+    return description
 
 
 def validate_grant(grant, description, now):
     expected = {k: v for k, v in description.items() if k != "source_manifest"}
     if set(grant) != set(expected) | {"expires_at", "grant_id"}:
         raise Boundary("exact grant fields required")
-    if any(grant[k] != v for k, v in expected.items()):
+    if any(canonical(grant[k]) != canonical(v) for k, v in expected.items()):
         raise Boundary("grant does not match frozen code/dependency/limits")
     identifier = grant["grant_id"]
     if (
@@ -208,6 +300,8 @@ def validate_child_parent(root, control_fd):
         raise Boundary("child requires fresh parent-only output set")
     description = json.loads((root / "source-manifest.json").read_text())
     validate_grant(grant, description, time.time())
+    if description.get("protections") != protection_profile():
+        raise Boundary("required protection contract changed")
     return description, verify_sources(description)
 
 
@@ -226,7 +320,8 @@ def child(root, control_fd):
             g0_guard.install_child_io(patch, files, root / "fixture.db")
             from g0_prefix import run_prefix
 
-            result = run_prefix(root, patch, files, control.json, lambda: True)
+            result = run_prefix(root, patch, files, control.json, lambda: True,
+                                _mock_accounted_config=candidate_config(description))
         result["cleanup"] = "THREADS_CLIENTS_CONNECTIONS_CLOSED"
         result["source_digest_before"] = before_digest
         result["source_digest_after"] = verify_sources(description)
@@ -242,15 +337,18 @@ def child(root, control_fd):
         }
     try:
         files.writer("diagnostic.json").json({"event": "child_final", **result})
-        control.json({"event": "finished", "classification": result["classification"]})
+        finished = {"event": "finished", "classification": result["classification"]}
+        if "candidate_profile" in description:
+            finished["candidate"] = result.get("candidate")
+        control.json(finished)
     finally:
         files.close()
         control.stream.close()
     return 0 if result["classification"].startswith("G0_") else 2
 
 
-def execute(grant_path, output_parent):
-    description = describe()
+def execute(grant_path, output_parent, *, candidate=False):
+    description = describe(candidate=candidate)
     grant_path = Path(grant_path).resolve(strict=True)
     if grant_path.stat().st_size > 16384:
         raise Boundary("grant too large")
@@ -284,10 +382,13 @@ def execute(grant_path, output_parent):
     selector = None
     receipt = {
         "classification": "UNKNOWN",
-        "scope": SCOPE,
+        "scope": description["scope"],
         "head": description["head"],
         "limits": LIMITS,
     }
+    if candidate:
+        receipt.update(candidate_profile=description["candidate_profile"],
+                       candidate_profile_sha256=description["candidate_profile_sha256"])
     try:
         process = subprocess.Popen(
             [sys.executable, "-B", __file__, "--child", str(root), str(write_fd)],
@@ -330,12 +431,15 @@ def execute(grant_path, output_parent):
                             pass  # Already retained verbatim in bounded control.jsonl.
                         elif message.get("event") == "finished" and finished is None:
                             finished = message["classification"]
+                            if candidate:
+                                receipt["candidate"] = message.get("candidate")
                         else:
                             raise Boundary("unexpected control event")
         if (
             pending
             or process.wait(timeout=max(0.001, budget.deadline - time.monotonic())) != 0
-            or finished not in {"G0_ORIGINAL_REJECTION_NO_W5", "G0_COMPLETED_NO_W5"}
+            or (not candidate and finished not in {"G0_ORIGINAL_REJECTION_NO_W5", "G0_COMPLETED_NO_W5"})
+            or (candidate and not candidate_completion(receipt.get("candidate"), finished))
             or budget.g0_at is None
         ):
             raise Boundary("child incomplete or unknown")
@@ -436,17 +540,20 @@ def execute(grant_path, output_parent):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--describe", action="store_true")
+    parser.add_argument("--candidate", action="store_true", help="explicit frozen synthetic candidate, no grant implied")
     parser.add_argument("--execute-grant")
     parser.add_argument("--output-parent")
     parser.add_argument("--child", nargs=2, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.child:
+        if args.candidate:
+            parser.error("child selection comes only from consumed exact description")
         return child(Path(args.child[0]), int(args.child[1]))
     if args.describe and not args.execute_grant:
-        print(json.dumps(describe(), ensure_ascii=False, indent=2))
+        print(json.dumps(describe(candidate=args.candidate), ensure_ascii=False, indent=2))
         return 0
     if args.execute_grant and args.output_parent and not args.describe:
-        return execute(args.execute_grant, args.output_parent)
+        return execute(args.execute_grant, args.output_parent, candidate=args.candidate)
     parser.error(
         "read-only --describe, or a separately authorized exact --execute-grant is required"
     )
