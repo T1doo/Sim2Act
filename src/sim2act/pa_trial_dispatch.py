@@ -1674,23 +1674,28 @@ def _graph_pb_archive_chain(graph, store, c, b, state, resolved, source_facts):
         gate._graph_trial_journal_models(graph, store, c, _models, state)
         gate._graph_trial_accounted_models(graph, store, c, _models, source_facts, 'source')
         _guard()
-        receipt = resolved.public_receipt
-        source, actual, chains, ns_reads = source_facts
-        slots = [s for s in state.slots if s.identity.stage == 'source']
-        gate.require(gate._trial_result(_production_binding(b), _guard) and (not state.halted) and (len(slots) == len(receipt['attempts']) == len(chains) == len(ns_reads) == 2) and (receipt['verification'] == 'SPEC_PRODUCTION_CONTROLLER_ARCHIVE') and (receipt['live_allowed'] is False) and (receipt['source_run_id'] == source['id']))
-        for slot, proof in gate._trial_result(zip(slots, receipt['attempts'], strict=True), _guard):
-            matching = tuple((chain for chain in chains if chain[3]['id'] == proof['attempt_id']))
-            gate.require(len(matching) == 1)
-            linked, capture, parsed, checked, wire, payload = matching[0]
-            gate.require(linked == slot and checked in actual and (slot.identity.run_id == source['id']) and (slot.identity.attempt_id == proof['attempt_id']) and (slot.identity.wire_sha256 == proof['request_sha256']) and (slot.identity.wire_bytes == proof['request_bytes']) and (capture.raw_sha256 == proof['decoded_body_sha256']) and (capture.raw_bytes == proof['decoded_body_bytes']) and (capture.canonical_sha256 == proof['canonical_ascii_sha256']) and (capture.canonical_ascii_bytes == proof['canonical_ascii_bytes']))
-            index = receipt['attempts'].index(proof)
-            gate.require(resolved.request_bodies[index] == wire and resolved.response_bodies[index] == payload)
+        _archive_chain_from_facts(b, state, resolved, source_facts, _guard=_guard)
         _guard()
     except BaseException:
         from .natural_spec_runtime import _ColdGraphRead
         if type(graph) is _ColdGraphRead:
             _ColdGraphRead.invalidate(graph)
         raise
+
+
+def _archive_chain_from_facts(b, state, resolved, source_facts, *, _guard=None):
+    """Original pure archive-family comparison; caller keeps every outer gate."""
+    receipt = resolved.public_receipt
+    source, actual, chains, ns_reads = source_facts
+    slots = [s for s in state.slots if s.identity.stage == 'source']
+    gate.require(gate._trial_result(_production_binding(b), _guard) and (not state.halted) and (len(slots) == len(receipt['attempts']) == len(chains) == len(ns_reads) == 2) and (receipt['verification'] == 'SPEC_PRODUCTION_CONTROLLER_ARCHIVE') and (receipt['live_allowed'] is False) and (receipt['source_run_id'] == source['id']))
+    for slot, proof in gate._trial_result(zip(slots, receipt['attempts'], strict=True), _guard):
+        matching = tuple((chain for chain in chains if chain[3]['id'] == proof['attempt_id']))
+        gate.require(len(matching) == 1)
+        linked, capture, parsed, checked, wire, payload = matching[0]
+        gate.require(linked == slot and checked in actual and (slot.identity.run_id == source['id']) and (slot.identity.attempt_id == proof['attempt_id']) and (slot.identity.wire_sha256 == proof['request_sha256']) and (slot.identity.wire_bytes == proof['request_bytes']) and (capture.raw_sha256 == proof['decoded_body_sha256']) and (capture.raw_bytes == proof['decoded_body_bytes']) and (capture.canonical_sha256 == proof['canonical_ascii_sha256']) and (capture.canonical_ascii_bytes == proof['canonical_ascii_bytes']))
+        index = receipt['attempts'].index(proof)
+        gate.require(resolved.request_bodies[index] == wire and resolved.response_bodies[index] == payload)
 
 
 def _journal_capture_from_facts(slot, capture, payload, *, _guard=None):

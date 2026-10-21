@@ -1,0 +1,811 @@
+I001 [*] Import block is un-sorted or un-formatted
+  --> src/sim2act/_cold_accounted_values.py:6:1
+   |
+ 4 |   product defaults or authorization. There is deliberately no thaw/materializer.
+ 5 |   """
+ 6 | / import base64
+ 7 | | import hashlib
+ 8 | | import json
+ 9 | | import math
+10 | | from typing import NamedTuple
+11 | |
+12 | | from sqlalchemy.engine import RowMapping
+13 | | from sqlalchemy.sql.elements import quoted_name
+14 | | from sim2act.errors import DomainError
+15 | | from sim2act.natural_spec_runtime import _cold_graph_row_storage
+   | |________________________________________________________________^
+   |
+help: Organize imports
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> src/sim2act/cold_accounted.py:8:1
+   |
+ 6 |   for installation. There is no fallback, post mode, thaw, or digest-as-permission.
+ 7 |   """
+ 8 | / from dataclasses import dataclass
+ 9 | | from threading import get_ident
+10 | |
+11 | | from sqlalchemy.engine import RowMapping
+12 | |
+13 | | from . import natural_live_admission as gate
+14 | | from . import natural_source_archives as archive
+15 | | from . import production_trial_policy as policy
+16 | | from . import production_trial_sender as sender
+17 | | from ._cold_accounted_values import _Bounds, _Node, _Rejected, _equal, _freeze, _node
+18 | | from .contracts import strict_json
+19 | | from .goal_applications import response_archive
+20 | | from .model import normalize_usage
+   | |__________________________________^
+21 |
+22 |   _SCHEMA = 'accounted-family.pre.v1'
+   |
+help: Organize imports
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> tests/test_cold_accounted_component.py:7:1
+   |
+ 5 |   and a stubbed producer/full-check, never a completed original graph/DB proof.
+ 6 |   """
+ 7 | / import base64
+ 8 | | import copy
+ 9 | | import hashlib
+10 | | import json
+11 | | from pathlib import Path
+12 | | from threading import get_ident
+13 | | from types import SimpleNamespace
+14 | |
+15 | | import pytest
+16 | | from sqlalchemy.engine import RowMapping
+17 | | from sqlalchemy.engine.result import SimpleResultMetaData
+18 | |
+19 | | from sim2act import cold_accounted as owned
+20 | | from sim2act import natural_live_admission as gate
+21 | | from sim2act import natural_source_archives as archive
+22 | | from sim2act import natural_spec_runtime as runtime
+23 | | from sim2act import pa_trial_dispatch as dispatch
+24 | | from sim2act import pb_natural_specs as pb
+25 | | from sim2act import production_trial_policy as policy
+26 | | from sim2act import production_trial_sender as sender
+27 | | from sim2act._cold_accounted_values import _Bounds, _Node, _equal, _freeze, _node
+28 | | from sim2act.contracts import strict_json
+29 | | from sim2act.db import runs, attempts, fingerprint
+30 | | from sim2act.errors import DomainError
+31 | | from sim2act.goal_applications import response_archive
+32 | | from sim2act.model import normalize_usage
+33 | | from sim2act.spec_production import ProductionTrialBinding
+   | |__________________________________________________________^
+34 |
+35 |   REPO = Path('/workspace/Sim2Act')
+   |
+help: Organize imports
+
+F401 [*] `sim2act.natural_live_admission` imported but unused
+  --> tests/test_cold_accounted_component.py:20:47
+   |
+19 | from sim2act import cold_accounted as owned
+20 | from sim2act import natural_live_admission as gate
+   |                                               ^^^^
+21 | from sim2act import natural_source_archives as archive
+22 | from sim2act import natural_spec_runtime as runtime
+   |
+help: Remove unused import: `sim2act.natural_live_admission`
+
+F401 [*] `sim2act._cold_accounted_values._Node` imported but unused
+  --> tests/test_cold_accounted_component.py:27:53
+   |
+25 | from sim2act import production_trial_policy as policy
+26 | from sim2act import production_trial_sender as sender
+27 | from sim2act._cold_accounted_values import _Bounds, _Node, _equal, _freeze, _node
+   |                                                     ^^^^^
+28 | from sim2act.contracts import strict_json
+29 | from sim2act.db import runs, attempts, fingerprint
+   |
+help: Remove unused import: `sim2act._cold_accounted_values._Node`
+
+E731 Do not assign a `lambda` expression, use a `def`
+  --> tests/test_cold_accounted_component.py:39:1
+   |
+37 | # Explicit test limits ONLY, never a product default/admission qualification.
+38 | LIMITS = _Bounds(20000, 50000, 128, 4 * 1024 * 1024, 8 * 1024 * 1024)
+39 | sha = lambda body: hashlib.sha256(body).hexdigest()
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: Rewrite `sha` as a `def`
+
+B007 Loop control variable `actual` not used within loop body
+   --> tests/test_cold_accounted_component.py:156:9
+    |
+155 | def controller(facts):
+156 |     for actual,chain in zip(facts[1],facts[2],strict=True):
+    |         ^^^^^^
+157 |         chain[0].settlement.__dict__['response_sha256']=sha(chain[5])
+158 |         chain[1].outcome.__dict__['response_sha256']=sha(chain[5])
+    |
+help: Rename unused `actual` to `_actual`
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:160:14
+    |
+158 |         chain[1].outcome.__dict__['response_sha256']=sha(chain[5])
+159 |         chain[1].__dict__['provenance']='SPEC_PRODUCTION_CONTROLLER'
+160 |     actual=[];chains=[]
+    |              ^
+161 |     for a,chain in zip(facts[1],facts[2],strict=True):
+162 |         actual.append(native_row(dict(a,mode='LIVE')))
+    |
+
+B007 Loop control variable `aid` not used within loop body
+   --> tests/test_cold_accounted_component.py:165:9
+    |
+163 |         s,c,p,checked,w,b=chain
+164 |         chains.append((s,c,p,native_row(dict(checked,mode='LIVE')),w,b))
+165 |     for aid,q,w,r,b in facts[3]:
+    |         ^^^
+166 |         q.__dict__['provenance']=r.__dict__['provenance']='SPEC_PRODUCTION_CONTROLLER'
+167 |     return facts[0],actual,tuple(chains),facts[3]
+    |
+help: Rename unused `aid` to `_aid`
+
+B007 Loop control variable `w` not used within loop body
+   --> tests/test_cold_accounted_component.py:165:15
+    |
+163 |         s,c,p,checked,w,b=chain
+164 |         chains.append((s,c,p,native_row(dict(checked,mode='LIVE')),w,b))
+165 |     for aid,q,w,r,b in facts[3]:
+    |               ^
+166 |         q.__dict__['provenance']=r.__dict__['provenance']='SPEC_PRODUCTION_CONTROLLER'
+167 |     return facts[0],actual,tuple(chains),facts[3]
+    |
+help: Rename unused `w` to `_w`
+
+B007 Loop control variable `b` not used within loop body
+   --> tests/test_cold_accounted_component.py:165:19
+    |
+163 |         s,c,p,checked,w,b=chain
+164 |         chains.append((s,c,p,native_row(dict(checked,mode='LIVE')),w,b))
+165 |     for aid,q,w,r,b in facts[3]:
+    |                   ^
+166 |         q.__dict__['provenance']=r.__dict__['provenance']='SPEC_PRODUCTION_CONTROLLER'
+167 |     return facts[0],actual,tuple(chains),facts[3]
+    |
+help: Rename unused `b` to `_b`
+
+B007 Loop control variable `s` not used within loop body
+   --> tests/test_cold_accounted_component.py:182:9
+    |
+180 | def resolved(facts):
+181 |     proofs=[]
+182 |     for s,c,p,a,w,b in facts[2]:
+    |         ^
+183 |         proofs.append(dict(attempt_id=a['id'],request_sha256=sha(w),request_bytes=len(w),
+184 |             decoded_body_sha256=sha(b),decoded_body_bytes=len(b),
+    |
+help: Rename unused `s` to `_s`
+
+B007 Loop control variable `p` not used within loop body
+   --> tests/test_cold_accounted_component.py:182:13
+    |
+180 | def resolved(facts):
+181 |     proofs=[]
+182 |     for s,c,p,a,w,b in facts[2]:
+    |             ^
+183 |         proofs.append(dict(attempt_id=a['id'],request_sha256=sha(w),request_bytes=len(w),
+184 |             decoded_body_sha256=sha(b),decoded_body_bytes=len(b),
+    |
+help: Rename unused `p` to `_p`
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:201:45
+    |
+200 | def rejects(call):
+201 |     with pytest.raises(DomainError) as error:call()
+    |                                             ^
+202 |     return error.value.code
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:206:29
+    |
+205 | def test_issuer_order_registration_original_pin_and_no_runtime_callers(lifecycle,monkeypatch):
+206 |     facts=family('generate');scope,g=lifecycle(facts)
+    |                             ^
+207 |     original=owned._capture
+208 |     def observed(*args):
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:235:24
+    |
+233 |     f,scope,g,_=issued(lifecycle)
+234 |     record=f.chains[1].slot.identity
+235 |     if change=='closed':scope.close()
+    |                        ^
+236 |     elif change=='scope':g.scope[0]=object()
+237 |     elif change=='transaction':g.transaction=object()
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:236:25
+    |
+234 |     record=f.chains[1].slot.identity
+235 |     if change=='closed':scope.close()
+236 |     elif change=='scope':g.scope[0]=object()
+    |                         ^
+237 |     elif change=='transaction':g.transaction=object()
+238 |     elif change=='source_token':g.connection.info['pb_source_reads']=object()
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:237:31
+    |
+235 |     if change=='closed':scope.close()
+236 |     elif change=='scope':g.scope[0]=object()
+237 |     elif change=='transaction':g.transaction=object()
+    |                               ^
+238 |     elif change=='source_token':g.connection.info['pb_source_reads']=object()
+239 |     elif change=='write_epoch':g.connection.info['source_proof_write_epoch']=1
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:238:32
+    |
+236 |     elif change=='scope':g.scope[0]=object()
+237 |     elif change=='transaction':g.transaction=object()
+238 |     elif change=='source_token':g.connection.info['pb_source_reads']=object()
+    |                                ^
+239 |     elif change=='write_epoch':g.connection.info['source_proof_write_epoch']=1
+240 |     elif change=='write_count':g.driver.total_changes=1
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:239:31
+    |
+237 |     elif change=='transaction':g.transaction=object()
+238 |     elif change=='source_token':g.connection.info['pb_source_reads']=object()
+239 |     elif change=='write_epoch':g.connection.info['source_proof_write_epoch']=1
+    |                               ^
+240 |     elif change=='write_count':g.driver.total_changes=1
+241 |     elif change=='raw_commit':g.driver.in_transaction=False
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:240:31
+    |
+238 |     elif change=='source_token':g.connection.info['pb_source_reads']=object()
+239 |     elif change=='write_epoch':g.connection.info['source_proof_write_epoch']=1
+240 |     elif change=='write_count':g.driver.total_changes=1
+    |                               ^
+241 |     elif change=='raw_commit':g.driver.in_transaction=False
+242 |     elif change=='phase':g.phase='post'
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:241:30
+    |
+239 |     elif change=='write_epoch':g.connection.info['source_proof_write_epoch']=1
+240 |     elif change=='write_count':g.driver.total_changes=1
+241 |     elif change=='raw_commit':g.driver.in_transaction=False
+    |                              ^
+242 |     elif change=='phase':g.phase='post'
+243 |     elif change=='binding':g.binding=object()
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:242:25
+    |
+240 |     elif change=='write_count':g.driver.total_changes=1
+241 |     elif change=='raw_commit':g.driver.in_transaction=False
+242 |     elif change=='phase':g.phase='post'
+    |                         ^
+243 |     elif change=='binding':g.binding=object()
+244 |     elif change=='thread':g.thread+=1
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:243:27
+    |
+241 |     elif change=='raw_commit':g.driver.in_transaction=False
+242 |     elif change=='phase':g.phase='post'
+243 |     elif change=='binding':g.binding=object()
+    |                           ^
+244 |     elif change=='thread':g.thread+=1
+245 |     else:monkeypatch.setattr(owned,'_SCHEMA','different-schema')
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:244:26
+    |
+242 |     elif change=='phase':g.phase='post'
+243 |     elif change=='binding':g.binding=object()
+244 |     elif change=='thread':g.thread+=1
+    |                          ^
+245 |     else:monkeypatch.setattr(owned,'_SCHEMA','different-schema')
+246 |     assert rejects(lambda:scope.read(f.handle,'source'))=='VERSION_CONFLICT'
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:245:9
+    |
+243 |     elif change=='binding':g.binding=object()
+244 |     elif change=='thread':g.thread+=1
+245 |     else:monkeypatch.setattr(owned,'_SCHEMA','different-schema')
+    |         ^
+246 |     assert rejects(lambda:scope.read(f.handle,'source'))=='VERSION_CONFLICT'
+247 |     assert rejects(lambda:record.attempt_id)=='VERSION_CONFLICT'
+    |
+
+B023 Function definition does not bind loop variable `handle`
+   --> tests/test_cold_accounted_component.py:254:42
+    |
+252 |     other,_,_,_=issued(lifecycle)
+253 |     for handle,role in ((owned._Handle(),'source'),(other.handle,'source'),(f.handle,'generate')):
+254 |         assert rejects(lambda:scope.read(handle,role))=='VERSION_CONFLICT'
+    |                                          ^^^^^^
+255 |     with pytest.raises((AttributeError,TypeError)):f.run._node=_node(_freeze({},LIMITS))
+256 |     with pytest.raises(TypeError):bool(f.chains[0].slot==f.chains[0].slot)
+    |
+
+B023 Function definition does not bind loop variable `role`
+   --> tests/test_cold_accounted_component.py:254:49
+    |
+252 |     other,_,_,_=issued(lifecycle)
+253 |     for handle,role in ((owned._Handle(),'source'),(other.handle,'source'),(f.handle,'generate')):
+254 |         assert rejects(lambda:scope.read(handle,role))=='VERSION_CONFLICT'
+    |                                                 ^^^^
+255 |     with pytest.raises((AttributeError,TypeError)):f.run._node=_node(_freeze({},LIMITS))
+256 |     with pytest.raises(TypeError):bool(f.chains[0].slot==f.chains[0].slot)
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:255:51
+    |
+253 |     for handle,role in ((owned._Handle(),'source'),(other.handle,'source'),(f.handle,'generate')):
+254 |         assert rejects(lambda:scope.read(handle,role))=='VERSION_CONFLICT'
+255 |     with pytest.raises((AttributeError,TypeError)):f.run._node=_node(_freeze({},LIMITS))
+    |                                                   ^
+256 |     with pytest.raises(TypeError):bool(f.chains[0].slot==f.chains[0].slot)
+257 |     with pytest.raises(TypeError):bool(f.run._node!=f.run._node)
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:256:34
+    |
+254 |         assert rejects(lambda:scope.read(handle,role))=='VERSION_CONFLICT'
+255 |     with pytest.raises((AttributeError,TypeError)):f.run._node=_node(_freeze({},LIMITS))
+256 |     with pytest.raises(TypeError):bool(f.chains[0].slot==f.chains[0].slot)
+    |                                  ^
+257 |     with pytest.raises(TypeError):bool(f.run._node!=f.run._node)
+258 |     forged=owned._Record(f,_node(_freeze({'id':'fake'},LIMITS)),'run')
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:257:34
+    |
+255 |     with pytest.raises((AttributeError,TypeError)):f.run._node=_node(_freeze({},LIMITS))
+256 |     with pytest.raises(TypeError):bool(f.chains[0].slot==f.chains[0].slot)
+257 |     with pytest.raises(TypeError):bool(f.run._node!=f.run._node)
+    |                                  ^
+258 |     forged=owned._Record(f,_node(_freeze({'id':'fake'},LIMITS)),'run')
+259 |     assert rejects(lambda:forged.id)=='VERSION_CONFLICT'
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:265:28
+    |
+264 | def test_domain_equality_different_nodes_aliases_order_and_exact_types(lifecycle):
+265 |     left=family('generate');right=family('generate')
+    |                            ^
+266 |     shared={'n':[1,True,1.,None]}
+267 |     left[1][0]['parameters']['extra']=[shared,shared]
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:271:49
+    |
+269 |     right[1][0]['parameters']['extra']=[copy.deepcopy(shared),copy.deepcopy(shared)]
+270 |     right[2][0][3]['parameters']['extra']=[copy.deepcopy(shared),copy.deepcopy(shared)]
+271 |     a,*_=issued(lifecycle,'generate',facts=left);b,*_=issued(lifecycle,'generate',facts=right)
+    |                                                 ^
+272 |     assert owned._same(a.actual[0],b.actual[0])
+273 |     assert owned._same(a.actual[0],a.chains[0].checked)
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:278:23
+    |
+276 |     assert _equal(_node(_freeze({'a':1,'b':[2]},LIMITS)),_node(_freeze({'b':[2],'a':1},LIMITS)))
+277 |     v={'x':0}
+278 |     for _ in range(35):v=[v,v]
+    |                       ^
+279 |     assert _equal(_node(_freeze(v,LIMITS)),_node(_freeze(copy.deepcopy(v),LIMITS)))
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:307:33
+    |
+305 |     facts[2][2][2]['usage']=usage
+306 |     normalized=normalize_usage(facts[2][2][2])
+307 |     facts[1][2]['usage'].clear();facts[1][2]['usage'].update(normalized)
+    |                                 ^
+308 |     facts[2][2][3]['usage'].clear();facts[2][2][3]['usage'].update(normalized)
+309 |     f,*_=issued(lifecycle,'generate',facts=facts)
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:308:36
+    |
+306 |     normalized=normalize_usage(facts[2][2][2])
+307 |     facts[1][2]['usage'].clear();facts[1][2]['usage'].update(normalized)
+308 |     facts[2][2][3]['usage'].clear();facts[2][2][3]['usage'].update(normalized)
+    |                                    ^
+309 |     f,*_=issued(lifecycle,'generate',facts=facts)
+310 |     assert owned._usage(f.chains[2].parsed)==normalized
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:319:26
+    |
+317 | def test_source_row_exchange_original_bytes_both_provenance_modes(lifecycle,mode):
+318 |     facts=family('source')
+319 |     if mode=='controller':facts=controller(facts)
+    |                          ^
+320 |     f,*_=issued(lifecycle,mode=mode,facts=facts)
+321 |     for i,a in enumerate(facts[1]):
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:334:39
+    |
+333 | def test_entire_archive_chain_against_extracted_original(lifecycle):
+334 |     facts=controller(family('source'));state=ledger(facts);result=resolved(facts)
+    |                                       ^
+335 |     f,_,g,_=issued(lifecycle,mode='controller',facts=facts)
+336 |     dispatch._archive_chain_from_facts(g.binding,state,result,facts)
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:334:59
+    |
+333 | def test_entire_archive_chain_against_extracted_original(lifecycle):
+334 |     facts=controller(family('source'));state=ledger(facts);result=resolved(facts)
+    |                                                           ^
+335 |     f,_,g,_=issued(lifecycle,mode='controller',facts=facts)
+336 |     dispatch._archive_chain_from_facts(g.binding,state,result,facts)
+    |
+
+B023 Function definition does not bind loop variable `changed`
+   --> tests/test_cold_accounted_component.py:344:82
+    |
+342 |         receipt['attempts'][1][field]=value+1 if type(value) is int else 'f'*64
+343 |         changed=archive.ResolvedSourceArchive(receipt,result.request_bodies,result.response_bodies)
+344 |         assert rejects(lambda:dispatch._archive_chain_from_facts(g.binding,state,changed,facts))=='VERSION_CONFLICT'
+    |                                                                                  ^^^^^^^
+345 |         assert rejects(lambda:owned._archive_chain(f,state,changed))=='VERSION_CONFLICT'
+346 |     for changed in (archive.ResolvedSourceArchive(result.public_receipt,tuple(reversed(result.request_bodies)),result.response_bodies…
+    |
+
+B023 Function definition does not bind loop variable `changed`
+   --> tests/test_cold_accounted_component.py:345:60
+    |
+343 |         changed=archive.ResolvedSourceArchive(receipt,result.request_bodies,result.response_bodies)
+344 |         assert rejects(lambda:dispatch._archive_chain_from_facts(g.binding,state,changed,facts))=='VERSION_CONFLICT'
+345 |         assert rejects(lambda:owned._archive_chain(f,state,changed))=='VERSION_CONFLICT'
+    |                                                            ^^^^^^^
+346 |     for changed in (archive.ResolvedSourceArchive(result.public_receipt,tuple(reversed(result.request_bodies)),result.response_bodies…
+347 |             archive.ResolvedSourceArchive(result.public_receipt,result.request_bodies,tuple(reversed(result.response_bodies)))):
+    |
+
+B023 Function definition does not bind loop variable `changed`
+   --> tests/test_cold_accounted_component.py:348:82
+    |
+346 |     for changed in (archive.ResolvedSourceArchive(result.public_receipt,tuple(reversed(result.request_bodies)),result.response_bodies…
+347 |             archive.ResolvedSourceArchive(result.public_receipt,result.request_bodies,tuple(reversed(result.response_bodies)))):
+348 |         assert rejects(lambda:dispatch._archive_chain_from_facts(g.binding,state,changed,facts))=='VERSION_CONFLICT'
+    |                                                                                  ^^^^^^^
+349 |         assert rejects(lambda:owned._archive_chain(f,state,changed))=='VERSION_CONFLICT'
+350 |     state.__dict__['halted']=True
+    |
+
+B023 Function definition does not bind loop variable `changed`
+   --> tests/test_cold_accounted_component.py:349:60
+    |
+347 |             archive.ResolvedSourceArchive(result.public_receipt,result.request_bodies,tuple(reversed(result.response_bodies)))):
+348 |         assert rejects(lambda:dispatch._archive_chain_from_facts(g.binding,state,changed,facts))=='VERSION_CONFLICT'
+349 |         assert rejects(lambda:owned._archive_chain(f,state,changed))=='VERSION_CONFLICT'
+    |                                                            ^^^^^^^
+350 |     state.__dict__['halted']=True
+351 |     assert rejects(lambda:owned._archive_chain(f,state,result))=='VERSION_CONFLICT'
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:358:27
+    |
+356 |     role='generate' if change=='third-checked' else 'source'
+357 |     facts=family(role)
+358 |     if change=='duplicate':facts=(facts[0],[facts[1][0],facts[1][0]],facts[2],facts[3])
+    |                           ^
+359 |     elif change=='swap':facts=(facts[0],facts[1],tuple(reversed(facts[2])),facts[3])
+360 |     elif change=='wrong-run':facts[2][1][0].identity.__dict__['run_id']='run_'+'f'*32
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:359:24
+    |
+357 |     facts=family(role)
+358 |     if change=='duplicate':facts=(facts[0],[facts[1][0],facts[1][0]],facts[2],facts[3])
+359 |     elif change=='swap':facts=(facts[0],facts[1],tuple(reversed(facts[2])),facts[3])
+    |                        ^
+360 |     elif change=='wrong-run':facts[2][1][0].identity.__dict__['run_id']='run_'+'f'*32
+361 |     elif change=='third-checked':facts[2][2][3]['parameters']['unexpected']='extra'
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:360:29
+    |
+358 |     if change=='duplicate':facts=(facts[0],[facts[1][0],facts[1][0]],facts[2],facts[3])
+359 |     elif change=='swap':facts=(facts[0],facts[1],tuple(reversed(facts[2])),facts[3])
+360 |     elif change=='wrong-run':facts[2][1][0].identity.__dict__['run_id']='run_'+'f'*32
+    |                             ^
+361 |     elif change=='third-checked':facts[2][2][3]['parameters']['unexpected']='extra'
+362 |     else:
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/test_cold_accounted_component.py:361:33
+    |
+359 |     elif change=='swap':facts=(facts[0],facts[1],tuple(reversed(facts[2])),facts[3])
+360 |     elif change=='wrong-run':facts[2][1][0].identity.__dict__['run_id']='run_'+'f'*32
+361 |     elif change=='third-checked':facts[2][2][3]['parameters']['unexpected']='extra'
+    |                                 ^
+362 |     else:
+363 |         ns=list(facts[3]);ns[1]=(ns[0][0],*ns[1][1:]);facts=(facts[0],facts[1],facts[2],tuple(ns))
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:363:26
+    |
+361 |     elif change=='third-checked':facts[2][2][3]['parameters']['unexpected']='extra'
+362 |     else:
+363 |         ns=list(facts[3]);ns[1]=(ns[0][0],*ns[1][1:]);facts=(facts[0],facts[1],facts[2],tuple(ns))
+    |                          ^
+364 |     scope,g=lifecycle(facts)
+365 |     assert rejects(lambda:scope.issue(role,None,None,facts[0]['id']))=='VERSION_CONFLICT'
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:363:54
+    |
+361 |     elif change=='third-checked':facts[2][2][3]['parameters']['unexpected']='extra'
+362 |     else:
+363 |         ns=list(facts[3]);ns[1]=(ns[0][0],*ns[1][1:]);facts=(facts[0],facts[1],facts[2],tuple(ns))
+    |                                                      ^
+364 |     scope,g=lifecycle(facts)
+365 |     assert rejects(lambda:scope.issue(role,None,None,facts[0]['id']))=='VERSION_CONFLICT'
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:372:60
+    |
+370 |     called=[]
+371 |     class Foreign:
+372 |         def __getattribute__(self,name):called.append(name);raise AssertionError
+    |                                                            ^
+373 |         def __eq__(self,other):called.append('eq');raise AssertionError
+374 |         def __str__(self):called.append('str');raise AssertionError
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:373:51
+    |
+371 |     class Foreign:
+372 |         def __getattribute__(self,name):called.append(name);raise AssertionError
+373 |         def __eq__(self,other):called.append('eq');raise AssertionError
+    |                                                   ^
+374 |         def __str__(self):called.append('str');raise AssertionError
+375 |         def __reduce__(self):called.append('reduce');raise AssertionError
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:374:47
+    |
+372 |         def __getattribute__(self,name):called.append(name);raise AssertionError
+373 |         def __eq__(self,other):called.append('eq');raise AssertionError
+374 |         def __str__(self):called.append('str');raise AssertionError
+    |                                               ^
+375 |         def __reduce__(self):called.append('reduce');raise AssertionError
+376 |     foreign=Foreign()
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:375:53
+    |
+373 |         def __eq__(self,other):called.append('eq');raise AssertionError
+374 |         def __str__(self):called.append('str');raise AssertionError
+375 |         def __reduce__(self):called.append('reduce');raise AssertionError
+    |                                                     ^
+376 |     foreign=Foreign()
+377 |     for leaf,args in ((owned._stage_usage,(foreign,'aid')),(owned._source_row,(foreign,'aid')),
+    |
+
+B023 Function definition does not bind loop variable `leaf`
+   --> tests/test_cold_accounted_component.py:380:31
+    |
+378 |             (owned._source_exchange,(foreign,'aid')),(owned._archive_chain,(foreign,None,None)),
+379 |             (owned._same,(foreign,foreign))):
+380 |         assert rejects(lambda:leaf(*args))=='VERSION_CONFLICT'
+    |                               ^^^^
+381 |     f,*_=issued(lifecycle)
+382 |     assert rejects(lambda:f.run[foreign])=='VERSION_CONFLICT'
+    |
+
+B023 Function definition does not bind loop variable `args`
+   --> tests/test_cold_accounted_component.py:380:37
+    |
+378 |             (owned._source_exchange,(foreign,'aid')),(owned._archive_chain,(foreign,None,None)),
+379 |             (owned._same,(foreign,foreign))):
+380 |         assert rejects(lambda:leaf(*args))=='VERSION_CONFLICT'
+    |                                     ^^^^
+381 |     f,*_=issued(lifecycle)
+382 |     assert rejects(lambda:f.run[foreign])=='VERSION_CONFLICT'
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:383:29
+    |
+381 |     f,*_=issued(lifecycle)
+382 |     assert rejects(lambda:f.run[foreign])=='VERSION_CONFLICT'
+383 |     facts=family('generate');facts[2][2][0].identity.__dict__['worker_id']=foreign
+    |                             ^
+384 |     assert rejects(lambda:owned._fixed(policy.Slot,facts[2][2][0],'slot'))=='VERSION_CONFLICT'
+385 |     assert called==[]
+    |
+
+B023 Function definition does not bind loop variable `scope`
+   --> tests/test_cold_accounted_component.py:401:31
+    |
+399 |     for field in ('nodes','edges','depth','leaf_bytes','encoded_bytes'):
+400 |         scope,g=lifecycle(facts,bounds=LIMITS._replace(**{field:1}))
+401 |         assert rejects(lambda:scope.issue('generate',None,None,facts[0]['id']))=='VERSION_CONFLICT'
+    |                               ^^^^^
+402 |         assert not scope._issued
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:412:29
+    |
+410 |     assert set(owned._FIELDS['run'])==set(runs.c.keys())
+411 |     assert set(owned._FIELDS['attempt'])==set(attempts.c.keys())
+412 |     facts=family('generate');facts[2][2][1].__dict__['extra']=True
+    |                             ^
+413 |     assert rejects(lambda:owned._capture(facts,'generate',owned._Context('intern-s2',32768,'offline'),LIMITS))=='VERSION_CONFLICT'
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:418:31
+    |
+416 | def test_nullable_row_usage_response_reject_without_attribute_error(lifecycle):
+417 |     for column in ('usage','response'):
+418 |         facts=family('source');actual=[];chains=[]
+    |                               ^
+419 |         for a,(s,c,p,checked,w,b) in zip(facts[1],facts[2],strict=True):
+420 |             actual.append(native_row(dict(dict(a),**{column:None})))
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:418:41
+    |
+416 | def test_nullable_row_usage_response_reject_without_attribute_error(lifecycle):
+417 |     for column in ('usage','response'):
+418 |         facts=family('source');actual=[];chains=[]
+    |                                         ^
+419 |         for a,(s,c,p,checked,w,b) in zip(facts[1],facts[2],strict=True):
+420 |             actual.append(native_row(dict(dict(a),**{column:None})))
+    |
+
+B023 Function definition does not bind loop variable `f`
+   --> tests/test_cold_accounted_component.py:425:54
+    |
+423 |         f,*_=issued(lifecycle,facts=facts)
+424 |         if column=='usage':
+425 |             assert rejects(lambda:owned._stage_usage(f,actual[1]['id']))=='VERSION_CONFLICT'
+    |                                                      ^
+426 |         else:
+427 |             assert rejects(lambda:owned._source_exchange(f,actual[1]['id']))=='VERSION_CONFLICT'
+    |
+
+B023 Function definition does not bind loop variable `actual`
+   --> tests/test_cold_accounted_component.py:425:56
+    |
+423 |         f,*_=issued(lifecycle,facts=facts)
+424 |         if column=='usage':
+425 |             assert rejects(lambda:owned._stage_usage(f,actual[1]['id']))=='VERSION_CONFLICT'
+    |                                                        ^^^^^^
+426 |         else:
+427 |             assert rejects(lambda:owned._source_exchange(f,actual[1]['id']))=='VERSION_CONFLICT'
+    |
+
+B023 Function definition does not bind loop variable `f`
+   --> tests/test_cold_accounted_component.py:427:58
+    |
+425 |             assert rejects(lambda:owned._stage_usage(f,actual[1]['id']))=='VERSION_CONFLICT'
+426 |         else:
+427 |             assert rejects(lambda:owned._source_exchange(f,actual[1]['id']))=='VERSION_CONFLICT'
+    |                                                          ^
+428 |         args=legacy_source(facts,1,False)
+429 |         assert rejects(lambda:archive._source_exchange_from_facts(*args))=='VERSION_CONFLICT'
+    |
+
+B023 Function definition does not bind loop variable `actual`
+   --> tests/test_cold_accounted_component.py:427:60
+    |
+425 |             assert rejects(lambda:owned._stage_usage(f,actual[1]['id']))=='VERSION_CONFLICT'
+426 |         else:
+427 |             assert rejects(lambda:owned._source_exchange(f,actual[1]['id']))=='VERSION_CONFLICT'
+    |                                                            ^^^^^^
+428 |         args=legacy_source(facts,1,False)
+429 |         assert rejects(lambda:archive._source_exchange_from_facts(*args))=='VERSION_CONFLICT'
+    |
+
+B023 Function definition does not bind loop variable `args`
+   --> tests/test_cold_accounted_component.py:429:68
+    |
+427 |             assert rejects(lambda:owned._source_exchange(f,actual[1]['id']))=='VERSION_CONFLICT'
+428 |         args=legacy_source(facts,1,False)
+429 |         assert rejects(lambda:archive._source_exchange_from_facts(*args))=='VERSION_CONFLICT'
+    |                                                                    ^^^^
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:433:27
+    |
+432 | def test_multibyte_wire_preserves_distinct_character_and_byte_counts(lifecycle):
+433 |     facts=family('source');index=1
+    |                           ^
+434 |     s,c,p,a,w,b=facts[2][index]
+435 |     envelope=strict_json(w,32768)
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:443:26
+    |
+441 |     facts[1][index]['parameters']['natural_spec_wire']=spec
+442 |     a['parameters']['natural_spec_wire']=copy.deepcopy(spec)
+443 |     chains=list(facts[2]);chains[index]=(s,c,p,a,wire,b)
+    |                          ^
+444 |     reads=list(facts[3]);aid,_,_,response,_=reads[index]
+445 |     reads[index]=(aid,archive._body(facts[0],aid,wire,True,None,archive.REQUEST),wire,response,b)
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:444:25
+    |
+442 |     a['parameters']['natural_spec_wire']=copy.deepcopy(spec)
+443 |     chains=list(facts[2]);chains[index]=(s,c,p,a,wire,b)
+444 |     reads=list(facts[3]);aid,_,_,response,_=reads[index]
+    |                         ^
+445 |     reads[index]=(aid,archive._body(facts[0],aid,wire,True,None,archive.REQUEST),wire,response,b)
+446 |     facts=facts[0],facts[1],tuple(chains),tuple(reads)
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:453:39
+    |
+452 | def test_external_ledger_full_slot_and_strict_receipt_scalar_contract(lifecycle):
+453 |     facts=controller(family('source'));state=ledger(facts);result=resolved(facts)
+    |                                       ^
+454 |     f,_,g,_=issued(lifecycle,mode='controller',facts=facts)
+455 |     # Same aid/bytes, but a full Slot value differs: SHA-only joins would miss it.
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_cold_accounted_component.py:453:59
+    |
+452 | def test_external_ledger_full_slot_and_strict_receipt_scalar_contract(lifecycle):
+453 |     facts=controller(family('source'));state=ledger(facts);result=resolved(facts)
+    |                                                           ^
+454 |     f,_,g,_=issued(lifecycle,mode='controller',facts=facts)
+455 |     # Same aid/bytes, but a full Slot value differs: SHA-only joins would miss it.
+    |
+
+Found 70 errors.
+[*] 5 fixable with the `--fix` option (4 hidden fixes can be enabled with the `--unsafe-fixes` option).
