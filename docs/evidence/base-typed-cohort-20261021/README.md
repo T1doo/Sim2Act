@@ -42,3 +42,59 @@ work allowance非CPU/RSS界。0真实模型/费用/外网业务/新增权限；�
 不足30不能替代全流程。当前局部15→2不是G0性能通过；实际窗口结果随后归档。
 
 两位只读独审已封最终源码与129项证据ACK，见reviews；reviewer未执行产品、测试、DB或窗口。
+
+## 本次完整窗口：第二commit已进入，但未完成
+
+执行候选 `bdcdce6248fb97b99f0c957aff85682a1cabfbee`，source/dependency摘要
+`d74b3b4c73c3f18839b0b5e18b3ead5709d2e713d21d8d7fc11cfddca132a8a8`；
+profile `f8758c85952d55e8d5ad8e257db62a20ba9cb7365deb15f94cd636da035f227f`。
+manifest相对前窗仅本片两源/一测试变化；launcher/guard/observer/依赖/预算均未改。
+绝对解释器与脚本身份实录，新目录/SQLite/grant消费一次；没有自动重试。
+
+| 实测项 | 结果 |
+| --- | --- |
+| parent/child分类、退出码 | **UNKNOWN / 2** |
+| Mock交换 / 入口 / Source delegate | **6 / 8 / 2** |
+| 真正进入G0 / 资格 | 是 / **OWNED**，native:issuance |
+| work wall / G0 wall | **342.2903028850051 / 30.890151267994952秒** |
+| 第一次原Cold commit | returned=true，11项原deadline；无返回时间戳 |
+| 第二次原Cold commit | **已进入**，在_recheck拒绝，returned=false |
+| 原scope返回 / 最终期限 | false / **NOT_PROVEN** |
+| 直接错误 | VERSION_CONFLICT: Run identity, cancellation, version or finite lease changed |
+| child / parent清理 | THREADS_CLIENTS_CONNECTIONS_CLOSED / OWNED_GROUP_EMPTY |
+| 独立进程核实 | 父60685、子60709不存在，60709 PGID为空 |
+| finalization_errors | [] |
+
+冻结实际栈 `advance_model:3752 → observed:46 → commit:3001 → _recheck:2896
+→ _require_run_context_row:869`。第二prefix已返回，与前窗停于prefix的Store.guard
+不同。该原Run谓词涵盖身份、项目/Runtime/资源/status、取消、version/fence、
+created_at及最严lease/Run/contract期限；没有拒绝现场的actual/at单独快照，不能
+仅据通用消息认定唯一为lease，也不能以G0 wall−30计算精确超期。
+
+根据冻结直线控制流可**推断**原 `_cold_receipts` 的pin_binding→_receipts→
+record_receipts等整段以及attempt回读、parse/usage/schema、receipt_for、
+settlement-parsed已返回；第二commit前置prefix亦已返回。没有独立receipt阶段、
+root/m采样，故这不是新增运行观测或硬编码m。没有证明第二commit后续、原scope
+返回或最终期限，整个G0/PB仍未通过。Cold RUNNING/RECEIVED是既有StopBoundary保现场机制的说明，
+本次未单独开库观测该行状态，不据此报生产漏收尾。
+
+五阶段 **5348 codec / 成功返回3720455764字节 / inclusive线程CPU14.564701304秒**。
+_prepare为3587，前窗3628，实际少41；其他阶段分别664/95/993/9。阶段wall分别
+15.003480207、2.578736076、0.381821738、3.962464959、0.034409378秒。
+局部15→2是lower_base完整fixture调用计数，不是整个输入每次都同样减少13，
+更不是G0通过。五阶段不含所有G0调用/CPU；成功返回字节非实际SHA调用观测，
+仪器有非零开销。前后窗口不同拒绝位置，不能宣称总wall受控改善或省下全部codec CPU。
+
+逻辑resident/live458430612、peak478097556、work188404034025305936651508，
+scope后active=false/live=resident=0；非进程RSS/CPU界。磁盘6795次采样，peak
+logical2257646、allocated2273280字节；均值0.05038094610847803秒，最大
+0.13611715400475077秒，配置0.1并非固定计划周期或原生硬配额。
+source before/after/parent cleanup摘要相同，收据evidence哈希全部实核；旧17项原件
+不变。当前全部原件见window归档/manifest，DB仅保全本地及摘要。0真实模型、费用、
+外网业务或新增权限；W5为原静态stop口径，不冒充观测计数；未自动重跑。
+
+最小剩余条件是原第二commit `_recheck`、后续全部期限和原scope最终检查完成。
+要唯一定位这次Run谓词失败，缺的是拒绝点at及各原比较输入/期限的只读见证；早先
+run_context快照不能代替此点。当前结果不支持扩大租约/删guard或原样再跑赌时间。
+
+两份最终窗口只读独审均接受结果、清理及README口径，见reviews。reviewer未执行测试、产品、DB或新窗口；本轮源码自冻结后未改。
