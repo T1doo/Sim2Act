@@ -46,9 +46,12 @@ def context_inputs(f, s):
             actual['id'], actual['version'], actual['fence'], f.worker.id)
 
 
-def test_two_fixed_segments_full_pins_outputs_and_normal_scope(sql_facts, monkeypatch, tmp_path):
+@pytest.mark.parametrize('single_content', [False, True])
+def test_two_fixed_segments_full_pins_outputs_and_normal_scope(sql_facts, monkeypatch, tmp_path, single_content):
     f = sql_facts
     seed_cold(f)
+    if not single_content:
+        monkeypatch.setattr(runtime._base_segments, 'eligible', lambda _: False)
     counts = []
     encode = runtime._cold_graph_bytes
 
@@ -81,7 +84,7 @@ def test_two_fixed_segments_full_pins_outputs_and_normal_scope(sql_facts, monkey
                 new_count = len(counts) - start
                 assert [v.model_dump() for v in new] == [v.model_dump() for v in old]
                 assert new[0] is not f.contract
-                assert (old_count, new_count) == (12, 4)
+                assert (old_count, new_count) == ((6, 2) if single_content else (12, 4))
                 results.append(dict(boundary=boundary, old_codec=old_count, new_codec=new_count))
             for boundary in ('first-commit-context', 'second-commit-context'):
                 start = len(counts)
@@ -93,7 +96,7 @@ def test_two_fixed_segments_full_pins_outputs_and_normal_scope(sql_facts, monkey
                 assert new.model_dump() == old.model_dump()
                 assert fingerprint(new.model_dump()) == fingerprint(old.model_dump())
                 assert new.checked_at == args[5] and new.deadline == old.deadline
-                assert (old_count, new_count) == (14, 4)
+                assert (old_count, new_count) == ((7, 2) if single_content else (14, 4))
                 results.append(dict(boundary=boundary, old_codec=old_count, new_codec=new_count))
             assert queries == []
         finally:

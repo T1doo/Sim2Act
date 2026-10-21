@@ -30,7 +30,6 @@ from sqlalchemy.sql.elements import quoted_name
 from sim2act import natural_live_admission as gate
 from sim2act import natural_spec_runtime as runtime
 from sim2act import pa_spec_apps as spec
-from sim2act import production_trial_policy as policy
 from sim2act.db import attempts, fingerprint
 from sim2act.errors import DomainError
 
@@ -71,6 +70,9 @@ class TailObservation:
         self.outputs = []
         self.fault_applied = False
         self.first_write_returned = False
+        self.base_calls = self.base_returned = self.base_rejected = 0
+        self.base_qualified = self.base_dynamic_checks = 0
+        self._in_base = 0
 
     def install(self, patch):
         context = runtime._cold_model_before
@@ -79,6 +81,38 @@ class TailObservation:
         receipts = spec._cold_receipts
         encode = runtime._cold_graph_bytes
         require_row = gate._require_run_context_row
+        base = runtime._ColdTrialGraph._base
+        dynamic = runtime._ColdGraphRead._check_dynamic
+        serializers = runtime._base_segments.fixed_serializers
+
+        def based(trial):
+            counted = self.active and trial is self.trial
+            if counted:
+                self.base_calls += 1
+                self._in_base += 1
+            try:
+                result = base(trial)
+                if counted:
+                    self.base_returned += 1
+                return result
+            except BaseException:
+                if counted:
+                    self.base_rejected += 1
+                raise
+            finally:
+                if counted:
+                    self._in_base -= 1
+
+        def qualified(models):
+            result = serializers(models)
+            if self._in_base:
+                self.base_qualified += int(result)
+            return result
+
+        def dynamic_checked(graph, store, connection):
+            if self._in_base:
+                self.base_dynamic_checks += 1
+            return dynamic(graph, store, connection)
 
         def encoded(values):
             result = encode(values)
@@ -166,6 +200,9 @@ class TailObservation:
             finally:
                 self.active = False
 
+        patch.setattr(runtime._ColdTrialGraph, '_base', based)
+        patch.setattr(runtime._ColdGraphRead, '_check_dynamic', dynamic_checked)
+        patch.setattr(runtime._base_segments, 'fixed_serializers', qualified)
         patch.setattr(runtime, '_cold_model_before', observed)
         patch.setattr(runtime, '_cold_graph_bytes', encoded)
         patch.setattr(runtime._ColdTrialGraph, '_prepare', prepared)
@@ -182,7 +219,10 @@ class TailObservation:
         return dict(prepared=self.prepared, commits=self.commits, receipts=self.receipts,
             original_scope_returned=self.scope_returned, codec_calls=self.codec_calls,
             codec_returned_bytes=self.codec_bytes, run_predicate_calls=self.required_rows,
-            sql_statements=len(self.sql), fault=self.fault,
+            sql_statements=len(self.sql), base_calls=self.base_calls,
+            base_returned=self.base_returned, base_rejected=self.base_rejected,
+            qualified_base_calls=self.base_qualified, base_dynamic_checks=self.base_dynamic_checks,
+            fault=self.fault,
             fault_applied=self.fault_applied, first_write_returned=self.first_write_returned,
             error=None if error is None else dict(type=type(error).__name__,
                 code=getattr(error, 'code', None), message=str(error)),
@@ -217,11 +257,7 @@ def test_complete_configured_old_candidate_tail_and_safety_cases(tmp_path, monke
             cap.new_case()
             observer = TailObservation(case, clock, fault)
             if old:
-                patch.setattr(runtime._ColdTrialGraph, '_requirements_value',
-                    lambda self, user, contract, key, pin:
-                        policy._requirements(user, contract, key, _guard=pin))
-                patch.setattr(runtime._ColdTrialGraph, '_run_check_value',
-                    lambda self, *args, pin: policy._run_check_from_facts(*args, _guard=pin))
+                patch.setattr(runtime._base_segments, 'eligible', lambda trial: False)
             if fault == 'write-fault':
                 with case.store.tx() as c:
                     c.execute(text('CREATE TABLE semantic_rollback_probe (value INTEGER CHECK(value=1))'))
@@ -278,8 +314,14 @@ def test_complete_configured_old_candidate_tail_and_safety_cases(tmp_path, monke
                 close_case(case, clock)
     left, right = successes
     assert left.outputs == right.outputs
+    assert exact_output(left.outputs) == exact_output(right.outputs)
     assert left.sql == right.sql
+    assert exact_output(left.sql) == exact_output(right.sql)
     assert left.required_rows == right.required_rows
+    assert left.base_calls == right.base_calls and right.base_qualified > 0
+    assert left.base_returned == right.base_returned
+    assert left.base_rejected == right.base_rejected == 1  # Deliberate closed-scope refusal.
+    assert left.base_dynamic_checks == right.base_dynamic_checks == 2 * right.base_returned + 1
     assert right.codec_calls < left.codec_calls and right.codec_bytes < left.codec_bytes
     assert hashlib.sha256(template.path.read_bytes()).hexdigest() == template.sha256
     expected = (11, 13) if checkpoint is None else (

@@ -30,6 +30,7 @@ from sqlalchemy.engine.cursor import CursorResultMetaData as _ColdGraphCursorMet
 from sqlalchemy.engine.result import SimpleResultMetaData as _ColdGraphSimpleMeta
 from sqlalchemy.sql.elements import quoted_name as _ColdGraphQuotedName
 
+from . import _cold_base_segment as _base_segments
 from . import _cold_policy_segment as _policy_segments
 from . import natural_specs as codec
 from .config import Settings
@@ -1819,39 +1820,47 @@ class _ColdGraphRead:
             pass  # Broken diagnostic state must not replace the original work.
         return hashlib.sha256(self.input_bytes(_validate=_validate)).hexdigest()
 
-    def check(self, store, c):
+    def _check_dynamic(self, store, c):
+        """Original lifecycle/header predicates, without a content result/token.
+
+        Only check() and the fixed _base pure segment use this local boundary.
+        """
         from .pb_natural_specs import _source_reads_current
 
+        w = self.worker
+        if self._accounted_frontier is not None:
+            from ._cold_accounted_native import _Frontier
+            require(type(self._accounted_frontier) is _Frontier
+                and self._accounted_frontier.graph is self)
+        require(type(self.inputs) is dict and bool(self.inputs)
+            and self.phase in {"pre", "post"} and type(self.role_limits) is dict
+            and set(self.role_limits) == {"source", "generate", "platform", "trial", "per_use"}
+            and all(v is None or type(v) is Limits for v in self.role_limits.values()))
+        require(self.active and len(self.scope) == 1 and self.scope[0] is self.nonce
+            and self.store is store and w.store is store and c is self.connection
+            and store.engine is self.engine and c.engine is self.engine
+            and w.s is self.settings and vars(w.s) == self.settings_values
+            and w.pa_trial is self.binding and w.stop is self.stop
+            and w.goal_planner_transport is self.transport and w.id == self.worker_id
+            and getattr(w, "_journal_trial_store", None) is store
+            and getattr(w, "_journal_trial_binding", None) is self.binding
+            and getattr(w, "_journal_trial_drift", None) is False
+            and not c.closed and c.get_transaction() is self.transaction
+            and c.connection.driver_connection is self.driver
+            and self.driver.total_changes == self.changes and self.thread == get_ident()
+            and self.epoch == c.info.get("source_proof_write_epoch", 0)
+            and _source_reads_current(store, c, self.token),
+            "Cold graph read segment or complete role inputs changed")
+
+    def check(self, store, c):
         try:
             self._diagnostic_counts[0] += 1
         except Exception:
             pass
         try:
-            w = self.worker
-            if self._accounted_frontier is not None:
-                from ._cold_accounted_native import _Frontier
-                require(type(self._accounted_frontier) is _Frontier
-                    and self._accounted_frontier.graph is self)
-            require(type(self.inputs) is dict and bool(self.inputs)
-                and self.phase in {"pre", "post"} and type(self.role_limits) is dict
-                and set(self.role_limits) == {"source", "generate", "platform", "trial", "per_use"}
-                and all(v is None or type(v) is Limits for v in self.role_limits.values()))
-            require(self.active and len(self.scope) == 1 and self.scope[0] is self.nonce
-                and self.store is store and w.store is store and c is self.connection
-                and store.engine is self.engine and c.engine is self.engine
-                and w.s is self.settings and vars(w.s) == self.settings_values
-                and w.pa_trial is self.binding and w.stop is self.stop
-                and w.goal_planner_transport is self.transport and w.id == self.worker_id
-                and getattr(w, "_journal_trial_store", None) is store
-                and getattr(w, "_journal_trial_binding", None) is self.binding
-                and getattr(w, "_journal_trial_drift", None) is False
-                and not c.closed and c.get_transaction() is self.transaction
-                and c.connection.driver_connection is self.driver
-                and self.driver.total_changes == self.changes and self.thread == get_ident()
-                and self.epoch == c.info.get("source_proof_write_epoch", 0)
-                and _source_reads_current(store, c, self.token)
-                and (self.input_key() == self.key if self._accounted_frontier is None
-                     else self._accounted_frontier.check() is None),
+            _ColdGraphRead._check_dynamic(self, store, c)
+            require(self.input_key() == self.key if self._accounted_frontier is None
+                    else self._accounted_frontier.check() is None,
                 "Cold graph read segment or complete role inputs changed")
         except BaseException:
             self.invalidate()
@@ -2489,11 +2498,45 @@ class _ColdTrialGraph:
     def _base(self):
         try:
             require(type(self.guard) is _ColdGraphRead)
-            _ColdGraphRead.check(self.guard, self.worker.store, self.c)
+            if (getattr(self, 'accounted_prewrite', None) is None
+                    or not _base_segments.eligible(self)):
+                _ColdGraphRead.check(self.guard, self.worker.store, self.c)
+                require(self.worker is self.guard.worker and self.c is self.guard.connection)
+                self._typed_parameters()
+                _ColdGraphRead.check(self.guard, self.worker.store, self.c)
+                return
+            _ColdGraphRead._check_dynamic(self.guard, self.worker.store, self.c)
             require(self.worker is self.guard.worker and self.c is self.guard.connection)
-            self._typed_parameters()
-            # The entire intervening cohort uses fixed pure cores. This full
-            # defense-in-depth pin is not a permission or cached check result.
+            mode = self._native_base_mode()
+            try:
+                mode._base_parameters_current(self.guard)
+            except BaseException:
+                if self.guard.active and mode.active:
+                    _ColdGraphRead.check(self.guard, self.worker.store, self.c)
+                raise
+            try:
+                models = self._typed_parameter_models()
+                pure = _base_segments.fixed_serializers(models)
+            except BaseException:
+                # This fixed collector/qualifier has no callbacks or effects.
+                # Preserve entry content rejection priority before propagating
+                # a pure type/join error. Never applied to dynamic/IO errors.
+                if self.guard.active and mode.active:
+                    _ColdGraphRead.check(self.guard, self.worker.store, self.c)
+                raise
+            if not pure:
+                # Before ANY unknown serializer, retain a full entry boundary.
+                _ColdGraphRead.check(self.guard, self.worker.store, self.c)
+                self._typed_values_from_models(models)
+            else:
+                try:
+                    self._typed_values_from_models(models)
+                except BaseException:
+                    if self.guard.active and mode.active:
+                        _ColdGraphRead.check(self.guard, self.worker.store, self.c)
+                    raise
+            mode._base_parameters_current(self.guard)
+            # No model/raw/result escapes this invocation before this full pin.
             _ColdGraphRead.check(self.guard, self.worker.store, self.c)
         except BaseException:
             if type(self.guard) is _ColdGraphRead:
@@ -2502,6 +2545,30 @@ class _ColdTrialGraph:
             raise
 
     def _typed_parameters(self):
+        """Original dual-full-pin path, including unknown serializer callbacks."""
+        from . import natural_live_admission as gate
+        mode = self._native_base_mode()
+        if mode is not None:
+            mode._base_parameters_current(self.guard)
+        models = self._typed_parameter_models()
+        gate._trial_typed_values(models)
+        if mode is not None:
+            mode._base_parameters_current(self.guard)
+
+    def _typed_values_from_models(self, models):
+        from . import natural_live_admission as gate
+        gate._trial_typed_values(models)
+
+    def _native_base_mode(self):
+        mode = getattr(self, 'accounted_prewrite', None)
+        if mode is None:
+            return None
+        from ._cold_accounted_native import _NativeCandidate
+        from .cold_accounted import _OwnedPrewriteMode
+        return mode if (type(mode) is _OwnedPrewriteMode
+            and type(mode._native) is _NativeCandidate and mode._native.owned_ready is True) else None
+
+    def _typed_parameter_models(self):
         from . import goal_applications as ga
         from . import lifecycle
         from . import natural_live_admission as gate
@@ -2512,16 +2579,14 @@ class _ColdTrialGraph:
 
         g = self.guard
         owned = getattr(self, 'accounted_prewrite', None)
-        # Sole caller is _base: its two complete CGR checks enclose this fixed
-        # pure cohort. No parameter, reentrant flag, token or cached PASS.
+        # Fixed private collector only; no serializer, SQL, clock, publication,
+        # input write, callback parameter, reentrant flag or remembered PASS.
         native_base = False
         if owned is not None:
             from ._cold_accounted_native import _NativeCandidate
             from .cold_accounted import _OwnedPrewriteMode
             native_base = (type(owned) is _OwnedPrewriteMode
                 and type(owned._native) is _NativeCandidate and owned._native.owned_ready is True)
-            if native_base:
-                owned._base_parameters_current(g)
         inputs = gate._trial_pure_mapping(g.inputs)
         models: list[tuple[type, object, dict]] = []
 
@@ -2619,11 +2684,7 @@ class _ColdTrialGraph:
             gate._trial_typed_hold(models, policy.SourceVerificationResult, self.live_source, self.source_record)
         if self.context_record is not None:
             gate._trial_typed_hold(models, policy.RunCheck, self.context, self.context_record)
-        gate._trial_typed_values(models)
-        if native_base and owned is not None:
-            # Stop and owned registries are not all encoded in CGR inputs.
-            # Recheck those cheap live witnesses before _base's final full pin.
-            owned._base_parameters_current(g)
+        return models
 
     def _source_value(self, value):
         from . import production_trial_policy as policy
@@ -3144,6 +3205,11 @@ def _model_source_key(source):
         "requirements_fingerprint", "account_id", "quota_subject", "provider", "model",
         "endpoint", "evidence_fingerprint", "decision", "legal_free_entitlement",
         "enforced_non_chargeable", "revoked")})
+
+
+# Code configuration witness, never an input result or a permission.
+_COLD_BASE_CORE = (_ColdTrialGraph._typed_parameter_models,
+    _ColdTrialGraph._typed_values_from_models, _ColdTrialGraph._native_base_mode)
 
 
 @dataclass

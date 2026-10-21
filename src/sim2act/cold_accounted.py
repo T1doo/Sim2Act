@@ -9,6 +9,7 @@ issuance; there is no post mode, thaw, or digest-as-permission.
 
 from contextlib import contextmanager
 from dataclasses import dataclass
+from inspect import getattr_static
 from threading import get_ident
 from types import MappingProxyType
 from typing import Any
@@ -19,8 +20,9 @@ from . import natural_live_admission as gate
 from . import natural_source_archives as archive
 from . import production_trial_policy as policy
 from . import production_trial_sender as sender
-from ._cold_accounted_values import _Bounds, _equal, _freeze, _Node, _node, _Rejected
+from ._cold_accounted_values import _Bounds, _equal, _freeze, _Node, _node, _Packet, _Rejected
 from .contracts import strict_json
+from .errors import DomainError
 from .goal_applications import response_archive
 from .model import normalize_usage
 
@@ -479,6 +481,7 @@ class _OwnedPrewriteMode:
         self.__cohort_started = False
         self.inputs = MappingProxyType(self.__inputs)
         self.complete = None
+        self.__complete_origin = self.__generation_origin = None
         self.__oracle = _LegacyOracle(graph)
         contract = graph.binding.contract
         self.scope = _AccountedScope(
@@ -593,6 +596,7 @@ class _OwnedPrewriteMode:
         self.__families.clear()
         self.__pending = None
         self.complete = None
+        self.__complete_origin = self.__generation_origin = None
         if self._native is not None:
             from ._cold_accounted_native import _NativeCandidate
             if type(self._native) is _NativeCandidate and self._native.mode is self:
@@ -714,11 +718,100 @@ class _OwnedPrewriteMode:
                          and target is full['extraction']['target']
                          and goal is full['extraction']['goal'])
 
-    def _base_parameters_current(self, graph):
-        """Pure member checks only inside _base's two full graph checks.
+    def _base_pure_ready(self):
+        """Gate every mutable member read by the fixed native pure joins.
 
-        No result/token escapes and public readers below still self-pin.
-        The private runtime parameter collector has exactly one caller: _base.
+        Only storage shape/scalar types, no equality/hash/truth on strangers.
+        Full values, lifecycle and relationships remain original predicates.
+        """
+        families, inputs = self.__families, self.__inputs
+        if (type(self.active) is not bool or type(families) is not dict
+                or not all(type(key) is str for key in families)
+                or set(families) != {'source', 'generate'}
+                or type(inputs) is not dict or not all(type(key) is str for key in inputs)
+                or type(self.__binding_header) is not tuple or len(self.__binding_header) != 4
+                or not all(type(value) is str for value in self.__binding_header)
+                or type(self.scope) is not _AccountedScope or self.scope._graph is not self.graph
+                or type(self.scope._active) is not bool
+                or type(self.scope._issued) is not dict
+                or not all(type(key) is _Handle for key in self.scope._issued)
+                or type(self.scope._context) is not _Context
+                or type(self.scope._context.model) is not str
+                or type(self.scope._context.max_output_tokens) is not int
+                or type(self.scope._frame) is not tuple or len(self.scope._frame) != 14
+                or any(type(self.scope._frame[i]) is not kind
+                    for i, kind in ((9, str), (10, int), (11, int), (12, int), (13, str)))):
+            return False
+        from ._cold_accounted_budget import _Ledger
+        from .spec_production import ProductionTrialBinding
+        binding = self.graph.binding
+        if type(binding) is not ProductionTrialBinding or type(self.scope._allocation) is not _Ledger:
+            return False
+        binding_raw = object.__getattribute__(binding, '__dict__')
+        if (type(binding_raw) is not dict or not all(type(key) is str for key in binding_raw)
+                or not all(type(binding_raw.get(key)) is str for key in
+                    ('approval_key', 'account_id', 'contract_fingerprint'))
+                # init=False version normally comes from the dataclass class.
+                or type(getattr_static(binding, 'version', None)) is not str):
+            return False
+
+        def header(value, kind):
+            # A missing Pydantic field can dispatch through a foreign extra.
+            # Match the existing full storage header WITHOUT model attributes.
+            if type(value) is not kind:
+                return None
+            try:
+                raw = object.__getattribute__(value, '__dict__')
+                fields = type.__getattribute__(kind, '__pydantic_fields__')
+                selected = object.__getattribute__(value, '__pydantic_fields_set__')
+                if (type(raw) is not dict or not all(type(key) is str for key in raw)
+                        or type(fields) is not dict or not all(type(key) is str for key in fields)
+                        or raw.keys() != fields.keys()
+                        or type(selected) is not set or not all(type(key) is str for key in selected)
+                        or not selected <= fields.keys()
+                        or object.__getattribute__(value, '__pydantic_extra__') is not None
+                        or object.__getattribute__(value, '__pydantic_private__') is not None):
+                    return None
+                return raw
+            except AttributeError:
+                return None
+
+        contract = header(binding_raw.get('contract'), gate.PBTrialContract)
+        if contract is None:
+            return False
+        caps = header(contract.get('caps'), gate.TrialCaps)
+        if (caps is None or type(contract.get('model')) is not str
+                or type(caps.get('max_output_tokens')) is not int):
+            return False
+        for item in self.scope._issued.values():
+            if (type(item) is not tuple or len(item) != 2 or type(item[0]) is not str
+                    or type(item[1]) is not _Packet):
+                return False
+        if self.complete is not None:
+            if (self.complete is not self.__complete_origin
+                    or type(self.complete) is not MappingProxyType
+                    or not all(type(key) is str for key in self.complete)):
+                return False
+            for name, kind in (('generation', MappingProxyType), ('extraction', dict)):
+                value: Any = self.complete.get(name)
+                if (name == 'generation' and value is not self.__generation_origin
+                        or type(value) is not kind
+                        or not all(type(key) is str for key in value)):
+                    return False
+        try:
+            if not _same_frame(self.scope._frame, _frame(self.graph)):
+                return False
+        except DomainError:
+            return False
+        return all(type(value) is _Family and type(value.role) is str
+            and value.role == role and value.scope is self.scope
+            and type(value.handle) is _Handle for role, value in families.items())
+
+    def _base_parameters_current(self, graph):
+        """Pure member checks at the fixed _base segment's two dynamic ends.
+
+        No result/token escapes before its full content check; public readers
+        still self-pin. The original dual-full-pin wrapper uses the same joins.
         """
         from ._cold_accounted_native import _NativeCandidate
 
@@ -768,9 +861,9 @@ class _OwnedPrewriteMode:
             and fields["generated"] is self.__families["generate"]
         )
         self.__assert_generation_run(fields["generation"]["run"])
-        self.complete = MappingProxyType(
-            dict(fields, generation=MappingProxyType(dict(fields["generation"])))
-        )
+        self.__generation_origin = MappingProxyType(dict(fields["generation"]))
+        self.complete = MappingProxyType(dict(fields, generation=self.__generation_origin))
+        self.__complete_origin = self.complete
         self.__inputs["cold-trial:complete"] = self.complete
 
     def pin_legacy_complete(self, fields):
@@ -1591,3 +1684,18 @@ def _archive_chain_nodes(family, ledger, root):
 def _arena(scope):
     ledger = scope._allocation
     return None if ledger is None else getattr(ledger, '_native_arena', None)
+
+
+# Eager code configuration identities, never input results or authority.
+_BASE_PURE_MEMBERS = tuple((kind, name, getattr(kind, name)) for kind, names in (
+    (_OwnedPrewriteMode, ('_base_pure_ready', '_base_parameters_current',
+        '_base_family_current', '_base_stage_current', '_base_stage_models',
+        '_dynamic', '_OwnedPrewriteMode__assert_links',
+        '_OwnedPrewriteMode__assert_generation_run', '_OwnedPrewriteMode__family_current',
+        '_OwnedPrewriteMode__run_current', '_OwnedPrewriteMode__stage_current')),
+    (_AccountedScope, ('_current',)), (_Family, ('_root',)),
+    (_Value, ('_check',)), (_Record, ('__getattr__',)),
+) for name in names)
+
+_BASE_PURE_FUNCTIONS = tuple((name, globals()[name]) for name in (
+    '_frame', '_same_frame', '_same', '_compare', '_arena', '_node'))

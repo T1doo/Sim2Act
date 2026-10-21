@@ -14,3 +14,10 @@ def test_complete_output_row_keys_bytes_and_container_types_are_serializable():
     assert ['quoted-name', 'id', None] in [pair[0] for pair in encoded[1]]
     assert ['quoted-name', 'created_at', False] in [pair[0] for pair in encoded[1]]
     assert ['str', 'archive'] in [pair[0] for pair in encoded[1]]
+
+
+def test_strict_output_oracle_does_not_accept_python_numeric_equality():
+    assert {'value': True} == {'value': 1} == {'value': 1.0}
+    assert exact_output({'value': True}) != exact_output({'value': 1})
+    assert exact_output({'value': 1.0}) != exact_output({'value': 1})
+    assert exact_output({'value': [1]}) != exact_output({'value': (1,)})

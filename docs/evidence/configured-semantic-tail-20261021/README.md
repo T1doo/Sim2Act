@@ -71,6 +71,8 @@ Generate3 + Source2 + Cold1，即每条逻辑路径 6 次交换 / 8 次入口。
 | 同事务写故障 | 首 commit 后真实 SQLite INSERT(1) 返回，INSERT(2) 违反 CHECK、sqlite_errorcode=275；异常回滚后查询 probe 表为 0 行 |
 | 跨 scope | 两条正常路径关闭原 scope 后 `trial.check()` 均拒绝 |
 
+写故障只证明测试 probe INSERT 在同事务回滚，**不是 W5 五写组故障覆盖**。
+
 负例不把 harness AssertionError/KeyError 算作安全拒绝；原 DomainError / IntegrityError
 保留为 cause，按类别、错误信息及到达位置断言。写故障表只存在于测试数据库。
 

@@ -162,22 +162,16 @@ def test_two_base_calls_have_no_cached_pass(sql_facts, damage):
     assert not s.mode.active and t.phase == 'INVALID'
 
 
-def test_private_parameter_collector_only_base_caller_and_two_outer_checks():
+def test_private_collector_has_only_fixed_base_and_legacy_wrapper_callers():
     root = Path(__file__).resolve().parents[1] / 'src/sim2act'
     calls = []
     for path in root.glob('*.py'):
         tree = ast.parse(path.read_text())
         for function in (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)):
-            if any(isinstance(n, ast.Call) and getattr(n.func, 'attr', None) == '_typed_parameters'
+            if any(isinstance(n, ast.Call) and getattr(n.func, 'attr', None) == '_typed_parameter_models'
                    for n in ast.walk(function)):
                 calls.append((path.name, function.name))
-    assert calls == [('natural_spec_runtime.py', '_base')]
-    tree = ast.parse((root/'natural_spec_runtime.py').read_text())
-    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == '_ColdTrialGraph')
-    base = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == '_base')
-    try_body = base.body[0].body
-    boundary = [n for n in try_body if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)]
-    assert [getattr(n.value.func, 'attr', None) for n in boundary] == [None, 'check', None, '_typed_parameters', 'check']
+    assert calls == [('natural_spec_runtime.py', '_base'), ('natural_spec_runtime.py', '_typed_parameters')]
 
 
 def test_unissued_default_and_unissued_mode_keep_original_collector(sql_facts, monkeypatch):
