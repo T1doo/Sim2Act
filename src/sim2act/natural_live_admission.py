@@ -1339,10 +1339,16 @@ def _trial_typed_storage(expected, model):
 
 def _trial_typed_values(models):
     """One pure complete cohort pass; no graph pin, IO, parse or authority."""
+    from ._cold_typed_stream import _stream_values
+
     require(type(models) is list, 'Exact trial model cohort required')
     for entry in models:
         require(type(entry) is tuple and len(entry) == 3, 'Exact trial model triple required')
         expected, model, raw = entry
+        if _stream_values(expected, model, raw):
+            continue
+        # A modified serializer retains the original pre-serializer raw
+        # snapshot semantics; never assume an arbitrary replacement is pure.
         actual = _trial_typed_storage(expected, model)
         require(type(raw) is dict, 'Complete typed trial raw pin required')
         saved = _trial_pure_data(raw)
