@@ -17,8 +17,10 @@
 | 层 | 内容与用途 | 不跨入的合同 |
 | --- | --- | --- |
 | `mode.inputs` / `mode.complete` | 私有 family / handle / issued Record；两个 logical accounted key 与 complete 指向同族 | 不传给旧 pickle，不持久化，不作为 Authority/业务指纹 |
-| `guard.inputs` | 原 raw schema 的完整 legacy witness，仅用于保留的全扫描/typed oracle | 无 Family、Packet、Node 或私有 digest 混装 |
+| `guard.inputs` 中的 accounted raw | 原 raw schema 的完整 legacy witness，仅用于保留的全扫描/typed oracle | 无 Family、Packet、Node 或私有 digest 混装 |
 | origin / 软件 / 公共回执 / post bridge | 保持原 schema、codec、业务指纹字段与动态验证路径 | 不用 family digest 替代原字节 SHA、origin/software 或 pre/post raw key |
+
+上表的 legacy oracle 限于两组 accounted 数据。未迁移的 extraction/origin/授权等根仍保留原读取路径；本片不是全平台 immutable graph。
 
 代码修改会正常改变软件内容指纹；这里没有声称旧软件批准能跨修订复用，也没有为此开启新窗口。没有承诺不同对象分配下的临时 pickle key 必须数值相同。
 
