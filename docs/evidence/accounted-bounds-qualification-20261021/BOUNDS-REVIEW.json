@@ -1,0 +1,154 @@
+{
+  "decision": "PARTIAL_ORIGIN_BOUNDS_ONLY_NO_UNIVERSAL_COMPLETE_ROW_BOUND",
+  "baseline": "f51bbaae3f7f5bab64c79c4c135d0b0d3a2951c8",
+  "reviewer_executions": {
+    "product_imports": 0,
+    "tests": 0,
+    "Worker": 0,
+    "Mock": 0,
+    "G0": 0,
+    "PB": 0,
+    "database_opens": 0,
+    "new_product_writer": 0
+  },
+  "writer_inventory": {
+    "file": "WRITER-INVENTORY.json",
+    "sha256": "05e3ba3356a95e092fb84f8d072c47c02390c2e9f0dbe6bb4fb4d752e7b10513",
+    "sites": 65,
+    "runs_insert": 5,
+    "runs_update": 42,
+    "attempts_insert": 1,
+    "attempts_update": 17,
+    "method": "AST textual insert/update(runs|attempts).values sites under src/sim2act; helpers with **values explicitly retained. Not a claim about arbitrary external SQL writers."
+  },
+  "proven_bounds": [
+    {
+      "scope": "table shape",
+      "value": "Run18, Attempt13 visible columns",
+      "source": "src/sim2act/db.py:95,178",
+      "qualification": "No String length, JSON bytes/depth/node CHECK constraints. Fixed columns are not a full-row storage-size bound."
+    },
+    {
+      "scope": "successful accounted producer",
+      "value": "Generate3/Source2 attempts, one full run, same-count chains, Source2 ns_reads",
+      "source": "src/sim2act/pa_trial_dispatch.py:1591-1595;src/sim2act/cold_accounted.py:703-715",
+      "qualification": "all() occurs before len check; counts cannot bound rejected/oversized SQL input acquisition."
+    },
+    {
+      "scope": "explicit strict_json call only",
+      "value": "caller max_bytes and depth<=20; no duplicate keys/nonfinite",
+      "source": "src/sim2act/contracts.py:397-433",
+      "qualification": "Not invoked automatically by SQLAlchemy JSON deserializer."
+    },
+    {
+      "scope": "PB contracts and fully accepted policy slots",
+      "value": "wire<=32768; canonical response<=32768; per-use output<=1024; accepted total_tokens<=wire+1024; run-reserved<=64000, all<=192000, slots<=7",
+      "source": "src/sim2act/natural_live_admission.py:50-64;src/sim2act/production_trial_policy.py:200-229",
+      "qualification": "Must cite actual completed guards/producer; bounds do not cover unrelated Run JSON members or every persisted/rejected row."
+    },
+    {
+      "scope": "Generate receipt",
+      "value": "safe msg UTF8 JSON<=16384; canonical raw ASCII<=32768, archive reread strict_json32768/depth20",
+      "source": "src/sim2act/goal_applications.py:68-82,594-605,1634-1655",
+      "qualification": "Does not cap all keys of Attempt.parameters or Run.context."
+    },
+    {
+      "scope": "Source context successful validation",
+      "value": "exact7 keys plus optional association marker, repairs0, request/tool counters bounded, messages tied to request fingerprint",
+      "source": "src/sim2act/natural_spec_runtime.py:917-954",
+      "qualification": "Only this checked family. Generate counter gate does not require exact ctx key set."
+    }
+  ],
+  "unbounded_or_unproved": [
+    "String/JSON table acceptance has no application-wide byte/node/depth bound; physical DB/runtime limits are not claimed infinite, just unspecified/variable by backend and unsuitable as this product bound.",
+    "Ordinary result/error/context and unchecked JSON extras are not globally covered by wire/archive caps.",
+    "SQLAlchemy RowMapping constructor/type does not attest cursor/query provenance or hidden-data/index size.",
+    "Positive lower bounds on version/fence do not establish application-wide upper bit-length; actual DB Integer ranges are backend restrictions, not portable Python/forged-row bounds.",
+    "SQLAlchemy DBAPI acquisition and JSON deserialization happen before a post-read meter; its own bounded scratch does not prove total query/decode memory bounded."
+  ],
+  "pure_source_counterexamples": [
+    {
+      "id": "STORE_KEY",
+      "path": "src/sim2act/db.py:966→1072",
+      "example": "Call existing Store.submit/submit_tx with normal owned project, goal and refs but key=\"k\"*N. HTTP RunInput max100 is absent at Store entry; request_key is stored directly.",
+      "domain": "Actual Store/SQL accepted-domain counterexample, not a claim PB KEY100 accepts it.",
+      "executed": false
+    },
+    {
+      "id": "CONTEXT",
+      "path": "src/sim2act/worker.py:346-351",
+      "example": "Existing checkpoint accepts context containing required counters/messages plus an arbitrarily large/deep JSON extra and only merges tools before updating runs.context.",
+      "domain": "Worker helper/database write domain; strict Source ctx later rejects extra keys, so not an accepted-full-Source claim.",
+      "executed": false
+    },
+    {
+      "id": "RESULT_ERROR",
+      "path": "src/sim2act/worker.py:353-448;src/sim2act/errors.py:10-28",
+      "example": "Ordinary non-special mock finalization can receive result/error JSON or a DomainError message/code with arbitrary length; helper/schema has no uniform container/length gate.",
+      "domain": "Generic row/helper domain; specialized generation/CSV/success/authority checks must not be bypassed.",
+      "executed": false
+    },
+    {
+      "id": "MOCK_MODEL_NAME",
+      "path": "src/sim2act/model.py:22-44,48-122;src/sim2act/worker.py:335-344,724-746",
+      "example": "Existing general synthetic model returns valid assistant content=\"ok\" plus raw.model=\"X\"*N. Parse_response bounds content, not raw.model; enforced=False does not reject the name. Actual update stores response_model and model_identity.raw_returned_model.",
+      "domain": "Ordinary mock writer path, not a real model run or a passing PB archive/identity claim.",
+      "executed": false
+    },
+    {
+      "id": "USAGE_INTEGER",
+      "path": "src/sim2act/model.py:125-139",
+      "example": "normalize_usage accepts arbitrary nonnegative Python ints and only verifies additive identity; no bit_length/digit bound at this leaf.",
+      "domain": "Normalizer accepted domain; later successful PB ledger/checked_usage narrows numbers.",
+      "executed": false
+    },
+    {
+      "id": "ROW_HIDDEN",
+      "path": "sqlalchemy/cyextension/resultproxy.pyx:14-24;src/sim2act/natural_spec_runtime.py:1680-1710",
+      "example": "Construct exact native RowMapping(parent18keys,None,index,tuple18values+(hugeJSON,)). Constructor preserves entire tuple without length==keys check; storage validator checks known positions then serializes all _data, including last invisible value.",
+      "domain": "Native RowMapping/legacy codec accepted storage shape; genuine exact select(runs) alone does not generate this extra position.",
+      "executed": false
+    },
+    {
+      "id": "ROW_SAFE_INDEX",
+      "path": "sqlalchemy/cyextension/resultproxy.pyx:14-24;src/sim2act/natural_spec_runtime.py:1696-1709",
+      "example": "Add arbitrarily many/long string aliases mapped to valid position0 in native _key_to_index; visible keys remain18/13, but current codec reconstructs and retains all safe string index entries. Foreign keys are ignored semantically but still iterated.",
+      "domain": "Native legacy row-storage accepted shape, not genuine exact select metadata provenance.",
+      "executed": false
+    }
+  ],
+  "row_provenance": {
+    "actual_fixed_queries": "pa_trial_dispatch.py1591 select(attempts),1595 select(runs) select all current fixed columns; no joins/extra columns here. Genuine metadata/data positions then13/18, without external mutation.",
+    "native_constructor": "cyextension/resultproxy.pyx14-24 preserves parent/index and processed/raw tuple. Python fallback _py_row.py39-66 equivalent.",
+    "mapping": "engine/row.py171 RowMapping shares parent/index/data; iteration keys may differ from full _data; values/len use full storage.",
+    "json": "sql/sqltypes.py2805-2820 uses dialect serializer/deserializer or stdlib json.dumps/json.loads; no project strict_json invoked.",
+    "full_storage": "runtime1680-1710 returns original keys,data plus rebuilt full safe string index, explicitly preserves hidden positions. cold_accounted718-728 visible fieldset gate retains raw sidecar.",
+    "allocation": "row storage helper allocates lookup; capture allocates names/set/visible dict and sidecars before current _freeze. Streaming work cap should precede these allocations if they are to be bounded."
+  },
+  "compatibility_implication": "Any finite owned-fastpath limits remain admission/work budgets, not a proof that every old accepted complete raw row fits. Oversized/unproved domains require unchanged compatible legacy path or a separately authorized schema/contract change; no dropping extras, hidden values or authority checks.",
+  "source_sha256": {
+    "src/sim2act/db.py": "51dd42a01b3852b3a79050f2139c78e18615b7ea85583433f5a347d88cd95173",
+    "src/sim2act/worker.py": "186708fde1b3834bcf2817de9047ac2fb1fd2f2af39dda841ebe64aea3438a5e",
+    "src/sim2act/app_jobs.py": "1689975276d8f9a0b17b1e87d98df50862f527d627a24cec338feb9a19b8b31f",
+    "src/sim2act/goal_applications.py": "94a7b351ff3d9d0f0ef78f61288268e78c67d2ba92717f418e7fc61ce4e712ec",
+    "src/sim2act/natural_spec_runtime.py": "577469f9f7431f168b532ab54b9a24442d8677e9b40722f4f268c78f3842c389",
+    "src/sim2act/pa_trial_dispatch.py": "7d13f9898583034240de9b0bc4227ad79d9b893b88869c41efb77998dd3667ae",
+    "src/sim2act/cold_accounted.py": "9bb10500efbc5d604864d5cb31480236902de54f4f141f13e4c2649a532414a8",
+    "src/sim2act/_cold_accounted_values.py": "f74bee1711f15886990dfd43f412edbac1829109ee13dd02be47db8ce9631275",
+    "src/sim2act/contracts.py": "51ed505c38228ea8b54424546637267bd785c306dd677a2d451ee867e02668a7",
+    "src/sim2act/model.py": "f04d4dbe49ca10614865d83ebff5fdc2fdf9d6167c47f0fd09e2b3c836fc7706",
+    "src/sim2act/errors.py": "27b0e0b6c16380851278a6c47cfb6541e374d2ae0557a37515d1a7bd53bb1144",
+    "src/sim2act/goals.py": "ddc1202d20d7e8f5ddea187ffeb6b1796415a7e74a6d7f96496e6f4c518fb40e",
+    "src/sim2act/natural_live_admission.py": "360379ccae1be7afc7554e2f6534ed6a8167269d7029dc57c34a827181ab9e77",
+    "src/sim2act/production_trial_policy.py": "65b0b8203f2c17b964c9db828d3f688fa9cc014d6ad38b6e9bca0c8d6237270f",
+    "src/sim2act/config.py": "ebe37a572f23b19796ebb74d7de9f16890897adff3da269c981d3dab3ace41eb"
+  },
+  "installed_primary_source_sha256": {
+    "sqlalchemy/cyextension/resultproxy.pyx": "7962ddc815e2072fc22d0ac5e5271f5899bb5f435e7a5b1c49779db63d73bfd4",
+    "sqlalchemy/engine/_py_row.py": "219bd8672b676222b2930027a46bfead1e57b0506aa1a02959d959720fc7f727",
+    "sqlalchemy/engine/row.py": "b02f758c84c1a22b448637909b7e884bb2a31b08992638b008acce15bc69e6aa",
+    "sqlalchemy/engine/cursor.py": "e7ea64279c56a57c99e7a06e5e9f1951d023c0318e2119916eff888984ba2097",
+    "sqlalchemy/engine/result.py": "f5696c92dff3bf562ab3fe0476a125a8c565c8aba1a90ae6dc4a65ee2dd21698",
+    "sqlalchemy/sql/sqltypes.py": "69b8d23dd227b9b8d360ad320bf236a6a01b63041707acc038669e44a9c38598"
+  }
+}
