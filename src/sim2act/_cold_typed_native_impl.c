@@ -4,6 +4,12 @@
  */
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#include <stddef.h>
+#include <structmember.h>
+
+#ifndef SIM2ACT_VISITOR_SOURCE_SHA
+#define SIM2ACT_VISITOR_SOURCE_SHA "unverified"
+#endif
 
 typedef struct {
     PyObject *allowed, *branch, *workflow, *require;
@@ -243,8 +249,285 @@ static PyObject *project(PyObject *module, PyObject *args) {
     return result;
 }
 
+/* This narrow route deliberately stays below the existing signal-poll interval.
+ * On the exact pinned 3.12 build, GC allocations schedule an eval breaker;
+ * these bounded C-only operations do not execute it. Signals/GC may execute at
+ * the entry poll, BEFORE fresh scanning. No GC state/counter is changed.
+ */
+#define QUAL_VISITS 255
+#define QUAL_WORK 4096
+typedef struct {
+    PyObject *value, *raw;
+    Py_ssize_t position, count;
+    int model, weight, memo;
+} QualFrame;
+
+typedef struct {
+    PyObject *spaces[QUAL_VISITS];
+    int count, ok;
+    int *work;
+} QualNamespaces;
+
+static int qualified_keys(PyObject *value, int *work);
+
+static PyObject *dict_name(PyObject *space, const char *name) {
+    PyObject *key = PyUnicode_InternFromString(name);
+    if (key == NULL) return NULL;
+    PyObject *result = PyDict_GetItemWithError(space, key);
+    Py_DECREF(key);
+    return result;
+}
+
+static PyObject *static_member(PyTypeObject *kind, const char *name, QualNamespaces *namespaces) {
+    int *work = namespaces->work;
+    PyObject *mro = kind->tp_mro;
+    if (mro == NULL || !PyTuple_CheckExact(mro) || PyTuple_GET_SIZE(mro) > 16) {
+        namespaces->ok = 0;
+        return NULL;
+    }
+    for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(mro); ++i) {
+        if (++*work > QUAL_WORK) { namespaces->ok = 0; return NULL; }
+        PyObject *space = PyType_GetDict((PyTypeObject *)PyTuple_GET_ITEM(mro, i));
+        if (space == NULL) { namespaces->ok = 0; return NULL; }
+        int known = 0;
+        for (int j = 0; j < namespaces->count; ++j) if (namespaces->spaces[j] == space) { known = 1; break; }
+        if (!known) {
+            /* Lookup must not dispatch foreign namespace key hash/equality.
+             * This witness is invocation-local inside the C-only region.
+             */
+            if (namespaces->count >= QUAL_VISITS || !qualified_keys(space, work)) {
+                Py_DECREF(space);
+                namespaces->ok = 0;
+                return NULL;
+            }
+            namespaces->spaces[namespaces->count++] = space;
+        } else Py_DECREF(space);  /* PyType_GetDict returns a new reference. */
+        PyObject *found = dict_name(space, name);
+        if (found != NULL) return found;  /* Borrowed, no descriptor invocation. */
+        if (PyErr_Occurred()) return NULL;
+    }
+    return NULL;
+}
+
+static int qualified_keys(PyObject *value, int *work) {
+    if (!PyDict_CheckExact(value)) return 0;
+    Py_ssize_t position = 0;
+    PyObject *key, *child;
+    while (PyDict_Next(value, &position, &key, &child)) {
+        if (++*work > QUAL_WORK || !PyUnicode_CheckExact(key)) return 0;
+    }
+    return 1;
+}
+
+static PyObject *selection(PyObject *module, PyObject *args) {
+    PyObject *expected, *model, *roots, *allowed, *branch, *workflow, *require_fn;
+    PyObject *base, *meta;
+    if (!PyArg_ParseTuple(args, "OOOOOOOOO:select_project", &expected, &model, &roots,
+            &allowed, &branch, &workflow, &require_fn, &base, &meta)) return NULL;
+    if (!class_tuple(roots) || !class_tuple(allowed) || !PyType_Check(expected) ||
+        !PyType_Check(branch) || !PyType_Check(workflow) || !PyType_Check(base) ||
+        !PyType_Check(meta) || !PyCallable_Check(require_fn)) {
+        PyErr_SetString(PyExc_TypeError, "Invalid fresh typed qualification ABI");
+        return NULL;
+    }
+    /* A handler can mutate input/metadata here. Re-read everything afterwards.
+     * If it raises, propagate once: neither projection has started.
+     */
+    if (PyErr_CheckSignals() < 0) return NULL;
+    PyThreadState *thread = PyThreadState_Get();
+    int py_left = thread->py_recursion_remaining, c_left = thread->c_recursion_remaining;
+    int work = 0, visits = 0, depth = 0, memo_count = 0, weight = 0, max_need = 64;
+    const char *reason = "eligible";
+    QualNamespaces namespaces = {.count = 0, .ok = 1, .work = &work};
+    QualFrame *frames = PyMem_Calloc(QUAL_VISITS, sizeof(QualFrame));
+    PyObject **memo = PyMem_Calloc(QUAL_VISITS, sizeof(PyObject *));
+    unsigned char *active = PyMem_Calloc(QUAL_VISITS, 1);
+    if (frames == NULL || memo == NULL || active == NULL) {
+        PyMem_Free(frames); PyMem_Free(memo); PyMem_Free(active);
+        return PyErr_NoMemory();
+    }
+    if (thread->c_profilefunc != NULL || thread->c_tracefunc != NULL) {
+        reason = "trace-or-profile"; goto finish;
+    }
+    if (!member(roots, expected) || (PyObject *)Py_TYPE(model) != expected) {
+        reason = "root"; goto finish;
+    }
+    const char *names[] = {"__dict__", "__pydantic_fields_set__", "__pydantic_extra__", "__pydantic_private__"};
+    PyObject *descriptors[4];
+    for (int i = 0; i < 4; ++i) {
+        descriptors[i] = static_member((PyTypeObject *)base, names[i], &namespaces);
+        if (descriptors[i] == NULL || (i == 0 ? !Py_IS_TYPE(descriptors[i], &PyGetSetDescr_Type)
+                : !Py_IS_TYPE(descriptors[i], &PyMemberDescr_Type))) {
+            reason = "base-layout"; goto finish;
+        }
+    }
+    PyObject *next = model;
+    for (;;) {
+        if (next != NULL) {
+            if (++visits > QUAL_VISITS || ++work > QUAL_WORK) {
+                reason = "scan-budget"; goto finish;
+            }
+            PyTypeObject *kind = Py_TYPE(next);
+            int own_weight = kind == &PyTuple_Type ? 2 : 1;
+            /* Includes visit frames, tuple generator frames, metadata/all/any,
+             * require, import/helper overhead, and return to the Python adapter.
+             * Overestimation only selects the unchanged Python implementation.
+             */
+            int need = 64 + 4 * (weight + own_weight);
+            if (need > max_need) max_need = need;
+            if (py_left < need || c_left < need) { reason = "remaining-stack"; goto finish; }
+            if (kind == &PyUnicode_Type || kind == &PyLong_Type || kind == &PyFloat_Type ||
+                kind == &PyBool_Type || kind == &PyBytes_Type || next == Py_None) goto advance;
+            int found = -1;
+            for (int i = 0; i < memo_count; ++i) if (memo[i] == next) { found = i; break; }
+            if (found >= 0) {
+                if (active[found]) { reason = "cycle"; goto finish; }
+                goto advance;
+            }
+            PyObject *raw = NULL;
+            int is_model = kind != &PyDict_Type && kind != &PyList_Type && kind != &PyTuple_Type;
+            if (is_model) {
+                if (!member(allowed, (PyObject *)kind) || Py_TYPE(kind) != (PyTypeObject *)meta ||
+                    kind->tp_basicsize != ((PyTypeObject *)base)->tp_basicsize ||
+                    kind->tp_dictoffset != ((PyTypeObject *)base)->tp_dictoffset ||
+                    kind->tp_itemsize != 0) { reason = "model-layout"; goto finish; }
+                for (int i = 0; i < 4; ++i) {
+                    if (static_member(kind, names[i], &namespaces) != descriptors[i]) {
+                        reason = "descriptor"; goto finish;
+                    }
+                }
+                if (static_member(Py_TYPE(kind), "__pydantic_fields__", &namespaces) != NULL || !namespaces.ok) {
+                    reason = "metaclass-fields"; goto finish;
+                }
+                PyObject *space = PyType_GetDict(kind);
+                if (space == NULL) goto finish;
+                PyObject *fields = dict_name(space, "__pydantic_fields__");
+                Py_DECREF(space);  /* Class still owns its dictionary/fields. */
+                if (fields == NULL || !qualified_keys(fields, &work)) {
+                    reason = "fields"; goto finish;
+                }
+                /* Known builtin descriptors only, never a user descriptor. */
+                PyObject *slots[3];
+                for (int i = 1; i < 4; ++i) {
+                    PyMemberDef *definition = ((PyMemberDescrObject *)descriptors[i])->d_member;
+                    if (definition->type != T_OBJECT_EX || definition->offset < 0 ||
+                        definition->offset + (Py_ssize_t)sizeof(PyObject *) > kind->tp_basicsize) {
+                        reason = "slot-layout"; goto finish;
+                    }
+                    slots[i - 1] = *(PyObject **)((char *)next + definition->offset);
+                }
+                PyObject *selected = slots[0], *extra = slots[1], *private_value = slots[2];
+                if (selected == NULL || !PySet_CheckExact(selected) || extra != Py_None || private_value != Py_None) {
+                    reason = "slots"; goto finish;
+                }
+                raw = Py_TYPE(descriptors[0])->tp_descr_get(descriptors[0], next, (PyObject *)kind);
+                if (raw == NULL) goto finish;
+                int ok = qualified_keys(raw, &work) &&
+                    qualified_keys(raw, &work) && PySet_CheckExact(selected) &&
+                    PyDict_Size(raw) == PyDict_Size(fields);
+                if (ok) {
+                    Py_ssize_t position = 0;
+                    PyObject *key, *child;
+                    while (PyDict_Next(raw, &position, &key, &child)) {
+                        if (++work > QUAL_WORK || PyDict_Contains(fields, key) != 1) { ok = 0; break; }
+                    }
+                }
+                if (ok) {
+                    PyObject *iterator = PyObject_GetIter(selected), *key;
+                    if (iterator == NULL) ok = 0;
+                    else {
+                        while ((key = PyIter_Next(iterator)) != NULL) {
+                            ok = ++work <= QUAL_WORK && PyUnicode_CheckExact(key) && PyDict_Contains(fields, key) == 1;
+                            Py_DECREF(key);
+                            if (!ok) break;
+                        }
+                        Py_DECREF(iterator);
+                    }
+                }
+                if (!ok || PyErr_Occurred()) {
+                    Py_XDECREF(raw);
+                    if (PyErr_Occurred()) goto finish;
+                    reason = "storage"; goto finish;
+                }
+            } else if (kind == &PyDict_Type) {
+                if (!qualified_keys(next, &work)) { reason = "keys-or-budget"; goto finish; }
+                raw = Py_NewRef(next);
+            }
+            found = memo_count++;
+            memo[found] = next; active[found] = 1;
+            frames[depth++] = (QualFrame){next, raw, 0,
+                kind == &PyList_Type ? PyList_GET_SIZE(next) : kind == &PyTuple_Type ? PyTuple_GET_SIZE(next) : 0,
+                is_model, own_weight, found};
+            weight += own_weight;
+        }
+advance:
+        next = NULL;
+        while (depth > 0 && next == NULL) {
+            QualFrame *frame = &frames[depth - 1];
+            if (++work > QUAL_WORK) { reason = "scan-budget"; goto finish; }
+            if (frame->raw != NULL) {
+                PyObject *key, *child;
+                while (PyDict_Next(frame->raw, &frame->position, &key, &child)) {
+                    if (++work > QUAL_WORK) { reason = "scan-budget"; goto finish; }
+                    if (frame->model && child == Py_None &&
+                        (((PyObject *)Py_TYPE(frame->value) == branch && omission_key(key, "value") == 1) ||
+                         ((PyObject *)Py_TYPE(frame->value) == workflow && omission_key(key, "when") == 1))) continue;
+                    next = child;
+                    break;
+                }
+            } else if (frame->position < frame->count) {
+                next = PyList_CheckExact(frame->value) ? PyList_GET_ITEM(frame->value, frame->position)
+                    : PyTuple_GET_ITEM(frame->value, frame->position);
+                frame->position++;
+            }
+            if (next == NULL) {
+                active[frame->memo] = 0;
+                weight -= frame->weight;
+                Py_CLEAR(frame->raw);
+                depth--;
+            }
+        }
+        if (depth == 0 && next == NULL) break;
+    }
+finish:;
+    PyObject *error = PyErr_GetRaisedException();
+    while (depth > 0) Py_XDECREF(frames[--depth].raw);
+    for (int i = 0; i < namespaces.count; ++i) Py_DECREF(namespaces.spaces[i]);
+    PyMem_Free(frames); PyMem_Free(memo); PyMem_Free(active);
+    if (error != NULL) { PyErr_SetRaisedException(error); return NULL; }
+    PyObject *result = Py_None;
+    int chosen = strcmp(reason, "eligible") == 0;
+    if (chosen) {
+        PyObject *arguments = PyTuple_GetSlice(args, 0, 7);
+        if (arguments == NULL) return NULL;
+        result = project(module, arguments);  /* No Python return/eval between scan and copy. */
+        Py_DECREF(arguments);
+        if (result == NULL) return NULL;
+    } else Py_INCREF(result);
+    PyObject *reply = Py_BuildValue("Nsiiiiii", result, reason, visits, work, max_need, py_left, c_left, chosen);
+    return reply;
+}
+
+static PyObject *build_identity(PyObject *module, PyObject *unused) {
+    (void)module; (void)unused;
+    return Py_BuildValue("ssnnn", SIM2ACT_VISITOR_SOURCE_SHA, Py_GetVersion(),
+        (Py_ssize_t)sizeof(PyThreadState), (Py_ssize_t)offsetof(PyThreadState, py_recursion_remaining),
+        (Py_ssize_t)offsetof(PyThreadState, c_recursion_remaining));
+}
+
+static PyObject *stack_ready(PyObject *module, PyObject *unused) {
+    (void)module; (void)unused;
+    PyThreadState *thread = PyThreadState_Get();
+    /* Called directly at the original input_bytes frame, before Python
+     * selectors/catalog helpers add frames. Read only, no counter changes. */
+    return PyBool_FromLong(thread->py_recursion_remaining >= 128 && thread->c_recursion_remaining >= 128);
+}
+
 static PyMethodDef methods[] = {
     {"project", project, METH_VARARGS, "Fresh experimental typed storage projection."},
+    {"select_project", selection, METH_VARARGS, "Bounded qualification then one projection, or Python selection."},
+    {"build_identity", build_identity, METH_NOARGS, "Exact build/source and thread-state layout witness."},
+    {"stack_ready", stack_ready, METH_NOARGS, "Read current remaining stacks before Python selection wrappers."},
     {NULL, NULL, 0, NULL}
 };
 static struct PyModuleDef definition = {

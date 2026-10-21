@@ -20,6 +20,7 @@ from pickle import Pickler as _ColdGraphPicklerBase
 from sqlite3 import Connection as SQLiteConnection
 from threading import Event, get_ident
 from time import monotonic as _cold_diagnostic_clock
+from types import BuiltinFunctionType as _ColdNativeFunctionType
 from typing import TYPE_CHECKING, Any, cast
 
 import httpx
@@ -32,6 +33,7 @@ from sqlalchemy.sql.elements import quoted_name as _ColdGraphQuotedName
 
 from . import _cold_base_segment as _base_segments
 from . import _cold_policy_segment as _policy_segments
+from . import _cold_typed_native_candidate as _typed_native_code
 from . import natural_specs as codec
 from .config import Settings
 from .contracts import Limits, strict_json, validate_value
@@ -1765,6 +1767,12 @@ class _ColdGraphRead:
             and all(v is None or type(v) is Limits for v in role_limits.values()),
             "Cold graph read requires exact local role inputs")
         self.worker, self.store, self.settings = worker, worker.store, worker.s
+        self._typed_native_candidate = getattr(worker, '_cold_typed_native_candidate', None)
+        if self._typed_native_candidate is not None:
+            from ._cold_typed_native_candidate import _QualifiedBackend
+            require(type(self._typed_native_candidate) is _QualifiedBackend
+                and worker.store.test_only and worker.store.sqlite,
+                'Typed native candidate is explicit synthetic SQLite only')
         self.engine, self.settings_values = worker.store.engine, dict(vars(worker.s))
         self.binding, self.stop = worker.pa_trial, worker.stop
         self.transport, self.worker_id = worker.goal_planner_transport, worker.id
@@ -1796,7 +1804,26 @@ class _ColdGraphRead:
         b = self.binding
         require(type(b) is ProductionTrialBinding and type(b.contract) is PBTrialContract,
             "Exact Cold graph trial binding required")
-        contract = _trial_typed_storage(PBTrialContract, b.contract)
+        selected = None
+        typed_candidate = getattr(self, '_typed_native_candidate', None)
+        if (type(typed_candidate) is _typed_native_code._QualifiedBackend
+                and vars(_typed_native_code._QualifiedBackend).get('_probe') is _typed_native_code._PROBE_SLOT):
+            try:
+                probe = object.__getattribute__(typed_candidate, '_probe')
+                issued = object.__getattribute__(typed_candidate, '_issued')
+                module = object.__getattribute__(typed_candidate, 'module')
+            except AttributeError:
+                probe = None
+            else:
+                # This C-only read precedes every added Python selector frame.
+                # The loader issued this private handle from its exact build.
+                if (issued is _typed_native_code._ISSUER and type(probe) is _ColdNativeFunctionType
+                        and probe.__name__ == 'stack_ready' and probe.__self__ is module and probe()):
+                    selected = _typed_native_code.select_candidate(typed_candidate, PBTrialContract, b.contract)
+        # Legacy must execute at its original frame depth, after the selector
+        # returns. Never retry a native projection failure.
+        contract = (_trial_typed_storage(PBTrialContract, b.contract)
+            if selected is None else selected)
         if _validate:
             require(_trial_typed_equal(contract, PBTrialContract.model_dump(b.contract, warnings=False)),
                 "Cold graph trial storage and fixed schema dump differ")
