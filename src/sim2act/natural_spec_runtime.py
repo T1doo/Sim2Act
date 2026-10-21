@@ -1774,13 +1774,14 @@ class _ColdGraphRead:
         self.scope, self.nonce = scope, scope[0]
         self.inputs, self.role_limits, self.phase = inputs, role_limits, phase
         self.active = True
+        self._accounted_frontier = None
         # Counts of existing method entries, including failed/short-circuited
         # calls. Not graph inputs, authority, a cache, or extra graph checks.
         self._diagnostic_counts = [0, 0]
         self.key = self.input_key(_validate=True)
         self.check(self.store, c)
 
-    def input_bytes(self, *, _validate=False):
+    def input_bytes(self, *, _validate=False, _frontier_inputs=None):
         from .natural_live_admission import (
             PBTrialContract,
             _trial_typed_equal,
@@ -1788,6 +1789,8 @@ class _ColdGraphRead:
         )
         from .spec_production import ProductionTrialBinding
 
+        require(self._accounted_frontier is None or _frontier_inputs is not None,
+            "Native candidate continuity cannot be exported as legacy origin bytes")
         b = self.binding
         require(type(b) is ProductionTrialBinding and type(b.contract) is PBTrialContract,
             "Exact Cold graph trial binding required")
@@ -1795,12 +1798,18 @@ class _ColdGraphRead:
         if _validate:
             require(_trial_typed_equal(contract, PBTrialContract.model_dump(b.contract, warnings=False)),
                 "Cold graph trial storage and fixed schema dump differ")
-        values = dict(inputs=self.inputs, role_limits=self.role_limits, phase=self.phase,
+        values = dict(inputs=self.inputs if _frontier_inputs is None else _frontier_inputs, role_limits=self.role_limits, phase=self.phase,
             binding=dict(contract=contract, key=b.approval_key,
                 account=b.account_id, version=b.version, fingerprint=b.contract_fingerprint))
         if _validate:
             _cold_graph_validate_inputs(values)
         return _cold_graph_bytes(values)
+
+    def _frontier_input_key(self, inputs):
+        require(self.phase == 'pre' and type(inputs) is dict)
+        digest = hashlib.sha256(b"SIM2ACT_NATIVE_ACCOUNTED_FRONTIER_V1\x00")
+        digest.update(self.input_bytes(_frontier_inputs=inputs))
+        return digest.hexdigest()
 
     def input_key(self, *, _validate=False):
         try:
@@ -1818,6 +1827,10 @@ class _ColdGraphRead:
             pass
         try:
             w = self.worker
+            if self._accounted_frontier is not None:
+                from ._cold_accounted_native import _Frontier
+                require(type(self._accounted_frontier) is _Frontier
+                    and self._accounted_frontier.graph is self)
             require(type(self.inputs) is dict and bool(self.inputs)
                 and self.phase in {"pre", "post"} and type(self.role_limits) is dict
                 and set(self.role_limits) == {"source", "generate", "platform", "trial", "per_use"}
@@ -1836,7 +1849,8 @@ class _ColdGraphRead:
                 and self.driver.total_changes == self.changes and self.thread == get_ident()
                 and self.epoch == c.info.get("source_proof_write_epoch", 0)
                 and _source_reads_current(store, c, self.token)
-                and self.input_key() == self.key,
+                and (self.input_key() == self.key if self._accounted_frontier is None
+                     else self._accounted_frontier.check() is None),
                 "Cold graph read segment or complete role inputs changed")
         except BaseException:
             self.invalidate()
@@ -1852,13 +1866,25 @@ class _ColdGraphRead:
             _cold_graph_validate_inputs(value, _forbid_root=self.inputs)
             self.inputs[name] = value
             # Re-pin complete current bytes, retaining every field and alias.
-            self.key = self.input_key()
+            if self._accounted_frontier is None:
+                self.key = self.input_key()
+            else:
+                self._accounted_frontier.added(name)
         except BaseException:
             self.invalidate()
             raise
 
     def invalidate(self):
+        was_active = self.active
         self.active = False
+        frontier = getattr(self, '_accounted_frontier', None)
+        if was_active and frontier is not None:
+            from ._cold_accounted_native import _Frontier
+            from .cold_accounted import _OwnedPrewriteMode
+            if (type(frontier) is _Frontier and frontier.graph is self
+                    and type(frontier.mode) is _OwnedPrewriteMode
+                    and frontier.mode.graph is self):
+                frontier.mode.close()
 
 
 @contextmanager
@@ -2413,7 +2439,7 @@ class _ColdTrialGraph:
     context_record_key: Any
     admission: Any
 
-    def __init__(self, worker, c, guard, *, completed=None, audit_seed=None, _accounted_prewrite=None):
+    def __init__(self, worker, c, guard, *, completed=None, audit_seed=None, _accounted_prewrite=None, _accounted_candidate=None):
         try:
             require(type(guard) is _ColdGraphRead)
             _ColdGraphRead.check(guard, worker.store, c)
@@ -2427,6 +2453,12 @@ class _ColdTrialGraph:
                 audit_seed.check(worker.store, c, guard)
             self.worker, self.c, self.guard = (worker, c, guard)
             self.accounted_prewrite = _accounted_prewrite
+            self.accounted_candidate = _accounted_candidate
+            if _accounted_candidate is not None:
+                from ._cold_accounted_native import _NativeCandidate
+                require(type(_accounted_candidate) is _NativeCandidate
+                    and _accounted_candidate.graph is guard and _accounted_prewrite is None
+                    and _accounted_candidate.result is None and guard.phase == 'pre')
             if _accounted_prewrite is not None:
                 from .cold_accounted import _prewrite_mode
                 _prewrite_mode(_accounted_prewrite, guard)
@@ -2721,6 +2753,8 @@ class _ColdTrialGraph:
             require(self._accounted_fields(self.source_accounted) == g.inputs['cold-trial:accounted-source'])
         else:
             self.accounted_prewrite.assert_family(g, self.source_accounted, 'source')
+        if getattr(self, 'accounted_candidate', None) is not None:
+            self.accounted_candidate.stage('source', self.source_accounted)
         expected_recipe = contract.extraction_recipe.model_dump(exclude_none=True)
         pin()
         gate._stage_recipe_from_facts(expected_recipe, t.binding['draft'], _guard=pin)
@@ -2737,6 +2771,12 @@ class _ColdTrialGraph:
             self.accounted_prewrite.assert_family(g, self.generate_accounted, 'generate')
             self.accounted_prewrite.assert_upstream_run('source', t.source_counter_reader.job)
             self.accounted_prewrite.assert_upstream_run('generate', generation)
+        if getattr(self, 'accounted_candidate', None) is not None:
+            self.accounted_candidate.stage('generate', self.generate_accounted)
+            selected = self.accounted_candidate.choose(ledger, upstreams=(t.source_counter_reader.job, generation))
+            if selected.route == 'OWNED':
+                self.accounted_prewrite = selected.mode
+                self.source_accounted, self.generate_accounted = selected.source, selected.generated
         self.extraction = (t.extraction_prefix.draft, t.extraction_prefix.body, t.extraction_review.material, t.extraction_review.goal.model_dump())
         pin()
         self.source_proof = t.source_facts.proof

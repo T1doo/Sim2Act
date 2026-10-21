@@ -370,6 +370,10 @@ def _source_slot(family, state, aid):
     _, chain, _ = _source_parts(family, aid)
     slots = tuple(s for s in state.slots if s.identity.attempt_id == aid)
     gate.require(len(slots) == 1 and slots[0].identity.stage == "source")
+    if _arena(family.scope) is not None:
+        from ._cold_accounted_native import _native_equal
+        gate.require(_native_equal(chain.slot._node, slots[0], typed=True), "Complete Source slot differs")
+        return
     if family.scope._allocation is not None:
         with _snapshot(family.scope, slots[0], typed=True) as packet:
             gate.require(_compare(family.scope, chain.slot._node, _node(packet)),
@@ -466,6 +470,7 @@ class _OwnedPrewriteMode:
         )
         _ColdGraphRead.check(graph, graph.store, graph.connection)
         self.graph, self.active = graph, True
+        self._native = None
         b = graph.binding
         self.__binding_header = (b.approval_key, b.account_id, b.version, b.contract_fingerprint)
         self.__inputs: dict[str, Any] = {}
@@ -483,6 +488,17 @@ class _OwnedPrewriteMode:
 
     def _dynamic(self):
         g, w, ctx = self.graph, self.graph.worker, self.scope._context
+        if self._native is not None:
+            from ._cold_accounted_native import _NativeCandidate
+            gate.require(type(self._native) is _NativeCandidate and self._native.graph is g
+                         and self._native.mode is self)
+            if self._native.owned_ready:
+                from ._cold_accounted_native import _Arena
+                gate.require(type(self._native.arena) is _Arena)
+                gate.require(self.scope._allocation is self._native.arena.ledger
+                             and self.scope._allocation._native_arena is self._native.arena)
+            frontier = getattr(self._native, 'frontier', None)
+            gate.require(frontier is None or g._accounted_frontier is frontier)
         gate.require(self.active and self.scope._active and self.scope._prewrite_mode is self)
         _frame(g)
         gate.require(
@@ -516,9 +532,10 @@ class _OwnedPrewriteMode:
         try:
             self._dynamic()
             self.__assert_links()
-            self.scope._full_check()  # Existing whole legacy scan, still retained.
-            self.__oracle.assert_current()
             self.scope._full_check()
+            if self._native is None or not self._native.owned_ready:
+                self.__oracle.assert_current()
+                self.scope._full_check()
         except BaseException:
             self.close()
             raise
@@ -555,14 +572,31 @@ class _OwnedPrewriteMode:
             "Logical generation Run must be the issued Generate record",
         )
 
+    def _assert_raw_before_owned(self):
+        gate.require(self._native is not None and not self._native.owned_ready)
+        self.__oracle.assert_current()
+        self.scope._full_check()
+
+    def _discard_oracle(self):
+        gate.require(self._native is not None and not self._native.owned_ready)
+        self.__oracle.clear()
+        assert self._native is not None
+        self._native.owned_ready = True
+
     def close(self):
         self.active = False
+        if self._native is not None and getattr(self.graph, "_accounted_frontier", None) is not None:
+            self.graph.invalidate()
         self.scope.close()
         self.__oracle.clear()
         self.__inputs.clear()
         self.__families.clear()
         self.__pending = None
         self.complete = None
+        if self._native is not None:
+            from ._cold_accounted_native import _NativeCandidate
+            if type(self._native) is _NativeCandidate and self._native.mode is self:
+                self._native.release()
 
     def _begin(self, graph, role):
         try:
@@ -626,7 +660,8 @@ class _OwnedPrewriteMode:
             and record._schema == "run"
             and _same(record, family.run)
         )
-        self.__oracle.assert_run(role, record)
+        if self._native is None:
+            self.__oracle.assert_run(role, record)
 
     def assert_upstream_run(self, role, native):
         self.assert_current()
@@ -654,12 +689,21 @@ class _OwnedPrewriteMode:
     def pin_legacy_complete(self, fields):
         """Oracle-only raw assembly; its value never crosses this method."""
         gate.require(fields is self.complete)
-        self.__oracle.pin_complete(fields)
+        if self._native is None:
+            self.__oracle.pin_complete(fields)
+        else:
+            prior = dict(fields)
+            prior["generation"] = dict(fields["generation"], run=self._native.raw["generate"]["run"])
+            prior["source"], prior["generated"] = self._native.raw["source"], self._native.raw["generate"]
+            self.graph.add("cold-trial:complete", prior)
         self.assert_current()
 
     def assert_archive(self, binding, state, resolved):
         self.assert_current()
-        self.__oracle.assert_archive(binding, state, resolved)
+        if self._native is None:
+            self.__oracle.assert_archive(binding, state, resolved)
+        else:
+            gate.require(binding is self.graph.binding)
         self.assert_current()
 
     def assert_stage(self, facts):
@@ -688,11 +732,11 @@ class _OwnedPrewriteMode:
                 and target is full["extraction"]["target"]
                 and goal is full["extraction"]["goal"]
             )
-        self.__oracle.assert_stage(facts)
+        if self._native is None:
+            self.__oracle.assert_stage(facts)
 
 
     def _select_cohort(self, budget, state, cursor, source_id, generate_id):
-        from ._cold_accounted_budget import _Capacity
         from .pa_trial_dispatch import _graph_stage_accounted
 
         graph = self.graph
@@ -703,7 +747,14 @@ class _OwnedPrewriteMode:
                                         state, cursor, source_id, 'source')
         generated = _graph_stage_accounted(graph, graph.store, graph.connection, graph.binding,
                                            state, cursor, generate_id, 'generate')
-        completed = {'source': source, 'generate': generated}
+        return self._select_completed(budget, {'source': source, 'generate': generated})
+
+    def _select_completed(self, budget, completed, *, native=None):
+        from ._cold_accounted_budget import _Capacity
+
+        graph = self.graph
+        gate.require(tuple(completed) == ('source', 'generate') and not self.__families)
+        source, generated = completed['source'], completed['generate']
         # Assertion-only legacy oracle, not a second producer or consumer source.
         for role, facts in completed.items():
             self.__oracle.remember(role, facts)
@@ -719,7 +770,10 @@ class _OwnedPrewriteMode:
                 with budget.snapshot(graph.inputs['cold-trial:accounted-' + role]) as expected:
                     gate.require(budget.equal(_node(packet).get('value'), _node(expected)),
                                  'Bounded copy differs from original complete producer')
+                    del expected
                 packets[role] = packet
+            if native is not None:
+                native.qualify(self, packets, budget)
             self.assert_current()
         except _Capacity:
             # Capacity must never hide drift/cycle/nonfinite/original validation
@@ -740,6 +794,8 @@ class _OwnedPrewriteMode:
                 family = _Family(self.scope, handle, role)
                 self.__families[role] = family
                 self.__inputs['cold-trial:accounted-' + role] = family
+            if native is not None:
+                native.issued(self)
             for family in self.__families.values():
                 _associations(family)
             self.assert_current()
@@ -984,11 +1040,15 @@ class _Record(_Value):
         node = self._node.get(name)
         nested = _NESTED.get((self._schema, name))
         if nested is not None and node.tag != "none":
-            return _Record(self._family, node, nested)
+            arena = _arena(self._family.scope)
+            return arena.record(self._family, node, nested) if arena is not None else _Record(self._family, node, nested)
         return _read(self._family, node)
 
 
 def _read(family, node):
+    arena = _arena(family.scope)
+    if arena is not None:
+        return arena.read(node)
     return _Value(family, node) if node.tag in ("dict", "tuple", "list") else node.scalar()
 
 
@@ -1030,16 +1090,28 @@ class _Family:
 
     @property
     def run(self):
-        return _Record(self, self._root().get("run"), "run")
+        root = self._root()
+        arena = _arena(self.scope)
+        if arena is not None and self.role in arena.families:
+            return arena.families[self.role][0]
+        return _Record(self, root.get("run"), "run")
 
     @property
     def actual(self):
-        return tuple(_Record(self, n, "attempt") for n in self._root().get("actual").sequence())
+        root = self._root()
+        arena = _arena(self.scope)
+        if arena is not None and self.role in arena.families:
+            return arena.families[self.role][1]
+        return tuple(_Record(self, n, "attempt") for n in root.get("actual").sequence())
 
     @property
     def chains(self):
+        root = self._root()
+        arena = _arena(self.scope)
+        if arena is not None and self.role in arena.families:
+            return arena.families[self.role][2]
         result = []
-        for n in self._root().get("chains").sequence():
+        for n in root.get("chains").sequence():
             s, c, p, a, w, b = n.sequence()
             result.append(
                 _Chain(
@@ -1055,8 +1127,12 @@ class _Family:
 
     @property
     def ns_reads(self):
+        root = self._root()
+        arena = _arena(self.scope)
+        if arena is not None and self.role in arena.families:
+            return arena.families[self.role][3]
         result = []
-        for n in self._root().get("ns_reads").sequence():
+        for n in root.get("ns_reads").sequence():
             aid, q, w, r, b = n.sequence()
             result.append(
                 _NSRead(
@@ -1081,6 +1157,9 @@ def _same_native(value, native, *, _visible=False):
     if type(value) not in (_Value, _Record):
         return False
     value._check()
+    if _arena(value._family.scope) is not None:
+        from ._cold_accounted_native import _native_equal
+        return _native_equal(value._node, native, visible=_visible)
     with _snapshot(value._family.scope, native, visible=_visible) as packet:
         return _compare(value._family.scope, value._node, _node(packet))
 
@@ -1099,6 +1178,9 @@ def _snapshot(scope, value, *, visible=False, typed=False):
 
 
 def _compare(scope, left, right):
+    arena = _arena(scope)
+    if arena is not None:
+        return arena.equal(left, right)
     if scope._allocation is None:
         return _equal(left, right)
     try:
@@ -1175,6 +1257,13 @@ def _usage(parsed):
 
 
 def _stage_usage(family, aid):
+    gate.require(type(family) is _Family)
+    family._root()
+    gate.require(type(aid) is str)
+    arena = _arena(family.scope)
+    if arena is not None and (family.role, aid) in arena.usage:
+        _one(family.actual, aid)
+        return
     gate.require(type(family) is _Family)
     actual = _one(family.actual, aid)
     chain = tuple(c for c in family.chains if c.checked.id == aid)
@@ -1266,6 +1355,11 @@ class _Canonical:
 def _source_exchange(family, aid):
     gate.require(type(family) is _Family)
     gate.require(type(family.scope) is _AccountedScope and type(family.role) is str)
+    arena = _arena(family.scope)
+    if arena is not None:
+        _source_parts(family, aid)
+        if aid in arena.canonicals:
+            return arena.canonicals[aid]
     ledger = family.scope._allocation
     if ledger is not None:
         _, _, read = _source_parts(family, aid)
@@ -1328,6 +1422,9 @@ def _archive_chain(family, state, resolved):
         and family.scope._context.mode == "controller"
         and type(resolved) is archive.ResolvedSourceArchive
     )
+    if _arena(family.scope) is not None:
+        from ._cold_accounted_native import _archive_native
+        return _archive_native(family, state, resolved)
     if family.scope._allocation is not None:
         # ResolvedSourceArchive is a fixed dataclass. Only these already-public
         # fields entered this comparison before; no new origin schema is made.
@@ -1390,3 +1487,8 @@ def _archive_chain_nodes(family, ledger, root):
             and root.get("requests").sequence()[index].scalar() == chain.wire
             and root.get("responses").sequence()[index].scalar() == chain.payload
         )
+
+
+def _arena(scope):
+    ledger = scope._allocation
+    return None if ledger is None else getattr(ledger, '_native_arena', None)

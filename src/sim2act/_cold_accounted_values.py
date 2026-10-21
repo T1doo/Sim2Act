@@ -193,6 +193,9 @@ class _Node:
         return self.packet.nodes[self.ref][0]
 
     def scalar(self):
+        arena = getattr(self.allocation, '_native_arena', None)
+        if arena is not None:
+            return arena.scalars[id(self.packet), self.ref]
         tag, value = self.packet.nodes[self.ref]
         if tag in ("dict", "list", "tuple", "row"):
             raise _Rejected("scalar required")
@@ -206,6 +209,9 @@ class _Node:
     def items(self):
         if self.tag != "dict":
             raise _Rejected("mapping required")
+        arena = getattr(self.allocation, '_native_arena', None)
+        if arena is not None:
+            return arena.items[id(self.packet), self.ref]
         if self.allocation is not None:
             body = self.packet.nodes[self.ref][1]
             self.allocation.spend(8 * len(body))
@@ -221,7 +227,7 @@ class _Node:
     def get(self, name):
         if type(name) is not str:
             raise _Rejected("exact field name required")
-        if self.allocation is not None and self.tag == 'dict':
+        if self.allocation is not None and getattr(self.allocation, '_native_arena', None) is None and self.tag == 'dict':
             body = self.packet.nodes[self.ref][1]
             self.allocation.spend(8 * len(body))
             for key, _ in body:
@@ -236,6 +242,9 @@ class _Node:
     def sequence(self):
         if self.tag not in ("list", "tuple"):
             raise _Rejected("sequence required")
+        arena = getattr(self.allocation, "_native_arena", None)
+        if arena is not None:
+            return arena.sequences[id(self.packet), self.ref]
         if self.allocation is not None:
             size = len(self.packet.nodes[self.ref][1])
             self.allocation.spend(4 * size)
@@ -249,6 +258,9 @@ def _node_ref(packet, ref, allocation=None):
         from ._cold_accounted_budget import _Ledger
         if type(allocation) is not _Ledger:
             raise _Rejected("exact allocation ledger required")
+        arena = getattr(allocation, "_native_arena", None)
+        if arena is not None:
+            return arena.node(packet, ref)
         allocation.view(128)
     return _Node(packet, ref, allocation)
 

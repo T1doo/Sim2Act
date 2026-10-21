@@ -343,6 +343,7 @@ def test_issuer_order_registration_original_pin_and_no_runtime_callers(lifecycle
             "pa_trial_dispatch.py",
             "natural_live_admission.py",
             "natural_spec_runtime.py",
+            "_cold_accounted_native.py",
         ):
             assert "import cold_accounted" not in path.read_text()
             assert "from .cold_accounted" not in path.read_text()
@@ -775,3 +776,11 @@ def test_producer_failure_invalidates_prior_handles_without_registering(lifecycl
         scope.issue("generate", None, None, "run_" + "f" * 32)
     assert not scope._active and not scope._issued
     assert rejects(lambda: f.run.id) == "VERSION_CONFLICT"
+
+
+def test_native_candidate_has_no_default_runtime_activation():
+    import inspect
+
+    from sim2act import natural_spec_runtime
+    assert inspect.signature(natural_spec_runtime._ColdTrialGraph).parameters[
+        '_accounted_candidate'].default is None
