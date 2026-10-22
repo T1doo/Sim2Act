@@ -34,7 +34,7 @@ def write(root, name, value):
 def collect(root):
     outputs = {}
     total = 0
-    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "read-failed.png", "cold.png", "failure.png"):
+    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "read-failed.png", "cold.png", "source-failed.png", "source-refreshed.png", "extract-failed.png", "extract-refreshed.png", "store-content-hashes.json", "failure.png"):
         file = root / name
         if not file.exists():
             continue
@@ -45,8 +45,8 @@ def collect(root):
     return outputs
 
 
-def emit(outputs, phase="extract", review=False, readback=False):
-    prefix = "SIM2ACT_REVIEW_READBACK_UI" if readback else "SIM2ACT_SOURCE_REVIEW_UI" if review else "SIM2ACT_SOURCE_UI" if phase == "source" else "SIM2ACT_EXTRACT_UI"
+def emit(outputs, phase="extract", review=False, readback=False, completion_readback=False):
+    prefix = "SIM2ACT_COMPLETION_READBACK_UI" if completion_readback else "SIM2ACT_REVIEW_READBACK_UI" if readback else "SIM2ACT_SOURCE_REVIEW_UI" if review else "SIM2ACT_SOURCE_UI" if phase == "source" else "SIM2ACT_EXTRACT_UI"
     for name, data in outputs.items():
         encoded = base64.b64encode(data).decode()
         print(prefix + "_FILE " + json.dumps(dict(name=name, bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), chunks=(len(encoded) + 3999) // 4000)))
@@ -55,7 +55,7 @@ def emit(outputs, phase="extract", review=False, readback=False):
     sys.stdout.flush()
 
 
-def launch_paths(root, deadline, phase="extract", review=False, readback=False):
+def launch_paths(root, deadline, phase="extract", review=False, readback=False, completion_readback=False):
     if review and phase != "source":
         raise ValueError("Only sealed Source supports registered review UI")
     evidence = evidence_for(phase)
@@ -99,7 +99,10 @@ def launch_paths(root, deadline, phase="extract", review=False, readback=False):
         "scripts/browser-ci/package.json", "scripts/browser-ci/package-lock.json", "scripts/browser-ci/extract-completion.cjs",
         "src/sim2act/__init__.py", "src/sim2act/api.py", "src/sim2act/protocol_jobs.py", "src/sim2act/protocol_reviews.py", "src/sim2act/web/index.html", "src/sim2act/web/app.js", "src/sim2act/web/app.css", "src/sim2act/web/protocol.js",
     ]
-    if readback:
+    if completion_readback:
+        from protocol_completion_readback_fixture import required_files
+        required += required_files()
+    elif readback:
         from protocol_review_readback_fixture import required_files
         required += required_files()
     else:
@@ -124,22 +127,31 @@ def join_api_threads(thread, deadline, attempt):
 
 
 def main():
-    assert sys.argv[1:] in ([], ["--source"], ["--source-review"], ["--review-readback"]), "Unknown phase arguments; no fallback"
+    assert sys.argv[1:] in ([], ["--source"], ["--source-review"], ["--review-readback"], ["--completion-readback"]), "Unknown phase arguments; no fallback"
     phase = "source" if sys.argv[1:] else "extract"
     review = sys.argv[1:] == ["--source-review"]
-    readback = sys.argv[1:] == ["--review-readback"]
+    completion_readback = sys.argv[1:] == ["--completion-readback"]
+    readback = completion_readback or sys.argv[1:] == ["--review-readback"]
+    action = "completion-readback" if completion_readback else "review-readback" if readback else "review" if review else "completion"
+    get_limit = 100 if completion_readback else 60 if readback else 30
+    static_limit = 120 if completion_readback else 60 if readback else 40
     evidence = evidence_for(phase)
     assert os.name == "nt" and os.environ.get("GITHUB_ACTIONS") == "true"
     assert os.environ.get("GITHUB_RUN_ATTEMPT") == "1", "No rerun"
     assert os.environ.get("GITHUB_REF") == "refs/heads/dev/production-trial-stages-20261018"
     absolute = int(os.environ["SIM2ACT_UI_UNTIL"]) / 1000
     until = time.monotonic() + (absolute - REAL_TIME())
-    root = Path(os.environ["RUNNER_TEMP"]) / (f"sim2act-{'review-readback' if readback else phase + ('-review' if review else '')}-ui-" + os.environ["GITHUB_RUN_ID"] + "-1")
+    root = Path(os.environ["RUNNER_TEMP"]) / (f"sim2act-{action if readback else phase + ('-review' if review else '')}-ui-" + os.environ["GITHUB_RUN_ID"] + "-1")
     root.mkdir()  # New window only; never reuse a consumed directory.
-    result = dict(status="UNKNOWN", phase=phase, action="review-readback" if readback else "review" if review else "completion", scope="SYNTHETIC SQLite / real Windows Edge DOM; not G0 or production source", limits=dict(work_seconds=180, cleanup_seconds=10, business_get=60 if readback else 30, static_get=60 if readback else 40, screenshots=4, **{"business_post" if readback else "review_post" if review else "completion_post": 0 if readback else 3}), model_calls=0, new_worker=0, new_source=0, new_extract=0)
+    result = dict(status="UNKNOWN", phase=phase, action=action, scope="SYNTHETIC SQLite / real Windows Edge DOM; not G0 or production source", limits=dict(work_seconds=180, cleanup_seconds=10, business_get=get_limit, static_get=static_limit, screenshots=4, **{"business_post" if readback else "review_post" if review else "completion_post": 0 if readback else 3}), model_calls=0, new_worker=0, new_source=0, new_extract=0)
     if readback:
-        result["phases"] = ["source", "cold"]
+        result["phases"] = ["source", "extract"] if completion_readback else ["source", "cold"]
     node = server = thread = store = counts = None
+    extra_store = extra_settings = None
+    extra_server = extra_thread = extra_listener = None
+    originals = None
+    sql_verbs = {}
+    sql_lock = threading.Lock()
     monitor_stop = threading.Event()
     watcher = None
     forbidden_calls = []
@@ -172,7 +184,7 @@ def main():
 
     try:
         remaining()
-        paths = launch_paths(root, until, phase, review, readback)
+        paths = launch_paths(root, until, phase, review, readback, completion_readback)
         remaining()
         # Existing project lock/SDK/license, official registries, no lifecycle
         # scripts, new SDK, browser installation, Actions cache or artifact.
@@ -182,7 +194,7 @@ def main():
         command([paths["node"], paths["npm_cli"], "ci", "--prefix", str(REPO / "scripts/browser-ci"), "--ignore-scripts", "--no-audit", "--no-fund", "--registry=https://registry.npmjs.org", "--cache", str(root / "npm-cache"), "--fetch-retries=0", "--fetch-timeout=30000"], "npm.log")
         import psutil
         import uvicorn
-        from sqlalchemy import select
+        from sqlalchemy import select, event
         from starlette.responses import JSONResponse
 
         from sim2act.api import create_app
@@ -194,7 +206,11 @@ def main():
 
         db = root / "fixture.sqlite"
         private_files.extend([db, root / "fixture.sqlite-wal", root / "fixture.sqlite-shm", root / "info.json", root / "owned-browser-pids.json"])
-        if readback:
+        if completion_readback:
+            from protocol_completion_readback_fixture import prepare, cases
+            originals, sealed_sidecars = prepare(root)
+            original = originals[0]
+        elif readback:
             from protocol_review_readback_fixture import prepare, cases
             original, sealed_sidecars = prepare(root)
         else:
@@ -211,16 +227,36 @@ def main():
         store = Store("sqlite:///" + str(db), test_only=True)  # No initialize/migrate.
         settings = Settings(**dict(original["settings"], database_url=str(store.engine.url), data_dir=root))
         assert settings.mode == "mock" and not settings.live_enabled and not settings.token
+        if completion_readback:
+            extra_db = root / "extract.sqlite"
+            private_files.extend([extra_db, root / "extract.sqlite-wal", root / "extract.sqlite-shm"])
+            extra_store = Store("sqlite:///" + str(extra_db), test_only=True)
+            extra_settings = Settings(**dict(originals[1]["settings"], database_url=str(extra_store.engine.url), data_dir=root))
+            assert extra_settings.mode == "mock" and not extra_settings.live_enabled and not extra_settings.token
+
+            def only_read(_c, _cursor, sql, _params, _context, _many):
+                verb = sql.lstrip().split(None, 1)[0].upper()
+                with sql_lock:
+                    sql_verbs[verb] = sql_verbs.get(verb, 0) + 1
+                assert verb in {"SELECT", "BEGIN"}, "Read-only window forbids DML/DDL"
+
+            for item in (store, extra_store):
+                event.listen(item.engine, "before_cursor_execute", only_read)
 
         def snapshot():
-            with store.engine.connect() as c:
-                return {t.name: sorted(fingerprint(dict(r)) for r in c.execute(select(t)).mappings()) for t in meta.sorted_tables}
+            def one(item):
+                with item.engine.connect() as c:
+                    return {t.name: sorted(fingerprint(dict(r)) for r in c.execute(select(t)).mappings()) for t in meta.sorted_tables}
+            return {"source": one(store), "extract": one(extra_store)} if completion_readback else one(store)
 
         before = snapshot()
         with store.engine.connect() as c:
             all_jobs = list(c.execute(select(protocol_jobs)).mappings())
             before_run = dict(c.execute(select(runs).where(runs.c.id == original["run"])).mappings().one())
-        if readback:
+        if completion_readback:
+            assert original["run"] in {r["run_id"] for r in all_jobs}
+            others = []
+        elif readback:
             assert {original["run"], original["cold"]}.issubset({r["run_id"] for r in all_jobs})
             others = []
         elif phase == "source":
@@ -237,9 +273,12 @@ def main():
 
         for owner, name in ((InternModel, "request"), (InternModel, "request_serialized"), (BudgetedProvider, "call"), (BudgetedProvider, "preflight"), (BudgetedProvider, "accept_candidate"), (Worker, "reserve"), (Worker, "__init__"), (Store, "claim")):
             setattr(owner, name, forbidden)
+        if completion_readback:
+            Store.event = forbidden
         # Explicit test business clock only. All operation/cleanup limits use
         # saved real wall clock or monotonic; product clock code is unchanged.
-        time.time = lambda: original["resume_at"]
+        business_at = max(o["resume_at"] for o in originals) if completion_readback else original["resume_at"]
+        time.time = lambda: business_at
         app = create_app(store, settings)
         post_kind = "business_post" if readback else "review_post" if review else "completion_post"
         counts = dict(business_get=0, static_get=0, blocked=0, **{post_kind: 0})
@@ -253,7 +292,7 @@ def main():
                 if request.method == "GET":
                     kind = "business_get" if route.startswith("/api/") or route == "/health" else "static_get"
                     counts[kind] += 1
-                    allowed = counts[kind] <= (60 if readback else 30 if kind == "business_get" else 40)
+                    allowed = counts[kind] <= (get_limit if kind == "business_get" else static_limit)
                 elif request.method == "POST" and (readback or route == completion_path):
                     counts[post_kind] += 1
                     allowed = not readback and counts[post_kind] <= 3
@@ -275,12 +314,30 @@ def main():
         while not server.started:
             assert thread.is_alive() and time.monotonic() < ready, "API did not start"
             time.sleep(0.01)
+        if completion_readback:
+            extra_app = create_app(extra_store, extra_settings)
+            extra_app.middleware("http")(bounded_http)
+            extra_listener = socket.socket()
+            extra_listener.bind(("127.0.0.1", 0))
+            extra_listener.listen(128)
+            extra_port = extra_listener.getsockname()[1]
+            extra_server = uvicorn.Server(uvicorn.Config(extra_app, log_level="error", access_log=False))
+            extra_thread = threading.Thread(target=extra_server.run, kwargs={"sockets": [extra_listener]}, daemon=True)
+            extra_thread.start()
+            ready = time.monotonic() + min(10, remaining())
+            while not extra_server.started:
+                assert extra_thread.is_alive() and time.monotonic() < ready, "Extract API did not start"
+                time.sleep(0.01)
         commit = subprocess.check_output([paths["git"], "rev-parse", "HEAD"], cwd=REPO, timeout=remaining(), text=True).strip()
-        hashes = {name: hashlib.sha256((REPO / name).read_bytes()).hexdigest() for name in ("src/sim2act/web/app.js", "src/sim2act/web/app.css", "src/sim2act/web/protocol.js", "src/sim2act/web/index.html", "scripts/protocol_completion_browser_ci.py", "scripts/browser-ci/extract-completion.cjs", "scripts/browser-ci/package-lock.json", "scripts/OwnedBrowserSetup.ps1", "scripts/windows_browser_ci.py", "scripts/WindowsExtractCompletionUI.ps1", ".github/workflows/windows-native-mock.yml", "src/sim2act/protocol_jobs.py", "src/sim2act/protocol_reviews.py", *(["scripts/protocol_review_readback_fixture.py"] if readback else []))}
-        write(root, "inventory.json", dict(commit=commit, source_sha256=hashes, source_lf_sha256={name: hashlib.sha256((REPO / name).read_bytes().replace(b"\r\n", b"\n")).hexdigest() for name in hashes}, synthetic_clock=original["resume_at"], browser_install=False, added_sdk=False))
-        info = dict(phase=phase, action="review-readback" if readback else "review" if review else "completion", base=f"http://127.0.0.1:{port}", project=original["project"], run=original["run"], captured=original["captured"], until_ms=absolute * 1000,
+        hashes = {name: hashlib.sha256((REPO / name).read_bytes()).hexdigest() for name in ("src/sim2act/web/app.js", "src/sim2act/web/app.css", "src/sim2act/web/protocol.js", "src/sim2act/web/index.html", "scripts/protocol_completion_browser_ci.py", "scripts/browser-ci/extract-completion.cjs", "scripts/browser-ci/package-lock.json", "scripts/OwnedBrowserSetup.ps1", "scripts/windows_browser_ci.py", "scripts/WindowsExtractCompletionUI.ps1", ".github/workflows/windows-native-mock.yml", "src/sim2act/protocol_jobs.py", "src/sim2act/protocol_reviews.py", *(["scripts/protocol_completion_readback_fixture.py", "src/sim2act/protocol_completion_readback.py", "src/sim2act/protocol_recovery.py", "src/sim2act/protocol_source_completion.py", "src/sim2act/protocol_extract_completion.py"] if completion_readback else ["scripts/protocol_review_readback_fixture.py"] if readback else []))}
+        write(root, "inventory.json", dict(commit=commit, source_sha256=hashes, source_lf_sha256={name: hashlib.sha256((REPO / name).read_bytes().replace(b"\r\n", b"\n")).hexdigest() for name in hashes}, synthetic_clock=business_at, browser_install=False, added_sdk=False))
+        info = dict(phase=phase, action=action, base=f"http://127.0.0.1:{port}", project=original["project"], run=original["run"], captured=original["captured"], until_ms=absolute * 1000,
                     expected_version=before_run["version"], expected_fence=before_run["fence"])
-        if readback:
+        if completion_readback:
+            original_cases = cases([store, extra_store], [settings, extra_settings], originals)
+            info["cases"] = [dict(item, base=base) for item, base in zip(original_cases, [info["base"], f"http://127.0.0.1:{extra_port}"], strict=True)]
+            info["limits"] = result["limits"]
+        elif readback:
             info["cases"] = cases(store, original)
             info["limits"] = result["limits"]
         elif review:
@@ -320,6 +377,8 @@ def main():
                 if time.monotonic() >= until:
                     (root / "stop").touch()
                     server.should_exit = True
+                    if extra_server:
+                        extra_server.should_exit = True
 
         watcher = threading.Thread(target=monitor, daemon=True)
         watcher.start()
@@ -332,7 +391,16 @@ def main():
         assert browser["status"] == "PASS" and browser["screenshots"] <= 4
         assert counts["blocked"] == 0 and not forbidden_calls and "monitor_error" not in result
         after = snapshot()
-        if readback:
+        if completion_readback:
+            assert after == before and counts["business_post"] == browser["counts"]["business_post"] == 0
+            assert fingerprint(cases([store, extra_store], [settings, extra_settings], originals)) == fingerprint(original_cases)
+            assert fingerprint(browser["located"]) == fingerprint([original_cases[0]["locator"]]*2 + [original_cases[1]["locator"]]*2)
+            assert all(x["hard_refresh"] and x["cold_page"] for x in browser["phase_results"])
+            write(root, "store-content-hashes.json", dict(before=before, after=after, sql_verbs=sql_verbs))
+            result["sql_verbs"] = dict(sql_verbs)
+            with store.engine.connect() as c:
+                run = dict(c.execute(select(runs).where(runs.c.id == original["run"])).mappings().one())
+        elif readback:
             assert after == before
             assert counts["business_post"] == 0 and browser["counts"]["business_post"] == 0
             assert len(browser["located"]) == 4
@@ -411,6 +479,8 @@ def main():
         attempt("request_stop", lambda: (root / "stop").touch())
         if server:
             server.should_exit = True
+        if extra_server:
+            extra_server.should_exit = True
         # The outer exact-handle supervisor has the same deadline and covers a
         # catastrophic Python failure. Normal cleanup confirms each owned item.
         if node and node.poll() is None:
@@ -442,7 +512,11 @@ def main():
         for installer in setup:
             if installer.poll() is None:
                 attempt("installer_supervisor_wait", lambda installer=installer: installer.wait(timeout=max(0.01, cleanup_until - time.monotonic())))
+        if extra_thread:
+            attempt("extract_api_join", lambda: extra_thread.join(max(0, cleanup_until - time.monotonic())))
         anyio_alive = join_api_threads(thread, cleanup_until, attempt)
+        if extra_listener and (not extra_thread or not extra_thread.is_alive()):
+            attempt("extract_listener_close", extra_listener.close)
         time.time = REAL_TIME
         alive = [pid for (pid, _), process in registered if attempt(f"owned_{pid}_final", process.is_running)]
         installers_alive = [p.pid for p in setup if p.poll() is None]
@@ -453,16 +527,22 @@ def main():
                 receipts.append(receipt)
                 if receipt and (receipt["timed_out"] or receipt["forced_tree_stop"]):
                     result["status"] = "UNKNOWN"
-        result["cleanup"] = dict(api_stopped=not thread or not thread.is_alive(), anyio_alive=anyio_alive, node_exit=None if node is None else node.poll(), owned_browser_descendants_alive=alive, installer_supervisors_alive=installers_alive, errors=cleanup_errors)
+        result["cleanup"] = dict(api_stopped=(not thread or not thread.is_alive()) and (not extra_thread or not extra_thread.is_alive()), anyio_alive=anyio_alive, node_exit=None if node is None else node.poll(), owned_browser_descendants_alive=alive, installer_supervisors_alive=installers_alive, errors=cleanup_errors)
         result["setup_receipts"] = receipts
         if counts is not None:
             with counter_lock:
                 result["server_counts"] = dict(counts)
         result["forbidden_attempts"] = forbidden_calls
-        if alive or anyio_alive or installers_alive or thread and thread.is_alive() or time.monotonic() > cleanup_until:
+        if alive or anyio_alive or installers_alive or thread and thread.is_alive() or extra_thread and extra_thread.is_alive() or time.monotonic() > cleanup_until:
             result["status"] = "UNKNOWN"
-        if store and (not thread or not thread.is_alive()):
+        if store and (not thread or not thread.is_alive()) and (not extra_thread or not extra_thread.is_alive()):
             attempt("store_dispose", store.engine.dispose)
+            if extra_store:
+                attempt("extract_store_dispose", extra_store.engine.dispose)
+        if completion_readback:
+            result["sql_verbs"] = dict(sql_verbs)
+            if result.get("accounting_tables_unchanged"):
+                attempt("write_final_store_hashes", lambda: write(root, "store-content-hashes.json", dict(before=before, after=after, sql_verbs=dict(sql_verbs))))
         attempt("write_result", lambda: write(root, "result.json", result))
         outputs = attempt("collect_evidence", lambda: collect(root)) or {}
         # No deletion while process/thread termination is unconfirmed. Bounded
@@ -478,7 +558,7 @@ def main():
             result["status"] = "UNKNOWN"
         outputs["result.json"] = json.dumps(result, ensure_ascii=False, indent=2).encode()
         attempt("write_final_result", lambda: write(root, "result.json", result))
-        attempt("emit_evidence", lambda: emit(outputs, phase, review, readback))
+        attempt("emit_evidence", lambda: emit(outputs, phase, review, readback, completion_readback))
     return exit_code if result["status"] == "PASS" else 1
 
 

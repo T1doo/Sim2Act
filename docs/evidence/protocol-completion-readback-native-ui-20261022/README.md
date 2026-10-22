@@ -1,0 +1,7 @@
+# Completion receipt native cold-page readback — 2026-10-22
+
+Frozen product baseline: `7e3b8052d9d8944a26b5e8802185ce7d965bd07e`. Launcher-only integration; product bytes unchanged. One Windows 2025 installed Edge protected native DOM window, existing workflow and official locked dependencies. No provider, model, Worker, new Source/extract, or business POST. Two independent sealed synthetic SQLite stores, original sidecars, explicit semantic test clock 1800000059.0; not G0 or real-time lease acceptance.
+
+Window limits: 180 seconds including setup, shared further 10 seconds cleanup (Node at most 4s); 100 business GET, 120 static GET, 0 POST, 4 PNG. Both Source and Extract must have initial empty-memory lookup and actual CDP hard reload, original key, fail-closed 403 projection and fresh recovery. Source checkbox check/uncheck only; no review submit. Extract Cold form only displayed, never executed. Original 2500ms polling and all product guards remain. Four full loads imply 108 baseline static requests; business headroom accounts for genuine unchanged polling. No retry if this window fails.
+
+Offline preflight and startup review are archived. Native status is NOT_RUN until raw job originals are inspected. Source immediate accepted control state and eventual poll readiness are recorded separately. Pixels only substantiate visible frames; DOM and interaction have separate evidence. PG/provider/G0/whole F2 remain unverified.

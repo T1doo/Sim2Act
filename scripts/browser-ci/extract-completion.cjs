@@ -21,15 +21,15 @@ const {chromium}=require('playwright-core');
 const root=process.argv[2],python=process.argv[3];
 const info=JSON.parse(fs.readFileSync(path.join(root,'info.json'),'utf8'));
 assert.ok(['source','extract'].includes(info.phase),'Unknown explicit completion phase');
-const source=info.phase==='source',review=info.action==='review',readback=info.action==='review-readback';
+const source=info.phase==='source',review=info.action==='review',completionReadback=info.action==='completion-readback',readback=completionReadback||info.action==='review-readback';
 assert.ok(info.action==='completion'||review||readback,'Unknown explicit action');
 assert.ok(!review||source,'Review fixture only supports sealed Source');
 const control=review||readback?'protocol-review':'protocol-completion',postKind=readback?'business_post':review?'review_post':'completion_post';
-const getLimit=readback?60:30,staticLimit=readback?60:40;
+const getLimit=completionReadback?100:readback?60:30,staticLimit=completionReadback?120:readback?60:40;
 if(source)assert.ok(!Object.hasOwn(info,'other'),'Source fixture must not manufacture another Run');
 else assert.equal(typeof info.other,'string');
 const completionPath=review?`/api/internal/protocol/runs/${info.run}/reviews`:`/api/projects/${info.project}/protocol/runs/${info.run}/${source?'complete-source':'complete-extraction'}`;
-const result={status:'UNKNOWN',phase:info.phase,action:info.action,nativeCrossRunABA:readback?'TWO_RUN_SELECTION_NOT_ABA':source?'NOT_TESTED_SINGLE_RUN_FIXTURE':'COVERED_RUN_SWITCH',screenshotFiles:[],located:[],scope:'real installed Edge / production full page / sealed synthetic SQLite',checks:[],receipts:[],screenshots:0,counts:{business_get:0,static_get:0,[postKind]:0,blocked:0},requests:[],pageErrors:[],sandbox:[]};
+const result={status:'UNKNOWN',phase:info.phase,action:info.action,nativeCrossRunABA:completionReadback?'SEPARATE_ORIGINS_NOT_ABA':readback?'TWO_RUN_SELECTION_NOT_ABA':source?'NOT_TESTED_SINGLE_RUN_FIXTURE':'COVERED_RUN_SWITCH',screenshotFiles:[],located:[],scope:'real installed Edge / production full page / sealed synthetic SQLite',checks:[],receipts:[],screenshots:0,counts:{business_get:0,static_get:0,[postKind]:0,blocked:0},requests:[],pageErrors:[],sandbox:[]};
 // Exactly the already reviewed installed-Edge route, not a new launch policy.
 const removedSecurityDefaults=[
  '--enable-unsafe-swiftshader','--unsafely-disable-devtools-self-xss-warnings',
@@ -44,7 +44,7 @@ const removedSecurityDefaults=[
 let browser,page,timer,watcher,failGet=false,holdGet=false,held,releaseHeld,heldRequest,delivered,cancelled=false,fail;
 const cancellation=new AbortController(),wait=promise=>stoppedWait(promise,cancellation.signal);
 const bodies=[],requestRecords=new WeakMap(),requestLifetimes=new WeakMap(),readbackDetailReleases=new Set();
-let readbackHoldDetails=false,readbackFailLocator=false;
+let readbackHoldDetails=false,readbackFailLocator=false,completionFailLocator=null;
 function releaseReadbackDetails(){readbackHoldDetails=false;for(const release of readbackDetailReleases)release();readbackDetailReleases.clear();}
 function check(name,condition){assert.ok(condition,name);result.checks.push(name);}
 function write(){fs.writeFileSync(path.join(root,'browser.json'),JSON.stringify(result,null,2));}
@@ -65,6 +65,82 @@ async function audit(){
  const renderers=observed.filter(p=>p.type==='renderer');
  check('actual renderer token is restricted low integrity or AppContainer',renderers.length>0&&renderers.every(p=>p.app_container||(p.restricted_token&&p.integrity_rid<=4096)));
  result.sandbox.push(observed);
+}
+async function runCompletionReadback(){
+ result.phase_results=[];
+ async function login(item){
+  await page.locator('#token').fill('secret test token');await page.locator('#connect').click();
+  await page.locator('#login').waitFor({state:'hidden'});await audit();
+  assert.equal(await page.locator('#project-select').inputValue(),item.project);
+  await choose(item.current.run_id);
+ }
+ async function mapsEmpty(){
+  return page.evaluate(()=>protocolCompletionReadbacks.size===0&&protocolCompletionIntents.size===0&&protocolReviewIntents.size===0&&protocolIntents.size===0);
+ }
+ async function state(){
+  return page.evaluate(()=>({at_ms:Date.now(),status:protocolContext.run.status,
+   top:document.getElementById('protocol-state').textContent,
+   result:document.getElementById('protocol-result').textContent,
+   receipt:document.getElementById('protocol-completion-locate-receipt').textContent,
+   locateDisabled:document.getElementById('protocol-completion-locate').disabled,
+   reviewConfirmDisabled:document.getElementById('protocol-review-confirm').disabled,
+   reviewSubmitDisabled:document.getElementById('protocol-review-submit').disabled,
+   coldHidden:document.getElementById('protocol-cold-form').hidden,
+   coldSubmitDisabled:document.getElementById('protocol-cold-submit').disabled,
+   extractHidden:document.getElementById('protocol-extract').hidden,
+   oldKey:protocolCompletionReadbacks.get(protocolCompletionKey(protocolContext,protocolContext.run.run_id))?.body.request_key,
+   readbackState:protocolCompletionReadbacks.get(protocolCompletionKey(protocolContext,protocolContext.run.run_id))?.state,
+   completionCommands:protocolCompletionIntents.size,reviewCommands:protocolReviewIntents.size}));
+ }
+ async function locate(item){
+  const clicked_ms=Date.now();await page.locator('#protocol-completion-locate').click();
+  await until(id=>!protocolContext.busy&&protocolCompletionReadbacks.get(protocolCompletionKey(protocolContext,id))?.state==='accepted',item.current.run_id);
+  assert.deepEqual(JSON.parse(await page.locator('#protocol-completion-locate-receipt').textContent()),{request:item.locator.request,receipt:item.locator.receipt});
+  assert.deepEqual(JSON.parse(await page.locator('#protocol-result').textContent()),item.current.result);
+  const observed=await state();assert.equal(observed.completionCommands,0);assert.equal(observed.reviewCommands,0);
+  assert.equal(observed.oldKey,item.locator.request.request_key);return {clicked_ms,accepted:observed};
+ }
+ for(const [index,item] of info.cases.entries()){
+  const phase=item.current.phase;assert.equal(phase,index===0?'source':'extract');
+  if(index){await page.goto(item.base,{waitUntil:'domcontentloaded'});assert.ok(await mapsEmpty());await login(item);}
+  else await choose(item.current.run_id);
+  check(phase+' cold page has no command or completion readback key',await mapsEmpty());
+  const cold=await locate(item);
+  check(phase+' native locator finds exact historical completion key and strict current output',cold.accepted.oldKey===item.locator.request.request_key);
+  completionFailLocator=item.current.run_id;
+  await page.locator('#protocol-completion-locate').click();
+  await until(()=>!protocolContext.busy&&document.getElementById('protocol-state').textContent.includes('不可确认'));
+  const failed=await state();
+  check(phase+' controlled read failure neutralizes output and routes without changing true Run status',
+   failed.status===item.current.status&&failed.top.includes('不可确认')&&!/SUCCEEDED|PASS|APPROVED/.test(failed.top)&&
+   !failed.result&&!failed.receipt&&failed.extractHidden&&failed.coldHidden&&failed.readbackState==='read-error'&&failed.oldKey===item.locator.request.request_key);
+  await page.locator('#protocol-completion-locate').scrollIntoViewIfNeeded();await shot(phase+'-failed.png');
+  const cdp=await page.context().newCDPSession(page),started_ms=Date.now(),loaded=page.waitForEvent('domcontentloaded');
+  await cdp.send('Page.reload',{ignoreCache:true});await loaded;await cdp.detach();
+  const refresh={started_ms,loaded_ms:Date.now(),ignoreCache:true,maps_empty:await mapsEmpty(),login_visible:await page.locator('#login').isVisible()};
+  check(phase+' actual hard refresh clears both command maps and readback map',refresh.maps_empty&&refresh.login_visible);
+  await login(item);check(phase+' selected hard-refreshed page has no historical key',await mapsEmpty());
+  const restored=await locate(item);
+  let interaction={kind:'locator GET click; Cold submit not executed'};
+  if(phase==='source'){
+   // Keep the original 2500ms poll and record its actual eventual state. Never
+   // invoke render/replace a controller or claim immediate button readiness.
+   await until(()=>!protocolContext.busy&&!document.getElementById('protocol-review-confirm').disabled&&!document.getElementById('protocol-review-submit').hidden);
+   const ready_ms=Date.now();
+   await page.locator('#protocol-review-confirm').check();
+   check('Source real confirmation change enables original review button without dispatch',await page.locator('#protocol-review-submit').isEnabled());
+   await page.locator('#protocol-review-confirm').uncheck();
+   check('Source unchecking restores explicit-confirmation gate and technical completion is not semantic PASS',await page.locator('#protocol-review-submit').isDisabled()&&await page.locator('#protocol-extract').isHidden()&&await page.locator('#protocol-cold-form').isHidden());
+   interaction={kind:'real checkbox check/uncheck; submit never clicked',ready_ms,immediately_ready_at_accept:!restored.accepted.reviewConfirmDisabled};
+  }else{
+   check('Extract actual restored plan route is visible; Cold remains an unexecuted user action',await page.locator('#protocol-cold-form').isVisible()&&await page.locator('#protocol-extract').isHidden());
+  }
+  const final=await state();assert.equal(final.completionCommands,0);assert.equal(final.reviewCommands,0);
+  await page.locator('#protocol-completion-locate').scrollIntoViewIfNeeded();await shot(phase+'-refreshed.png');
+  result.phase_results.push({phase,run:item.current.run_id,cold_page:true,hard_refresh:true,cold,failed,refresh,restored,interaction,final});
+ }
+ check('all actual requests are bounded GETs, with no page errors or blocked overrun',result.counts.business_post===0&&result.counts.blocked===0&&result.pageErrors.length===0&&result.requests.every(r=>r.method==='GET'));
+ result.receipts=result.located.map(item=>item.receipt);result.status='PASS';
 }
 async function runReadback(){
  const [sourceCase,coldCase]=info.cases;
@@ -132,7 +208,7 @@ async function run(){
  await context.route('**/*',async route=>{
   try{
   const request=route.request(),url=new URL(request.url()),method=request.method();
-  let allowed=url.origin===info.base;
+  let allowed=completionReadback?info.cases.some(item=>url.origin===item.base):url.origin===info.base;
   const business=url.pathname.startsWith('/api/')||url.pathname==='/health';
   let kind;
   if(allowed&&method==='GET')kind=business?'business_get':'static_get';
@@ -140,12 +216,18 @@ async function run(){
   else allowed=false;
   if(kind){result.counts[kind]++;allowed=result.counts[kind]<=(kind==='business_get'?getLimit:kind===postKind?(readback?0:3):staticLimit);}
   if(!allowed||cancelled||Date.now()>=info.until_ms){result.counts.blocked++;result.rejectedRequest??={method,path:url.pathname,kind,counts:{...result.counts},cancelled,at_ms:Date.now(),until_ms:info.until_ms};await route.abort();throw Error('Business/request/time budget stop; no retry');}
-  const record={method,path:url.pathname+url.search,kind,at_ms:Date.now()};result.requests.push(record);requestRecords.set(request,record);
+  const record={method,origin:url.origin,path:url.pathname+url.search,kind,at_ms:Date.now()};result.requests.push(record);requestRecords.set(request,record);
   let finish;requestLifetimes.set(record,{done:new Promise(resolve=>finish=resolve),finish:()=>finish()});
   if(readback&&url.pathname===`/api/projects/${info.project}/protocol/runs/${info.run}`&&readbackHoldDetails){
    record.test_hold='detail request paused before server only for failure capture';
    let release;const delayed=new Promise(resolve=>release=resolve);readbackDetailReleases.add(release);
    try{await wait(delayed);}finally{readbackDetailReleases.delete(release);record.released_at_ms=Date.now();}
+  }
+  if(completionReadback&&url.pathname.endsWith('/completion-receipt')){
+   const item=info.cases.find(item=>item.base===url.origin&&url.pathname===`/api/projects/${item.project}/protocol/runs/${item.current.run_id}/completion-receipt`);assert.ok(item,'Exact sealed completion locator only');
+   if(completionFailLocator===item.current.run_id){completionFailLocator=null;record.controlled_response='403 completion locator-only';await route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({error:{code:'CONTROLLED_COMPLETION_LOCATOR_FAILURE'}})});return;}
+   const response=await route.fetch({maxRedirects:0,maxRetries:0,timeout:8000});assert.equal(response.status(),200);
+   const value=await response.json();assert.deepEqual(value,item.locator);result.located.push(value);await route.fulfill({response});return;
   }
   if(readback&&url.pathname.endsWith('/review-receipt')){
    if(readbackFailLocator){assert.equal(url.pathname,`/api/projects/${info.project}/protocol/runs/${info.run}/review-receipt`);readbackFailLocator=false;record.controlled_response='403 locator-only read-failure';await route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({error:{code:'CONTROLLED_LOCATOR_READ_FAILURE'}})});return;}
@@ -199,6 +281,7 @@ async function run(){
  await page.locator('#token').fill('secret test token');
  await page.locator('#connect').click();await page.locator('#login').waitFor({state:'hidden'});
  check('original project selected from real authenticated UI',await page.locator('#project-select').inputValue()===info.project);
+ if(completionReadback){await runCompletionReadback();return;}
  if(readback){await runReadback();return;}
  await choose(info.run);
  check('explicit acknowledgement starts unchecked and submission disabled',!await page.locator(`#${control}-confirm`).isChecked()&&await page.locator(`#${control}-submit`).isDisabled());
