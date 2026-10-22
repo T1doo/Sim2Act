@@ -32,7 +32,7 @@ async function audit(){
  const pids=(await cdp.send('SystemInfo.getProcessInfo')).processInfo.filter(p=>['browser','renderer'].includes(p.type));
  const file=path.join(root,'owned-browser-pids.json');fs.writeFileSync(file,JSON.stringify(pids));
  const remaining=Math.min(10000,info.until_ms-Date.now());assert.ok(remaining>0);
- const observed=JSON.parse(execFileSync(python,['scripts/windows_browser_ci.py','--root',root,'--audit',file],{encoding:'utf8',timeout:remaining}));
+ const observed=JSON.parse(execFileSync(python,[path.resolve(__dirname,'..','windows_browser_ci.py'),'--root',root,'--audit',file],{encoding:'utf8',timeout:remaining,cwd:path.resolve(__dirname,'..','..')}));
  await cdp.detach();
  check('actual processes preserve sandbox and SDK protections',observed.length>0&&observed.every(p=>p.security_args_verified));
  const renderers=observed.filter(p=>p.type==='renderer');

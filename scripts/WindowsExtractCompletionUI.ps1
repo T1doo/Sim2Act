@@ -4,7 +4,8 @@ param([switch]$DeleteOnly)
 $ErrorActionPreference = 'Stop'
 if (-not $IsWindows -or $env:GITHUB_ACTIONS -ne 'true') { throw 'Actual Windows runner required' }
 $Until = [double]$env:SIM2ACT_UI_UNTIL
-$Root = Join-Path $env:RUNNER_TEMP "sim2act-extract-ui-$env:GITHUB_RUN_ID-1"
+$Root = Join-Path $env:RUNNER_TEMP "sim2act-extract-ui-${env:GITHUB_RUN_ID}-1"
+$RepoRoot = Split-Path $PSScriptRoot -Parent
 if ($DeleteOnly) {
     # Invoked only after Python exits and DLLs are no longer loaded. Literal
     # own-run directory, no process search/other project/alternate permission.
@@ -26,7 +27,8 @@ $Python = Join-Path $env:pythonLocation 'python.exe'
 if (-not [IO.Path]::IsPathFullyQualified($Python) -or -not (Test-Path -LiteralPath $Python -PathType Leaf)) { throw 'Exact selected Python executable unavailable; no PATH fallback' }
 $Process.StartInfo.FileName = [IO.Path]::GetFullPath($Python)
 $Process.StartInfo.UseShellExecute = $false
-$Process.StartInfo.ArgumentList.Add('scripts/protocol_completion_browser_ci.py')
+$Process.StartInfo.WorkingDirectory = $RepoRoot
+$Process.StartInfo.ArgumentList.Add((Join-Path $PSScriptRoot 'protocol_completion_browser_ci.py'))
 $Receipt = [ordered]@{started=$false; timed_out=$false; forced_tree_stop=$false; process_exited=$false; exit_code=$null}
 try {
     $Remaining = $Until - [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
@@ -74,6 +76,7 @@ try {
                 $Delete=[System.Diagnostics.Process]::new()
                 $Delete.StartInfo.FileName=(Get-Process -Id $PID).Path
                 $Delete.StartInfo.UseShellExecute=$false
+                $Delete.StartInfo.WorkingDirectory=$RepoRoot
                 foreach ($Arg in @('-NoProfile','-NonInteractive','-File',$PSCommandPath,'-DeleteOnly')) { $Delete.StartInfo.ArgumentList.Add($Arg) }
                 if (-not $Delete.Start()) { throw 'Owned cleanup did not start' }
                 if (-not $Delete.WaitForExit([int][Math]::Max(0,$Remaining-1000))) {

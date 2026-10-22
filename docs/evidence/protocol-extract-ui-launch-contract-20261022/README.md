@@ -1,0 +1,22 @@
+# Frozen launch-contract repair, 2026-10-22
+
+The preceding Windows run [39740895401](https://github.com/T1doo/Sim2Act/actions/runs/39740895401) did **not start Python or a browser**. Its immutable [job.log](../protocol-extract-ui-sparse-20261022/native-one-shot/job.log), lines 184–199, records setup-python's one `pythonLocation`, followed by an attempted executable containing both toolcache `python.exe` and WindowsApps `python.exe` on separate lines. `Process.Start()` reported “The system cannot find the file specified”; the receipt says `started:false`. Sparse checkout succeeded in about seven seconds; this was not another checkout timeout.
+
+Commit `9e09532ccbb563bc1ed0b0ed718b4d8bc51de834` replaces the multivalue `Get-Command` source with `pythonLocation/python.exe`, rejects blank/newline/nonabsolute/missing paths, and retains `UseShellExecute=false`/`ArgumentList`. The current follow-up gives child scripts absolute paths and explicit repository cwd, then checks the complete installed tool/file layout before dependency installation. No alternative interpreter, SDK install, browser download, sandbox relaxation or permission fallback is introduced.
+
+| Handoff | Binding / remaining qualification |
+|---|---|
+| Actions → PowerShell | Pinned actions; existing standard Windows runner; sparse 19-pattern dependency closure; original work deadline begins before checkout. |
+| PowerShell → Python | Selected setup-python root only, existing absolute leaf, GetFullPath, one argv element per argument, repository cwd. Installed Edge Microsoft signature checked first. |
+| Python → installer supervisor | Scalar absolute `pwsh.exe`; absolute supervisor/config; JSON UTF-8 and exact executable/argv/cwd. Original absolute deadline. |
+| Supervisor → pip | Same selected Python; absolute existing requirements lock; isolated binary-only original lock, official registry, retries zero. |
+| Supervisor → npm | Existing absolute node plus npm.cmd-relative existing npm-cli.js; absolute package prefix; original package lock; lifecycle scripts disabled. Layout mismatch fails before either install. |
+| Python → API | Existing project src/scripts plus isolated target dependencies; original sealed SQLite/sidecar and all four evaluation assets. Prior sparse ASGI closure remains historical evidence, not a new Windows result. |
+| Python → Node → audit Python | Bound node/Python, absolute driver/audit scripts, explicit repository cwd. Node JSON reads UTF-8; Python argv remains separate. `--audit` returns before the unrelated full fixture path. |
+| Exit / deletion | Exact created process handles; shared earliest cleanup deadline; own root only; forced/unknown cleanup cannot PASS. WaitForExit does not prove all descendants exited. No search/kill of unknown processes. |
+
+[verify_paths.py](verify_paths.py) produced [offline.json](offline.json): logged failing path regression, Windows path algebra including spaces/Unicode, real Python UTF-8 JSON → Node JSON roundtrip, actual launch preflight's expected refusal on Linux, and all 23 required files covered by existing 19 sparse patterns. Zero business HTTP, model/Mock/Worker calls or browser starts. An initial verification-script assertion counted only names containing `/` and missed three top-level files; that verifier defect was corrected before the successful run; no CI was triggered by it.
+
+Local checks do **not** qualify actual Windows file layout, PowerShell/.NET argument execution, Windows sidecar locking, protected Edge DOM or process cleanup. No local pwsh/dotnet SDK is installed. Those remain the purpose of one reviewed native run, with work180s + shared cleanup10s, completion POST≤3, business GET≤30, static GET≤40, screenshots≤4; sealed facts only, zero new Source/extract/Worker/model, no Cold2/W5. Another launcher failure must stop triggers pending complete contract review.
+
+The fixed action [exports pythonLocation as installDir](https://github.com/actions/setup-python/blob/a26af69be951a213d495a4c3e4e4022e16d87065/src/find-python.ts); [.NET ArgumentList](https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.processstartinfo.argumentlist) owns argument escaping. [.NET Kill documentation](https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.process.kill) explicitly limits what WaitForExit proves after descendant termination. These explain the binding/cleanup contract; they do not prove this runner passed it.

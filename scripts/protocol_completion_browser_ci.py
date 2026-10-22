@@ -31,7 +31,7 @@ def write(root, name, value):
 def collect(root):
     outputs = {}
     total = 0
-    for name in ("inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "failure.png"):
+    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "failure.png"):
         file = root / name
         if not file.exists():
             continue
@@ -49,6 +49,57 @@ def emit(outputs):
         for i, start in enumerate(range(0, len(encoded), 4000)):
             print(f"SIM2ACT_EXTRACT_UI_CHUNK {name} {i} {encoded[start:start + 4000]}")
     sys.stdout.flush()
+
+
+def launch_paths(root, deadline):
+    """Resolve the entire existing launch toolchain before any installation.
+
+    Scalar executable paths are passed as argv elements, never a shell string.
+    Missing/unknown layouts fail together; no alternate SDK or PATH retry.
+    """
+    errors, paths = [], {}
+
+    def file(label, value):
+        if time.monotonic() >= deadline:
+            raise TimeoutError("Original work deadline during launch preflight")
+        try:
+            if value is None or not str(value).strip() or any(c in str(value) for c in "\r\n"):
+                raise ValueError("missing or ambiguous path")
+            path = Path(value)
+            if not path.is_absolute() or not path.is_file():
+                raise ValueError("absolute existing file required")
+            paths[label] = str(path.resolve(strict=True))
+        except (OSError, ValueError) as error:
+            errors.append(dict(path=label, error=type(error).__name__, message=str(error)))
+
+    file("python", sys.executable)
+    for label, name in (("pwsh", "pwsh.exe"), ("node", "node.exe"), ("npm_cmd", "npm.cmd"), ("git", "git.exe")):
+        if time.monotonic() >= deadline:
+            raise TimeoutError("Original work deadline during tool resolution")
+        file(label, shutil.which(name))
+    if "npm_cmd" in paths:
+        file("npm_cli", Path(paths["npm_cmd"]).parent / "node_modules/npm/bin/npm-cli.js")
+    try:
+        expected = Path(os.environ["pythonLocation"]) / "python.exe"
+        if "python" not in paths or not os.path.samefile(paths["python"], expected):
+            raise ValueError("interpreter differs from selected setup-python file")
+    except (OSError, KeyError, ValueError) as error:
+        errors.append(dict(path="selected_python", error=type(error).__name__, message=str(error)))
+    required = [
+        ".gitattributes", ".github/workflows/windows-native-mock.yml", "pyproject.toml", "requirements-windows.lock",
+        "scripts/OwnedBrowserSetup.ps1", "scripts/WindowsExtractCompletionUI.ps1",
+        "scripts/protocol_completion_browser_ci.py", "scripts/windows_browser_ci.py",
+        "scripts/browser-ci/package.json", "scripts/browser-ci/package-lock.json", "scripts/browser-ci/extract-completion.cjs",
+        "src/sim2act/__init__.py", "src/sim2act/api.py", "src/sim2act/web/index.html", "src/sim2act/web/app.js", "src/sim2act/web/protocol.js",
+    ]
+    required += [f"docs/evidence/protocol-extract-process-recovery-20261022/{name}" for name in ("original.json", "before.sqlite.gz", "original-received-sidecar.json")]
+    required += [f"docs/evidence/protocol-store-loop-20261006/evaluation/{name}.json" for name in ("a-source", "a-cold", "b-source", "b-cold")]
+    for name in required:
+        file(name, REPO / name)
+    write(root, "launch-contract.json", dict(status="FAIL" if errors else "QUALIFIED_FILES_ONLY", paths=paths, errors=errors, cwd=str(REPO), root=str(root), scope="file/layout checks, not Windows handle/sandbox qualification"))
+    if errors:
+        raise RuntimeError("Launch contract incomplete: " + json.dumps(errors))
+    return paths
 
 
 def main():
@@ -79,27 +130,28 @@ def main():
 
     def command(args, log):
         config = root / (log + ".json")
-        executable = shutil.which(args[0])
-        assert executable
+        executable = args[0]
+        assert Path(executable).is_absolute() and Path(executable).is_file()
         write(root, config.name, dict(executable=executable, arguments=args[1:], cwd=str(REPO), until_ms=absolute * 1000, receipt=str(root / (log + ".receipt.json"))))
         with (root / log).open("wb") as output:
             # The original deadline belongs to the supervisor too. The extra
             # two seconds allow its exact-handle tree termination, not work.
             wait = remaining()
-            supervisor = subprocess.Popen(["pwsh", "-NoProfile", "-NonInteractive", "-File", str(REPO / "scripts/OwnedBrowserSetup.ps1"), "-Config", str(config)], cwd=REPO, stdout=output, stderr=subprocess.STDOUT)
+            supervisor = subprocess.Popen([paths["pwsh"], "-NoProfile", "-NonInteractive", "-File", paths["scripts/OwnedBrowserSetup.ps1"], "-Config", str(config)], cwd=REPO, stdout=output, stderr=subprocess.STDOUT)
             setup.append(supervisor)
             supervisor.wait(timeout=wait + 2)
             assert supervisor.returncode == 0, "Owned setup failed; no retry"
 
     try:
+        remaining()
+        paths = launch_paths(root, until)
+        remaining()
         # Existing project lock/SDK/license, official registries, no lifecycle
         # scripts, new SDK, browser installation, Actions cache or artifact.
         site = root / "site"
-        command([sys.executable, "-m", "pip", "--isolated", "install", "--target", str(site), "--only-binary=:all:", "--no-input", "--no-cache-dir", "--disable-pip-version-check", "--keyring-provider", "disabled", "--retries", "0", "--timeout", "20", "--index-url", "https://pypi.org/simple", "-r", "requirements-windows.lock"], "pip.log")
+        command([paths["python"], "-m", "pip", "--isolated", "install", "--target", str(site), "--only-binary=:all:", "--no-input", "--no-cache-dir", "--disable-pip-version-check", "--keyring-provider", "disabled", "--retries", "0", "--timeout", "20", "--index-url", "https://pypi.org/simple", "-r", paths["requirements-windows.lock"]], "pip.log")
         sys.path[:0] = [str(site), str(REPO / "src"), str(REPO / "scripts")]
-        npm = Path(shutil.which("npm.cmd")).parent / "node_modules/npm/bin/npm-cli.js"
-        assert npm.is_file(), "Installed official npm CLI required; no alternate source"
-        command(["node", str(npm), "ci", "--prefix", "scripts/browser-ci", "--ignore-scripts", "--no-audit", "--no-fund", "--registry=https://registry.npmjs.org", "--cache", str(root / "npm-cache"), "--fetch-retries=0", "--fetch-timeout=30000"], "npm.log")
+        command([paths["node"], paths["npm_cli"], "ci", "--prefix", str(REPO / "scripts/browser-ci"), "--ignore-scripts", "--no-audit", "--no-fund", "--registry=https://registry.npmjs.org", "--cache", str(root / "npm-cache"), "--fetch-retries=0", "--fetch-timeout=30000"], "npm.log")
         import psutil
         import uvicorn
         from sqlalchemy import select
@@ -179,13 +231,13 @@ def main():
         while not server.started:
             assert thread.is_alive() and time.monotonic() < ready, "API did not start"
             time.sleep(0.01)
-        commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, timeout=remaining(), text=True).strip()
+        commit = subprocess.check_output([paths["git"], "rev-parse", "HEAD"], cwd=REPO, timeout=remaining(), text=True).strip()
         hashes = {name: hashlib.sha256((REPO / name).read_bytes()).hexdigest() for name in ("src/sim2act/web/app.js", "src/sim2act/web/protocol.js", "src/sim2act/web/index.html", "scripts/protocol_completion_browser_ci.py", "scripts/browser-ci/extract-completion.cjs", "scripts/browser-ci/package-lock.json", "scripts/OwnedBrowserSetup.ps1", "scripts/WindowsExtractCompletionUI.ps1", ".github/workflows/windows-native-mock.yml")}
         write(root, "inventory.json", dict(commit=commit, source_sha256=hashes, synthetic_clock=original["resume_at"], browser_install=False, added_sdk=False))
         write(root, "info.json", dict(base=f"http://127.0.0.1:{port}", project=original["project"], run=original["run"], other=others[0], captured=original["captured"], until_ms=absolute * 1000))
         env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(site), str(REPO / "src")]))
         output = (root / "driver.log").open("wb")
-        node = subprocess.Popen(["node", "scripts/browser-ci/extract-completion.cjs", str(root), sys.executable], cwd=REPO, env=env, stdout=output, stderr=subprocess.STDOUT)
+        node = subprocess.Popen([paths["node"], paths["scripts/browser-ci/extract-completion.cjs"], str(root), paths["python"]], cwd=REPO, env=env, stdout=output, stderr=subprocess.STDOUT)
         node_process = psutil.Process(node.pid)
         node_process.create_time()  # Bind this process identity once, not by later PID lookup.
 
