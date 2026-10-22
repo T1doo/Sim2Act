@@ -73,7 +73,7 @@ jobs:
       github.event.repository.private == false &&
       github.ref == 'refs/heads/dev/production-trial-stages-20261018' &&
       github.run_attempt == 1 &&
-      contains(github.event.head_commit.message, '[extract-ui-native-once-20261022]')
+      contains(github.event.head_commit.message, '[extract-ui-sparse-once-20261022]')
     runs-on: windows-2025
     timeout-minutes: 4
     defaults:
@@ -96,6 +96,27 @@ jobs:
         timeout-minutes: 1
         with:
           persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.gitattributes
+            /.github/workflows/windows-native-mock.yml
+            /pyproject.toml
+            /requirements-windows.lock
+            /src/
+            /scripts/OwnedBrowserSetup.ps1
+            /scripts/WindowsExtractCompletionUI.ps1
+            /scripts/protocol_completion_browser_ci.py
+            /scripts/windows_browser_ci.py
+            /scripts/browser-ci/package.json
+            /scripts/browser-ci/package-lock.json
+            /scripts/browser-ci/extract-completion.cjs
+            /docs/evidence/protocol-extract-process-recovery-20261022/original.json
+            /docs/evidence/protocol-extract-process-recovery-20261022/before.sqlite.gz
+            /docs/evidence/protocol-extract-process-recovery-20261022/original-received-sidecar.json
+            /docs/evidence/protocol-store-loop-20261006/evaluation/a-source.json
+            /docs/evidence/protocol-store-loop-20261006/evaluation/a-cold.json
+            /docs/evidence/protocol-store-loop-20261006/evaluation/b-source.json
+            /docs/evidence/protocol-store-loop-20261006/evaluation/b-cold.json
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         timeout-minutes: 1
         with:
