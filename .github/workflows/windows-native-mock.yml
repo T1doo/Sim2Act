@@ -73,7 +73,8 @@ jobs:
       github.event.repository.private == false &&
       github.ref == 'refs/heads/dev/production-trial-stages-20261018' &&
       github.run_attempt == 1 &&
-      contains(github.event.head_commit.message, '[source-review-ui-once-20261022]')
+      (contains(github.event.head_commit.message, '[source-review-ui-once-20261022]') ||
+       contains(github.event.head_commit.message, '[review-readback-ui-once-20261022]'))
     runs-on: windows-2025
     timeout-minutes: 4
     defaults:
@@ -106,10 +107,15 @@ jobs:
             /scripts/OwnedBrowserSetup.ps1
             /scripts/WindowsExtractCompletionUI.ps1
             /scripts/protocol_completion_browser_ci.py
+            /scripts/protocol_review_readback_fixture.py
             /scripts/windows_browser_ci.py
             /scripts/browser-ci/package.json
             /scripts/browser-ci/package-lock.json
             /scripts/browser-ci/extract-completion.cjs
+            /docs/evidence/protocol-cold-review-http-20261022/fixture.json
+            /docs/evidence/protocol-cold-review-http-20261022/MANIFEST.json
+            /docs/evidence/protocol-cold-review-http-20261022/runtime/after.sqlite.gz
+            /docs/evidence/protocol-cold-review-http-20261022/fixture/
             /docs/evidence/protocol-source-process-recovery-20261022/original.json
             /docs/evidence/protocol-source-process-recovery-20261022/after.sqlite.gz
             /docs/evidence/protocol-source-process-recovery-20261022/original-received-sidecar.json
@@ -122,6 +128,9 @@ jobs:
         with:
           python-version: '3.12.10'
           architecture: x64
-      - name: Only sealed Source registered review in protected installed Edge
+      - name: Explicit sealed review action in protected installed Edge
         timeout-minutes: 4
-        run: ./scripts/WindowsExtractCompletionUI.ps1 -SourceReview
+        run: |
+          $Readback = '${{ contains(github.event.head_commit.message, '[review-readback-ui-once-20261022]') }}' -eq 'true'
+          if ($Readback) { ./scripts/WindowsExtractCompletionUI.ps1 -ReviewReadback }
+          else { ./scripts/WindowsExtractCompletionUI.ps1 -SourceReview }

@@ -21,14 +21,15 @@ const {chromium}=require('playwright-core');
 const root=process.argv[2],python=process.argv[3];
 const info=JSON.parse(fs.readFileSync(path.join(root,'info.json'),'utf8'));
 assert.ok(['source','extract'].includes(info.phase),'Unknown explicit completion phase');
-const source=info.phase==='source',review=info.action==='review';
-assert.ok(info.action==='completion'||review,'Unknown explicit action');
+const source=info.phase==='source',review=info.action==='review',readback=info.action==='review-readback';
+assert.ok(info.action==='completion'||review||readback,'Unknown explicit action');
 assert.ok(!review||source,'Review fixture only supports sealed Source');
-const control=review?'protocol-review':'protocol-completion',postKind=review?'review_post':'completion_post';
+const control=review||readback?'protocol-review':'protocol-completion',postKind=readback?'business_post':review?'review_post':'completion_post';
+const getLimit=readback?60:30,staticLimit=readback?60:40;
 if(source)assert.ok(!Object.hasOwn(info,'other'),'Source fixture must not manufacture another Run');
 else assert.equal(typeof info.other,'string');
 const completionPath=review?`/api/internal/protocol/runs/${info.run}/reviews`:`/api/projects/${info.project}/protocol/runs/${info.run}/${source?'complete-source':'complete-extraction'}`;
-const result={status:'UNKNOWN',phase:info.phase,action:info.action,nativeCrossRunABA:source?'NOT_TESTED_SINGLE_RUN_FIXTURE':'COVERED_RUN_SWITCH',screenshotFiles:[],scope:'real installed Edge / production full page / sealed synthetic SQLite',checks:[],receipts:[],screenshots:0,counts:{business_get:0,static_get:0,[postKind]:0,blocked:0},requests:[],pageErrors:[],sandbox:[]};
+const result={status:'UNKNOWN',phase:info.phase,action:info.action,nativeCrossRunABA:readback?'TWO_RUN_SELECTION_NOT_ABA':source?'NOT_TESTED_SINGLE_RUN_FIXTURE':'COVERED_RUN_SWITCH',screenshotFiles:[],located:[],scope:'real installed Edge / production full page / sealed synthetic SQLite',checks:[],receipts:[],screenshots:0,counts:{business_get:0,static_get:0,[postKind]:0,blocked:0},requests:[],pageErrors:[],sandbox:[]};
 // Exactly the already reviewed installed-Edge route, not a new launch policy.
 const removedSecurityDefaults=[
  '--enable-unsafe-swiftshader','--unsafely-disable-devtools-self-xss-warnings',
@@ -42,7 +43,9 @@ const removedSecurityDefaults=[
 ];
 let browser,page,timer,watcher,failGet=false,holdGet=false,held,releaseHeld,heldRequest,delivered,cancelled=false,fail;
 const cancellation=new AbortController(),wait=promise=>stoppedWait(promise,cancellation.signal);
-const bodies=[];
+const bodies=[],requestRecords=new WeakMap(),requestLifetimes=new WeakMap(),readbackDetailReleases=new Set();
+let readbackHoldDetails=false,readbackFailLocator=false;
+function releaseReadbackDetails(){readbackHoldDetails=false;for(const release of readbackDetailReleases)release();readbackDetailReleases.clear();}
 function check(name,condition){assert.ok(condition,name);result.checks.push(name);}
 function write(){fs.writeFileSync(path.join(root,'browser.json'),JSON.stringify(result,null,2));}
 function failWindow(error){cancelled=true;cancellation.abort(error);fail(error);}
@@ -63,6 +66,63 @@ async function audit(){
  check('actual renderer token is restricted low integrity or AppContainer',renderers.length>0&&renderers.every(p=>p.app_container||(p.restricted_token&&p.integrity_rid<=4096)));
  result.sandbox.push(observed);
 }
+async function runReadback(){
+ const [sourceCase,coldCase]=info.cases;
+ assert.equal(sourceCase.current.phase,'source');assert.equal(coldCase.current.phase,'cold');
+ const key=sourceCase.locator.request.request_key;
+ async function locate(item){
+  await page.locator('#protocol-review-locate').click();
+  await until(id=>!protocolContext.busy&&protocolReviewIntents.get(protocolCompletionKey(protocolContext,id))?.state==='accepted',item.current.run_id);
+  assert.deepEqual(JSON.parse(await page.locator('#protocol-review-locate-receipt').textContent()),{request:item.locator.request,receipt:item.locator.receipt});
+  assert.deepEqual(JSON.parse(await page.locator('#protocol-result').textContent()),item.current.result);
+ }
+ await choose(sourceCase.current.run_id);
+ check('initial real page has no completion or review intent',await page.evaluate(()=>protocolReviewIntents.size===0&&protocolCompletionIntents.size===0));
+ await locate(sourceCase);
+ check('Source original accepted key recovered by GET on initial native page',await page.locator('#protocol-review-locate-receipt').textContent().then(s=>s.includes(key)));
+ await page.locator('#protocol-state').scrollIntoViewIfNeeded();await shot('initial.png');
+ // Drain earlier details, then hold only new background detail responses for
+ // the failure screenshot. The production 2500ms poll keeps running; no
+ // controller, timer or function identity is replaced.
+ readbackHoldDetails=true;
+ const prior=result.requests.filter(r=>r.path===`/api/projects/${info.project}/protocol/runs/${info.run}`);
+ await wait(Promise.all(prior.map(r=>requestLifetimes.get(r).done)));
+ await wait(page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))));
+ readbackFailLocator=true;
+ try{
+  await page.locator('#protocol-review-locate').click();
+  await until(()=>!protocolContext.busy&&document.getElementById('protocol-state').textContent.includes('不可确认'));
+  const closed=await page.evaluate(()=>({top:document.getElementById('protocol-state').textContent,message:document.getElementById('protocol-review-status').textContent,
+   result:document.getElementById('protocol-result').textContent,receipt:document.getElementById('protocol-review-locate-receipt').textContent,
+   key:protocolReviewIntents.get(protocolCompletionKey(protocolContext,protocolContext.run.run_id)).body.request_key,
+   entryState:protocolReviewIntents.get(protocolCompletionKey(protocolContext,protocolContext.run.run_id)).state,status:protocolContext.run.status}));
+  assert.equal(closed.key,key);assert.equal(closed.entryState,'accepted-read-error');assert.equal(closed.status,sourceCase.current.status);
+  check('failed locator removes old PASS text, output, receipt and extraction route',closed.top.includes('不可确认')&&!/SUCCEEDED|PASS|APPROVED/.test(closed.top)&&closed.message.includes('不可确认')&&!closed.message.includes('已复读确认')&&!closed.result&&!closed.receipt&&await page.locator('#protocol-extract').isHidden());
+  result.failedReadProjection=closed;
+  await page.locator('#protocol-state').scrollIntoViewIfNeeded();await shot('read-failed.png');
+  check('failure screenshot retains unconfirmed state while only background details are delayed',await page.locator('#protocol-state').textContent().then(s=>s.includes('不可确认')));
+ }finally{releaseReadbackDetails();}
+ await locate(sourceCase);
+ check('Source old key restores only through a new locator and fresh GET after failed read',await page.locator('#protocol-review-status').textContent().then(s=>s.includes('已复读确认')));
+ const cdp=await page.context().newCDPSession(page);
+ const loaded=page.waitForEvent('domcontentloaded');await cdp.send('Page.reload',{ignoreCache:true});await loaded;await cdp.detach();
+ check('hard refresh clears authenticated page memory and both command maps',await page.locator('#login').isVisible()&&await page.evaluate(()=>protocolReviewIntents.size===0&&protocolCompletionIntents.size===0&&protocolIntents.size===0));
+ await page.locator('#token').fill('secret test token');await page.locator('#connect').click();await page.locator('#login').waitFor({state:'hidden'});
+ await audit();await choose(sourceCase.current.run_id);
+ check('hard refreshed selected Source has no original key in memory',await page.evaluate(()=>protocolReviewIntents.size===0));
+ await locate(sourceCase);
+ check('hard refresh Source original key and receipt recovered solely by GET',await page.locator('#protocol-review-status').textContent().then(s=>s.includes('已复读确认')));
+ await page.locator('#protocol-state').scrollIntoViewIfNeeded();await shot('completed.png');
+ await choose(coldCase.current.run_id);
+ check('Cold original key absent from fresh page memory before locate',await page.evaluate(id=>!protocolReviewIntents.has(protocolCompletionKey(protocolContext,id)),coldCase.current.run_id));
+ await locate(coldCase);
+ check('Cold original key and full receipt recovered by GET, no Source substitution',await page.locator('#protocol-run-id').textContent()===coldCase.current.run_id&&await page.locator('#protocol-extract').isHidden());
+ check('both recovered facts remain owner PENDING and unpublished',info.cases.every(item=>item.current.owner_semantic_acceptance==='PENDING'&&!item.current.formal_publication_enabled)&&await page.evaluate(()=>protocolContext.run.owner_semantic_acceptance==='PENDING'&&!protocolContext.run.formal_publication_enabled));
+ await page.locator('#protocol-state').scrollIntoViewIfNeeded();await shot('cold.png');
+ check('zero business POST and no page errors with actual request trace',result.counts.business_post===0&&result.counts.blocked===0&&result.pageErrors.length===0&&result.requests.every(r=>r.method==='GET'));
+ result.refreshKeyRecovery='VERIFIED_GET_ONLY_EXISTING_ACCEPTED_SOURCE_AND_COLD';result.receipts=result.located.map(item=>item.receipt);
+ result.status='PASS';
+}
 async function run(){
  const launchRemaining=Math.min(20000,info.until_ms-Date.now());assert.ok(launchRemaining>0);
  browser=await chromium.launch({channel:'msedge',chromiumSandbox:true,headless:true,ignoreDefaultArgs:removedSecurityDefaults,timeout:launchRemaining,env:process.env});
@@ -76,11 +136,23 @@ async function run(){
   const business=url.pathname.startsWith('/api/')||url.pathname==='/health';
   let kind;
   if(allowed&&method==='GET')kind=business?'business_get':'static_get';
-  else if(allowed&&method==='POST'&&url.pathname===completionPath)kind=postKind;
+  else if(allowed&&!readback&&method==='POST'&&url.pathname===completionPath)kind=postKind;
   else allowed=false;
-  if(kind){result.counts[kind]++;allowed=result.counts[kind]<=(kind==='business_get'?30:kind===postKind?3:40);}
+  if(kind){result.counts[kind]++;allowed=result.counts[kind]<=(kind==='business_get'?getLimit:kind===postKind?(readback?0:3):staticLimit);}
   if(!allowed||cancelled||Date.now()>=info.until_ms){result.counts.blocked++;result.rejectedRequest??={method,path:url.pathname,kind,counts:{...result.counts},cancelled,at_ms:Date.now(),until_ms:info.until_ms};await route.abort();throw Error('Business/request/time budget stop; no retry');}
-  result.requests.push({method,path:url.pathname,kind});
+  const record={method,path:url.pathname+url.search,kind,at_ms:Date.now()};result.requests.push(record);requestRecords.set(request,record);
+  let finish;requestLifetimes.set(record,{done:new Promise(resolve=>finish=resolve),finish:()=>finish()});
+  if(readback&&url.pathname===`/api/projects/${info.project}/protocol/runs/${info.run}`&&readbackHoldDetails){
+   record.test_hold='detail request paused before server only for failure capture';
+   let release;const delayed=new Promise(resolve=>release=resolve);readbackDetailReleases.add(release);
+   try{await wait(delayed);}finally{readbackDetailReleases.delete(release);record.released_at_ms=Date.now();}
+  }
+  if(readback&&url.pathname.endsWith('/review-receipt')){
+   if(readbackFailLocator){assert.equal(url.pathname,`/api/projects/${info.project}/protocol/runs/${info.run}/review-receipt`);readbackFailLocator=false;record.controlled_response='403 locator-only read-failure';await route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({error:{code:'CONTROLLED_LOCATOR_READ_FAILURE'}})});return;}
+   const response=await route.fetch({maxRedirects:0,maxRetries:0,timeout:8000});assert.equal(response.status(),200);
+   const value=await response.json();assert.equal(value.state,'FOUND');result.located.push(value);
+   await route.fulfill({response});return;
+  }
   if(method==='POST'){
    bodies.push(request.postDataJSON());
    const body=bodies[bodies.length-1];
@@ -108,7 +180,7 @@ async function run(){
    assert.equal(bodies.length,2);failGet=true;await route.fulfill({response});return;
   }
   if(business&&url.pathname===`/api/projects/${info.project}/protocol/runs/${info.run}`){
-   if(failGet){failGet=false;await route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({error:{code:'CONTROLLED_RESPONSE_READ_FAILURE'}})});return;}
+   if(failGet){record.controlled_response='403 read-failure';failGet=false;await route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({error:{code:'CONTROLLED_RESPONSE_READ_FAILURE'}})});return;}
    if(holdGet){
     holdGet=false;const response=await route.fetch({maxRedirects:0,maxRetries:0,timeout:8000});
     heldRequest=request;held();await wait(new Promise(resolve=>releaseHeld=resolve));await wait(route.fulfill({response}));delivered();return;
@@ -119,11 +191,15 @@ async function run(){
  });
  page=await context.newPage();page.setDefaultTimeout(8000);
  page.on('pageerror',e=>result.pageErrors.push(e.message));
+ page.on('response',response=>{const record=requestRecords.get(response.request());if(record)record.status=response.status();});
+ page.on('requestfinished',request=>{const record=requestRecords.get(request);if(record){record.finished_at_ms=Date.now();requestLifetimes.get(record)?.finish();}});
+ page.on('requestfailed',request=>{const record=requestRecords.get(request);if(record){record.failure=request.failure()?.errorText||'REQUEST_FAILED';requestLifetimes.get(record)?.finish();}});
  await page.goto(info.base,{waitUntil:'domcontentloaded'});
  await audit(); // Actual application renderer, not a blank-page substitute.
  await page.locator('#token').fill('secret test token');
  await page.locator('#connect').click();await page.locator('#login').waitFor({state:'hidden'});
  check('original project selected from real authenticated UI',await page.locator('#project-select').inputValue()===info.project);
+ if(readback){await runReadback();return;}
  await choose(info.run);
  check('explicit acknowledgement starts unchecked and submission disabled',!await page.locator(`#${control}-confirm`).isChecked()&&await page.locator(`#${control}-submit`).isDisabled());
  await page.locator(`#${control}`).scrollIntoViewIfNeeded();await shot('initial.png');
@@ -196,7 +272,7 @@ async function run(){
  try{await Promise.race([work,budget]);}
  catch(error){result.status='FAIL';result.error=error.stack;console.error(error.stack);if(page&&!page.isClosed()&&result.screenshots<4&&Date.now()<info.until_ms)try{await shot('failure.png');}catch{};}
  finally{
-  clearTimeout(timer);clearInterval(watcher);cancelled=true;cancellation.abort(Error('Owned window cleanup'));if(releaseHeld)releaseHeld();
+  clearTimeout(timer);clearInterval(watcher);cancelled=true;cancellation.abort(Error('Owned window cleanup'));if(releaseHeld)releaseHeld();releaseReadbackDetails();
   // One shared ten seconds, not a new allowance for each process. Node uses
   // at most four, leaving the coordinator six for monitor/API/AnyIO cleanup.
   const deadlines=cleanupDeadlines(Date.now(),info.until_ms),cleanupUntil=deadlines.node;fs.writeFileSync(path.join(root,'cleanup-until.json'),JSON.stringify(deadlines.shared/1000));

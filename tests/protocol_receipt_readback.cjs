@@ -21,6 +21,42 @@ function setup(item,handler){
 const locate=()=>elements.get('protocol-review-locate').onclick();
 const entry=()=>ev('protocolContext&&protocolReviewIntents.get(protocolCompletionKey(protocolContext,activeRun))');
 (async()=>{
+ if(process.argv[3]==='poll'){
+  const outcomes=[],item=cases[0];let release;
+  setup(item,url=>url.endsWith('/review-receipt')?new Promise(resolve=>release=()=>resolve({data:item.locator})):{data:item.run});
+  let locating=locate();await Promise.resolve();await ev('showProtocolRun(activeRun)');release();await locating;
+  outcomes.push({scenario:'background selection during locator',accepted:entry()?.state==='accepted',original_key:entry()?.body.request_key===item.locator.request.request_key});
+  let oldRead,detail=0;
+  setup(item,url=>url.endsWith('/review-receipt')?{data:item.locator}:++detail===1?new Promise(resolve=>oldRead=()=>resolve({status:403,data:{error:{code:'OLD_READ_FAILURE'}}})):{data:item.run});
+  locating=locate();for(let n=0;n<20&&!oldRead;n++)await Promise.resolve();assert(oldRead);
+  await ev('showProtocolRun(activeRun)');oldRead();await locating;
+  outcomes.push({scenario:'newer matching background read before old rejection',accepted:entry()?.state==='accepted',original_key:entry()?.body.request_key===item.locator.request.request_key});
+  detail=0;oldRead=null;
+  setup(item,url=>url.endsWith('/review-receipt')?{data:item.locator}:++detail===1?new Promise(resolve=>oldRead=()=>resolve({data:item.run})):{status:403,data:{error:{code:'NEWER_READ_FAILURE'}}});
+  locating=locate();for(let n=0;n<20&&!oldRead;n++)await Promise.resolve();assert(oldRead);
+  try{await ev('showProtocolRun(activeRun)');}catch(error){assert.equal(error.message,'NEWER_READ_FAILURE');}oldRead();await locating;
+  outcomes.push({scenario:'newer rejection must not admit older PASS',not_accepted:entry()?.state!=='accepted',output_closed:!elements.get('protocol-result').textContent});
+  let releaseNew;detail=0;oldRead=null;
+  setup(item,url=>url.endsWith('/review-receipt')?{data:item.locator}:++detail===1?new Promise(resolve=>oldRead=()=>resolve({status:403,data:{error:{code:'OLD_READ_FAILURE'}}})):new Promise(resolve=>releaseNew=()=>resolve({data:item.run})));
+  locating=locate();for(let n=0;n<20&&!oldRead;n++)await Promise.resolve();assert(oldRead);
+  const background=ev('showProtocolRun(activeRun)');for(let n=0;n<20&&!releaseNew;n++)await Promise.resolve();assert(releaseNew);
+  oldRead();await locating;
+  const pendingClosed=elements.get('protocol-state').textContent.includes('不可确认')&&elements.get('protocol-extract').hidden;
+  releaseNew();await background;
+  outcomes.push({scenario:'old rejection closes projection while newer read pending then fresh match restores',pending_closed:pendingClosed,accepted:entry()?.state==='accepted'});
+  setup(item);context.saved=item.locator;
+  ev('protocolReviewIntents.set(protocolCompletionKey(protocolContext,activeRun),{rid:activeRun,phase:selected.phase,body:saved.request,receipt:saved.receipt,state:"accepted-read-error"});');
+  await ev('showProtocolRun(activeRun)');outcomes.push({scenario:'unregistered receipt cannot be adopted by background',not_accepted:entry().state!=='accepted'});
+  for(const kind of ['intent-ABA','wrong-fence']){
+   detail=0;oldRead=null;
+   setup(item,url=>url.endsWith('/review-receipt')?{data:item.locator}:++detail===1?new Promise(resolve=>oldRead=()=>resolve({status:403,data:{error:{code:'OLD_READ_FAILURE'}}})):{data:kind==='wrong-fence'?{...item.run,fence:item.run.fence+1}:item.run});
+   locating=locate();for(let n=0;n<20&&!oldRead;n++)await Promise.resolve();assert(oldRead);
+   if(kind==='intent-ABA')ev('protocolContext.intent++');await ev('showProtocolRun(activeRun)');oldRead();await locating;
+   outcomes.push({scenario:kind+' cannot adopt prior receipt read',not_accepted:entry().state!=='accepted',original_key:entry().body.request_key===item.locator.request.request_key});
+  }
+  const report={status:outcomes.every(x=>Object.entries(x).filter(([k])=>k!=='scenario').every(([,v])=>v))?'PASS':'FAIL',scope:'bounded controller VM poll interleavings',source_sha256:crypto.createHash('sha256').update(source).digest('hex'),outcomes};
+  fs.writeFileSync(path.join(root,'poll-result.json'),JSON.stringify(report,null,2));assert.equal(report.status,'PASS',JSON.stringify(outcomes));console.log('7 poll interleavings PASS');return;
+ }
  if(process.argv[3]==='projection'){
   const outcomes=[];
   for(const failure of ['NOT_FOUND','locator-read-error','result-read-error']){
