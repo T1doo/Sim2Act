@@ -91,6 +91,7 @@ async function logic(){
 }
 async function http(){
  const info=JSON.parse(fs.readFileSync(path.join(out,'http-info.json'),'utf8')),base=new URL(info.base);assert.equal(base.hostname,'127.0.0.1');
+ const phase=mode==='http-cold'?'cold':'source';if(phase==='cold')assert.equal(info.phase,'cold','Cold HTTP must receive an explicit genuine Cold fixture');
  const seen=[];let first=true,failRead=true;
  const send=async(url,options={})=>{const target=new URL(url,base);assert.equal(target.origin,base.origin);const response=await fetch(target,options);return {status:response.status,data:await response.json()};};
  const initial=await send(`/api/projects/${info.project}/protocol/runs/${info.run}`,{headers:{Authorization:'Bearer secret test token'}});assert.equal(initial.status,200);const run=initial.data;
@@ -102,13 +103,13 @@ async function http(){
   if(failRead){failRead=false;return {status:403,data:{error:{code:'TEST_READ_FAILURE'}}};}
   return send(url,options);
  });elements.get('project-select').value=info.project;ctx.token='secret test token';evaluate('protocolContext.project=$("project-select").value;protocolContext.token=token;');
- check(run.contract_id==='protocol.synthetic.a-source.v1','HTTP exposes only verified frozen contract ID');
+ check(run.phase===phase&&run.contract_id===`protocol.synthetic.a-${phase}.v1`,'HTTP exposes actual '+phase+' and its verified frozen contract ID');
  await start();check(entry().state==='unknown'&&posts().length===1&&elements.get('protocol-extract').hidden,'real accepted review reply lost: UNKNOWN, no route unlock');
  const original=JSON.stringify(posts()[0].body);closeReturn();choose(run);await retry();
  check(entry().state==='accepted-read-error'&&posts().length===2&&posts().every(p=>JSON.stringify(p.body)===original),'same page returns and replays exact original real review key');
  assert.deepEqual(seen[0],seen[1]);check(elements.get('protocol-extract').hidden,'real receipt alone plus controlled failed GET stays closed');
- await retry();check(posts().length===2&&entry().state==='accepted'&&!elements.get('protocol-extract').hidden,'GET-only recovery authenticates persisted PASS and enables existing explicit extraction button');
+ await retry();check(posts().length===2&&entry().state==='accepted'&&elements.get('protocol-extract').hidden===(phase==='cold'),'GET-only recovery authenticates persisted '+phase+' PASS with only phase-appropriate existing controls');
  check(evaluate('protocolContext.run.owner_semantic_acceptance==="PENDING"&&!protocolContext.run.formal_publication_enabled')&&elements.get('protocol-cold-form').hidden,'no owner acceptance, publication, plan or Cold auto-unlock');
  fs.writeFileSync(path.join(out,'http-receipts.json'),JSON.stringify({bodies:posts().map(p=>p.body),receipts:seen,read:evaluate('protocolContext.run')},null,2));
 }
-(async()=>{await (mode==='http'?http():logic());fs.writeFileSync(path.join(out,mode+'-result.json'),JSON.stringify({status:'PASS',scope:'actual controller minimal element VM; not DOM/browser',source_sha256:crypto.createHash('sha256').update(source).digest('hex'),checks,controller_requests:calls.length,model_requests:0},null,2));console.log(`${checks.length} ${mode} review checks PASS`);})().catch(error=>{console.error(error);process.exitCode=1;});
+(async()=>{await (['http','http-cold'].includes(mode)?http():logic());fs.writeFileSync(path.join(out,mode+'-result.json'),JSON.stringify({status:'PASS',scope:'actual controller minimal element VM; not DOM/browser',source_sha256:crypto.createHash('sha256').update(source).digest('hex'),checks,controller_requests:calls.length,model_requests:0},null,2));console.log(`${checks.length} ${mode} review checks PASS`);})().catch(error=>{console.error(error);process.exitCode=1;});
