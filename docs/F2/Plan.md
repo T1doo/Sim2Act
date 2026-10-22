@@ -1,5 +1,7 @@
 # F2 并行工程 Plan：权威当前状态
 
+2026-10-22 接续`5d5a255e`实际修复原Cold `_base`重复资格遍历：以新鲜类型发现替代第一遍完整actual校验，保留原consumer全部字段/raw/serializer比较、原动态两端和完整出口pin；新增发现后未知serializer恢复入口pin。最终37PASS/59.19s/555输入无漂移，0Mock/Worker/模型；从封存prefix JSON重建7模型25类、计入catalogguard的资格局部中位CPU约降5.80%，非完整对象别名/整尾段收益，不签G0。默认native关闭及原事务/lease/授权不变；[实质代码、反例、原件与账户可信来源缺件](../evidence/cold-base-type-discovery-20261022/README.md)。不据此追加完整窗口或扩大权限。
+
 2026-10-22 原 F2-T09 / AT-05、AT-18 的Source/单请求Extract完成及持久回执只读恢复已做[交付与操作说明收口](ProtocolRecoveryQuickstart20261022.md)。最新归档`4f3454d2`，两族各真实硬刷新、原键GET恢复、失败中性化、0POST/0模型，唯一Windows Edge窗口及清理限定通过。此条不改签旧失败、PG/真实provider/G0/owner或整体F2/R0；剩余最小条件见同页，停止同型原生回读重复验收。
 
 2026-10-20 原记录 PG 验收前置：发现四处冷 Store 遗失测试 schema，现仅修测试夹具并保留专用 schema/同值 _none，独立连接池且拒未隔离 PG 配置。无连接方言检查首批9P2F（测试编译参数错误），仅两项修正复测2P；原 SQLite API/页面2P，补 helper 输入清单后页面1P另计。当前无 PG 实例/镜像/安全注入连接；现 CI 会创建密码/角色并完整运行，未启动。真实 PG 事务/冷重启/隔离继续 BLOCKED_ENVIRONMENT，不以 SQLite/方言代签。原件、独审及唯一原11节点见[PG隔离前置](../evidence/record-pg-isolation-20261020/README.md)；无产品/权限/依赖/workflow 改动。

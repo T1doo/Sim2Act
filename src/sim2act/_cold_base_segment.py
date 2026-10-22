@@ -4,7 +4,12 @@ Only the collector and fixed standard serializers are pure. Unknown code or
 schemas retain the original full entry pin before any callback can execute.
 """
 
+from collections.abc import Iterator
 from inspect import getattr_static
+from typing import Any
+
+from pydantic import BaseModel
+from pydantic_core import SchemaSerializer
 
 from . import _cold_policy_segment as schema_code
 from . import _cold_typed_stream as stream_code
@@ -22,6 +27,73 @@ _STREAM_CODE = tuple((name, getattr_static(_Comparison, name)) for name in (
 _STREAM_VALUES = stream_code._stream_values
 _SCHEMA_SHAPE = schema_code._schema_shape
 _SCHEMA_MATCHES = schema_code._schema_matches
+_STANDARD_DUMP = BaseModel.model_dump
+
+
+def _model_kinds(models):
+    """Discover serializer classes, not actual-value validity or saved headers.
+
+    The consumer still freshly validates every actual value and raw pin. Only
+    this invocation's code eligibility needs the set of reachable classes.
+    Retain completed objects so a removed DAG edge cannot permit id reuse.
+    Native values/iteration never dispatch a foreign key hash or equality.
+    """
+    allowed = gate._trial_typed_nested_classes()
+    kinds: dict[int, type] = {}
+    completed: dict[int, Any] = {}
+    active: set[int] = set()
+    frames: list[tuple[Any, Iterator[Any]]] = [(None, iter(model for _, model, _ in models))]
+    while frames:
+        try:
+            value = next(frames[-1][1])
+        except StopIteration:
+            value, _ = frames.pop()
+            if value is not None:
+                identity = id(value)
+                active.remove(identity)
+                completed[identity] = value
+            continue
+        kind = type(value)
+        if (kind is str or kind is int or kind is float or kind is bool
+                or kind is bytes or kind is type(None)):
+            continue
+        identity = id(value)
+        if identity in active:
+            return None
+        if identity in completed:
+            continue
+        if kind is dict:
+            children = iter(dict.values(value))
+        elif kind is list or kind is tuple:
+            children = iter(value)
+        elif any(kind is item for item in allowed):
+            raw = object.__getattribute__(value, '__dict__')
+            if type(raw) is not dict:
+                return None
+            kinds[id(kind)] = kind
+            children = iter(dict.values(raw))
+        else:
+            return None
+        active.add(identity)
+        frames.append((value, children))
+    return tuple(kinds.values())
+
+
+def serializers_current():
+    """Fresh compiled-code witness, including kinds introduced after discovery.
+
+    The immutable original C serializers contain only the already-reviewed
+    callbacks. Changed compiled serializers/dump methods select a full entry pin before the
+    original bridge; this is not a remembered content validation result.
+    """
+    return all(getattr_static(kind, 'model_dump') is _STANDARD_DUMP
+        and type.__getattribute__(kind, '__dict__').get('__pydantic_serializer__') is serializer
+        for kind, _, _, _, serializer in schema_code._SCHEMAS)
+
+
+_MODEL_KINDS = _model_kinds
+_SERIALIZERS_CURRENT = serializers_current
+_SCHEMA_CATALOG = schema_code._SCHEMAS
 
 
 def eligible(trial):
@@ -37,6 +109,9 @@ def eligible(trial):
             or stream_code._stream_values is not _STREAM_VALUES
             or schema_code._schema_shape is not _SCHEMA_SHAPE
             or schema_code._schema_matches is not _SCHEMA_MATCHES
+            or schema_code._SCHEMAS is not _SCHEMA_CATALOG
+            or _model_kinds is not _MODEL_KINDS
+            or serializers_current is not _SERIALIZERS_CURRENT
             or any(getattr_static(_Comparison, name) is not function for name, function in _STREAM_CODE)
             or any(getattr_static(trial, name) is not function
                 for name, function in zip(('_typed_parameter_models',
@@ -54,17 +129,24 @@ def eligible(trial):
 
 
 def fixed_serializers(models):
-    """Fresh exact storage + complete schema/code witness, before serialization.
+    """Fresh type discovery + complete schema/code witness before serialization.
 
     This metadata is discarded at return. No successful value or validation
     result survives into another _base invocation. Unfit input is not rejected
     by eligibility: the caller restores the original full entry pin and bridge.
     """
-    comparison = _Comparison(gate._trial_typed_nested_classes())
     try:
-        for _, model, _ in models:
-            comparison.validate_model(model)
-        kinds = {type(model) for model, _, _ in comparison.models.values()}
-        return comparison.standard_serializers() and all(_fixed_schema(kind) for kind in kinds)
+        kinds = _model_kinds(models)
+        if kinds is None:
+            return False
+        for kind in kinds:
+            namespace = type.__getattribute__(kind, '__dict__')
+            serializer = namespace.get('__pydantic_serializer__')
+            if (getattr_static(kind, 'model_dump') is not _STANDARD_DUMP
+                    or type(serializer) is not SchemaSerializer
+                    or SchemaSerializer.__reduce__(serializer)[1][0]
+                        is not namespace.get('__pydantic_core_schema__')):
+                return False
+        return all(_fixed_schema(kind) for kind in kinds)
     except DomainError:
         return False

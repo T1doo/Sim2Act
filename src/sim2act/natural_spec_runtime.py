@@ -2551,7 +2551,7 @@ class _ColdTrialGraph:
                 if self.guard.active and mode.active:
                     _ColdGraphRead.check(self.guard, self.worker.store, self.c)
                 raise
-            if not pure:
+            if not pure or not _base_segments.serializers_current():
                 # Before ANY unknown serializer, retain a full entry boundary.
                 _ColdGraphRead.check(self.guard, self.worker.store, self.c)
                 self._typed_values_from_models(models)

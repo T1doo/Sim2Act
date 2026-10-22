@@ -50,7 +50,7 @@ Source / Cold 的 **“请求已注册合成核查”** 是另一项显式业务
 | 最高价值剩余项 | 源码/原件依据 | 最小缺失条件和当前边界 |
 | --- | --- | --- |
 | 生产账户证据接入 | `production_evidence.resolve_account` 恒以 `SOURCE_MISSING` 拒绝；`spec_production.source` 使用此真实边界，见[证据要求](ProductionEvidenceBoundary20261018.md) | 可信且可核验的账户/合法免费权益/强制不可收费及禁付费回退/撤权时效原始来源，以及经审服务端接线。现有候选诊断、hash和合成替换不是该来源；不读取新凭据、不默认授权真实调用 |
-| 原PB Cold G0真实时钟尾段 | [最后已存实时时钟尾段失败](../evidence/typed-stream-synthetic-window-20261021/README.md)在第二commit的_recheck拒绝；[后续完整合成A/B](../evidence/row-native-complete-pair-20261022/README.md)未显示净提速；[input_bytes静态复用审查](../evidence/input-bytes-reuse-review-20261022/README.md)无可安全复用子图 | 当前表示含可变模型/RowMapping/跨根别名，没有已证明安全且有实测收益的新生产切片。需要保持全读集、当前动态门与原30秒租约的实质改进及最终真实时钟完整尾段证据；不延租约、删pin、缓存PASS或重复碰运气。后续合成时钟PASS不证明当前版本G0失败原因或通过 |
+| 原PB Cold G0真实时钟尾段 | [最后已存实时时钟尾段失败](../evidence/typed-stream-synthetic-window-20261021/README.md)在第二commit的_recheck拒绝；[后续完整合成A/B](../evidence/row-native-complete-pair-20261022/README.md)未显示净提速；[input_bytes静态复用审查](../evidence/input-bytes-reuse-review-20261022/README.md)无可安全复用子图 | 已完成[资格阶段新鲜类型发现修复](../evidence/cold-base-type-discovery-20261022/README.md)，37项定向通过且资格局部计时下降；不代表完整对象别名/尾段收益。当前表示仍含可变模型/RowMapping/跨根别名，需要保持全读集、当前动态门与原30秒租约的完整尾段净收益及最终真实时钟证据；不延租约、删pin、缓存PASS或重复碰运气。后续合成时钟PASS不证明当前版本G0失败原因或通过 |
 | 最新Cold组合PG | 上述PG入口，实际连接前缺配置SKIP | 指定环境已有获准PG、预迁移空隔离schema及既有应用角色CRUD连接，且允许保留合成结果。当前不新建角色、凭据或权限，不把SQLite当PG |
 | 真实任务/owner与整体交付 | [V5阶段门](../sources/V5/分阶段开发计划.md)及[产品§8](../sources/V5/平台产品设计.md) | 有限真实任务/模型的独立授权、精确版本和适用范围的owner语义签收、Win11与整体固定验收记录。工程测试不能代签；正式发布/部署仍关闭 |
 
