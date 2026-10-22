@@ -8,6 +8,8 @@ resource thresholds still require qualification before any runtime substitution.
 import hashlib
 import importlib.util
 import json
+import os
+import stat
 import sys
 import sysconfig
 from pathlib import Path
@@ -24,6 +26,9 @@ _NESTED = gate._trial_typed_nested_classes
 _ISSUER = object()
 _BUILD = '3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]'
 _EXECUTABLE = 'fa67443527ed9647f760d807e2a38f26340757123e643c4639cf273ed15d5ea7'
+_ASAN_LINK = Path('/usr/lib/gcc/x86_64-linux-gnu/14/libasan.so')
+_ASAN_REAL = Path('/usr/lib/x86_64-linux-gnu/libasan.so.8.0.0')
+_ASAN_SHA256 = 'f5c57422d80671ced6cffe350f92c8ab9bec23fda9b155658aac630d2bc2a240'
 _BINARIES = {
     None: 'a9c32db0f64ab4a8f901a5c7c5dc3cf32cc72c67573437f38b7ec306459510f2',
     'address': '3cca77d9b8eecc2d8f583bff44bd7a80be914011a9952c038c10a8a4d3d68b89',
@@ -107,6 +112,40 @@ def select_candidate(handle, expected, model):
     return _SELECT(handle, expected, model)
 
 
+def _asan_runtime_mapped():
+    """Recognize only this installed runtime, including its loader spelling.
+
+    /proc reports the canonical pathname when LD_PRELOAD names the GCC symlink.
+    Path text alone is insufficient: require the pinned file and an executable
+    mapping of its device/inode. This neither searches for nor loads a library.
+    """
+    try:
+        if _ASAN_LINK.resolve(strict=True) != _ASAN_REAL:
+            return False
+        with _ASAN_REAL.open('rb') as library:
+            info = os.fstat(library.fileno())
+            # Reading the library may itself update atime under relatime.
+            stable = lambda item: (item.st_dev, item.st_ino, item.st_mode,
+                item.st_size, item.st_mtime_ns, item.st_ctime_ns)
+            if (not stat.S_ISREG(info.st_mode) or not info.st_ino
+                    or hashlib.file_digest(library, 'sha256').hexdigest() != _ASAN_SHA256
+                    or stable(os.fstat(library.fileno())) != stable(info)):
+                return False
+        for line in Path('/proc/self/maps').read_text().splitlines():
+            parts = line.split(None, 5)
+            if (len(parts) != 6 or parts[5] not in (str(_ASAN_REAL), str(_ASAN_LINK))
+                    or 'x' not in parts[1]):
+                continue
+            device = parts[3].split(':')
+            if (len(device) == 2 and int(device[0], 16) == os.major(info.st_dev)
+                    and int(device[1], 16) == os.minor(info.st_dev)
+                    and int(parts[4]) == info.st_ino):
+                return True
+        return False
+    except (OSError, ValueError):
+        return False
+
+
 def load_candidate(path):
     """Explicit local build receipt, source, binary, interpreter and ABI witness.
 
@@ -141,8 +180,7 @@ def load_candidate(path):
             expected_command += ['-g', '-fsanitize=address', '-fno-omit-frame-pointer']
         if proof['command'] != expected_command:
             return None
-        if (proof['sanitizer'] == 'address' and
-                '/usr/lib/gcc/x86_64-linux-gnu/14/libasan.so' not in Path('/proc/self/maps').read_text()):
+        if proof['sanitizer'] == 'address' and not _asan_runtime_mapped():
             # Loading an ASAN DSO without the runtime preloaded can abort the
             # interpreter; an exact source digest alone does not qualify it.
             return None
