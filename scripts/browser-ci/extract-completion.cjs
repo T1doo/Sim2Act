@@ -21,11 +21,14 @@ const {chromium}=require('playwright-core');
 const root=process.argv[2],python=process.argv[3];
 const info=JSON.parse(fs.readFileSync(path.join(root,'info.json'),'utf8'));
 assert.ok(['source','extract'].includes(info.phase),'Unknown explicit completion phase');
-const source=info.phase==='source';
+const source=info.phase==='source',review=info.action==='review';
+assert.ok(info.action==='completion'||review,'Unknown explicit action');
+assert.ok(!review||source,'Review fixture only supports sealed Source');
+const control=review?'protocol-review':'protocol-completion',postKind=review?'review_post':'completion_post';
 if(source)assert.ok(!Object.hasOwn(info,'other'),'Source fixture must not manufacture another Run');
 else assert.equal(typeof info.other,'string');
-const completionPath=`/api/projects/${info.project}/protocol/runs/${info.run}/${source?'complete-source':'complete-extraction'}`;
-const result={status:'UNKNOWN',phase:info.phase,nativeCrossRunABA:source?'NOT_TESTED_SINGLE_RUN_FIXTURE':'COVERED_RUN_SWITCH',screenshotFiles:[],scope:'real installed Edge / production full page / sealed synthetic SQLite',checks:[],receipts:[],screenshots:0,counts:{business_get:0,static_get:0,completion_post:0,blocked:0},requests:[],pageErrors:[],sandbox:[]};
+const completionPath=review?`/api/internal/protocol/runs/${info.run}/reviews`:`/api/projects/${info.project}/protocol/runs/${info.run}/${source?'complete-source':'complete-extraction'}`;
+const result={status:'UNKNOWN',phase:info.phase,action:info.action,nativeCrossRunABA:source?'NOT_TESTED_SINGLE_RUN_FIXTURE':'COVERED_RUN_SWITCH',screenshotFiles:[],scope:'real installed Edge / production full page / sealed synthetic SQLite',checks:[],receipts:[],screenshots:0,counts:{business_get:0,static_get:0,[postKind]:0,blocked:0},requests:[],pageErrors:[],sandbox:[]};
 // Exactly the already reviewed installed-Edge route, not a new launch policy.
 const removedSecurityDefaults=[
  '--enable-unsafe-swiftshader','--unsafely-disable-devtools-self-xss-warnings',
@@ -73,22 +76,27 @@ async function run(){
   const business=url.pathname.startsWith('/api/')||url.pathname==='/health';
   let kind;
   if(allowed&&method==='GET')kind=business?'business_get':'static_get';
-  else if(allowed&&method==='POST'&&url.pathname===completionPath)kind='completion_post';
+  else if(allowed&&method==='POST'&&url.pathname===completionPath)kind=postKind;
   else allowed=false;
-  if(kind){result.counts[kind]++;allowed=result.counts[kind]<=(kind==='business_get'?30:kind==='completion_post'?3:40);}
+  if(kind){result.counts[kind]++;allowed=result.counts[kind]<=(kind==='business_get'?30:kind===postKind?3:40);}
   if(!allowed||cancelled||Date.now()>=info.until_ms){result.counts.blocked++;result.rejectedRequest??={method,path:url.pathname,kind,counts:{...result.counts},cancelled,at_ms:Date.now(),until_ms:info.until_ms};await route.abort();throw Error('Business/request/time budget stop; no retry');}
   result.requests.push({method,path:url.pathname,kind});
   if(method==='POST'){
    bodies.push(request.postDataJSON());
    const body=bodies[bodies.length-1];
-   assert.deepEqual(Object.keys(body).sort(),['expected_fence','expected_version','request_key']);
+   assert.deepEqual(Object.keys(body).sort(),review?['contract_id','expected_fence','expected_result_fingerprint','expected_version','request_key']:['expected_fence','expected_version','request_key']);
+   if(review){assert.equal(body.contract_id,info.contract_id);assert.equal(body.expected_result_fingerprint,info.expected_result_fingerprint);}
    assert.equal(body.expected_version,info.expected_version);assert.equal(body.expected_fence,info.expected_fence);
    assert.match(body.request_key,/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
    if(bodies.length>1)assert.deepEqual(body,bodies[0]);
    result.commandBodies=bodies;write();
    const response=await route.fetch({maxRedirects:0,maxRetries:0,timeout:8000});
-   assert.equal(response.status(),200);const receipt=await response.json();result.receipts.push(receipt);
-   if(source){
+   assert.equal(response.status(),review?201:200);const receipt=await response.json();result.receipts.push(receipt);
+   if(review){
+    assert.deepEqual(Object.keys(receipt).sort(),['id','run_id','contract_id','namespace','decision','reason','fingerprint','publishable','model_requests'].sort());
+    assert.equal(receipt.namespace,'protocol-review.v1');assert.equal(receipt.run_id,info.run);assert.equal(receipt.contract_id,info.contract_id);
+    assert.equal(receipt.decision,'PASS');assert.equal(receipt.publishable,false);assert.equal(receipt.model_requests,0);assert.match(receipt.fingerprint,/^[a-f0-9]{64}$/);
+   }else if(source){
     assert.deepEqual(Object.keys(receipt).sort(),['namespace','run_id','status','version','fence','result_fingerprint','provider_requests','automatic_resend','cached'].sort());
     assert.equal(receipt.namespace,'protocol-source-completion.v2');assert.equal(receipt.run_id,info.run);
     assert.equal(receipt.status,'WAITING_APPROVAL');assert.equal(receipt.version,body.expected_version+1);
@@ -117,27 +125,29 @@ async function run(){
  await page.locator('#connect').click();await page.locator('#login').waitFor({state:'hidden'});
  check('original project selected from real authenticated UI',await page.locator('#project-select').inputValue()===info.project);
  await choose(info.run);
- check('explicit acknowledgement starts unchecked and submission disabled',!await page.locator('#protocol-completion-confirm').isChecked()&&await page.locator('#protocol-completion-submit').isDisabled());
- await page.locator('#protocol-completion').scrollIntoViewIfNeeded();await shot('initial.png');
- await page.locator('#protocol-completion-confirm').check();
- await page.locator('#protocol-completion-submit').dblclick();
- await until(()=>!protocolContext.busy&&document.getElementById('protocol-completion-status').textContent.includes('UNKNOWN'));
- check('double click made exactly one actual POST; lost receipt remains UNKNOWN',bodies.length===1&&await page.locator('#protocol-completion-submit').isDisabled());
+ check('explicit acknowledgement starts unchecked and submission disabled',!await page.locator(`#${control}-confirm`).isChecked()&&await page.locator(`#${control}-submit`).isDisabled());
+ await page.locator(`#${control}`).scrollIntoViewIfNeeded();await shot('initial.png');
+ await page.locator(`#${control}-confirm`).check();
+ await page.locator(`#${control}-submit`).dblclick();
+ await until(id=>!protocolContext.busy&&document.getElementById(id).textContent.includes('UNKNOWN'),control+'-status');
+ check('double click made exactly one actual POST; lost receipt remains UNKNOWN',bodies.length===1&&await page.locator(`#${control}-submit`).isDisabled());
  await shot('unknown.png');
  if(source){
   await page.locator('[data-tab="apps"]').click();await page.locator('[data-tab="projects"]').click();
-  check('real workspace close/return retains Source UNKNOWN command without another Run',await page.locator('#protocol-completion-retry').isVisible()&&bodies.length===1);
+  check('real workspace close/return retains Source UNKNOWN command without another Run',await page.locator(`#${control}-retry`).isVisible()&&bodies.length===1);
  }else{
   await choose(info.other);await choose(info.run);
-  check('same-page Run switch retains original UNKNOWN command',await page.locator('#protocol-completion-retry').isVisible());
+  check('same-page Run switch retains original UNKNOWN command',await page.locator(`#${control}-retry`).isVisible());
  }
- await page.locator('#protocol-completion-retry').click();
- await until(()=>!protocolContext.busy&&document.getElementById('protocol-completion-status').textContent.includes('成果读取未通过'));
+ await page.locator(`#${control}-retry`).click();
+ await until(id=>!protocolContext.busy&&document.getElementById(id).textContent.includes('成果读取未通过'),control+'-status');
  assert.deepEqual(bodies[1],bodies[0]);
- assert.deepEqual(result.receipts[1],{...result.receipts[0],cached:true});
- check('same original body/key returned exact cached receipt; result read failed closed',bodies.length===2&&!(await page.locator('#protocol-result').textContent()).includes('compiled_plan')&&await page.locator('#protocol-cold-form').isHidden());
- await page.locator('#protocol-completion-retry').click();
- if(source)await until(fp=>!protocolContext.busy&&protocolContext.run?.phase==='source'&&protocolContext.run?.status==='WAITING_APPROVAL'&&protocolContext.run?.result_fingerprint===fp&&!!protocolContext.run?.result?.protocol_result,result.receipts[0].result_fingerprint);
+ assert.deepEqual(result.receipts[1],review?result.receipts[0]:{...result.receipts[0],cached:true});
+ check('same original body/key returned original receipt; result read failed closed',bodies.length===2&&(await page.locator('#protocol-result').textContent())===''&&await page.locator('#protocol-cold-form').isHidden()&&(!review||await page.locator('#protocol-extract').isHidden()));
+ if(review){await page.locator(`#${control}`).scrollIntoViewIfNeeded();await shot('read-failed.png');}
+ await page.locator(`#${control}-retry`).click();
+ if(review)await until(fp=>!protocolContext.busy&&protocolContext.run?.status==='SUCCEEDED'&&protocolContext.run?.semantic_status==='PASS'&&protocolContext.run?.semantic_review==='APPROVED'&&protocolContext.run?.result_fingerprint===fp,info.expected_result_fingerprint);
+ else if(source)await until(fp=>!protocolContext.busy&&protocolContext.run?.phase==='source'&&protocolContext.run?.status==='WAITING_APPROVAL'&&protocolContext.run?.result_fingerprint===fp&&!!protocolContext.run?.result?.protocol_result,result.receipts[0].result_fingerprint);
  else await until(()=>!protocolContext.busy&&protocolContext.run?.result?.compiled_plan);
  check('known accepted read failure recovers by GET only',bodies.length===2);
  const actual=JSON.parse(await page.locator('#protocol-result').textContent());
@@ -145,16 +155,19 @@ async function run(){
  if(source){
   assert.equal(Object.hasOwn(actual,'compiled_plan'),false);
   const state=await page.evaluate(()=>({status:protocolContext.run.status,semantic:protocolContext.run.semantic_status,result_fingerprint:protocolContext.run.result_fingerprint}));
-  assert.deepEqual(state,{status:'WAITING_APPROVAL',semantic:'UNKNOWN',result_fingerprint:result.receipts[0].result_fingerprint});
-  check('exact Source result and original receipts rendered, awaiting independent review',true);
-  check('Source technical completion unlocks neither extraction nor Cold',await page.locator('#protocol-extract').isHidden()&&await page.locator('#protocol-cold-form').isHidden());
+  assert.deepEqual(state,{status:review?'SUCCEEDED':'WAITING_APPROVAL',semantic:review?'PASS':'UNKNOWN',result_fingerprint:review?info.expected_result_fingerprint:result.receipts[0].result_fingerprint});
+  check('exact original Source result and receipts rendered',true);
+  if(review){
+   check('registered PASS alone unlocks existing explicit extraction button, no automatic extraction or Cold',await page.locator('#protocol-extract').isVisible()&&await page.locator('#protocol-cold-form').isHidden());
+   check('owner remains PENDING, publication disabled; no compiled plan',await page.evaluate(()=>protocolContext.run.owner_semantic_acceptance==='PENDING'&&protocolContext.run.formal_publication_enabled===false&&protocolContext.run.result.compiled_plan===undefined));
+  }else check('Source technical completion unlocks neither extraction nor Cold',await page.locator('#protocol-extract').isHidden()&&await page.locator('#protocol-cold-form').isHidden());
   result.sourceResult=state;
  }else{
   assert.deepEqual(actual.compiled_plan,info.captured.compiled);
   check('exact original compiled plan and source receipt rendered',true);
  }
- check('completed command has no new completion submit control',await page.locator('#protocol-completion').isHidden());
- await page.locator('#protocol-detail').scrollIntoViewIfNeeded();await shot('completed.png');
+ check('completed command has no new submit control',review?(await page.locator(`#${control}-submit`).isHidden()&&await page.locator(`#${control}-retry`).isHidden()&&await page.locator(`#${control}-confirm`).isDisabled()):await page.locator(`#${control}`).isHidden());
+ await page.locator(review?`#${control}`:'#protocol-detail').scrollIntoViewIfNeeded();await shot('completed.png');
  // Hold one genuine detail response, close/return the real workspace, then
  // release it. No page-global/controller function or timer is replaced.
  const reached=new Promise(resolve=>held=resolve),delivery=new Promise(resolve=>delivered=resolve);holdGet=true;
@@ -167,7 +180,7 @@ async function run(){
  check('no new command after workspace return',bodies.length===2);
  result.closeReturnRequestOffset=count;
  check('no DOM script errors',result.pageErrors.length===0);
- check('all request limits respected without blocked overrun',result.counts.blocked===0&&result.counts.business_get<=30&&result.counts.completion_post<=3);
+ check('all request limits respected without blocked overrun',result.counts.blocked===0&&result.counts.business_get<=30&&result.counts[postKind]<=3);
  // Page memory is deliberately not persisted: no refresh/close key recovery
  // claim, storage write, or second browser window.
  result.refreshKeyRecovery='NOT_SUPPORTED_PAGE_MEMORY_ONLY';

@@ -83,6 +83,8 @@ async function logic(){
  const oldRead=start();for(let n=0;n<10&&!releaseOld;n++)await Promise.resolve();assert(releaseOld);
  evaluate('clearProtocol()');choose(run,false);respond=()=>({data:approved(run)});await retry();check(entry().state==='accepted','new selected context completes newer authenticated GET');
  releaseOld();await oldRead;check(entry().state==='accepted'&&!elements.get('protocol-extract').hidden,'older failed GET cannot overwrite newer accepted command state');
+ setup(run);await start();check(!elements.get('protocol-extract').hidden,'approved Source displays explicit extraction before workspace change');closeReturn();
+ check(elements.get('protocol-extract').hidden&&evaluate('protocolContext.run.result===null'),'workspace close/return clears approved Source extraction until fresh inspection');
  let release;setup(run,(url,options)=>options.method==='POST'?{data:receipt(run)}:new Promise(resolve=>release=()=>resolve({data:approved(run)})));
  const inflight=start();for(let n=0;n<10&&!release;n++)await Promise.resolve();assert(release);closeReturn();release();await inflight;
  check(elements.get('protocol-extract').hidden&&evaluate('protocolContext.run.result===null'),'late approved GET cannot restore hidden output after workspace close/return');

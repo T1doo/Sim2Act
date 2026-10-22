@@ -34,7 +34,7 @@ def write(root, name, value):
 def collect(root):
     outputs = {}
     total = 0
-    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "failure.png"):
+    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "read-failed.png", "failure.png"):
         file = root / name
         if not file.exists():
             continue
@@ -45,8 +45,8 @@ def collect(root):
     return outputs
 
 
-def emit(outputs, phase="extract"):
-    prefix = "SIM2ACT_SOURCE_UI" if phase == "source" else "SIM2ACT_EXTRACT_UI"
+def emit(outputs, phase="extract", review=False):
+    prefix = "SIM2ACT_SOURCE_REVIEW_UI" if review else "SIM2ACT_SOURCE_UI" if phase == "source" else "SIM2ACT_EXTRACT_UI"
     for name, data in outputs.items():
         encoded = base64.b64encode(data).decode()
         print(prefix + "_FILE " + json.dumps(dict(name=name, bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), chunks=(len(encoded) + 3999) // 4000)))
@@ -55,7 +55,9 @@ def emit(outputs, phase="extract"):
     sys.stdout.flush()
 
 
-def launch_paths(root, deadline, phase="extract"):
+def launch_paths(root, deadline, phase="extract", review=False):
+    if review and phase != "source":
+        raise ValueError("Only sealed Source supports registered review UI")
     evidence = evidence_for(phase)
     """Resolve the entire existing launch toolchain before any installation.
 
@@ -95,9 +97,9 @@ def launch_paths(root, deadline, phase="extract"):
         "scripts/OwnedBrowserSetup.ps1", "scripts/WindowsExtractCompletionUI.ps1",
         "scripts/protocol_completion_browser_ci.py", "scripts/windows_browser_ci.py",
         "scripts/browser-ci/package.json", "scripts/browser-ci/package-lock.json", "scripts/browser-ci/extract-completion.cjs",
-        "src/sim2act/__init__.py", "src/sim2act/api.py", "src/sim2act/web/index.html", "src/sim2act/web/app.js", "src/sim2act/web/app.css", "src/sim2act/web/protocol.js",
+        "src/sim2act/__init__.py", "src/sim2act/api.py", "src/sim2act/protocol_jobs.py", "src/sim2act/protocol_reviews.py", "src/sim2act/web/index.html", "src/sim2act/web/app.js", "src/sim2act/web/app.css", "src/sim2act/web/protocol.js",
     ]
-    required += [str((evidence / name).relative_to(REPO)) for name in ("original.json", "before.sqlite.gz", "original-received-sidecar.json")]
+    required += [str((evidence / name).relative_to(REPO)) for name in ("original.json", "after.sqlite.gz" if review else "before.sqlite.gz", "original-received-sidecar.json")]
     required += [f"docs/evidence/protocol-store-loop-20261006/evaluation/{name}.json" for name in ("a-source", "a-cold", "b-source", "b-cold")]
     for name in required:
         file(name, REPO / name)
@@ -118,17 +120,18 @@ def join_api_threads(thread, deadline, attempt):
 
 
 def main():
-    assert sys.argv[1:] in ([], ["--source"]), "Unknown phase arguments; no fallback"
+    assert sys.argv[1:] in ([], ["--source"], ["--source-review"]), "Unknown phase arguments; no fallback"
     phase = "source" if sys.argv[1:] else "extract"
+    review = sys.argv[1:] == ["--source-review"]
     evidence = evidence_for(phase)
     assert os.name == "nt" and os.environ.get("GITHUB_ACTIONS") == "true"
     assert os.environ.get("GITHUB_RUN_ATTEMPT") == "1", "No rerun"
     assert os.environ.get("GITHUB_REF") == "refs/heads/dev/production-trial-stages-20261018"
     absolute = int(os.environ["SIM2ACT_UI_UNTIL"]) / 1000
     until = time.monotonic() + (absolute - REAL_TIME())
-    root = Path(os.environ["RUNNER_TEMP"]) / (f"sim2act-{phase}-ui-" + os.environ["GITHUB_RUN_ID"] + "-1")
+    root = Path(os.environ["RUNNER_TEMP"]) / (f"sim2act-{phase}{'-review' if review else ''}-ui-" + os.environ["GITHUB_RUN_ID"] + "-1")
     root.mkdir()  # New window only; never reuse a consumed directory.
-    result = dict(status="UNKNOWN", phase=phase, scope="SYNTHETIC SQLite / real Windows Edge DOM; not G0 or production source", limits=dict(work_seconds=180, cleanup_seconds=10, completion_post=3, business_get=30, static_get=40, screenshots=4), model_calls=0, new_worker=0, new_source=0, new_extract=0)
+    result = dict(status="UNKNOWN", phase=phase, action="review" if review else "completion", scope="SYNTHETIC SQLite / real Windows Edge DOM; not G0 or production source", limits=dict(work_seconds=180, cleanup_seconds=10, business_get=30, static_get=40, screenshots=4, **{"review_post" if review else "completion_post": 3}), model_calls=0, new_worker=0, new_source=0, new_extract=0)
     node = server = thread = store = counts = None
     monitor_stop = threading.Event()
     watcher = None
@@ -162,7 +165,7 @@ def main():
 
     try:
         remaining()
-        paths = launch_paths(root, until, phase)
+        paths = launch_paths(root, until, phase, review)
         remaining()
         # Existing project lock/SDK/license, official registries, no lifecycle
         # scripts, new SDK, browser installation, Actions cache or artifact.
@@ -185,7 +188,7 @@ def main():
         original = json.loads((evidence / "original.json").read_text(encoding="utf-8"))
         db = root / "fixture.sqlite"
         private_files.extend([db, root / "fixture.sqlite-wal", root / "fixture.sqlite-shm", root / "info.json", root / "owned-browser-pids.json"])
-        with gzip.open(evidence / "before.sqlite.gz", "rb") as src, db.open("wb") as dst:
+        with gzip.open(evidence / ("after.sqlite.gz" if review else "before.sqlite.gz"), "rb") as src, db.open("wb") as dst:
             shutil.copyfileobj(src, dst)
         sidecar = root / (original["run"] + ".json")
         private_files.extend([sidecar, sidecar.with_suffix(".lock")])
@@ -222,9 +225,10 @@ def main():
         # saved real wall clock or monotonic; product clock code is unchanged.
         time.time = lambda: original["resume_at"]
         app = create_app(store, settings)
-        counts = dict(completion_post=0, business_get=0, static_get=0, blocked=0)
+        post_kind = "review_post" if review else "completion_post"
+        counts = dict(business_get=0, static_get=0, blocked=0, **{post_kind: 0})
         counter_lock = threading.Lock()
-        completion_path = f'/api/projects/{original["project"]}/protocol/runs/{original["run"]}/complete-{phase if phase == "source" else "extraction"}'
+        completion_path = f'/api/internal/protocol/runs/{original["run"]}/reviews' if review else f'/api/projects/{original["project"]}/protocol/runs/{original["run"]}/complete-{phase if phase == "source" else "extraction"}'
 
         @app.middleware("http")
         async def bounded_http(request, call_next):
@@ -235,8 +239,8 @@ def main():
                     counts[kind] += 1
                     allowed = counts[kind] <= (30 if kind == "business_get" else 40)
                 elif request.method == "POST" and route == completion_path:
-                    counts["completion_post"] += 1
-                    allowed = counts["completion_post"] <= 3
+                    counts[post_kind] += 1
+                    allowed = counts[post_kind] <= 3
                 else:
                     allowed = False
                 if time.monotonic() >= until or not allowed:
@@ -256,10 +260,14 @@ def main():
             assert thread.is_alive() and time.monotonic() < ready, "API did not start"
             time.sleep(0.01)
         commit = subprocess.check_output([paths["git"], "rev-parse", "HEAD"], cwd=REPO, timeout=remaining(), text=True).strip()
-        hashes = {name: hashlib.sha256((REPO / name).read_bytes()).hexdigest() for name in ("src/sim2act/web/app.js", "src/sim2act/web/app.css", "src/sim2act/web/protocol.js", "src/sim2act/web/index.html", "scripts/protocol_completion_browser_ci.py", "scripts/browser-ci/extract-completion.cjs", "scripts/browser-ci/package-lock.json", "scripts/OwnedBrowserSetup.ps1", "scripts/WindowsExtractCompletionUI.ps1", ".github/workflows/windows-native-mock.yml")}
+        hashes = {name: hashlib.sha256((REPO / name).read_bytes()).hexdigest() for name in ("src/sim2act/web/app.js", "src/sim2act/web/app.css", "src/sim2act/web/protocol.js", "src/sim2act/web/index.html", "scripts/protocol_completion_browser_ci.py", "scripts/browser-ci/extract-completion.cjs", "scripts/browser-ci/package-lock.json", "scripts/OwnedBrowserSetup.ps1", "scripts/WindowsExtractCompletionUI.ps1", ".github/workflows/windows-native-mock.yml", "src/sim2act/protocol_jobs.py", "src/sim2act/protocol_reviews.py")}
         write(root, "inventory.json", dict(commit=commit, source_sha256=hashes, synthetic_clock=original["resume_at"], browser_install=False, added_sdk=False))
-        info = dict(phase=phase, base=f"http://127.0.0.1:{port}", project=original["project"], run=original["run"], captured=original["captured"], until_ms=absolute * 1000,
+        info = dict(phase=phase, action="review" if review else "completion", base=f"http://127.0.0.1:{port}", project=original["project"], run=original["run"], captured=original["captured"], until_ms=absolute * 1000,
                     expected_version=before_run["version"], expected_fence=before_run["fence"])
+        if review:
+            info["contract_id"] = all_jobs[0]["accepted_snapshot"]["contract"]["contract_id"]
+            info["expected_result_fingerprint"] = all_jobs[0]["result_fingerprint"]
+            assert before_run["status"] == "WAITING_APPROVAL" and before_run["result"] is not None
         if phase == "extract":
             info["other"] = others[0]
         write(root, "info.json", info)
@@ -305,13 +313,26 @@ def main():
         assert browser["status"] == "PASS" and browser["screenshots"] <= 4
         assert counts["blocked"] == 0 and not forbidden_calls and "monitor_error" not in result
         after = snapshot()
-        assert {name for name in before if before[name] != after[name]} == {"runs", "protocol_jobs", "events"}
-        assert set(before["events"]).issubset(after["events"]) and len(after["events"]) == len(before["events"]) + 4
+        assert {name for name in before if before[name] != after[name]} == ({"runs", "events", "protocol_reviews"} if review else {"runs", "protocol_jobs", "events"})
+        assert set(before["events"]).issubset(after["events"]) and len(after["events"]) == len(before["events"]) + (1 if review else 4)
         with store.engine.connect() as c:
             run = dict(c.execute(select(runs).where(runs.c.id == original["run"])).mappings().one())
             job = dict(c.execute(select(protocol_jobs).where(protocol_jobs.c.run_id == original["run"])).mappings().one())
         assert fingerprint(job["result_snapshot"]["protocol_result"]) == fingerprint(original["captured"]["result"])
-        if phase == "source":
+        if review:
+            from sim2act.db import protocol_reviews
+            with store.engine.connect() as c:
+                row = dict(c.execute(select(protocol_reviews).where(protocol_reviews.c.run_id == original["run"])).mappings().one())
+            assert run["status"] == "SUCCEEDED" and run["version"] == before_run["version"] + 1
+            assert {key for key in run if run[key] != before_run[key]} == {"status", "version"}
+            assert row["payload"]["decision"] == "PASS" and row["payload"]["verification"]["semantic_status"] == "PASS"
+            assert len(browser["commandBodies"]) == 2 and browser["commandBodies"][0] == browser["commandBodies"][1]
+            assert fingerprint(row["payload"]["request"]) == fingerprint(browser["commandBodies"][0])
+            assert browser["receipts"][0] == browser["receipts"][1]
+            assert browser["receipts"][0]["fingerprint"] == row["fingerprint"]
+            from sim2act.protocol_reviews import _public as public_review
+            assert fingerprint(browser["receipts"][0]) == fingerprint(public_review(row))
+        elif phase == "source":
             assert run["status"] == "WAITING_APPROVAL"
             assert job["result_snapshot"]["protocol_result"]["semantic_status"] == "UNKNOWN"
             assert "compiled_plan" not in job["result_snapshot"]
@@ -428,7 +449,7 @@ def main():
             result["status"] = "UNKNOWN"
         outputs["result.json"] = json.dumps(result, ensure_ascii=False, indent=2).encode()
         attempt("write_final_result", lambda: write(root, "result.json", result))
-        attempt("emit_evidence", lambda: emit(outputs, phase))
+        attempt("emit_evidence", lambda: emit(outputs, phase, review))
     return exit_code if result["status"] == "PASS" else 1
 
 

@@ -80,7 +80,7 @@ function protocolCompletionWorkspaceChanged(){
   if($("projects").hidden){
     if(ctx.run)ctx.run={...ctx.run,result:null,result_fingerprint:null,error:null};
     ctx.plan=null;ctx.renderedPlan=null;
-    $("protocol-result").textContent="";$("protocol-cold-form").hidden=true;
+    $("protocol-result").textContent="";$("protocol-extract").hidden=true;$("protocol-cold-form").hidden=true;
     $("protocol-cold-inputs").replaceChildren();$("protocol-cold-materials").replaceChildren();
   }else if(ctx.run){renderProtocolCompletion(ctx);renderProtocolReview(ctx);}
 }
