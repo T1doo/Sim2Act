@@ -83,6 +83,54 @@ async function logic(){
  respond=async()=>{choose(runData({run_id:otherRid}));return {data:{recovery:'CONTINUATION_NOT_IMPLEMENTED',provider_requests:0,global_send_blocked:false}};};
  await evaluate('recoverProtocol()');check(postCalls().length===1&&postCalls()[0].url.endsWith('/recover')&&!postCalls()[0].url.endsWith('/complete-extraction'),'existing state-only recover retains its own route');
 }
+async function materials(){
+ const make=(items,current=()=>true)=>({project,token:ctx.token,materials:items,current});
+ setup(runData(),url=>({data:url.endsWith('/contracts')?{items:[]}:[]}));
+ ctx.read=make([{id:'fresh'}]);await evaluate('refreshProtocol(read)');
+ check(calls.length===1&&calls[0].url.endsWith('/contracts')&&evaluate('protocolContext.catalogReady&&protocolMaterials[0].id==="fresh"'),'initial shared fresh batch loads catalog without second resource GET');
+ ctx.read=make([{id:'newer'}]);await evaluate('refreshProtocol(read)');
+ check(calls.length===1&&evaluate('protocolMaterials[0].id==="newer"'),'current loaded batch consumes supplied materials without cross-batch cache');
+ await evaluate('refreshProtocol()');
+ check(calls.length===2&&calls[1].url.endsWith('/resources')&&evaluate('protocolMaterials.length===0'),'independent refresh reads resources again and observes removed material');
+ respond=()=>({status:403,data:{error:{code:'GRANT_REVOKED'}}});
+ await assert.rejects(evaluate('refreshProtocol()'),error=>error.message==='GRANT_REVOKED');
+ check(calls.length===3&&evaluate('protocolMaterials.length===0'),'independent refusal never reuses previous shared read as success');
+ for(const stale of ['batch','project','identity']){
+  const count=calls.length;ctx.read=make([{id:'stale'}],()=>stale!=='batch');
+  if(stale==='project')ctx.read.project=otherProject;
+  if(stale==='identity')ctx.read.token='synthetic-B';
+  await evaluate('refreshProtocol(read)');
+  check(calls.length===count&&evaluate('protocolMaterials.length===0'),'stale shared '+stale+' returns without fallback request or publication');
+ }
+ for(const aba of ['same-project','project-ABA','identity-ABA']){
+  let release,oldCurrent=true;
+  setup(runData(),()=>new Promise(resolve=>release=resolve));
+  ctx.old=make([{id:'old'}],()=>oldCurrent);
+  const old=evaluate('refreshProtocol(old)');assert(release);
+  oldCurrent=false;
+  if(aba==='project-ABA'){elements.get('project-select').value=otherProject;evaluate('clearProtocol()');elements.get('project-select').value=project;}
+  if(aba==='identity-ABA'){ctx.token='synthetic-B';evaluate('clearProtocol()');ctx.token='synthetic-A';}
+  respond=()=>({data:{items:[]}});ctx.next=make([{id:'current'}]);await evaluate('refreshProtocol(next)');
+  release({data:{items:[]}});await old;
+  check(calls.length===2&&evaluate('protocolContext.catalogReady&&protocolMaterials[0].id==="current"'),'late catalog cannot publish old materials or strand initialization after '+aba);
+ }
+ // Exercise the real caller as a function unit too. Other page renderers are
+ // inert adapters; this is not a claim about a full page, DOM or network.
+ const appSource=fs.readFileSync(path.join(web,'app.js'),'utf8');
+ const refreshSource=appSource.slice(appSource.indexOf('async function refresh() {'),appSource.indexOf('\nfunction fixedGoalAcceptancePassed'));
+ function caller(){
+  elements.get('goal-card-resources').selectedOptions=[];
+  Object.assign(ctx,{updateOrdinaryRunMaterials(){},refreshGoalCards:async()=>{},refreshApps:async()=>{},resourceMaterialRow:()=>({}),api:async(url)=>{
+   const response=await ctx.fetch(url,{method:'GET'});if(!response.ok)throw Error('MATERIAL_READ_REFUSED');return response.json();
+  }});
+  vm.runInContext('let runHistoryGeneration=0;'+refreshSource,ctx,{filename:'app.js:refresh'});
+ }
+ setup(runData(),url=>({data:url.endsWith('/contracts')?{items:[]}:[]}));caller();await evaluate('refresh()');
+ check(calls.filter(call=>call.url.endsWith('/resources')).length===1&&evaluate('protocolContext.catalogReady'),'actual refresh caller shares its one fresh material response');
+ setup(runData(),()=>({status:403,data:{error:{code:'GRANT_REVOKED'}}}));caller();
+ await assert.rejects(evaluate('refresh()'),error=>error.message==='MATERIAL_READ_REFUSED');
+ check(calls.length===1&&!evaluate('protocolContext.catalogReady'),'failed shared read does not invoke protocol fallback or publish cached success');
+}
 async function http(){
  const info=JSON.parse(fs.readFileSync(path.join(out,'http-info.json'),'utf8'));
  const base=new URL(info.base);assert.equal(base.hostname,'127.0.0.1');
@@ -99,4 +147,4 @@ async function http(){
  check(shown.result.compiled_plan.candidate_receipt.namespace==='protocol-attempt-receipt.v2','real original V2 receipt preserved by page readback');
  fs.writeFileSync(path.join(out,'http-calls.json'),JSON.stringify(calls,null,2));
 }
-(async()=>{try{await (mode==='http'?http():logic());const result={status:'PASS',mode,checks,adapter:'MINIMAL_ELEMENT_VM_NOT_DOM_BROWSER',model_requests:0,source_sha256:crypto.createHash('sha256').update(source).digest('hex'),html_sha256:crypto.createHash('sha256').update(html).digest('hex')};fs.writeFileSync(path.join(out,mode+'-result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));}catch(error){fs.writeFileSync(path.join(out,mode+'-failure.json'),JSON.stringify({checks,error:error.stack},null,2));console.error(error.stack);process.exitCode=1;}})();
+(async()=>{try{await (mode==='http'?http():mode==='materials'?materials():logic());const result={status:'PASS',mode,checks,adapter:'MINIMAL_ELEMENT_VM_NOT_DOM_BROWSER',model_requests:0,source_sha256:crypto.createHash('sha256').update(source).digest('hex'),html_sha256:crypto.createHash('sha256').update(html).digest('hex')};fs.writeFileSync(path.join(out,mode+'-result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));}catch(error){fs.writeFileSync(path.join(out,mode+'-failure.json'),JSON.stringify({checks,error:error.stack},null,2));console.error(error.stack);process.exitCode=1;}})();

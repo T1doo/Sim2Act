@@ -13,7 +13,40 @@ function protocolMaterialField(labelText,allowed,selected=""){const label=docume
 function clearProtocolSelection(){clearProtocolCompletion();const ctx=protocolContext;if(ctx){ctx.selection++;ctx.run=null;ctx.plan=null;ctx.renderedPlan=null;ctx.recoveryPending=null;}$("protocol-detail").hidden=true;$("protocol-result").textContent="";$("protocol-state").textContent="";$("protocol-cold-form").hidden=true;$("protocol-cold-inputs").replaceChildren();$("protocol-cold-materials").replaceChildren();$("protocol-extract").hidden=true;}
 function protocolSelectRun(id,userSelection=true){const ctx=protocolContext;if(!ctx)return;if(userSelection)ctx.intent=(ctx.intent||0)+1;if(ctx.run&&ctx.run.run_id!==id)clearProtocolSelection();}
 function renderProtocolSource(){const ctx=protocolContext,contract=protocolContract($("protocol-contract").value);if(!ctx||!protocolCurrent(ctx)||!contract)return;$("protocol-source-goal").textContent=contract.public_goal;protocolInputFields($("protocol-inputs"),contract.public_inputs,ctx.inputContract===contract.contract_id);ctx.inputContract=contract.contract_id;$("protocol-source-materials").replaceChildren(...contract.resource_hashes.map((hash,index)=>{const matches=protocolMaterials.filter(resource=>resource.hash===hash);return protocolMaterialField(`材料 ${index+1}`,matches,matches.length===1?matches[0].id:"");}));$("protocol-source-submit").disabled=contract.resource_hashes.some(hash=>!protocolMaterials.some(resource=>resource.hash===hash));$("protocol-source-status").textContent=$("protocol-source-submit").disabled?"缺少此注册任务匹配的已授权材料，请先在资源工作区保存材料。":"注册契约已冻结；任务输出仍须独立核查。默认未配置协议 provider 时会等待资源。";}
-async function refreshProtocol(){const project=$("project-select").value;if(!project||!token){clearProtocol();return;}const previous=protocolContext;if(previous?.project===project&&previous.token===token){const materials=await protocolRequest(previous,`/api/projects/${project}/resources`);if(!protocolCurrent(previous))return;if(JSON.stringify(materials)!==JSON.stringify(protocolMaterials)){protocolMaterials=materials;renderProtocolSource();if(previous.plan)renderProtocolCold();}return;}clearProtocol();const ctx={project,token,generation:protocolGeneration,selection:0,intent:0,run:null,busy:false};protocolContext=ctx;try{const [catalog,materials]=await Promise.all([protocolRequest(ctx,`/api/projects/${project}/protocol/contracts`),protocolRequest(ctx,`/api/projects/${project}/resources`)]);if(!protocolCurrent(ctx))return;protocolCatalog=catalog.items;protocolMaterials=materials;$("protocol-contract").replaceChildren(...protocolCatalog.filter(item=>item.phase==="source").map(item=>new Option(`${item.family} · v${item.version}`,item.contract_id)));renderProtocolSource();}catch(error){if(protocolCurrent(ctx))$("protocol-source-status").textContent=error.message;}}
+async function refreshProtocol(materialRead=null){
+  const project=$("project-select").value;
+  if(!project||!token){clearProtocol();return;}
+  // A supplied read belongs only to its originating refresh, including its
+  // generation witness. Stale/ABA reads stop here; they cannot fall back to
+  // another request or overwrite a newer batch in the same project.
+  const readCurrent=()=>!materialRead||(materialRead.project===project&&materialRead.token===token&&
+    project===$("project-select").value&&typeof materialRead.current==="function"&&materialRead.current());
+  if(!readCurrent())return;
+  const previous=protocolContext;
+  if(previous?.project===project&&previous.token===token&&previous.catalogReady){
+    const materials=materialRead?materialRead.materials:await protocolRequest(previous,`/api/projects/${project}/resources`);
+    if(!protocolCurrent(previous)||!readCurrent())return;
+    if(JSON.stringify(materials)!==JSON.stringify(protocolMaterials)){
+      protocolMaterials=materials;renderProtocolSource();if(previous.plan)renderProtocolCold();
+    }
+    return;
+  }
+  // An overlapping initial batch may invalidate an in-flight catalog. The
+  // next current batch must initialize it rather than leave a partial context.
+  clearProtocol();
+  const ctx={project,token,generation:protocolGeneration,selection:0,intent:0,run:null,busy:false,catalogReady:false};
+  protocolContext=ctx;
+  try{
+    const [catalog,materials]=await Promise.all([
+      protocolRequest(ctx,`/api/projects/${project}/protocol/contracts`),
+      materialRead?Promise.resolve(materialRead.materials):protocolRequest(ctx,`/api/projects/${project}/resources`)
+    ]);
+    if(!protocolCurrent(ctx)||!readCurrent())return;
+    protocolCatalog=catalog.items;protocolMaterials=materials;ctx.catalogReady=true;
+    $("protocol-contract").replaceChildren(...protocolCatalog.filter(item=>item.phase==="source").map(item=>new Option(`${item.family} · v${item.version}`,item.contract_id)));
+    renderProtocolSource();
+  }catch(error){if(protocolCurrent(ctx)&&readCurrent())$("protocol-source-status").textContent=error.message;}
+}
 function renderProtocolRun(ctx){if(!protocolCurrent(ctx)||!ctx.run||$("projects").hidden)return;const run=ctx.run;$("protocol-detail").hidden=false;$("protocol-run-id").textContent=run.run_id;protocolStatus(ctx,`${run.phase} · ${run.status} · 语义 ${run.semantic_status} · ${run.semantic_review} · owner ${run.owner_semantic_acceptance||"PENDING"}。注册核查不等于 owner 对真实任务签收；未发布。`);$("protocol-result").textContent=JSON.stringify(run.result||run.error||{},null,2);$("protocol-extract").hidden=!(run.phase==="source"&&run.status==="SUCCEEDED"&&run.semantic_status==="PASS"&&run.semantic_review==="APPROVED");$("protocol-cold-form").hidden=!(run.phase==="extract"&&run.status==="SUCCEEDED"&&run.result?.compiled_plan);$("protocol-recover").disabled=ctx.busy;$("protocol-recover-retry").hidden=!ctx.recoveryPending;renderProtocolCompletion(ctx);if(!$("protocol-cold-form").hidden){const plan=run.result.compiled_plan;if(ctx.renderedPlan===plan.plan_fingerprint)return;ctx.renderedPlan=plan.plan_fingerprint;ctx.plan=plan;$("protocol-cold-contract").replaceChildren(...protocolCatalog.filter(item=>item.phase==="cold").map(item=>new Option(`${item.family} · v${item.version}`,item.contract_id)));renderProtocolCold();}}
 function renderProtocolCold(){const ctx=protocolContext,contract=protocolContract($("protocol-cold-contract").value);if(!ctx?.plan||!protocolCurrent(ctx)||!contract)return;protocolInputFields($("protocol-cold-inputs"),contract.public_inputs,ctx.coldInputContract===contract.contract_id);ctx.coldInputContract=contract.contract_id;const allowed=protocolMaterials.filter(resource=>contract.resource_hashes.includes(resource.hash));$("protocol-cold-materials").replaceChildren(...Object.entries(ctx.plan.candidate.resources).map(([name,id])=>{const source=protocolMaterials.find(resource=>resource.id===id);const label=protocolMaterialField(`${name} · 来源 ${source?.name||id}`,allowed,allowed.length===1?allowed[0].id:"");label.querySelector("select").dataset.binding=name;return label;}));$("protocol-cold-submit").disabled=contract.resource_hashes.some(hash=>!allowed.some(resource=>resource.hash===hash));}
 async function showProtocolRun(id,ctx=protocolContext){if(!ctx||!protocolCurrent(ctx)||$("projects").hidden)return;const selection=++ctx.selection,workspace=workspaceSelectionGeneration;try{const run=await protocolRequest(ctx,`/api/projects/${ctx.project}/protocol/runs/${id}`);if(!protocolCurrent(ctx)||selection!==ctx.selection||activeRun!==id||workspace!==workspaceSelectionGeneration||$("projects").hidden)return;if(ctx.run?.run_id!==run.run_id)ctx.recoveryPending=null;ctx.run=run;renderProtocolRun(ctx);}catch(error){if(protocolCurrent(ctx)&&selection===ctx.selection&&workspace===workspaceSelectionGeneration&&!$("projects").hidden){ctx.run=null;ctx.plan=null;ctx.renderedPlan=null;$("protocol-cold-inputs").replaceChildren();$("protocol-cold-materials").replaceChildren();$("protocol-detail").hidden=true;$("protocol-result").textContent="";protocolStatus(ctx,error.message);throw error;}}}

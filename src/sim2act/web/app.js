@@ -156,6 +156,10 @@ async function refresh() {
   if(typeof renderResourceMaterial === "function")renderResourceMaterial();
   if(typeof reconcileConditionalSources === "function")reconcileConditionalSources(materials);
   updateOrdinaryRunMaterials(materials);
+  // One newly authorized material read per refresh batch. Independent task
+  // reads still refresh their own materials; never retain a batch as a cache.
+  if(typeof refreshProtocol === "function")await refreshProtocol({project:pid,token:identity,materials,current});
+  if (!current()) return;
   const selectedGoals=Array.from($("goal-card-resources").selectedOptions).map(o=>o.value);
   $("goal-card-resources").replaceChildren(...materials.map(m=>{const o=new Option(m.name,m.id);o.selected=selectedGoals.includes(m.id);return o;}));
   await refreshGoalCards(pid);
@@ -165,7 +169,6 @@ async function refresh() {
   $("app-resource").replaceChildren(...materials.filter(x => x.format === "csv").map(x => {const o=document.createElement("option");o.value=x.id;o.textContent=x.name;return o;}));
   if (materials.some(x => x.id === oldResource)) $("app-resource").value = oldResource;
   await refreshApps();
-  if(typeof refreshProtocol === "function")await refreshProtocol();
   if (!current()) return;
   $("run-history-status").textContent="正在读取持久任务历史…";
   let runs;

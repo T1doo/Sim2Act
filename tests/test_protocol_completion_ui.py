@@ -47,6 +47,10 @@ def test_completion_controller_selection_receipts_and_original_key(tmp_path):
     driver(tmp_path, "logic")
 
 
+def test_protocol_material_batch_freshness_and_late_catalog(tmp_path):
+    driver(tmp_path, "materials")
+
+
 def test_completion_button_actual_http_without_new_model_requests(tmp_path, monkeypatch):
     """Reuse a sealed genuine received fact, not another Source/Worker/Mock prefix."""
     original = json.loads((EVIDENCE / "original.json").read_text())
