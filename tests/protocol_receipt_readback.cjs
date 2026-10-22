@@ -1,7 +1,7 @@
 'use strict';
 // Fresh controller contexts and serialized actual API replies; no native DOM.
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict'),crypto=require('node:crypto');
-const root=process.argv[2],web=path.join(__dirname,'../src/sim2act/web'),source=fs.readFileSync(path.join(web,'protocol.js'),'utf8');
+const root=process.argv[2],web=path.join(__dirname,'../src/sim2act/web'),source=fs.readFileSync(process.argv[4]||path.join(web,'protocol.js'),'utf8');
 const ids=[...fs.readFileSync(path.join(web,'index.html'),'utf8').matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);
 const cases=JSON.parse(fs.readFileSync(path.join(root,'cases.json'),'utf8')),checks=[];
 let context,elements,calls,respond,allowCompletionProbe=false;
@@ -21,6 +21,33 @@ function setup(item,handler){
 const locate=()=>elements.get('protocol-review-locate').onclick();
 const entry=()=>ev('protocolContext&&protocolReviewIntents.get(protocolCompletionKey(protocolContext,activeRun))');
 (async()=>{
+ if(process.argv[3]==='projection'){
+  const outcomes=[];
+  for(const failure of ['NOT_FOUND','locator-read-error','result-read-error']){
+   const item=cases[0];setup(item);await locate();assert.equal(entry().state,'accepted');
+   const key=entry().body.request_key;
+   respond=(url)=>failure==='NOT_FOUND'?{data:{...item.locator,state:'NOT_FOUND',request:null,receipt:null}}:
+    failure==='result-read-error'&&url.endsWith('/review-receipt')?{data:item.locator}:
+    {status:403,data:{error:{code:'CONTROLLED_READ_FAILURE'}}};
+   await locate();ev('renderProtocolRun(protocolContext)');
+   let blocked=false;try{await elements.get('protocol-extract').onclick();}catch(error){blocked=error.message==='来源尚未通过独立注册核查';}
+   const top=elements.get('protocol-state').textContent,message=entry().message||'',visible=elements.get('protocol-review-status').textContent;
+   const predicates={top_unconfirmed:top.includes('不可确认')&&!/SUCCEEDED|PASS|APPROVED/.test(top),
+    entry_unconfirmed:message.includes('不可确认')&&!message.includes('已复读确认'),
+    visible_unconfirmed:visible.includes('不可确认')&&!visible.includes('已复读确认'),
+    receipt_hidden:!elements.get('protocol-review-locate-receipt').textContent,
+    output_closed:elements.get('protocol-extract').hidden&&!elements.get('protocol-result').textContent,
+    original_key:entry().body.request_key===key,extract_click_blocked:blocked,run_status_unchanged:ev('protocolContext.run.status')===item.run.status,version_fence_unchanged:ev('protocolContext.run.version')===item.run.version&&ev('protocolContext.run.fence')===item.run.fence,get_only:calls.every(c=>c.method==='GET')};
+   respond=url=>({data:url.endsWith('/review-receipt')?item.locator:item.run});await locate();
+   predicates.fresh_read_restores=entry().state==='accepted'&&entry().body.request_key===key&&
+     elements.get('protocol-state').textContent.includes('语义 PASS')&&entry().message.includes('已复读确认')&&calls.every(c=>c.method==='GET');
+   outcomes.push({failure,predicates,top,message,visible});
+  }
+  const report={status:outcomes.every(x=>Object.values(x.predicates).every(Boolean))?'PASS':'FAIL',scope:'controller VM projection only',
+   source_sha256:crypto.createHash('sha256').update(source).digest('hex'),outcomes};
+  fs.writeFileSync(path.join(root,'projection-result.json'),JSON.stringify(report,null,2));
+  assert.equal(report.status,'PASS',JSON.stringify(outcomes));console.log('3 projection rejection cases PASS');return;
+ }
  for(const item of cases){
   setup(item);check(!entry(),'new page has no in-memory key '+item.run.phase);await locate();
   check(entry().state==='accepted'&&entry().body.request_key===item.locator.request.request_key&&calls.length===2,'cold '+item.run.phase+' locates original key and verifies fresh Run using two GETs');

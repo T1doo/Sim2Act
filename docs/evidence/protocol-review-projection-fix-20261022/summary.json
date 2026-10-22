@@ -1,0 +1,57 @@
+{
+  "status": "PASS_TARGETED_PROJECTION_FIX",
+  "base_sha": "c9ff939e0bd3d5d709b59ad7c4ca005346ce0a58",
+  "red": {
+    "exit_code": 1,
+    "cases": 3,
+    "status": "FAIL",
+    "source": "exact c9ff JS bytes using same final test harness"
+  },
+  "green": {
+    "projection_cases": 3,
+    "readonly_checks": 25,
+    "review_compat_checks": 65,
+    "all_exit_codes": [
+      0,
+      0,
+      0
+    ]
+  },
+  "commands": [
+    "node tests/protocol_receipt_readback.cjs /workspace/sim2act-review-projection-20261022-red projection /workspace/sim2act-review-projection-20261022-red/before.js",
+    "timeout --signal=TERM --kill-after=5s 20s node tests/protocol_receipt_readback.cjs /workspace/sim2act-review-projection-20261022-green/projection projection",
+    "timeout --signal=TERM --kill-after=5s 20s node tests/protocol_receipt_readback.cjs /workspace/sim2act-review-projection-20261022-green/readonly",
+    "timeout --signal=TERM --kill-after=5s 20s node tests/protocol_review_ui.cjs /workspace/sim2act-review-projection-20261022-green/review-compat logic"
+  ],
+  "actual_new": {
+    "network": 0,
+    "business_POST": 0,
+    "model": 0,
+    "MockProvider_exchange": 0,
+    "Worker": 0,
+    "Source": 0,
+    "extract": 0,
+    "DB": 0,
+    "CI": 0
+  },
+  "simulated_POST_note": "Existing VM compatibility scenarios include fake POST replies; these are not network/model calls",
+  "source_freeze": {
+    "files": 2,
+    "unchanged_after_green": true
+  },
+  "source_completion_unchanged": true,
+  "cleanup": {
+    "all_Node_processes_exited": true,
+    "services_started": 0,
+    "unknown_processes_touched": false
+  },
+  "not_claimed": [
+    "new native DOM/Windows",
+    "PG",
+    "OS restart",
+    "G0",
+    "real provider",
+    "whole F2 acceptance"
+  ],
+  "independent_review": "Source-only limited ACK; reviewer ran zero tests"
+}
