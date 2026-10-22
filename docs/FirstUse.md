@@ -4,6 +4,8 @@
 
 本说明的页面步骤已在 Linux 的干净合成 SQLite 测试库、真实 HTTP/product JS 和正常 Worker 上执行；仅预建测试 schema 和固定合成登录身份，不预置项目、候选、Release、Run 或结果。普通用户 PostgreSQL/PowerShell 安装、真实浏览器像素、Win11 首次体验 **未测**，不能据此签收。实际证据与失败见 [核查记录](evidence/first-use-bounded-20261007/README.md)。
 
+协议任务的Source/Extract完成、刷新后旧键只读找回和核查回执，另见[协议恢复操作说明](F2/ProtocolRecoveryQuickstart20261022.md)。该合成协议路径与本页CSV流程分开，读取不会自动执行或开放真实模型。
+
 ## 先让后台能运行
 
 按 [安装说明](Installation.md) 完成依赖、私有 `.env`、显式迁移及应用角色 CRUD、Doctor、本机身份和 Start。浏览器打开 Start 输出的 `127.0.0.1` 地址，输入已有本机令牌连接。保持 MOCK、LIVE=false；不要添加模型密钥、使用管理员数据库角色或放宽安全设置。预检 PASS 只是依赖/配置存在性通过，不证明数据库可连接或 worker 正在运行。

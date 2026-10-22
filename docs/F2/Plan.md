@@ -1,5 +1,7 @@
 # F2 并行工程 Plan：权威当前状态
 
+2026-10-22 原 F2-T09 / AT-05、AT-18 的Source/单请求Extract完成及持久回执只读恢复已做[交付与操作说明收口](ProtocolRecoveryQuickstart20261022.md)。最新归档`4f3454d2`，两族各真实硬刷新、原键GET恢复、失败中性化、0POST/0模型，唯一Windows Edge窗口及清理限定通过。此条不改签旧失败、PG/真实provider/G0/owner或整体F2/R0；剩余最小条件见同页，停止同型原生回读重复验收。
+
 2026-10-20 原记录 PG 验收前置：发现四处冷 Store 遗失测试 schema，现仅修测试夹具并保留专用 schema/同值 _none，独立连接池且拒未隔离 PG 配置。无连接方言检查首批9P2F（测试编译参数错误），仅两项修正复测2P；原 SQLite API/页面2P，补 helper 输入清单后页面1P另计。当前无 PG 实例/镜像/安全注入连接；现 CI 会创建密码/角色并完整运行，未启动。真实 PG 事务/冷重启/隔离继续 BLOCKED_ENVIRONMENT，不以 SQLite/方言代签。原件、独审及唯一原11节点见[PG隔离前置](../evidence/record-pg-isolation-20261020/README.md)；无产品/权限/依赖/workflow 改动。
 
 2026-10-20 原 F2-T06 [OPEN 记录内容更正](LocalRecordContentEdit20261020.md)：产品 `fa244834efe50358459340b30f5a988a39089164`，新应用显式选择 v2 typed 合同后可更正 OPEN 标题/正文，ID/状态及不可变历史保持；旧 v1 不扩能力、无新工具/表/写授权。作者11唯一节点11PASS，实际新页面79检查/4普通冷Worker/3冷页，独审另跨实例/项目/主体3拒绝且全表零写，无P1/P2。失败 setup、哈希和原件见[证据](../evidence/local-record-content-edit-20261020/README.md)。仅 Linux/SQLite/HTTP/JSDOM/NoModel，不关闭旧软件迁移、真实语义、PG/Windows/native/CI、PB/G0 或正式发布门。

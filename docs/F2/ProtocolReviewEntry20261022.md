@@ -1,5 +1,7 @@
 # Explicit registered synthetic review request
 
+2026-10-22 后续交付索引：[当前操作说明与限定证据](ProtocolRecoveryQuickstart20261022.md)。已持久完成/核查回执现有只读冷页定位；原文的页内命令键、未持久 UNKNOWN 和原初切片未验范围仍按当时口径保留，不把只读找回等同继续或重发。
+
 The original `ProtocolStoreLoopPlan.md` allows the owner to request an independently registered evaluation, without supplying PASS, gold or a checker. `ProtocolUiEntryLog.md` recorded that this backend action had no UI entry. A Source could therefore be technically completed into WAITING_APPROVAL while its existing extraction button remained unavailable.
 
 The selected Source/Cold result now offers a separate, unchecked confirmation to request the existing fixed synthetic checker. The verified Run response exposes only its enqueue-time `contract_id`. The request binds that ID, original result fingerprint, version and fence, plus a new page-generated request key. It does not read the currently selected source/cold form contract, submit a verdict, register an evaluator, grant access, or start extraction/Cold automatically. Only the four existing `protocol.synthetic.{a,b}-{source,cold}.v1` contracts are eligible.

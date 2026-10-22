@@ -1,8 +1,10 @@
 # Sim2Act
 
-让想法成为会行动的应用。当前开发分支 `dev/f1-foundation`，处于 **F1 工程底座**，尚未通过 F1/R0 验收。
+让想法成为会行动的应用。当前接续开发分支 `dev/production-trial-stages-20261018`，F1 底座之上正推进有限 F2 工程；F1/F2/R0 整体验收尚未通过。
 
 [动态计划](docs/Plan.md) · [F1 任务](docs/F1/Plan.md) · [实际日志](docs/F1/Log.md) · [V5 产品设计](docs/平台产品设计.md)
+
+[协议任务恢复与完成回执](docs/F2/ProtocolRecoveryQuickstart20261022.md)：区分原任务结算、冷页只读找回完成/核查回执和未知请求；列明两族真实硬刷新证据及PG/provider/G0等未验边界。仅为开发分支的有限工程交付，尚未正式发布。
 
 [本机安装与只读预检](docs/Installation.md)：MOCK 工程体验；真实 Win11 普通用户首次启动仍未测。
 
