@@ -486,6 +486,59 @@ def source_proof(store, c, user, rid, limits=None):
     return review_proof(store, c, user, rid)
 
 
+def read_receipt(store, user, pid, rid):
+    """Locate an accepted command without receiving a key or invoking a writer.
+
+    Absence is not proof that a request was never sent. Ambiguous or partially
+    missing acceptance evidence fails closed; this entry never chooses a key.
+    """
+    with store.tx() as c:
+        store.own_project(c, user, pid)
+        location = c.execute(
+            select(runs.c.project_id).where(runs.c.id == rid, runs.c.principal_id == user)
+        ).scalar()
+        if location != pid:
+            raise DomainError("PERMISSION_DENIED")
+        job, run, evidence, hashes = _pending(store, c, user, rid)
+        rows = (
+            c.execute(select(protocol_reviews).where(protocol_reviews.c.run_id == rid))
+            .mappings()
+            .all()
+        )
+        seals = (
+            c.execute(
+                select(events.c.data).where(
+                    events.c.run_id == rid, events.c.kind == "PROTOCOL_REVIEW"
+                )
+            )
+            .scalars()
+            .all()
+        )
+        result = dict(
+            namespace="protocol-review-readback.v1",
+            run_id=rid,
+            phase=job["kind"],
+            state="NOT_FOUND",
+            request=None,
+            receipt=None,
+        )
+        if not rows and not seals and run["status"] == "WAITING_APPROVAL":
+            return result
+        if len(rows) != 1 or len(seals) != 1:
+            raise DomainError("VERSION_CONFLICT", "Accepted review is missing or ambiguous")
+        row = rows[0]
+        contract, contract_hash = evaluation_contract(row["contract_id"])
+        _validated_review(c, row, contract, contract_hash, job, run, evidence)
+        if _oracle(contract, evidence, hashes)[0] != row["payload"]["decision"]:
+            raise DomainError("VERSION_CONFLICT", "Accepted review no longer matches")
+        return dict(
+            result,
+            state="FOUND",
+            request=copy.deepcopy(row["payload"]["request"]),
+            receipt=_public(row),
+        )
+
+
 def mount(app, store, identity):
     """Closed owner command; assets/checkers/decisions are never caller arguments."""
     user_dependency = Depends(identity)
@@ -493,3 +546,7 @@ def mount(app, store, identity):
     @app.post("/api/internal/protocol/runs/{rid}/reviews", status_code=201)
     def submit_review(rid: str, body: ReviewInput, user=user_dependency):
         return review(store, user, rid, body.model_dump())
+
+    @app.get("/api/projects/{pid}/protocol/runs/{rid}/review-receipt")
+    def read_review_receipt(pid: str, rid: str, user=user_dependency):
+        return read_receipt(store, user, pid, rid)
