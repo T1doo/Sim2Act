@@ -2,7 +2,7 @@
 // Actual protocol.js controller in a minimal element adapter, not a DOM/browser.
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict'),crypto=require('node:crypto');
 const out=process.argv[2],mode=process.argv[3]||'logic',web=path.join(__dirname,'../src/sim2act/web');
-const source=fs.readFileSync(path.join(web,'protocol.js'),'utf8'),html=fs.readFileSync(path.join(web,'index.html'),'utf8');
+const source=fs.readFileSync(process.argv[4]||path.join(web,'protocol.js'),'utf8'),html=fs.readFileSync(path.join(web,'index.html'),'utf8');
 const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);
 for(const id of ['protocol-completion','protocol-completion-confirm','protocol-completion-submit','protocol-completion-retry','protocol-completion-status'])assert.equal(ids.filter(v=>v===id).length,1,id);
 const rid='run_'+'1'.repeat(32),otherRid='run_'+'2'.repeat(32),project='proj_'+'3'.repeat(32),otherProject='proj_'+'4'.repeat(32),fp='a'.repeat(64);
@@ -32,6 +32,65 @@ function choose(run,selection=true){
 async function start(){elements.get('protocol-completion-confirm').checked=true;elements.get('protocol-completion-confirm').onchange();return elements.get('protocol-completion-submit').onclick();}
 async function retry(){return elements.get('protocol-completion-retry').onclick();}
 function postCalls(){return calls.filter(c=>c.method==='POST');}
+async function readbackComposition(){
+ const outcomes=[];
+ for(const phase of ['source','extract'])for(const fault of ['none','read403','mismatch','selection','closed','unknown']){
+  let release;
+  const initial=runData({phase,contract_id:'protocol.synthetic.a-source.v1',semantic_status:'UNKNOWN',semantic_review:'WAITING_APPROVAL',owner_semantic_acceptance:'PENDING',formal_publication_enabled:false});
+  const done=body=>phase==='source'?{...initial,status:'WAITING_APPROVAL',version:body.expected_version+1,fence:body.expected_fence+1,result_fingerprint:fp,result:{protocol_result:{semantic_status:'UNKNOWN'}}}:completed(body);
+  const accepted=body=>phase==='source'?{namespace:'protocol-source-completion.v2',run_id:rid,status:'WAITING_APPROVAL',version:body.expected_version+1,fence:body.expected_fence+1,result_fingerprint:fp,provider_requests:0,automatic_resend:false,cached:false}:receipt(body);
+  setup(initial,(url,options)=>{
+   if(url.endsWith('/completion-receipt'))return {data:{namespace:'protocol-completion-readback.v1',run_id:rid,phase,state:'NOT_FOUND',request:null,receipt:null}};
+   if(options.method==='POST'){
+    assert(url.endsWith(phase==='source'?'/complete-source':'/complete-extraction'));
+    if(fault==='unknown')throw Error('controlled lost completion response');
+    return {data:accepted(JSON.parse(options.body))};
+   }
+   const current=done(entry().body);
+   if(fault==='read403')return {status:403,data:{error:{code:'GRANT_REVOKED'}}};
+   if(fault==='mismatch')return {data:{...current,fence:current.fence+1}};
+   if(['selection','closed'].includes(fault))return new Promise(resolve=>release=()=>resolve({data:current}));
+   return {data:current};
+  });
+  await elements.get('protocol-completion-locate').onclick();
+  const originalClosed=evaluate('protocolCompletionProjectionUnconfirmed(protocolContext)')&&elements.get('protocol-result').textContent==='';
+  const pending=start();
+  if(['selection','closed'].includes(fault)){
+   for(let n=0;n<30&&!release;n++)await Promise.resolve();assert(release,'completion detail reached');
+   if(fault==='selection')evaluate('protocolContext.selection++');
+   else{elements.get('projects').hidden=true;evaluate('protocolCompletionWorkspaceChanged()');elements.get('projects').hidden=false;}
+   release();
+  }
+  await pending;
+  // Match the existing normal repaint after the command releases busy. No
+  // extra GET or explicit read is used to release a projection in this test.
+  if(fault==='none')evaluate('renderProtocolRun(protocolContext)');
+  const body=JSON.stringify(postCalls()[0].body);
+  const common={locator_closed_initially:originalClosed,one_original_post:postCalls().length===1,
+   original_key:JSON.stringify(entry().body)===body,readback_map_unmodified:evaluate('protocolCompletionReadbacks.size===0'),
+   only_original_endpoints:calls.length===(fault==='unknown'?2:3)};
+  if(fault==='none'){
+   Object.assign(common,{completion_accepted:entry().state==='accepted',current_projection_released:!evaluate('protocolCompletionProjectionUnconfirmed(protocolContext)'),
+    output_visible:!!elements.get('protocol-result').textContent&&!elements.get('protocol-state').textContent.includes('不可确认'),
+    original_next_gate:phase==='source'?!elements.get('protocol-review').hidden&&!elements.get('protocol-review-confirm').disabled&&!elements.get('protocol-review-submit').hidden&&elements.get('protocol-review-submit').disabled&&evaluate('protocolReviewEligible(protocolContext.run)')&&elements.get('protocol-extract').hidden&&elements.get('protocol-cold-form').hidden:!elements.get('protocol-cold-form').hidden});
+  }else{
+   Object.assign(common,{not_accepted:entry().state!=='accepted',projection_still_closed:evaluate('protocolCompletionProjectionUnconfirmed(protocolContext)'),
+    no_output:!elements.get('protocol-result').textContent,next_routes_closed:elements.get('protocol-extract').hidden&&elements.get('protocol-cold-form').hidden});
+   if(fault==='unknown'){
+    await start();Object.assign(common,{unknown_preserved:entry().state==='unknown'&&entry().uncertain===true,
+     unknown_no_new_key:postCalls().length===1&&JSON.stringify(entry().body)===body});
+   }
+  }
+  outcomes.push({phase,fault,predicates:common});
+ }
+ const report={status:outcomes.every(o=>Object.values(o.predicates).every(Boolean))?'PASS':'FAIL',
+  scope:'MINIMAL_ELEMENT_CONTROLLER_VM / no business HTTP, Mock, Worker or model',
+  source_sha256:crypto.createHash('sha256').update(source).digest('hex'),outcomes,business_http:0,model:0};
+ fs.writeFileSync(path.join(out,'readback-composition-observations.json'),JSON.stringify(report,null,2));
+ assert.equal(report.status,'PASS',JSON.stringify(outcomes.filter(o=>!Object.values(o.predicates).every(Boolean))));
+ checks.push('Source/Extract NOT_FOUND then original confirmed completion releases only current accepted projection',
+  'Both families preserve closure for 403, mismatched detail, later selection, closed context and UNKNOWN; original key/maps preserved');
+}
 async function logic(){
  setup();await elements.get('protocol-completion-submit').onclick();check(calls.length===0,'unchecked explicit completion sends nothing');
  for(const changed of [{phase:'cold'},{namespace:'bounded-check.v1'},{status:'PAUSED'},{status:'CANCELLED'},{error:{code:'OUTCOME_UNKNOWN'}},{version:true},{fence:false}]){
@@ -156,4 +215,4 @@ async function http(){
  check(shown.result.compiled_plan.candidate_receipt.namespace==='protocol-attempt-receipt.v2','real original V2 receipt preserved by page readback');
  fs.writeFileSync(path.join(out,'http-calls.json'),JSON.stringify(calls,null,2));
 }
-(async()=>{try{await (mode==='http'?http():mode==='materials'?materials():logic());const result={status:'PASS',mode,checks,adapter:'MINIMAL_ELEMENT_VM_NOT_DOM_BROWSER',model_requests:0,source_sha256:crypto.createHash('sha256').update(source).digest('hex'),html_sha256:crypto.createHash('sha256').update(html).digest('hex')};fs.writeFileSync(path.join(out,mode+'-result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));}catch(error){fs.writeFileSync(path.join(out,mode+'-failure.json'),JSON.stringify({checks,error:error.stack},null,2));console.error(error.stack);process.exitCode=1;}})();
+(async()=>{try{await (mode==='readback-composition'?readbackComposition():mode==='http'?http():mode==='materials'?materials():logic());const result={status:'PASS',mode,checks,adapter:'MINIMAL_ELEMENT_VM_NOT_DOM_BROWSER',model_requests:0,source_sha256:crypto.createHash('sha256').update(source).digest('hex'),html_sha256:crypto.createHash('sha256').update(html).digest('hex')};fs.writeFileSync(path.join(out,mode+'-result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));}catch(error){fs.writeFileSync(path.join(out,mode+'-failure.json'),JSON.stringify({checks,error:error.stack},null,2));console.error(error.stack);process.exitCode=1;}})();

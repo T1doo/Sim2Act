@@ -134,6 +134,7 @@ async function readProtocolCompletion(ctx,entry,current){
     const run=await protocolRequest(ctx,`/api/projects/${ctx.project}/protocol/runs/${entry.rid}`);
     if(!protocolCompletionReadMatches(run,entry))throw Error("完成成果与回执不匹配");
     if(!current()||selection!==ctx.selection)return;
+    if(ctx.completionProjectionInvalid===entry.rid)ctx.completionProjectionInvalid=null;
     entry.state="accepted";entry.message=entry.phase==="source"?"已结算原来源任务；没有新增模型请求。技术完成后仍须独立审核；当前状态按原成果显示。":"已完成原提取；没有新增模型请求。语义验收和发布状态仍按原成果显示。";
     ctx.run=run;renderProtocolRun(ctx);
   }catch(error){

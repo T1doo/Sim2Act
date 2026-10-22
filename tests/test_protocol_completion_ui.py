@@ -47,6 +47,10 @@ def test_completion_controller_selection_receipts_and_original_key(tmp_path):
     driver(tmp_path, "logic")
 
 
+def test_completion_after_optional_receipt_not_found(tmp_path):
+    driver(tmp_path, "readback-composition")
+
+
 def test_protocol_material_batch_freshness_and_late_catalog(tmp_path):
     driver(tmp_path, "materials")
 
