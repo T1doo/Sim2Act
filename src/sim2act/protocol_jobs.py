@@ -785,6 +785,8 @@ def _public(job, run, *, cached=False):
         "owner_semantic_acceptance": "PENDING",
         "run_id": run["id"],
         "phase": job["phase"],
+        # Only the verified enqueue-time ID; no gold, rubric or caller-selected checker.
+        "contract_id": (job["snapshot"].get("contract") or {}).get("contract_id"),
         "status": run["status"],
         "version": run["version"],
         "fence": run["fence"],

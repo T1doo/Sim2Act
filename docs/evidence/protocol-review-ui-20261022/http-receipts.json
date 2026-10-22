@@ -1,0 +1,290 @@
+{
+  "bodies": [
+    {
+      "contract_id": "protocol.synthetic.a-source.v1",
+      "expected_result_fingerprint": "83d2869dc4d3c8e5b5ccd3a1329730b18a53b193d9554bd0b95d3af28532c426",
+      "expected_version": 2,
+      "expected_fence": 2,
+      "request_key": "c892bf83-f8a6-45ea-b7e2-21f64b7e6db4"
+    },
+    {
+      "contract_id": "protocol.synthetic.a-source.v1",
+      "expected_result_fingerprint": "83d2869dc4d3c8e5b5ccd3a1329730b18a53b193d9554bd0b95d3af28532c426",
+      "expected_version": 2,
+      "expected_fence": 2,
+      "request_key": "c892bf83-f8a6-45ea-b7e2-21f64b7e6db4"
+    }
+  ],
+  "receipts": [
+    {
+      "id": "review_63d983845f7e461e93327859a7e4c022",
+      "run_id": "run_5062b844bf304b2490bfde023a99525e",
+      "contract_id": "protocol.synthetic.a-source.v1",
+      "namespace": "protocol-review.v1",
+      "decision": "PASS",
+      "reason": "Frozen synthetic semantic assertions and provenance match",
+      "fingerprint": "d9d8136aa2a4efcc6ef9c9a174db5adf5d39a33a3cfd7e668577b3c0fedfbb2d",
+      "publishable": false,
+      "model_requests": 0
+    },
+    {
+      "id": "review_63d983845f7e461e93327859a7e4c022",
+      "run_id": "run_5062b844bf304b2490bfde023a99525e",
+      "contract_id": "protocol.synthetic.a-source.v1",
+      "namespace": "protocol-review.v1",
+      "decision": "PASS",
+      "reason": "Frozen synthetic semantic assertions and provenance match",
+      "fingerprint": "d9d8136aa2a4efcc6ef9c9a174db5adf5d39a33a3cfd7e668577b3c0fedfbb2d",
+      "publishable": false,
+      "model_requests": 0
+    }
+  ],
+  "read": {
+    "namespace": "protocol_jobs.v1",
+    "semantic_status": "PASS",
+    "semantic_review": "APPROVED",
+    "owner_semantic_acceptance": "PENDING",
+    "run_id": "run_5062b844bf304b2490bfde023a99525e",
+    "phase": "source",
+    "contract_id": "protocol.synthetic.a-source.v1",
+    "status": "SUCCEEDED",
+    "version": 3,
+    "fence": 2,
+    "result": {
+      "protocol_result": {
+        "kind": "model-protocol.v1",
+        "status": "AWAITING_EVALUATION",
+        "semantic_status": "UNKNOWN",
+        "evidence": {
+          "goal": "只依据本包，逐条提取义务、条件、例外与原文行号；判断案例下一步。未写明的事实标UNKNOWN，不执行动作。",
+          "inputs": {
+            "format": "JSON with line evidence and explicit UNKNOWN"
+          },
+          "resource_ids": [
+            "res_4d1d84684fd64ea38ff358c2dc418b6a"
+          ],
+          "tool_trace": [
+            {
+              "tool": "resource.read",
+              "args": {
+                "resource_id": "res_4d1d84684fd64ea38ff358c2dc418b6a"
+              },
+              "data": {
+                "resource_id": "res_4d1d84684fd64ea38ff358c2dc418b6a",
+                "content": "合成规则A-S：境内差旅报销\n适用对象：海岚工作室员工；本文件全部内容为虚构。\nR1：行程结束后，员工须在10个自然日内提交报销单和收据。\nR2：金额超过500元时，须先取得主管批准，再提交报销。\nR3：缺少收据时不得提交；收据补齐后仍按R1期限处理。\n案例：林舟行程已结束2天，金额680元，收据齐全，尚未取得主管批准。\n问题：提取规则，并判断林舟现在可否提交及尚需完成什么。\n",
+                "hash": "ec7cf7070be884d8e27cd2e107484dbebe3885bae0434107ef76fefecdb71808",
+                "format": "md"
+              }
+            }
+          ],
+          "output": {
+            "obligations": {
+              "submit_form": {
+                "actor": "海岚工作室员工",
+                "action": "提交报销单",
+                "condition": "行程结束后",
+                "lines": [
+                  3
+                ],
+                "deadline": {
+                  "amount": 10,
+                  "unit": "自然日",
+                  "start_event": "行程结束",
+                  "absolute_date": "UNKNOWN"
+                }
+              },
+              "submit_proof": {
+                "actor": "海岚工作室员工",
+                "action": "提交收据",
+                "condition": "行程结束后",
+                "lines": [
+                  3
+                ],
+                "deadline": {
+                  "amount": 10,
+                  "unit": "自然日",
+                  "start_event": "行程结束",
+                  "absolute_date": "UNKNOWN"
+                }
+              },
+              "prior_approval": {
+                "actor": "海岚工作室员工",
+                "action": "取得主管批准",
+                "condition": {
+                  "field": "金额",
+                  "operator": ">",
+                  "value": 500,
+                  "unit": "元"
+                },
+                "lines": [
+                  4
+                ],
+                "order": "before submission"
+              },
+              "missing_proof_block": {
+                "actor": "海岚工作室员工",
+                "action": "不得提交",
+                "condition": "缺少收据",
+                "lines": [
+                  5
+                ],
+                "release_condition": "收据补齐"
+              },
+              "unchanged_deadline": {
+                "actor": "海岚工作室员工",
+                "action": "补齐收据后仍按R1期限处理",
+                "condition": "之前缺少收据后补齐",
+                "lines": [
+                  3,
+                  5
+                ],
+                "deadline": {
+                  "amount": 10,
+                  "unit": "自然日",
+                  "start_event": "行程结束",
+                  "absolute_date": "UNKNOWN"
+                },
+                "no_extension_or_restart": true
+              }
+            },
+            "case": {
+              "decision": "CONFLICT",
+              "may_submit_now": false,
+              "blocking_rule": "prior_approval",
+              "required_next_step": "先取得主管批准，再按原10自然日期限提交报销单和收据"
+            },
+            "absolute_deadline": "UNKNOWN"
+          },
+          "attempts": [
+            {
+              "identity": {
+                "requested_model": "intern-s2",
+                "raw_returned_model": "intern-s2",
+                "normalized_returned_model": "intern-s2",
+                "normalization_policy_version": "intern-s2-returned-name.v1",
+                "enforced": true,
+                "verdict": "ACCEPTED"
+              },
+              "usage": {
+                "status": "known",
+                "tokens": {
+                  "prompt_tokens": 10,
+                  "completion_tokens": 10,
+                  "total_tokens": 20
+                }
+              }
+            },
+            {
+              "identity": {
+                "requested_model": "intern-s2",
+                "raw_returned_model": "intern-s2",
+                "normalized_returned_model": "intern-s2",
+                "normalization_policy_version": "intern-s2-returned-name.v1",
+                "enforced": true,
+                "verdict": "ACCEPTED"
+              },
+              "usage": {
+                "status": "known",
+                "tokens": {
+                  "prompt_tokens": 10,
+                  "completion_tokens": 10,
+                  "total_tokens": 20
+                }
+              }
+            }
+          ]
+        },
+        "verification": null
+      },
+      "completed_fence": 2,
+      "completed_run_version": 2,
+      "operation_refs": [
+        "op_a8762bb9e9214415b0afb10e79a6cdfa"
+      ],
+      "attempt_refs": [
+        "attempt_baeb45877a2a415bb3cc6bcaad249c1b",
+        "attempt_8811ba1694294e6babb1603668a3dd4f"
+      ],
+      "scope": {
+        "approval_id": "run_5062b844bf304b2490bfde023a99525e",
+        "project_id": "proj_4c181381afa84d4dab3e1ce8c0a548ce",
+        "resource_ids": [
+          "res_4d1d84684fd64ea38ff358c2dc418b6a"
+        ],
+        "tool_refs": [
+          "resource.read"
+        ],
+        "max_requests": 3,
+        "mode": "offline",
+        "model": "intern-s2"
+      },
+      "operation_seals": [
+        {
+          "operation_id": "op_a8762bb9e9214415b0afb10e79a6cdfa",
+          "call_id": "protocol:b3a7ee4928ec1ea1705ec009362077645d0eb99ebec9955240479552f5ec96b6",
+          "tool_ref": "resource.read",
+          "status": "VERIFIED",
+          "request_fingerprint": "ed2aeb006551626a69da5341b6cdcf9073613d7b011b65bd686d83e0f3ec566d",
+          "intent_fingerprint": "ed2aeb006551626a69da5341b6cdcf9073613d7b011b65bd686d83e0f3ec566d",
+          "receipt_fingerprint": "aae94d1d9175423655a71a5373e6aeefbc5a27c949bd90a8e35b7f53a9e5bed9"
+        }
+      ],
+      "attempt_seals": [
+        {
+          "attempt_id": "attempt_baeb45877a2a415bb3cc6bcaad249c1b",
+          "safe_response_fingerprint": "8b6baa8facf6ff56ceb01f103f5291690a70e4cb44e9584128e1d137f131a336",
+          "usage": {
+            "status": "known",
+            "tokens": {
+              "prompt_tokens": 10,
+              "completion_tokens": 10,
+              "total_tokens": 20
+            }
+          },
+          "model_identity": {
+            "requested_model": "intern-s2",
+            "raw_returned_model": "intern-s2",
+            "normalized_returned_model": "intern-s2",
+            "normalization_policy_version": "intern-s2-returned-name.v1",
+            "enforced": true,
+            "verdict": "ACCEPTED"
+          },
+          "parameters_fingerprint": "905a5bffbaa0f8444733741b028a42b97869680fd8759f83a79976172fe7521a",
+          "request_model": "intern-s2",
+          "response_model": "intern-s2",
+          "mode": "MOCK",
+          "status": "RECEIVED"
+        },
+        {
+          "attempt_id": "attempt_8811ba1694294e6babb1603668a3dd4f",
+          "safe_response_fingerprint": "cc99db16a6b65be809896e50429ac52c12b69430824a95737240497af4f2df67",
+          "usage": {
+            "status": "known",
+            "tokens": {
+              "prompt_tokens": 10,
+              "completion_tokens": 10,
+              "total_tokens": 20
+            }
+          },
+          "model_identity": {
+            "requested_model": "intern-s2",
+            "raw_returned_model": "intern-s2",
+            "normalized_returned_model": "intern-s2",
+            "normalization_policy_version": "intern-s2-returned-name.v1",
+            "enforced": true,
+            "verdict": "ACCEPTED"
+          },
+          "parameters_fingerprint": "763ee18bc27ebcacae8fd7eda435465c4096ecf8507518ee0b7eb7f13e4d72d9",
+          "request_model": "intern-s2",
+          "response_model": "intern-s2",
+          "mode": "MOCK",
+          "status": "RECEIVED"
+        }
+      ]
+    },
+    "result_fingerprint": "83d2869dc4d3c8e5b5ccd3a1329730b18a53b193d9554bd0b95d3af28532c426",
+    "error": null,
+    "cached": false,
+    "formal_publication_enabled": false
+  }
+}

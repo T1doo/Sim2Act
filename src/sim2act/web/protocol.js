@@ -47,7 +47,7 @@ async function refreshProtocol(materialRead=null){
     renderProtocolSource();
   }catch(error){if(protocolCurrent(ctx)&&readCurrent())$("protocol-source-status").textContent=error.message;}
 }
-function renderProtocolRun(ctx){if(!protocolCurrent(ctx)||!ctx.run||$("projects").hidden)return;const run=ctx.run;$("protocol-detail").hidden=false;$("protocol-run-id").textContent=run.run_id;protocolStatus(ctx,`${run.phase} · ${run.status} · 语义 ${run.semantic_status} · ${run.semantic_review} · owner ${run.owner_semantic_acceptance||"PENDING"}。注册核查不等于 owner 对真实任务签收；未发布。`);$("protocol-result").textContent=JSON.stringify(run.result||run.error||{},null,2);$("protocol-extract").hidden=!(run.phase==="source"&&run.status==="SUCCEEDED"&&run.semantic_status==="PASS"&&run.semantic_review==="APPROVED");$("protocol-cold-form").hidden=!(run.phase==="extract"&&run.status==="SUCCEEDED"&&run.result?.compiled_plan);$("protocol-recover").disabled=ctx.busy;$("protocol-recover-retry").hidden=!ctx.recoveryPending;renderProtocolCompletion(ctx);if(!$("protocol-cold-form").hidden){const plan=run.result.compiled_plan;if(ctx.renderedPlan===plan.plan_fingerprint)return;ctx.renderedPlan=plan.plan_fingerprint;ctx.plan=plan;$("protocol-cold-contract").replaceChildren(...protocolCatalog.filter(item=>item.phase==="cold").map(item=>new Option(`${item.family} · v${item.version}`,item.contract_id)));renderProtocolCold();}}
+function renderProtocolRun(ctx){if(!protocolCurrent(ctx)||!ctx.run||$("projects").hidden)return;const run=ctx.run;$("protocol-detail").hidden=false;$("protocol-run-id").textContent=run.run_id;protocolStatus(ctx,`${run.phase} · ${run.status} · 语义 ${run.semantic_status} · ${run.semantic_review} · owner ${run.owner_semantic_acceptance||"PENDING"}。注册核查不等于 owner 对真实任务签收；未发布。`);$("protocol-result").textContent=JSON.stringify(run.result||run.error||{},null,2);$("protocol-extract").hidden=!(run.phase==="source"&&run.status==="SUCCEEDED"&&run.semantic_status==="PASS"&&run.semantic_review==="APPROVED");$("protocol-cold-form").hidden=!(run.phase==="extract"&&run.status==="SUCCEEDED"&&run.result?.compiled_plan);$("protocol-recover").disabled=ctx.busy;$("protocol-recover-retry").hidden=!ctx.recoveryPending;renderProtocolCompletion(ctx);renderProtocolReview(ctx);if(!$("protocol-cold-form").hidden){const plan=run.result.compiled_plan;if(ctx.renderedPlan===plan.plan_fingerprint)return;ctx.renderedPlan=plan.plan_fingerprint;ctx.plan=plan;$("protocol-cold-contract").replaceChildren(...protocolCatalog.filter(item=>item.phase==="cold").map(item=>new Option(`${item.family} · v${item.version}`,item.contract_id)));renderProtocolCold();}}
 function renderProtocolCold(){const ctx=protocolContext,contract=protocolContract($("protocol-cold-contract").value);if(!ctx?.plan||!protocolCurrent(ctx)||!contract)return;protocolInputFields($("protocol-cold-inputs"),contract.public_inputs,ctx.coldInputContract===contract.contract_id);ctx.coldInputContract=contract.contract_id;const allowed=protocolMaterials.filter(resource=>contract.resource_hashes.includes(resource.hash));$("protocol-cold-materials").replaceChildren(...Object.entries(ctx.plan.candidate.resources).map(([name,id])=>{const source=protocolMaterials.find(resource=>resource.id===id);const label=protocolMaterialField(`${name} · 来源 ${source?.name||id}`,allowed,allowed.length===1?allowed[0].id:"");label.querySelector("select").dataset.binding=name;return label;}));$("protocol-cold-submit").disabled=contract.resource_hashes.some(hash=>!allowed.some(resource=>resource.hash===hash));}
 async function showProtocolRun(id,ctx=protocolContext){if(!ctx||!protocolCurrent(ctx)||$("projects").hidden)return;const selection=++ctx.selection,workspace=workspaceSelectionGeneration;try{const run=await protocolRequest(ctx,`/api/projects/${ctx.project}/protocol/runs/${id}`);if(!protocolCurrent(ctx)||selection!==ctx.selection||activeRun!==id||workspace!==workspaceSelectionGeneration||$("projects").hidden)return;if(ctx.run?.run_id!==run.run_id)ctx.recoveryPending=null;ctx.run=run;renderProtocolRun(ctx);}catch(error){if(protocolCurrent(ctx)&&selection===ctx.selection&&workspace===workspaceSelectionGeneration&&!$("projects").hidden){ctx.run=null;ctx.plan=null;ctx.renderedPlan=null;$("protocol-cold-inputs").replaceChildren();$("protocol-cold-materials").replaceChildren();$("protocol-detail").hidden=true;$("protocol-result").textContent="";protocolStatus(ctx,error.message);throw error;}}}
 async function renderSelectedProtocol(run,id,current=()=>true){if(!current())return;await refreshProtocol();const ctx=protocolContext;if(!ctx||!protocolCurrent(ctx)||activeRun!==id||!current())return;await showProtocolRun(id,ctx);if(!current()||!protocolCurrent(ctx)||activeRun!==id||ctx.run?.run_id!==id)return;$("result").textContent="协议成果与核对状态见下方。";$("commands").replaceChildren();$("reconcile-panel").hidden=true;$("events").textContent="";$("raw-result").textContent="";}
@@ -64,6 +64,7 @@ $("protocol-read").onclick=safe(()=>{const ctx=protocolContext;if(ctx?.run)retur
 const protocolCompletionIntents=new Map();
 function protocolCompletionKey(ctx,rid){return JSON.stringify([ctx.token,ctx.project,rid]);}
 function clearProtocolCompletion(){
+  clearProtocolReview();
   $("protocol-completion").hidden=true;
   $("protocol-completion-confirm").checked=false;
   $("protocol-completion-submit").disabled=true;
@@ -75,13 +76,13 @@ function protocolCompletionWorkspaceChanged(){
   const ctx=protocolContext;
   if(!ctx||!protocolCurrent(ctx))return;
   ctx.intent=(ctx.intent||0)+1;ctx.selection++;
-  ctx.completionSignature=null;
+  ctx.completionSignature=null;ctx.reviewSignature=null;
   if($("projects").hidden){
     if(ctx.run)ctx.run={...ctx.run,result:null,result_fingerprint:null,error:null};
     ctx.plan=null;ctx.renderedPlan=null;
     $("protocol-result").textContent="";$("protocol-cold-form").hidden=true;
     $("protocol-cold-inputs").replaceChildren();$("protocol-cold-materials").replaceChildren();
-  }else if(ctx.run)renderProtocolCompletion(ctx);
+  }else if(ctx.run){renderProtocolCompletion(ctx);renderProtocolReview(ctx);}
 }
 function protocolCompletionEligible(run){
   return run?.namespace==="protocol_jobs.v1"&&["extract","source"].includes(run.phase)&&run.result===null&&
@@ -186,3 +187,123 @@ async function completeProtocolExtraction(retry=false){
 $("protocol-completion-confirm").onchange=()=>{if(protocolContext)renderProtocolCompletion(protocolContext);};
 $("protocol-completion-submit").onclick=safe(()=>completeProtocolExtraction());
 $("protocol-completion-retry").onclick=safe(()=>completeProtocolExtraction(true));
+
+// Owner may request the existing registered synthetic checker, never choose a verdict.
+// Commands live only in page memory, scoped to identity/project/Run like completion.
+const protocolReviewIntents=new Map();
+function clearProtocolReview(){
+  $("protocol-review").hidden=true;
+  $("protocol-review-confirm").checked=false;
+  $("protocol-review-submit").disabled=true;
+  $("protocol-review-retry").hidden=true;
+  $("protocol-review-status").textContent="";
+}
+function protocolReviewEligible(run){
+  return run?.namespace==="protocol_jobs.v1"&&["source","cold"].includes(run.phase)&&
+    run.status==="WAITING_APPROVAL"&&run.semantic_status==="UNKNOWN"&&run.semantic_review==="WAITING_APPROVAL"&&
+    run.owner_semantic_acceptance==="PENDING"&&run.formal_publication_enabled===false&&
+    !run.error&&run.result!==null&&typeof run.result==="object"&&
+    typeof run.contract_id==="string"&&new RegExp(`^protocol\\.synthetic\\.[ab]-${run.phase}\\.v1$`).test(run.contract_id)&&
+    typeof run.result_fingerprint==="string"&&/^[a-f0-9]{64}$/.test(run.result_fingerprint)&&
+    Number.isSafeInteger(run.version)&&run.version>=1&&Number.isSafeInteger(run.version+1)&&
+    Number.isSafeInteger(run.fence)&&run.fence>=1;
+}
+function protocolReviewReceipt(value,entry){
+  const keys=["id","run_id","contract_id","namespace","decision","reason","fingerprint","publishable","model_requests"];
+  return value!==null&&typeof value==="object"&&!Array.isArray(value)&&
+    Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key))&&
+    typeof value.id==="string"&&/^review_[a-f0-9]{32}$/.test(value.id)&&
+    value.run_id===entry.rid&&value.contract_id===entry.body.contract_id&&value.namespace==="protocol-review.v1"&&
+    ["PASS","FAIL","UNKNOWN"].includes(value.decision)&&typeof value.reason==="string"&&
+    typeof value.fingerprint==="string"&&/^[a-f0-9]{64}$/.test(value.fingerprint)&&
+    value.publishable===false&&value.model_requests===0;
+}
+function protocolReviewReadMatches(run,entry){
+  const body=entry.body,receipt=entry.receipt;
+  return !!receipt&&run?.namespace==="protocol_jobs.v1"&&run.run_id===entry.rid&&run.phase===entry.phase&&
+    run.contract_id===body.contract_id&&run.result_fingerprint===body.expected_result_fingerprint&&
+    run.fence===body.expected_fence&&!run.error&&run.result!==null&&typeof run.result==="object"&&
+    run.owner_semantic_acceptance==="PENDING"&&run.formal_publication_enabled===false&&
+    (receipt.decision==="PASS"?
+      run.status==="SUCCEEDED"&&run.version===body.expected_version+1&&run.semantic_status==="PASS"&&run.semantic_review==="APPROVED":
+      run.status==="WAITING_APPROVAL"&&run.version===body.expected_version&&run.semantic_status==="UNKNOWN"&&run.semantic_review==="WAITING_APPROVAL");
+}
+function renderProtocolReview(ctx){
+  if(!protocolCurrent(ctx)||!ctx.run||$("projects").hidden){clearProtocolReview();return;}
+  const run=ctx.run,entry=protocolReviewIntents.get(protocolCompletionKey(ctx,run.run_id));
+  const eligible=protocolReviewEligible(run),pending=["sending","unknown","accepted-read-error"].includes(entry?.state);
+  // Keep a completed evaluation visible without offering another key for the same result.
+  $("protocol-review").hidden=!eligible&&!pending&&entry?.state!=="accepted";
+  const signature=JSON.stringify([ctx.intent,workspaceSelectionGeneration,run.run_id,run.contract_id,run.result_fingerprint,run.version,run.fence]);
+  if(ctx.reviewSignature!==signature){ctx.reviewSignature=signature;$("protocol-review-confirm").checked=false;}
+  const blocked=ctx.busy||pending||entry?.state==="accepted";
+  $("protocol-review-confirm").disabled=!eligible||blocked;
+  $("protocol-review-submit").hidden=!eligible||pending||entry?.state==="accepted";
+  $("protocol-review-submit").disabled=!eligible||blocked||!$("protocol-review-confirm").checked;
+  $("protocol-review-retry").hidden=!["unknown","accepted-read-error"].includes(entry?.state);
+  $("protocol-review-retry").disabled=ctx.busy;
+  $("protocol-review-retry").textContent=entry?.state==="accepted-read-error"?"重新读取核查状态（不再提交）":"用原核查键核对";
+  $("protocol-review-status").textContent=entry?.message||`冻结契约 ${run.contract_id}；核查不会代替真实任务签收。刷新或关闭页面后原请求键不可恢复，请先读取任务状态。`;
+}
+async function readProtocolReview(ctx,entry,current){
+  const selection=++ctx.selection,readGeneration=entry.readGeneration=(entry.readGeneration||0)+1;
+  try{
+    const run=await protocolRequest(ctx,`/api/projects/${ctx.project}/protocol/runs/${entry.rid}`);
+    if(!protocolReviewReadMatches(run,entry))throw Error("原成果与核查回执不匹配");
+    if(entry.readGeneration!==readGeneration||!current()||selection!==ctx.selection)return;
+    entry.state="accepted";entry.message=`注册合成核查 ${entry.receipt.decision}；原成果已复读确认。owner 真实任务签收仍 PENDING，未发布。`;
+    ctx.run=run;renderProtocolRun(ctx);
+  }catch(error){
+    if(entry.readGeneration!==readGeneration)return;
+    entry.state="accepted-read-error";entry.message="核查回执已记录，原成果读取未通过；只能重读状态，不再提交核查。";
+    if(current()&&selection===ctx.selection){
+      ctx.run={...ctx.run,result:null,result_fingerprint:null,error:null};ctx.plan=null;ctx.renderedPlan=null;
+      $("protocol-result").textContent="";$("protocol-extract").hidden=true;$("protocol-cold-form").hidden=true;
+      $("protocol-cold-inputs").replaceChildren();$("protocol-cold-materials").replaceChildren();
+      renderProtocolReview(ctx);
+    }
+  }
+}
+async function requestProtocolReview(retry=false){
+  const ctx=protocolContext,run=ctx?.run;
+  if(!ctx||!run||!protocolCurrent(ctx)||$("projects").hidden||activeRun!==run.run_id||ctx.busy)return;
+  const key=protocolCompletionKey(ctx,run.run_id);
+  let entry=protocolReviewIntents.get(key);
+  if(retry){
+    if(!entry||!["unknown","accepted-read-error"].includes(entry.state))return;
+  }else{
+    if(!protocolReviewEligible(run)||!$("protocol-review-confirm").checked||
+       ["sending","unknown","accepted-read-error","accepted"].includes(entry?.state))return;
+    entry={rid:run.run_id,phase:run.phase,body:Object.freeze({contract_id:run.contract_id,
+      expected_result_fingerprint:run.result_fingerprint,expected_version:run.version,
+      expected_fence:run.fence,request_key:crypto.randomUUID()}),state:"new",uncertain:false};
+    protocolReviewIntents.set(key,entry);
+  }
+  const intent=ctx.intent,workspace=workspaceSelectionGeneration,current=()=>protocolCurrent(ctx)&&ctx.intent===intent&&
+    workspace===workspaceSelectionGeneration&&!$("projects").hidden&&activeRun===entry.rid&&ctx.run?.run_id===entry.rid;
+  ctx.busy=true;$("protocol-review-confirm").checked=false;$("protocol-recover").disabled=true;
+  try{
+    if(entry.state==="accepted-read-error"){
+      renderProtocolReview(ctx);await readProtocolReview(ctx,entry,current);return;
+    }
+    entry.state="sending";entry.message="正在请求原契约的注册合成核查；没有发起模型请求。";renderProtocolReview(ctx);
+    try{
+      const receipt=await protocolRequest(ctx,`/api/internal/protocol/runs/${entry.rid}/reviews`,"POST",entry.body);
+      if(!protocolReviewReceipt(receipt,entry))throw Error("核查回执未通过核对");
+      entry.receipt=receipt;entry.state="accepted-read-error";entry.message="核查回执已记录，正在复读原成果。";
+    }catch(error){
+      const rejected=!entry.uncertain&&Number.isInteger(error.httpStatus)&&error.httpStatus>=400&&error.httpStatus<500&&![408,425,429].includes(error.httpStatus);
+      entry.state=rejected?"rejected":"unknown";if(!rejected)entry.uncertain=true;
+      entry.message=rejected?`服务端拒绝核查：${error.message}。请先读取当前状态。`:
+        "核查回执 UNKNOWN；只可显式使用原核查键核对，不自动重发、不另选契约或补传判定。";
+      return;
+    }
+    if(current())await readProtocolReview(ctx,entry,current);
+  }finally{
+    ctx.busy=false;
+    if(current()){renderProtocolReview(ctx);$("protocol-recover").disabled=false;}
+  }
+}
+$("protocol-review-confirm").onchange=()=>{if(protocolContext)renderProtocolReview(protocolContext);};
+$("protocol-review-submit").onclick=safe(()=>requestProtocolReview());
+$("protocol-review-retry").onclick=safe(()=>requestProtocolReview(true));
