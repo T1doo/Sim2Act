@@ -560,14 +560,14 @@ $("reconcile-form").onsubmit = safe(async () => {const a=unresolvedAttempts.find
 $("project-select").onchange = safe(async () => {projectSelectionGeneration++;clearOrdinaryRunMaterials();if(typeof clearCsvLogic === "function")clearCsvLogic();if(typeof clearTextLogic === "function")clearTextLogic();if(typeof clearResourceMaterial === "function")clearResourceMaterial();if(typeof clearApplicationUse === "function")clearApplicationUse(true);runUserSelectionGeneration++;runHistoryGeneration++;$("runs").replaceChildren();$("run-history-status").textContent="";activeRun=null;renderRunSubmission();if(typeof clearProtocol === "function")clearProtocol();clearApp();clearGoalCard();clearRunDetail();$("resource-preview").textContent="";projectSelectionRefresh=refresh();await projectSelectionRefresh;});
 document.querySelectorAll("#workspace-nav [data-tab]").forEach(b => b.onclick = () => selectWorkspace(b.dataset.tab));
 selectWorkspace("projects");
-document.querySelector("#projects .grid > section:last-child").append($("reconcile-panel"));
+$("task-result-panel").append($("reconcile-panel"));
 function renderProjectContext() {
   const select = $("project-select"), option = select.selectedOptions[0];
   const selected = !!token && !!select.value && option?.value === select.value;
   $("project-context-status").textContent = !token
     ? "请先连接本机 API，再选择项目。材料仅在所选项目内保存和授权。"
     : selected
-      ? `当前所选项目：${option.textContent}。保存材料将授权给此项目；切换项目请使用项目工作区的原选择器。`
+      ? `当前所选项目：${option.textContent}。保存材料将授权给此项目；切换项目请使用此处的项目选择器。`
       : "尚未选择项目。请到项目工作区选择已有项目，或填写名称创建项目。";
   $("project-context-open").textContent = !token ? "填写连接令牌" : selected ? "选择或切换项目" : "选择或创建项目";
 }
@@ -575,7 +575,7 @@ $("project-context-open").onclick = () => {
   selectWorkspace("projects");
   if (!token) {$("login").hidden = false;$("token").focus();}
   else if (Array.from($("project-select").options).some(option => !!option.value)) $("project-select").focus();
-  else $("project-name").focus();
+  else {$("project-create").open=true;$("project-name").focus();}
 };
 $("project-select").addEventListener("change", renderProjectContext);
 const projectContextObserver = new MutationObserver(renderProjectContext);
