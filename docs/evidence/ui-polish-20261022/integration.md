@@ -1,0 +1,7 @@
+# Development integration, 2026-10-22
+
+Integrates visual tip `406310f9cdf33eca2b4d4cf8f35cae5cc67578f7` into functionality tip `467b340c01fc6f12c83b68f83635b2d583066ce0`. Exact common ancestor is `ca4b29f5d67a35e08ddf170ea863484944c5092f`. Normal two-parent development merge, no main/force push/deployment.
+
+Precommit integration checks: no conflicts; product diff only `src/sim2act/web/app.css`, bytes identical to the visual branch (SHA256 `4a39c8afbf8911a0e97094fcee09d6114ddd85ed65e0c9a63b2a65ddccecf329`); all four cleanup-repair source hashes unchanged; every visual raw gzip archive and its uncompressed hash matches the original manifest; staged diff whitespace check passes. No new browser/model/CI execution.
+
+The visual branch's8PASS/1FAIL are historical checks, not this merged tree's validation. The cold-page business readback timeout remains **open**, reproduced at the same location on the untouched baseline; it was not fixed or waived by integration. Actual protected-browser visual/focus/viewport acceptance is still unverified. The existing native run's GET-budget failure and incomplete cleanup remain failed evidence; the newly merged cleanup repair has only its documented local targeted verification. A later single bounded browser run must use the then-frozen integrated source and cover both presentation and the completion/recovery flow; no old-tree test or screenshot signs it off.
