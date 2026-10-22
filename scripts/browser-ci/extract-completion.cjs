@@ -17,7 +17,7 @@ const removedSecurityDefaults=[
  'Translate','AutoDeElevate','OptimizationHints','msForceBrowserSignIn',
  'msEdgeUpdateLaunchServicesPreferredVersion'].join(',')
 ];
-let browser,page,timer,watcher,failGet=false,holdGet=false,held,releaseHeld,cancelled=false,fail;
+let browser,page,timer,watcher,failGet=false,holdGet=false,held,releaseHeld,heldRequest,delivered,cancelled=false,fail;
 const bodies=[];
 function check(name,condition){assert.ok(condition,name);result.checks.push(name);}
 function write(){fs.writeFileSync(path.join(root,'browser.json'),JSON.stringify(result,null,2));}
@@ -68,7 +68,7 @@ async function run(){
    if(failGet){failGet=false;await route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({error:{code:'CONTROLLED_RESPONSE_READ_FAILURE'}})});return;}
    if(holdGet){
     holdGet=false;const response=await route.fetch({maxRedirects:0,maxRetries:0,timeout:8000});
-    held();await new Promise(resolve=>releaseHeld=resolve);await route.fulfill({response});return;
+    heldRequest=request;held();await new Promise(resolve=>releaseHeld=resolve);await route.fulfill({response});delivered();return;
    }
   }
   await route.continue();
@@ -106,10 +106,11 @@ async function run(){
  await page.locator('#protocol-detail').scrollIntoViewIfNeeded();await shot('completed.png');
  // Hold one genuine detail response, close/return the real workspace, then
  // release it. No page-global/controller function or timer is replaced.
- const reached=new Promise(resolve=>held=resolve);holdGet=true;
+ const reached=new Promise(resolve=>held=resolve),delivery=new Promise(resolve=>delivered=resolve);holdGet=true;
  await page.locator('#protocol-read').click();await reached;
  await page.locator('[data-tab="apps"]').click();await page.locator('[data-tab="projects"]').click();
- const count=result.requests.length;releaseHeld();
+ const count=result.requests.length,returned=page.waitForResponse(response=>response.request()===heldRequest);
+ releaseHeld();await delivery;const response=await returned;assert.equal(await response.finished(),null);
  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
  check('workspace close/return clears content and late detail cannot restore it',await page.locator('#protocol-result').textContent()===''&&await page.locator('#protocol-cold-form').isHidden());
  check('no new command after workspace return',bodies.length===2);
