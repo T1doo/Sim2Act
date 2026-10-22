@@ -1012,7 +1012,7 @@ def create_app(store=None, settings=None):
     from .pb_natural_uses import PA
     mount_pb_natural_uses(app, db, platform_limits, identity, family=PA)
     mount_protocol_api(app, db, platform_limits, identity, s)
-    mount_protocol_recovery(app, db, identity)
+    mount_protocol_recovery(app, db, identity, s)
     mount_protocol_reviews(app, db, identity)
     mount_conditional_checks(app, db, identity)
     mount_conditional_runs(app, db, identity, platform_limits, s)

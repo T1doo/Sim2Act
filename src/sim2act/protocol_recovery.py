@@ -282,7 +282,7 @@ def _response(run, reason, global_send_blocked):
     }
 
 
-def mount(app, store, identity):
+def mount(app, store, identity, settings):
     user_dependency = Depends(identity)
 
     @app.post("/api/projects/{pid}/protocol/runs/{rid}/recover")
@@ -292,3 +292,14 @@ def mount(app, store, identity):
             if c.execute(select(runs.c.project_id).where(runs.c.id == rid)).scalar() != pid:
                 raise DomainError("PERMISSION_DENIED")
         return recover(store, user, rid, body)
+
+    from .protocol_extract_completion import CompletionInput, complete_extract
+
+    @app.post("/api/projects/{pid}/protocol/runs/{rid}/complete-extraction")
+    def complete_received_extract(pid: str, rid: str, body: CompletionInput, user=user_dependency):
+        with store.tx() as c:
+            store.own_project(c, user, pid)
+            if c.execute(select(runs.c.project_id).where(runs.c.id == rid,
+                    runs.c.principal_id == user)).scalar() != pid:
+                raise DomainError("PERMISSION_DENIED")
+        return complete_extract(store, user, rid, body, settings)

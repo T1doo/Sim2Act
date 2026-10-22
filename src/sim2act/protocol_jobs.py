@@ -878,6 +878,101 @@ def fail_job(worker, run, error):
         )
 
 
+def compile_extraction(snapshot, result):
+    """Same pure compiled-plan construction for normal and known completion."""
+    compiled = {
+        "kind": "protocol-compiled-plan.v1",
+        "compiler_version": COMPILER_VERSION,
+        **copy.deepcopy(result),
+        "source_run_id": snapshot["source"]["run_id"],
+        "source_result_fingerprint": snapshot["source"]["result_fingerprint"],
+    }
+    compiled["kind"] = "protocol-compiled-plan.v1"
+    if snapshot.get("bounded_check_namespace"):
+        compiled["source_check_fingerprint"] = snapshot["source"]["check_fingerprint"]
+        compiled["bounded_check_namespace"] = snapshot["bounded_check_namespace"]
+    compiled["plan_fingerprint"] = fingerprint(compiled)
+    return compiled
+
+
+def complete_in_tx(store, c, current, snapshot, result, compiled, fence):
+    """Original atomic completion body; caller owns the fresh admission gate."""
+    rid, phase = current["id"], snapshot["phase"]
+    final = {
+        "protocol_result": result,
+        "completed_fence": fence,
+        "completed_run_version": current["version"] + 1,
+        "operation_refs": list(
+            c.execute(
+                select(operations.c.id).where(
+                    operations.c.run_id == rid, operations.c.status == "VERIFIED"
+                )
+            ).scalars()
+        ),
+        "attempt_refs": list(
+            c.execute(
+                select(attempts.c.id).where(
+                    attempts.c.run_id == rid, attempts.c.status == "RECEIVED"
+                )
+            ).scalars()
+        ),
+        "scope": snapshot["scope"],
+        "operation_seals": [
+            _operation_seal(c, o)
+            for o in c.execute(
+                select(operations)
+                .where(operations.c.run_id == rid)
+                .order_by(operations.c.id)
+            ).mappings()
+        ],
+        "attempt_seals": [
+            _attempt_seal(a)
+            for a in c.execute(
+                select(attempts)
+                .where(attempts.c.run_id == rid)
+                .order_by(attempts.c.created_at)
+            ).mappings()
+        ],
+    }
+    if compiled is not None:
+        final["compiled_plan"] = compiled
+    state = "SUCCEEDED" if phase == "extract" else "WAITING_APPROVAL"
+    c.execute(
+        update(_table())
+        .where(_table().c.run_id == rid)
+        .values(
+            result_snapshot=final,
+            result_fingerprint=fingerprint(final),
+            completed_fence=fence,
+        )
+    )
+    c.execute(
+        update(runs)
+        .where(runs.c.id == rid)
+        .values(result=final, status=state, lease_until=0, version=current["version"] + 1)
+    )
+    store.event(
+        c,
+        rid,
+        "PROTOCOL_COMPLETED",
+        {
+            "result_fingerprint": fingerprint(final),
+            "completed_fence": fence,
+            "completed_run_version": current["version"] + 1,
+        },
+    )
+    store.event(
+        c,
+        rid,
+        "PROTOCOL_STATE",
+        {
+            "status": state,
+            "semantic_status": "NOT_RUN" if phase == "extract" else "UNKNOWN",
+        },
+    )
+    return final
+
+
 def process_job(worker, run):
     store, rid, fence = worker.store, run["id"], run["fence"]
     stopped = threading.Event()
@@ -1033,18 +1128,7 @@ def process_job(worker, run):
                 result = extract_candidate(store, run, snapshot, protocol)
             else:
                 result = protocol.extract_candidate(source_result)
-            compiled = {
-                "kind": "protocol-compiled-plan.v1",
-                "compiler_version": COMPILER_VERSION,
-                **copy.deepcopy(result),
-                "source_run_id": snapshot["source"]["run_id"],
-                "source_result_fingerprint": snapshot["source"]["result_fingerprint"],
-            }
-            compiled["kind"] = "protocol-compiled-plan.v1"
-            if snapshot.get("bounded_check_namespace"):
-                compiled["source_check_fingerprint"] = snapshot["source"]["check_fingerprint"]
-                compiled["bounded_check_namespace"] = snapshot["bounded_check_namespace"]
-            compiled["plan_fingerprint"] = fingerprint(compiled)
+            compiled = compile_extraction(snapshot, result)
         else:
             plan = snapshot["compiled_plan"]
             extracted = {
@@ -1110,78 +1194,7 @@ def process_job(worker, run):
                 raise DomainError(
                     "VERIFICATION_FAILED", "Technical execution cannot sign semantic acceptance"
                 )
-            final = {
-                "protocol_result": result,
-                "completed_fence": fence,
-                "completed_run_version": current["version"] + 1,
-                "operation_refs": list(
-                    c.execute(
-                        select(operations.c.id).where(
-                            operations.c.run_id == rid, operations.c.status == "VERIFIED"
-                        )
-                    ).scalars()
-                ),
-                "attempt_refs": list(
-                    c.execute(
-                        select(attempts.c.id).where(
-                            attempts.c.run_id == rid, attempts.c.status == "RECEIVED"
-                        )
-                    ).scalars()
-                ),
-                "scope": snapshot["scope"],
-                "operation_seals": [
-                    _operation_seal(c, o)
-                    for o in c.execute(
-                        select(operations)
-                        .where(operations.c.run_id == rid)
-                        .order_by(operations.c.id)
-                    ).mappings()
-                ],
-                "attempt_seals": [
-                    _attempt_seal(a)
-                    for a in c.execute(
-                        select(attempts)
-                        .where(attempts.c.run_id == rid)
-                        .order_by(attempts.c.created_at)
-                    ).mappings()
-                ],
-            }
-            if compiled is not None:
-                final["compiled_plan"] = compiled
-            state = "SUCCEEDED" if phase == "extract" else "WAITING_APPROVAL"
-            c.execute(
-                update(_table())
-                .where(_table().c.run_id == rid)
-                .values(
-                    result_snapshot=final,
-                    result_fingerprint=fingerprint(final),
-                    completed_fence=fence,
-                )
-            )
-            c.execute(
-                update(runs)
-                .where(runs.c.id == rid)
-                .values(result=final, status=state, lease_until=0, version=current["version"] + 1)
-            )
-            store.event(
-                c,
-                rid,
-                "PROTOCOL_COMPLETED",
-                {
-                    "result_fingerprint": fingerprint(final),
-                    "completed_fence": fence,
-                    "completed_run_version": current["version"] + 1,
-                },
-            )
-            store.event(
-                c,
-                rid,
-                "PROTOCOL_STATE",
-                {
-                    "status": state,
-                    "semantic_status": "NOT_RUN" if phase == "extract" else "UNKNOWN",
-                },
-            )
+            complete_in_tx(store, c, current, snapshot, result, compiled, fence)
     except DomainError as exc:
         fail_job(worker, run, exc)
     finally:

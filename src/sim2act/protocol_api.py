@@ -210,6 +210,9 @@ class ProtocolAttemptRunner:
         receipt = self.provider.accept_candidate(candidate_fingerprint, source_proof_fingerprint)
         if self.last_attempt_id is None:
             raise DomainError("VERIFICATION_FAILED")
+        from .protocol_extract_completion import VERSION, persist_acceptance
+        if receipt.get("receipt_version") == VERSION:
+            return persist_acceptance(self.worker, self.run, self.snapshot, self.provider, receipt)
         receipt = {
             **receipt,
             "attempt_id": self.last_attempt_id,
@@ -263,13 +266,17 @@ class ProtocolAttemptRunner:
                 or source_run["status"] != "SUCCEEDED"
                 or plan != self.snapshot["compiled_plan"]
                 or plan["candidate_receipt"] != receipt
-                or receipt.get("namespace") != "protocol-attempt-receipt.v1"
+                or receipt.get("namespace") not in {"protocol-attempt-receipt.v1", "protocol-attempt-receipt.v2"}
                 or receipt.get("extraction_run_id") != source_id
                 or receipt.get("candidate_fingerprint") != candidate_fingerprint
                 or receipt.get("source_proof_fingerprint") != source_proof_fingerprint
                 or attempt["parameters"].get("protocol_candidate_receipt") != receipt
             ):
                 raise DomainError("VERIFICATION_FAILED", "Persisted extraction receipt mismatch")
+            if receipt["namespace"] == "protocol-attempt-receipt.v2":
+                from .protocol_extract_completion import sidecar, verified_receipt
+                with sidecar(self.worker.s.data_dir, source_id) as data:
+                    verified_receipt(self.worker.store, c, self.run["principal_id"], source_id, receipt, data)
             message, _ = parse_response(attempt["response"])
             from .contracts import strict_json
 
@@ -313,7 +320,10 @@ class ProtocolAttemptRunner:
         self.request_attempt_ids[len(self.request_attempt_ids)] = aid
         start, raw = time.monotonic(), None
         try:
-            raw = self.provider.call(messages, tools)
+            from .protocol_extract_completion import bind_request
+            origin = bind_request(worker, run, self.snapshot, self.provider, aid, messages, tools)
+            raw = (self.provider.call(messages, tools) if origin is None else
+                self.provider.call(messages, tools, request_binding=origin))
             identity = returned_model_identity(worker.s.model, raw.get("model"), enforced=True)
             require_returned_model(identity)
             parse_response(raw)

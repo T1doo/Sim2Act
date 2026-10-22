@@ -285,10 +285,14 @@ class BudgetedProvider:
             self._check_request(data, body, chars, len(body) + 1024)
         return len(body) + 1024
 
-    def call(self, messages, tools):
+    def call(self, messages, tools, *, request_binding=None):
         self.last_response = None
         wire_guard = self.wire_guard
         body, chars = self._request_body(messages, tools)
+        if request_binding is not None:
+            from .protocol_extract_completion import check_actual_wire
+            check_actual_wire(request_binding, body, self.scope, self.stage)
+            request_binding = copy.deepcopy(request_binding)
         # Private JSON copies break aliases to caller-owned input and authorization hooks.
         frozen = json.loads(body)
         messages, tools = frozen["messages"], frozen["tools"]
@@ -296,14 +300,30 @@ class BudgetedProvider:
 
         def actual_guard(request):
             if (
-                wire_guard is None
+                wire_guard is None and request_binding is None
                 or self.model.transport is not self.transport
                 or self.model.settings is not self.settings
                 or self.wire_guard is not wire_guard
                 or request.headers.get("authorization") != "Bearer " + self.settings.token
             ):
                 raise DomainError("PERMISSION_DENIED", "Frozen provider metadata changed")
-            wire_guard(request)
+            if request_binding is not None:
+                if request.method != "POST" or str(request.url) != ENDPOINT or request.content != body:
+                    raise DomainError("PERMISSION_DENIED", "Original extraction wire changed")
+                check_actual_wire(request_binding, request.content, self.scope, self.stage)
+            if wire_guard is not None:
+                wire_guard(request)
+            if request_binding is not None:
+                # The preceding trusted guard is still an external callback.
+                # Its return must not leave a different body/header to send.
+                if (request.method != "POST" or str(request.url) != ENDPOINT
+                        or request.content != body
+                        or request.headers.get("authorization") != "Bearer " + self.settings.token
+                        or self.model.transport is not self.transport
+                        or self.model.settings is not self.settings
+                        or self.wire_guard is not wire_guard):
+                    raise DomainError("PERMISSION_DENIED", "Extraction guard changed the wire")
+                check_actual_wire(request_binding, request.content, self.scope, self.stage)
 
         with _locked(self.path.with_suffix(".lock")):
             data = self._load()
@@ -325,13 +345,15 @@ class BudgetedProvider:
                 "chars": chars,
                 "bytes": len(body),
             }
+            if request_binding is not None:
+                slot["protocol_origin_v2"] = request_binding
             data["slots"].append(slot)
             data["reserved"] += reserve
             _save(self.path, data)  # Crash after this point consumes a slot, never resend.
             try:
                 raw = (
                     self.model.request_serialized(body, actual_guard)
-                    if wire_guard is not None
+                    if wire_guard is not None or request_binding is not None
                     else self.model.request(messages, tools)
                 )
                 self.last_response = copy.deepcopy(raw)
@@ -364,6 +386,11 @@ class BudgetedProvider:
                         except DomainError:
                             pass  # The protocol will reject/halt any malformed final response.
                 slot["status"] = "RECEIVED"
+                if request_binding is not None:
+                    from .protocol_extract_completion import safe_response
+                    slot["safe_response_fingerprint_v2"] = fingerprint(safe_response(raw))
+                    slot["raw_response_fingerprint_v2"] = fingerprint(raw)
+                    slot["normalized_usage_v2"] = usage
                 _save(self.path, data)
                 return raw
             except BaseException:
@@ -405,6 +432,12 @@ class BudgetedProvider:
                 "candidate_fingerprint": candidate_fingerprint,
                 "source_proof_fingerprint": source_proof_fingerprint,
             }
+            if "protocol_origin_v2" in slot:
+                from .protocol_extract_completion import VERSION
+                receipt.update(receipt_version=VERSION,
+                    origin_fingerprint=fingerprint(slot["protocol_origin_v2"]),
+                    safe_response_fingerprint=slot["safe_response_fingerprint_v2"],
+                    usage=slot["normalized_usage_v2"])
             slot["candidate_receipt"] = receipt
             _save(self.path, data)
             return receipt
@@ -428,6 +461,12 @@ class BudgetedProvider:
                 "candidate_fingerprint": candidate_fingerprint,
                 "source_proof_fingerprint": source_proof_fingerprint,
             }
+            if "protocol_origin_v2" in slot:
+                from .protocol_extract_completion import VERSION
+                expected.update(receipt_version=VERSION,
+                    origin_fingerprint=fingerprint(slot["protocol_origin_v2"]),
+                    safe_response_fingerprint=slot["safe_response_fingerprint_v2"],
+                    usage=slot["normalized_usage_v2"])
             if (
                 fingerprint(receipt) != fingerprint(expected)
                 or fingerprint(slot.get("candidate_receipt")) != fingerprint(expected)
