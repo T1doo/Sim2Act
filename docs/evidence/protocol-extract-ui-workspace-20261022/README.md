@@ -15,3 +15,5 @@
 正常结束须确认 API/AnyIO/Node 与登记浏览器后代终态、原非完成表/sidecar/期限不变。Windows 已加载 pyd/DLL 只能在 Python 退出后由外层自有进程清理依赖目录；沿同一最早清理截止。`.NET Kill(true)` 后 WaitForExit 只证明直接进程退出，[不证明后代终止](https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.process.kill?view=net-9.0)，任何强制收尾/未知后代/拒绝均 UNKNOWN，不重置时间或换杀法，不签完整清理，不删除未确认资源。
 
 当前本目录仅本地定向结果及启动前证据；原生窗口结果须另行归档，不能从 VM 或候选源码推断 PASS。
+
+后续唯一原生CI窗口已执行并[完整保全](native-one-shot/README.md)：checkout在60秒自身上限失败，自有启动器/浏览器步骤未开始，0业务调用/截图/新模型。原生UI NOT_RUN，未自动重跑；不改写本地定向PASS，也不冒称Windows/清理或产品验收通过。
