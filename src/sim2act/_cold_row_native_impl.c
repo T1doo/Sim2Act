@@ -9,7 +9,7 @@ typedef struct {
     PyObject *function, *code, *require, *require_code, *leaf, *leaf_code;
     PyObject *globals, *builtins, *codec;
     PyObject *dict_sizeof;
-    PyObject *kinds[4], *mros[4], *descriptors[5], *names[18], *expected[9], *messages[3];
+    PyObject *kinds[4], *mros[4], *descriptors[5], *names[19], *expected[10], *messages[3];
     unsigned long native_calls, python_calls;
 } Reader;
 
@@ -23,8 +23,8 @@ static void dispose(PyObject *capsule) {
         Py_XDECREF(s->dict_sizeof);
         for (int i = 0; i < 4; ++i) { Py_XDECREF(s->kinds[i]); Py_XDECREF(s->mros[i]); }
         for (int i = 0; i < 5; ++i) Py_XDECREF(s->descriptors[i]);
-        for (int i = 0; i < 18; ++i) Py_XDECREF(s->names[i]);
-        for (int i = 0; i < 9; ++i) Py_XDECREF(s->expected[i]);
+        for (int i = 0; i < 19; ++i) Py_XDECREF(s->names[i]);
+        for (int i = 0; i < 10; ++i) Py_XDECREF(s->expected[i]);
         for (int i = 0; i < 3; ++i) Py_XDECREF(s->messages[i]);
         PyMem_Free(s);
     }
@@ -91,6 +91,7 @@ static int schema(Reader *s) {
      * handles unknown code/callbacks after this C frame has returned None. */
     for (int i = 0; i < 9; ++i) if (global(s, i) != s->expected[i])
         return PyErr_Occurred() ? -1 : 0;
+    if (global(s, 18) != s->expected[9]) return PyErr_Occurred() ? -1 : 0;
     if (global(s, 17) != s->codec ||
             PyDict_GetItemWithError(PyModule_GetDict(s->codec), s->names[0]) != s->leaf)
         return PyErr_Occurred() ? -1 : 0;
@@ -237,8 +238,8 @@ static PyObject *make_reader(PyObject *module, PyObject *args) {
     if (!PyDict_CheckExact(s->globals) || !PyDict_CheckExact(s->builtins)) goto unsuitable;
     const char *names[] = {"require", "type", "object", "dict", "list", "tuple", "str", "len", "all",
         "_parent", "_data", "_key_to_index", "_keys", "_ColdGraphRowMapping",
-        "_ColdGraphCursorMeta", "_ColdGraphSimpleMeta", "_ColdGraphQuotedName", "codec"};
-    for (int i = 0; i < 18; ++i) {
+        "_ColdGraphCursorMeta", "_ColdGraphSimpleMeta", "_ColdGraphQuotedName", "codec", "int"};
+    for (int i = 0; i < 19; ++i) {
         s->names[i] = PyUnicode_InternFromString(names[i]);
         if (s->names[i] == NULL) goto error;
     }
@@ -247,6 +248,10 @@ static PyObject *make_reader(PyObject *module, PyObject *args) {
         if (item == NULL) goto unsuitable;
         s->expected[i] = Py_NewRef(item);
     }
+    PyObject *integer = global(s, 18);
+    if (integer == NULL) goto unsuitable;
+    s->expected[9] = Py_NewRef(integer);
+    if (integer != (PyObject *)&PyLong_Type) goto unsuitable;
     if (s->expected[0] != require || s->expected[1] != (PyObject *)&PyType_Type ||
             s->expected[2] != (PyObject *)&PyBaseObject_Type || s->expected[3] != (PyObject *)&PyDict_Type ||
             s->expected[4] != (PyObject *)&PyList_Type || s->expected[5] != (PyObject *)&PyTuple_Type ||

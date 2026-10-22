@@ -1,6 +1,7 @@
 """Explicit fresh row leaf, isolated SQLite, no Worker/Mock/HTTP/G0."""
 
 import gc
+import builtins
 import inspect
 import json
 import os
@@ -90,6 +91,27 @@ def test_exact_original_error_category_and_order(reader, position):
     assert failures[0] == failures[1]
     assert 'index positions' in str(failures[0][1])
     assert reader.counts() == (1, 0)
+
+
+@pytest.mark.parametrize('namespace', ['runtime', 'builtins'])
+def test_int_binding_change_selects_original_before_projection(reader, monkeypatch, namespace):
+    value = original_cases.row()
+    failures = []
+    path = Path(reader.module.__file__)
+    with monkeypatch.context() as patch:
+        patch.setattr(runtime if namespace == 'runtime' else builtins, 'int', bool, raising=False)
+        # Avoid pytest machinery while the process builtin is deliberately
+        # rebound. Both functions must produce the original position rejection.
+        for storage in (ORIGINAL, reader.storage):
+            try:
+                storage(value)
+            except runtime.DomainError as error:
+                failures.append((type(error), error.args))
+        qualified = candidate.load_candidate(path)
+    assert len(failures) == 2 and failures[0] == failures[1]
+    assert 'index positions' in str(failures[0][1])
+    assert qualified is None and reader.counts() == (0, 1)
+    assert reader.storage(value) == ORIGINAL(value)
 
 
 @pytest.mark.parametrize('change', ['descriptor', 'row-descriptor', 'require', 'leaf', 'codec', 'str', 'quote-slot', 'code'])

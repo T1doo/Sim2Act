@@ -25,10 +25,10 @@ _SOURCES = {
 }
 _REQUIRE, _LEAF = runtime.require, runtime.codec.require
 _CODES = (_ORIGINAL.__code__, _REQUIRE.__code__, _LEAF.__code__)
-_BUILTINS = {name: getattr(builtins, name) for name in ('type', 'object', 'dict', 'list', 'tuple', 'str', 'len', 'all')}
+_BUILTINS = {name: getattr(builtins, name) for name in ('type', 'object', 'dict', 'list', 'tuple', 'str', 'len', 'all', 'int')}
 _BINARIES = {
-    None: 'd3fe559a0f5b11d958c11a6785828f422119b1294330adf30fe8a9023923b748',
-    'address': '71d82103c0a91686b6a73760619b0d2df90a122f2fd69a9b7691d7ad9f8f246e',
+    None: '1ce4e25fcae84662d2b1f32e6b7647d2f10d17f8cff1905b88eeeec434c85e04',
+    'address': '11e5a8432cfd3ab02f7b64c5fd10f63cfb5a991b2d85d696927f478482063d8c',
 }
 _SQL = {
     'sqlalchemy.cyextension.resultproxy': '73c1c4ede83b6ceaabf546a4211b92e88da7a089dde29d96b539a7adb9f67f74',
