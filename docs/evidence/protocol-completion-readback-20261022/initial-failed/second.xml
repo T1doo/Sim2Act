@@ -1,0 +1,401 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="42" time="13.213" timestamp="2026-10-22T14:39:16.013020+00:00" hostname="6097ec571c91"><testcase classname="tests.test_protocol_completion_readback" name="test_original_receipt_after_execution_deadline_and_new_store[source]" time="0.613" /><testcase classname="tests.test_protocol_completion_readback" name="test_original_receipt_after_execution_deadline_and_new_store[extract]" time="0.819" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[source-missing_run]" time="0.266" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[source-missing_attempt]" time="0.160" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[source-duplicate]" time="0.250" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[source-wrong_family]" time="0.231" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[source-response_namespace]" time="0.180" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[source-response_extra]" time="0.283" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[source-response_bool]" time="0.258" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[source-request_bool]" time="0.189" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[source-late]" time="0.288" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[source-early]" time="0.282" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[source-cancel]" time="0.266" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[source-revoked]" time="0.160" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[source-expired]" time="0.252" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[source-sidecar]" time="0.264" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[source-usage]" time="0.170"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERIFICATION_FAILED&quot;,&quot;message&quot;:&quot;Actual Attempt differs from immutable completion seal&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 400 in {403, 409}&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code">sealed = (&lt;sim2act.db.Store object at 0x7f8fa0b713a0&gt;, Settings(database_url='sqlite:////workspace/sim2act-completion-readback-...kspace/sim2act-completion-readback-second/test_failures_are_readonly_con14/run_5062b844bf304b2490bfde023a99525e.json'))
+fault = 'usage'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "missing_run",
+            "missing_attempt",
+            "duplicate",
+            "wrong_family",
+            "response_namespace",
+            "response_extra",
+            "response_bool",
+            "request_bool",
+            "late",
+            "early",
+            "cancel",
+            "revoked",
+            "expired",
+            "sidecar",
+            "usage",
+            "wire",
+        ],
+    )
+    def test_failures_are_readonly_conflicts_not_missing(sealed, fault):
+        store, settings, original, sidecar = sealed
+        rid = original["run"]
+        with store.tx() as c:
+            kind = source.COMPLETED if original["phase"] == "source" else extract.COMPLETED
+            roots = c.execute(select(events).where(events.c.kind == kind)).mappings().all()
+            ids = [r["id"] for r in roots]
+            old = copy.deepcopy(next(r["data"] for r in roots if r["run_id"] == rid))
+            if fault.startswith("missing_"):
+                c.execute(
+                    delete(events).where(
+                        events.c.id.in_(
+                            [r["id"] for r in roots if (r["run_id"] == rid) == (fault == "missing_run")]
+                        )
+                    )
+                )
+            elif fault == "duplicate":
+                row = dict(roots[0])
+                row["id"] = "event_extra_completion_readback"
+                c.execute(insert(events).values(**row))
+            elif fault == "wrong_family":
+                c.execute(
+                    update(events)
+                    .where(events.c.id.in_(ids))
+                    .values(kind=extract.COMPLETED if kind == source.COMPLETED else source.COMPLETED)
+                )
+            elif fault in {
+                "response_namespace",
+                "response_extra",
+                "response_bool",
+                "request_bool",
+                "late",
+                "early",
+            }:
+                if fault == "response_namespace":
+                    old["response"]["namespace"] = "protocol-review.v1"
+                if fault == "response_extra":
+                    old["response"]["extra"] = 1
+                if fault == "response_bool":
+                    old["response"]["provider_requests"] = False
+                if fault == "request_bool":
+                    old["request"]["expected_version"] = True
+                if fault == "late":
+                    old["completed_at"] += 1000
+                if fault == "early":
+                    old["completed_at"] = 0
+                c.execute(update(events).where(events.c.id.in_(ids)).values(data=old))
+            elif fault == "cancel":
+                c.execute(update(runs).where(runs.c.id == rid).values(cancel_intent=True))
+            elif fault in {"revoked", "expired"}:
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"])
+                    .values(
+                        **({"revoked": True} if fault == "revoked" else {"expires_at": time.time() - 1})
+                    )
+                )
+            elif fault in {"usage", "wire"}:
+                row = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+                if fault == "usage":
+                    c.execute(update(attempts).where(attempts.c.id == row["id"]).values(usage={}))
+                else:
+                    params = dict(row["parameters"])
+                    params["protocol_wire"] = {}
+                    c.execute(
+                        update(attempts).where(attempts.c.id == row["id"]).values(parameters=params)
+                    )
+        if fault == "sidecar":
+            sidecar.write_text("{}")
+        with TestClient(create_app(store, settings)) as client:
+            response = readonly(sealed, lambda original=original: read(client, original))
+&gt;       assert response.status_code in {403, 409}, response.text
+E       AssertionError: {"error":{"code":"VERIFICATION_FAILED","message":"Actual Attempt differs from immutable completion seal","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 in {403, 409}
+E        +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+
+tests/test_protocol_completion_readback.py:281: AssertionError</failure></testcase><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[source-wire]" time="0.273"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERIFICATION_FAILED&quot;,&quot;message&quot;:&quot;Actual Attempt differs from immutable completion seal&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 400 in {403, 409}&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code">sealed = (&lt;sim2act.db.Store object at 0x7f8f9b5283e0&gt;, Settings(database_url='sqlite:////workspace/sim2act-completion-readback-...kspace/sim2act-completion-readback-second/test_failures_are_readonly_con15/run_5062b844bf304b2490bfde023a99525e.json'))
+fault = 'wire'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "missing_run",
+            "missing_attempt",
+            "duplicate",
+            "wrong_family",
+            "response_namespace",
+            "response_extra",
+            "response_bool",
+            "request_bool",
+            "late",
+            "early",
+            "cancel",
+            "revoked",
+            "expired",
+            "sidecar",
+            "usage",
+            "wire",
+        ],
+    )
+    def test_failures_are_readonly_conflicts_not_missing(sealed, fault):
+        store, settings, original, sidecar = sealed
+        rid = original["run"]
+        with store.tx() as c:
+            kind = source.COMPLETED if original["phase"] == "source" else extract.COMPLETED
+            roots = c.execute(select(events).where(events.c.kind == kind)).mappings().all()
+            ids = [r["id"] for r in roots]
+            old = copy.deepcopy(next(r["data"] for r in roots if r["run_id"] == rid))
+            if fault.startswith("missing_"):
+                c.execute(
+                    delete(events).where(
+                        events.c.id.in_(
+                            [r["id"] for r in roots if (r["run_id"] == rid) == (fault == "missing_run")]
+                        )
+                    )
+                )
+            elif fault == "duplicate":
+                row = dict(roots[0])
+                row["id"] = "event_extra_completion_readback"
+                c.execute(insert(events).values(**row))
+            elif fault == "wrong_family":
+                c.execute(
+                    update(events)
+                    .where(events.c.id.in_(ids))
+                    .values(kind=extract.COMPLETED if kind == source.COMPLETED else source.COMPLETED)
+                )
+            elif fault in {
+                "response_namespace",
+                "response_extra",
+                "response_bool",
+                "request_bool",
+                "late",
+                "early",
+            }:
+                if fault == "response_namespace":
+                    old["response"]["namespace"] = "protocol-review.v1"
+                if fault == "response_extra":
+                    old["response"]["extra"] = 1
+                if fault == "response_bool":
+                    old["response"]["provider_requests"] = False
+                if fault == "request_bool":
+                    old["request"]["expected_version"] = True
+                if fault == "late":
+                    old["completed_at"] += 1000
+                if fault == "early":
+                    old["completed_at"] = 0
+                c.execute(update(events).where(events.c.id.in_(ids)).values(data=old))
+            elif fault == "cancel":
+                c.execute(update(runs).where(runs.c.id == rid).values(cancel_intent=True))
+            elif fault in {"revoked", "expired"}:
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"])
+                    .values(
+                        **({"revoked": True} if fault == "revoked" else {"expires_at": time.time() - 1})
+                    )
+                )
+            elif fault in {"usage", "wire"}:
+                row = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+                if fault == "usage":
+                    c.execute(update(attempts).where(attempts.c.id == row["id"]).values(usage={}))
+                else:
+                    params = dict(row["parameters"])
+                    params["protocol_wire"] = {}
+                    c.execute(
+                        update(attempts).where(attempts.c.id == row["id"]).values(parameters=params)
+                    )
+        if fault == "sidecar":
+            sidecar.write_text("{}")
+        with TestClient(create_app(store, settings)) as client:
+            response = readonly(sealed, lambda original=original: read(client, original))
+&gt;       assert response.status_code in {403, 409}, response.text
+E       AssertionError: {"error":{"code":"VERIFICATION_FAILED","message":"Actual Attempt differs from immutable completion seal","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 in {403, 409}
+E        +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+
+tests/test_protocol_completion_readback.py:281: AssertionError</failure></testcase><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[extract-missing_run]" time="0.273" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[extract-missing_attempt]" time="0.193" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[extract-duplicate]" time="0.306" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[extract-wrong_family]" time="0.277" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[extract-response_namespace]" time="0.423" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[extract-response_extra]" time="0.287" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[extract-response_bool]" time="0.371" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[extract-request_bool]" time="0.353" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[extract-late]" time="0.379" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[extract-early]" time="0.393" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[extract-cancel]" time="0.386" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[extract-revoked]" time="0.160" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[extract-expired]" time="0.248" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[extract-sidecar]" time="0.351" /><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[extract-usage]" time="0.260"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERIFICATION_FAILED&quot;,&quot;message&quot;:&quot;Actual Attempt differs from immutable completion seal&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 400 in {403, 409}&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code">sealed = (&lt;sim2act.db.Store object at 0x7f8fa0c67200&gt;, Settings(database_url='sqlite:////workspace/sim2act-completion-readback-...kspace/sim2act-completion-readback-second/test_failures_are_readonly_con30/run_ee268db83af7478c8736278657804fb9.json'))
+fault = 'usage'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "missing_run",
+            "missing_attempt",
+            "duplicate",
+            "wrong_family",
+            "response_namespace",
+            "response_extra",
+            "response_bool",
+            "request_bool",
+            "late",
+            "early",
+            "cancel",
+            "revoked",
+            "expired",
+            "sidecar",
+            "usage",
+            "wire",
+        ],
+    )
+    def test_failures_are_readonly_conflicts_not_missing(sealed, fault):
+        store, settings, original, sidecar = sealed
+        rid = original["run"]
+        with store.tx() as c:
+            kind = source.COMPLETED if original["phase"] == "source" else extract.COMPLETED
+            roots = c.execute(select(events).where(events.c.kind == kind)).mappings().all()
+            ids = [r["id"] for r in roots]
+            old = copy.deepcopy(next(r["data"] for r in roots if r["run_id"] == rid))
+            if fault.startswith("missing_"):
+                c.execute(
+                    delete(events).where(
+                        events.c.id.in_(
+                            [r["id"] for r in roots if (r["run_id"] == rid) == (fault == "missing_run")]
+                        )
+                    )
+                )
+            elif fault == "duplicate":
+                row = dict(roots[0])
+                row["id"] = "event_extra_completion_readback"
+                c.execute(insert(events).values(**row))
+            elif fault == "wrong_family":
+                c.execute(
+                    update(events)
+                    .where(events.c.id.in_(ids))
+                    .values(kind=extract.COMPLETED if kind == source.COMPLETED else source.COMPLETED)
+                )
+            elif fault in {
+                "response_namespace",
+                "response_extra",
+                "response_bool",
+                "request_bool",
+                "late",
+                "early",
+            }:
+                if fault == "response_namespace":
+                    old["response"]["namespace"] = "protocol-review.v1"
+                if fault == "response_extra":
+                    old["response"]["extra"] = 1
+                if fault == "response_bool":
+                    old["response"]["provider_requests"] = False
+                if fault == "request_bool":
+                    old["request"]["expected_version"] = True
+                if fault == "late":
+                    old["completed_at"] += 1000
+                if fault == "early":
+                    old["completed_at"] = 0
+                c.execute(update(events).where(events.c.id.in_(ids)).values(data=old))
+            elif fault == "cancel":
+                c.execute(update(runs).where(runs.c.id == rid).values(cancel_intent=True))
+            elif fault in {"revoked", "expired"}:
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"])
+                    .values(
+                        **({"revoked": True} if fault == "revoked" else {"expires_at": time.time() - 1})
+                    )
+                )
+            elif fault in {"usage", "wire"}:
+                row = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+                if fault == "usage":
+                    c.execute(update(attempts).where(attempts.c.id == row["id"]).values(usage={}))
+                else:
+                    params = dict(row["parameters"])
+                    params["protocol_wire"] = {}
+                    c.execute(
+                        update(attempts).where(attempts.c.id == row["id"]).values(parameters=params)
+                    )
+        if fault == "sidecar":
+            sidecar.write_text("{}")
+        with TestClient(create_app(store, settings)) as client:
+            response = readonly(sealed, lambda original=original: read(client, original))
+&gt;       assert response.status_code in {403, 409}, response.text
+E       AssertionError: {"error":{"code":"VERIFICATION_FAILED","message":"Actual Attempt differs from immutable completion seal","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 in {403, 409}
+E        +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+
+tests/test_protocol_completion_readback.py:281: AssertionError</failure></testcase><testcase classname="tests.test_protocol_completion_readback" name="test_failures_are_readonly_conflicts_not_missing[extract-wire]" time="0.168"><failure message="AssertionError: {&quot;error&quot;:{&quot;code&quot;:&quot;VERIFICATION_FAILED&quot;,&quot;message&quot;:&quot;Actual Attempt differs from immutable completion seal&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user_action&quot;:&quot;Check status, configuration and permissions&quot;}}&#10;assert 400 in {403, 409}&#10; +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code">sealed = (&lt;sim2act.db.Store object at 0x7f8fa0edbbf0&gt;, Settings(database_url='sqlite:////workspace/sim2act-completion-readback-...kspace/sim2act-completion-readback-second/test_failures_are_readonly_con31/run_ee268db83af7478c8736278657804fb9.json'))
+fault = 'wire'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "missing_run",
+            "missing_attempt",
+            "duplicate",
+            "wrong_family",
+            "response_namespace",
+            "response_extra",
+            "response_bool",
+            "request_bool",
+            "late",
+            "early",
+            "cancel",
+            "revoked",
+            "expired",
+            "sidecar",
+            "usage",
+            "wire",
+        ],
+    )
+    def test_failures_are_readonly_conflicts_not_missing(sealed, fault):
+        store, settings, original, sidecar = sealed
+        rid = original["run"]
+        with store.tx() as c:
+            kind = source.COMPLETED if original["phase"] == "source" else extract.COMPLETED
+            roots = c.execute(select(events).where(events.c.kind == kind)).mappings().all()
+            ids = [r["id"] for r in roots]
+            old = copy.deepcopy(next(r["data"] for r in roots if r["run_id"] == rid))
+            if fault.startswith("missing_"):
+                c.execute(
+                    delete(events).where(
+                        events.c.id.in_(
+                            [r["id"] for r in roots if (r["run_id"] == rid) == (fault == "missing_run")]
+                        )
+                    )
+                )
+            elif fault == "duplicate":
+                row = dict(roots[0])
+                row["id"] = "event_extra_completion_readback"
+                c.execute(insert(events).values(**row))
+            elif fault == "wrong_family":
+                c.execute(
+                    update(events)
+                    .where(events.c.id.in_(ids))
+                    .values(kind=extract.COMPLETED if kind == source.COMPLETED else source.COMPLETED)
+                )
+            elif fault in {
+                "response_namespace",
+                "response_extra",
+                "response_bool",
+                "request_bool",
+                "late",
+                "early",
+            }:
+                if fault == "response_namespace":
+                    old["response"]["namespace"] = "protocol-review.v1"
+                if fault == "response_extra":
+                    old["response"]["extra"] = 1
+                if fault == "response_bool":
+                    old["response"]["provider_requests"] = False
+                if fault == "request_bool":
+                    old["request"]["expected_version"] = True
+                if fault == "late":
+                    old["completed_at"] += 1000
+                if fault == "early":
+                    old["completed_at"] = 0
+                c.execute(update(events).where(events.c.id.in_(ids)).values(data=old))
+            elif fault == "cancel":
+                c.execute(update(runs).where(runs.c.id == rid).values(cancel_intent=True))
+            elif fault in {"revoked", "expired"}:
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"])
+                    .values(
+                        **({"revoked": True} if fault == "revoked" else {"expires_at": time.time() - 1})
+                    )
+                )
+            elif fault in {"usage", "wire"}:
+                row = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+                if fault == "usage":
+                    c.execute(update(attempts).where(attempts.c.id == row["id"]).values(usage={}))
+                else:
+                    params = dict(row["parameters"])
+                    params["protocol_wire"] = {}
+                    c.execute(
+                        update(attempts).where(attempts.c.id == row["id"]).values(parameters=params)
+                    )
+        if fault == "sidecar":
+            sidecar.write_text("{}")
+        with TestClient(create_app(store, settings)) as client:
+            response = readonly(sealed, lambda original=original: read(client, original))
+&gt;       assert response.status_code in {403, 409}, response.text
+E       AssertionError: {"error":{"code":"VERIFICATION_FAILED","message":"Actual Attempt differs from immutable completion seal","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 in {403, 409}
+E        +  where 400 = &lt;Response [400 Bad Request]&gt;.status_code
+
+tests/test_protocol_completion_readback.py:281: AssertionError</failure></testcase><testcase classname="tests.test_protocol_completion_readback" name="test_absent_completion_marks_do_not_need_sidecar_or_reconstruct_key[source]" time="0.258" /><testcase classname="tests.test_protocol_completion_readback" name="test_absent_completion_marks_do_not_need_sidecar_or_reconstruct_key[extract]" time="0.268" /><testcase classname="tests.test_protocol_completion_readback" name="test_ready_or_accepted_is_not_completed[source]" time="0.169" /><testcase classname="tests.test_protocol_completion_readback" name="test_ready_or_accepted_is_not_completed[extract]" time="0.280" /><testcase classname="tests.test_protocol_completion_readback" name="test_auth_project_and_mode_gate[source]" time="0.380" /><testcase classname="tests.test_protocol_completion_readback" name="test_auth_project_and_mode_gate[extract]" time="0.425" /><testcase classname="tests.test_protocol_completion_readback" name="test_controller_original_completion_still_isolated" time="0.049" /><testcase classname="tests.test_protocol_completion_readback" name="test_exact_completed_source_review_and_controller" time="1.250" /></testsuite></testsuites>

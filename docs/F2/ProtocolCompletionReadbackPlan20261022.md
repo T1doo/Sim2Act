@@ -48,6 +48,8 @@ Source原回执固定WAITING_APPROVAL。当前Run可以仍version=receipt.versio
 
 NOT_FOUND/403/坏格式/详情失败均显示“当前完成状态不可确认，仅可只读重核”，清当前成果/可见完成回执/旧确认文案、提取与Cold入口，保留原历史键和回执但不把它们呈现为当前已确认；真实Run.status不改成UNKNOWN。核查投影和完成投影各有状态，失败中性化不得篡改独立核查事实；业务路由必须同时满足当前新鲜Run与适用投影条件。独立的Source完成命令旧流程保持，不能因读定位失败误解锁或误禁合法的未完成Source。
 
+实现独审收口：可选历史完成回执不能变成普通worker成果的新资格。原“重新读取成果与核查状态”按钮可显式GET新鲜原Run，在严格intent/selection/身份/project/workspace/Run采纳见证下恢复原成果与原业务门；无V2回执仍无FOUND/accepted、不补key。自动poll不清失败标记，403或过期响应不恢复。投影失效/关闭必须保留原错误码，尤其OUTCOME_UNKNOWN；仅清展示不能将其变为无错误。此修正不修改原完成POST、原键或回执逻辑。
+
 ## 实施验收边界（尚未执行）
 
 仅复用上述封存完成事实及原sidecar的隔离副本，无新Source/extract/Worker/Mock/模型，无完成或核查POST。必要认证HTTP/控制器回归：两family空Map→GET找回→详情严格复读；当前Source WAITING_APPROVAL与合法review后状态；超过历史执行截止仍可经当前授权读旧回执、当前Grant过期/撤权拒绝；错owner/project、错槽/Run/wire/usage/sidecar、缺/重复/错Attempt镜像、普通worker完成无V2key、READY/ACCEPTED无完成、混淆review与completion、读取失败无旧PASS、迟到/关闭/上下文切换及既有意图冲突。异常必须无DML/计数变化，无新key；55表和原sidecar完整对照。

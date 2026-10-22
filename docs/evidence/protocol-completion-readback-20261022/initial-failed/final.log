@@ -1,0 +1,1882 @@
+...............FFFF...FF................FFFF...FF...........             [100%]
+=================================== FAILURES ===================================
+___ test_failures_are_readonly_conflicts_not_missing[source-runtime_revoked] ___
+
+sealed = (<sim2act.db.Store object at 0x7f83233b6f60>, Settings(database_url='sqlite:////workspace/sim2act-completion-readback-...rkspace/sim2act-completion-readback-final/test_failures_are_readonly_con13/run_5062b844bf304b2490bfde023a99525e.json'))
+fault = 'runtime_revoked'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "missing_run",
+            "missing_attempt",
+            "duplicate",
+            "wrong_family",
+            "response_namespace",
+            "response_extra",
+            "response_bool",
+            "request_bool",
+            "recovery_float",
+            "cross_run",
+            "wrong_attempt",
+            "slot",
+            "content",
+            "runtime_revoked",
+            "principal_revoked",
+            "runtime_expired",
+            "principal_expired",
+            "late",
+            "early",
+            "cancel",
+            "revoked",
+            "expired",
+            "sidecar",
+            "usage",
+            "wire",
+        ],
+    )
+    def test_failures_are_readonly_conflicts_not_missing(sealed, fault):
+        store, settings, original, sidecar = sealed
+        rid = original["run"]
+        with store.tx() as c:
+            kind = source.COMPLETED if original["phase"] == "source" else extract.COMPLETED
+            roots = c.execute(select(events).where(events.c.kind == kind)).mappings().all()
+            ids = [r["id"] for r in roots]
+            old = copy.deepcopy(next(r["data"] for r in roots if r["run_id"] == rid))
+            if fault.startswith("missing_"):
+                c.execute(
+                    delete(events).where(
+                        events.c.id.in_(
+                            [r["id"] for r in roots if (r["run_id"] == rid) == (fault == "missing_run")]
+                        )
+                    )
+                )
+            elif fault == "duplicate":
+                row = dict(roots[0])
+                row["id"] = "event_extra_completion_readback"
+                c.execute(insert(events).values(**row))
+            elif fault == "wrong_family":
+                c.execute(
+                    update(events)
+                    .where(events.c.id.in_(ids))
+                    .values(kind=extract.COMPLETED if kind == source.COMPLETED else source.COMPLETED)
+                )
+            elif fault in {
+                "response_namespace",
+                "response_extra",
+                "response_bool",
+                "request_bool",
+                "recovery_float",
+                "cross_run",
+                "late",
+                "early",
+            }:
+                if fault == "response_namespace":
+                    old["response"]["namespace"] = "protocol-review.v1"
+                if fault == "response_extra":
+                    old["response"]["extra"] = 1
+                if fault == "response_bool":
+                    old["response"]["provider_requests"] = False
+                if fault == "request_bool":
+                    old["request"]["expected_version"] = True
+                if fault == "recovery_float":
+                    old["recovery_fence"] = float(old["recovery_fence"])
+                if fault == "cross_run":
+                    old["response"]["run_id"] = "run_not_original"
+                if fault == "late":
+                    old["completed_at"] += 1000
+                if fault == "early":
+                    old["completed_at"] = 0
+                c.execute(update(events).where(events.c.id.in_(ids)).values(data=old))
+            elif fault == "cancel":
+                c.execute(update(runs).where(runs.c.id == rid).values(cancel_intent=True))
+            elif fault == "wrong_attempt":
+                aids = list(c.execute(select(attempts.c.id).where(attempts.c.run_id == rid)).scalars())
+                mirror = next(r for r in roots if r["run_id"] != rid)
+                other = next((a for a in aids if a != mirror["run_id"]), rid)
+                c.execute(update(events).where(events.c.id == mirror["id"]).values(run_id=other))
+            elif fault == "slot":
+                c.execute(
+                    update(protocol_request_slots)
+                    .where(protocol_request_slots.c.run_id == rid)
+                    .values(fence=999)
+                )
+            elif fault == "content":
+                c.execute(
+                    update(resources)
+                    .where(resources.c.project_id == original["project"])
+                    .values(content="changed content")
+                )
+            elif fault.startswith("runtime_") or fault.startswith("principal_"):
+                actor = c.execute(
+                    select(
+                        runs.c.runtime_id if fault.startswith("runtime_") else runs.c.principal_id
+                    ).where(runs.c.id == rid)
+                ).scalar_one()
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"], grants.c.principal_id == actor)
+                    .values(
+                        **(
+                            {"revoked": True}
+                            if fault.endswith("revoked")
+                            else {"expires_at": time.time() - 1}
+                        )
+                    )
+                )
+            elif fault in {"revoked", "expired"}:
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"])
+                    .values(
+                        **({"revoked": True} if fault == "revoked" else {"expires_at": time.time() - 1})
+                    )
+                )
+            elif fault in {"usage", "wire"}:
+                row = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+                if fault == "usage":
+                    c.execute(update(attempts).where(attempts.c.id == row["id"]).values(usage={}))
+                else:
+                    params = dict(row["parameters"])
+                    params["protocol_wire"] = {}
+                    c.execute(
+                        update(attempts).where(attempts.c.id == row["id"]).values(parameters=params)
+                    )
+        if fault == "sidecar":
+            sidecar.write_text("{}")
+        with TestClient(create_app(store, settings)) as client:
+            response = readonly(sealed, lambda original=original: read(client, original))
+        assert response.status_code in {400, 403, 409}, response.text
+>       assert response.json()["error"]["code"] in {
+            "VERIFICATION_FAILED",
+            "PERMISSION_DENIED",
+            "VERSION_CONFLICT",
+        }
+E       AssertionError: assert 'GRANT_REVOKED' in {'PERMISSION_DENIED', 'VERIFICATION_FAILED', 'VERSION_CONFLICT'}
+
+tests/test_protocol_completion_readback.py:341: AssertionError
+__ test_failures_are_readonly_conflicts_not_missing[source-principal_revoked] __
+
+sealed = (<sim2act.db.Store object at 0x7f832146e810>, Settings(database_url='sqlite:////workspace/sim2act-completion-readback-...rkspace/sim2act-completion-readback-final/test_failures_are_readonly_con14/run_5062b844bf304b2490bfde023a99525e.json'))
+fault = 'principal_revoked'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "missing_run",
+            "missing_attempt",
+            "duplicate",
+            "wrong_family",
+            "response_namespace",
+            "response_extra",
+            "response_bool",
+            "request_bool",
+            "recovery_float",
+            "cross_run",
+            "wrong_attempt",
+            "slot",
+            "content",
+            "runtime_revoked",
+            "principal_revoked",
+            "runtime_expired",
+            "principal_expired",
+            "late",
+            "early",
+            "cancel",
+            "revoked",
+            "expired",
+            "sidecar",
+            "usage",
+            "wire",
+        ],
+    )
+    def test_failures_are_readonly_conflicts_not_missing(sealed, fault):
+        store, settings, original, sidecar = sealed
+        rid = original["run"]
+        with store.tx() as c:
+            kind = source.COMPLETED if original["phase"] == "source" else extract.COMPLETED
+            roots = c.execute(select(events).where(events.c.kind == kind)).mappings().all()
+            ids = [r["id"] for r in roots]
+            old = copy.deepcopy(next(r["data"] for r in roots if r["run_id"] == rid))
+            if fault.startswith("missing_"):
+                c.execute(
+                    delete(events).where(
+                        events.c.id.in_(
+                            [r["id"] for r in roots if (r["run_id"] == rid) == (fault == "missing_run")]
+                        )
+                    )
+                )
+            elif fault == "duplicate":
+                row = dict(roots[0])
+                row["id"] = "event_extra_completion_readback"
+                c.execute(insert(events).values(**row))
+            elif fault == "wrong_family":
+                c.execute(
+                    update(events)
+                    .where(events.c.id.in_(ids))
+                    .values(kind=extract.COMPLETED if kind == source.COMPLETED else source.COMPLETED)
+                )
+            elif fault in {
+                "response_namespace",
+                "response_extra",
+                "response_bool",
+                "request_bool",
+                "recovery_float",
+                "cross_run",
+                "late",
+                "early",
+            }:
+                if fault == "response_namespace":
+                    old["response"]["namespace"] = "protocol-review.v1"
+                if fault == "response_extra":
+                    old["response"]["extra"] = 1
+                if fault == "response_bool":
+                    old["response"]["provider_requests"] = False
+                if fault == "request_bool":
+                    old["request"]["expected_version"] = True
+                if fault == "recovery_float":
+                    old["recovery_fence"] = float(old["recovery_fence"])
+                if fault == "cross_run":
+                    old["response"]["run_id"] = "run_not_original"
+                if fault == "late":
+                    old["completed_at"] += 1000
+                if fault == "early":
+                    old["completed_at"] = 0
+                c.execute(update(events).where(events.c.id.in_(ids)).values(data=old))
+            elif fault == "cancel":
+                c.execute(update(runs).where(runs.c.id == rid).values(cancel_intent=True))
+            elif fault == "wrong_attempt":
+                aids = list(c.execute(select(attempts.c.id).where(attempts.c.run_id == rid)).scalars())
+                mirror = next(r for r in roots if r["run_id"] != rid)
+                other = next((a for a in aids if a != mirror["run_id"]), rid)
+                c.execute(update(events).where(events.c.id == mirror["id"]).values(run_id=other))
+            elif fault == "slot":
+                c.execute(
+                    update(protocol_request_slots)
+                    .where(protocol_request_slots.c.run_id == rid)
+                    .values(fence=999)
+                )
+            elif fault == "content":
+                c.execute(
+                    update(resources)
+                    .where(resources.c.project_id == original["project"])
+                    .values(content="changed content")
+                )
+            elif fault.startswith("runtime_") or fault.startswith("principal_"):
+                actor = c.execute(
+                    select(
+                        runs.c.runtime_id if fault.startswith("runtime_") else runs.c.principal_id
+                    ).where(runs.c.id == rid)
+                ).scalar_one()
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"], grants.c.principal_id == actor)
+                    .values(
+                        **(
+                            {"revoked": True}
+                            if fault.endswith("revoked")
+                            else {"expires_at": time.time() - 1}
+                        )
+                    )
+                )
+            elif fault in {"revoked", "expired"}:
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"])
+                    .values(
+                        **({"revoked": True} if fault == "revoked" else {"expires_at": time.time() - 1})
+                    )
+                )
+            elif fault in {"usage", "wire"}:
+                row = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+                if fault == "usage":
+                    c.execute(update(attempts).where(attempts.c.id == row["id"]).values(usage={}))
+                else:
+                    params = dict(row["parameters"])
+                    params["protocol_wire"] = {}
+                    c.execute(
+                        update(attempts).where(attempts.c.id == row["id"]).values(parameters=params)
+                    )
+        if fault == "sidecar":
+            sidecar.write_text("{}")
+        with TestClient(create_app(store, settings)) as client:
+            response = readonly(sealed, lambda original=original: read(client, original))
+        assert response.status_code in {400, 403, 409}, response.text
+>       assert response.json()["error"]["code"] in {
+            "VERIFICATION_FAILED",
+            "PERMISSION_DENIED",
+            "VERSION_CONFLICT",
+        }
+E       AssertionError: assert 'GRANT_REVOKED' in {'PERMISSION_DENIED', 'VERIFICATION_FAILED', 'VERSION_CONFLICT'}
+
+tests/test_protocol_completion_readback.py:341: AssertionError
+___ test_failures_are_readonly_conflicts_not_missing[source-runtime_expired] ___
+
+sealed = (<sim2act.db.Store object at 0x7f8321c043b0>, Settings(database_url='sqlite:////workspace/sim2act-completion-readback-...rkspace/sim2act-completion-readback-final/test_failures_are_readonly_con15/run_5062b844bf304b2490bfde023a99525e.json'))
+fault = 'runtime_expired'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "missing_run",
+            "missing_attempt",
+            "duplicate",
+            "wrong_family",
+            "response_namespace",
+            "response_extra",
+            "response_bool",
+            "request_bool",
+            "recovery_float",
+            "cross_run",
+            "wrong_attempt",
+            "slot",
+            "content",
+            "runtime_revoked",
+            "principal_revoked",
+            "runtime_expired",
+            "principal_expired",
+            "late",
+            "early",
+            "cancel",
+            "revoked",
+            "expired",
+            "sidecar",
+            "usage",
+            "wire",
+        ],
+    )
+    def test_failures_are_readonly_conflicts_not_missing(sealed, fault):
+        store, settings, original, sidecar = sealed
+        rid = original["run"]
+        with store.tx() as c:
+            kind = source.COMPLETED if original["phase"] == "source" else extract.COMPLETED
+            roots = c.execute(select(events).where(events.c.kind == kind)).mappings().all()
+            ids = [r["id"] for r in roots]
+            old = copy.deepcopy(next(r["data"] for r in roots if r["run_id"] == rid))
+            if fault.startswith("missing_"):
+                c.execute(
+                    delete(events).where(
+                        events.c.id.in_(
+                            [r["id"] for r in roots if (r["run_id"] == rid) == (fault == "missing_run")]
+                        )
+                    )
+                )
+            elif fault == "duplicate":
+                row = dict(roots[0])
+                row["id"] = "event_extra_completion_readback"
+                c.execute(insert(events).values(**row))
+            elif fault == "wrong_family":
+                c.execute(
+                    update(events)
+                    .where(events.c.id.in_(ids))
+                    .values(kind=extract.COMPLETED if kind == source.COMPLETED else source.COMPLETED)
+                )
+            elif fault in {
+                "response_namespace",
+                "response_extra",
+                "response_bool",
+                "request_bool",
+                "recovery_float",
+                "cross_run",
+                "late",
+                "early",
+            }:
+                if fault == "response_namespace":
+                    old["response"]["namespace"] = "protocol-review.v1"
+                if fault == "response_extra":
+                    old["response"]["extra"] = 1
+                if fault == "response_bool":
+                    old["response"]["provider_requests"] = False
+                if fault == "request_bool":
+                    old["request"]["expected_version"] = True
+                if fault == "recovery_float":
+                    old["recovery_fence"] = float(old["recovery_fence"])
+                if fault == "cross_run":
+                    old["response"]["run_id"] = "run_not_original"
+                if fault == "late":
+                    old["completed_at"] += 1000
+                if fault == "early":
+                    old["completed_at"] = 0
+                c.execute(update(events).where(events.c.id.in_(ids)).values(data=old))
+            elif fault == "cancel":
+                c.execute(update(runs).where(runs.c.id == rid).values(cancel_intent=True))
+            elif fault == "wrong_attempt":
+                aids = list(c.execute(select(attempts.c.id).where(attempts.c.run_id == rid)).scalars())
+                mirror = next(r for r in roots if r["run_id"] != rid)
+                other = next((a for a in aids if a != mirror["run_id"]), rid)
+                c.execute(update(events).where(events.c.id == mirror["id"]).values(run_id=other))
+            elif fault == "slot":
+                c.execute(
+                    update(protocol_request_slots)
+                    .where(protocol_request_slots.c.run_id == rid)
+                    .values(fence=999)
+                )
+            elif fault == "content":
+                c.execute(
+                    update(resources)
+                    .where(resources.c.project_id == original["project"])
+                    .values(content="changed content")
+                )
+            elif fault.startswith("runtime_") or fault.startswith("principal_"):
+                actor = c.execute(
+                    select(
+                        runs.c.runtime_id if fault.startswith("runtime_") else runs.c.principal_id
+                    ).where(runs.c.id == rid)
+                ).scalar_one()
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"], grants.c.principal_id == actor)
+                    .values(
+                        **(
+                            {"revoked": True}
+                            if fault.endswith("revoked")
+                            else {"expires_at": time.time() - 1}
+                        )
+                    )
+                )
+            elif fault in {"revoked", "expired"}:
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"])
+                    .values(
+                        **({"revoked": True} if fault == "revoked" else {"expires_at": time.time() - 1})
+                    )
+                )
+            elif fault in {"usage", "wire"}:
+                row = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+                if fault == "usage":
+                    c.execute(update(attempts).where(attempts.c.id == row["id"]).values(usage={}))
+                else:
+                    params = dict(row["parameters"])
+                    params["protocol_wire"] = {}
+                    c.execute(
+                        update(attempts).where(attempts.c.id == row["id"]).values(parameters=params)
+                    )
+        if fault == "sidecar":
+            sidecar.write_text("{}")
+        with TestClient(create_app(store, settings)) as client:
+            response = readonly(sealed, lambda original=original: read(client, original))
+        assert response.status_code in {400, 403, 409}, response.text
+>       assert response.json()["error"]["code"] in {
+            "VERIFICATION_FAILED",
+            "PERMISSION_DENIED",
+            "VERSION_CONFLICT",
+        }
+E       AssertionError: assert 'GRANT_REVOKED' in {'PERMISSION_DENIED', 'VERIFICATION_FAILED', 'VERSION_CONFLICT'}
+
+tests/test_protocol_completion_readback.py:341: AssertionError
+__ test_failures_are_readonly_conflicts_not_missing[source-principal_expired] __
+
+sealed = (<sim2act.db.Store object at 0x7f8322fd1790>, Settings(database_url='sqlite:////workspace/sim2act-completion-readback-...rkspace/sim2act-completion-readback-final/test_failures_are_readonly_con16/run_5062b844bf304b2490bfde023a99525e.json'))
+fault = 'principal_expired'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "missing_run",
+            "missing_attempt",
+            "duplicate",
+            "wrong_family",
+            "response_namespace",
+            "response_extra",
+            "response_bool",
+            "request_bool",
+            "recovery_float",
+            "cross_run",
+            "wrong_attempt",
+            "slot",
+            "content",
+            "runtime_revoked",
+            "principal_revoked",
+            "runtime_expired",
+            "principal_expired",
+            "late",
+            "early",
+            "cancel",
+            "revoked",
+            "expired",
+            "sidecar",
+            "usage",
+            "wire",
+        ],
+    )
+    def test_failures_are_readonly_conflicts_not_missing(sealed, fault):
+        store, settings, original, sidecar = sealed
+        rid = original["run"]
+        with store.tx() as c:
+            kind = source.COMPLETED if original["phase"] == "source" else extract.COMPLETED
+            roots = c.execute(select(events).where(events.c.kind == kind)).mappings().all()
+            ids = [r["id"] for r in roots]
+            old = copy.deepcopy(next(r["data"] for r in roots if r["run_id"] == rid))
+            if fault.startswith("missing_"):
+                c.execute(
+                    delete(events).where(
+                        events.c.id.in_(
+                            [r["id"] for r in roots if (r["run_id"] == rid) == (fault == "missing_run")]
+                        )
+                    )
+                )
+            elif fault == "duplicate":
+                row = dict(roots[0])
+                row["id"] = "event_extra_completion_readback"
+                c.execute(insert(events).values(**row))
+            elif fault == "wrong_family":
+                c.execute(
+                    update(events)
+                    .where(events.c.id.in_(ids))
+                    .values(kind=extract.COMPLETED if kind == source.COMPLETED else source.COMPLETED)
+                )
+            elif fault in {
+                "response_namespace",
+                "response_extra",
+                "response_bool",
+                "request_bool",
+                "recovery_float",
+                "cross_run",
+                "late",
+                "early",
+            }:
+                if fault == "response_namespace":
+                    old["response"]["namespace"] = "protocol-review.v1"
+                if fault == "response_extra":
+                    old["response"]["extra"] = 1
+                if fault == "response_bool":
+                    old["response"]["provider_requests"] = False
+                if fault == "request_bool":
+                    old["request"]["expected_version"] = True
+                if fault == "recovery_float":
+                    old["recovery_fence"] = float(old["recovery_fence"])
+                if fault == "cross_run":
+                    old["response"]["run_id"] = "run_not_original"
+                if fault == "late":
+                    old["completed_at"] += 1000
+                if fault == "early":
+                    old["completed_at"] = 0
+                c.execute(update(events).where(events.c.id.in_(ids)).values(data=old))
+            elif fault == "cancel":
+                c.execute(update(runs).where(runs.c.id == rid).values(cancel_intent=True))
+            elif fault == "wrong_attempt":
+                aids = list(c.execute(select(attempts.c.id).where(attempts.c.run_id == rid)).scalars())
+                mirror = next(r for r in roots if r["run_id"] != rid)
+                other = next((a for a in aids if a != mirror["run_id"]), rid)
+                c.execute(update(events).where(events.c.id == mirror["id"]).values(run_id=other))
+            elif fault == "slot":
+                c.execute(
+                    update(protocol_request_slots)
+                    .where(protocol_request_slots.c.run_id == rid)
+                    .values(fence=999)
+                )
+            elif fault == "content":
+                c.execute(
+                    update(resources)
+                    .where(resources.c.project_id == original["project"])
+                    .values(content="changed content")
+                )
+            elif fault.startswith("runtime_") or fault.startswith("principal_"):
+                actor = c.execute(
+                    select(
+                        runs.c.runtime_id if fault.startswith("runtime_") else runs.c.principal_id
+                    ).where(runs.c.id == rid)
+                ).scalar_one()
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"], grants.c.principal_id == actor)
+                    .values(
+                        **(
+                            {"revoked": True}
+                            if fault.endswith("revoked")
+                            else {"expires_at": time.time() - 1}
+                        )
+                    )
+                )
+            elif fault in {"revoked", "expired"}:
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"])
+                    .values(
+                        **({"revoked": True} if fault == "revoked" else {"expires_at": time.time() - 1})
+                    )
+                )
+            elif fault in {"usage", "wire"}:
+                row = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+                if fault == "usage":
+                    c.execute(update(attempts).where(attempts.c.id == row["id"]).values(usage={}))
+                else:
+                    params = dict(row["parameters"])
+                    params["protocol_wire"] = {}
+                    c.execute(
+                        update(attempts).where(attempts.c.id == row["id"]).values(parameters=params)
+                    )
+        if fault == "sidecar":
+            sidecar.write_text("{}")
+        with TestClient(create_app(store, settings)) as client:
+            response = readonly(sealed, lambda original=original: read(client, original))
+        assert response.status_code in {400, 403, 409}, response.text
+>       assert response.json()["error"]["code"] in {
+            "VERIFICATION_FAILED",
+            "PERMISSION_DENIED",
+            "VERSION_CONFLICT",
+        }
+E       AssertionError: assert 'GRANT_REVOKED' in {'PERMISSION_DENIED', 'VERIFICATION_FAILED', 'VERSION_CONFLICT'}
+
+tests/test_protocol_completion_readback.py:341: AssertionError
+_______ test_failures_are_readonly_conflicts_not_missing[source-revoked] _______
+
+sealed = (<sim2act.db.Store object at 0x7f8322e57020>, Settings(database_url='sqlite:////workspace/sim2act-completion-readback-...rkspace/sim2act-completion-readback-final/test_failures_are_readonly_con20/run_5062b844bf304b2490bfde023a99525e.json'))
+fault = 'revoked'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "missing_run",
+            "missing_attempt",
+            "duplicate",
+            "wrong_family",
+            "response_namespace",
+            "response_extra",
+            "response_bool",
+            "request_bool",
+            "recovery_float",
+            "cross_run",
+            "wrong_attempt",
+            "slot",
+            "content",
+            "runtime_revoked",
+            "principal_revoked",
+            "runtime_expired",
+            "principal_expired",
+            "late",
+            "early",
+            "cancel",
+            "revoked",
+            "expired",
+            "sidecar",
+            "usage",
+            "wire",
+        ],
+    )
+    def test_failures_are_readonly_conflicts_not_missing(sealed, fault):
+        store, settings, original, sidecar = sealed
+        rid = original["run"]
+        with store.tx() as c:
+            kind = source.COMPLETED if original["phase"] == "source" else extract.COMPLETED
+            roots = c.execute(select(events).where(events.c.kind == kind)).mappings().all()
+            ids = [r["id"] for r in roots]
+            old = copy.deepcopy(next(r["data"] for r in roots if r["run_id"] == rid))
+            if fault.startswith("missing_"):
+                c.execute(
+                    delete(events).where(
+                        events.c.id.in_(
+                            [r["id"] for r in roots if (r["run_id"] == rid) == (fault == "missing_run")]
+                        )
+                    )
+                )
+            elif fault == "duplicate":
+                row = dict(roots[0])
+                row["id"] = "event_extra_completion_readback"
+                c.execute(insert(events).values(**row))
+            elif fault == "wrong_family":
+                c.execute(
+                    update(events)
+                    .where(events.c.id.in_(ids))
+                    .values(kind=extract.COMPLETED if kind == source.COMPLETED else source.COMPLETED)
+                )
+            elif fault in {
+                "response_namespace",
+                "response_extra",
+                "response_bool",
+                "request_bool",
+                "recovery_float",
+                "cross_run",
+                "late",
+                "early",
+            }:
+                if fault == "response_namespace":
+                    old["response"]["namespace"] = "protocol-review.v1"
+                if fault == "response_extra":
+                    old["response"]["extra"] = 1
+                if fault == "response_bool":
+                    old["response"]["provider_requests"] = False
+                if fault == "request_bool":
+                    old["request"]["expected_version"] = True
+                if fault == "recovery_float":
+                    old["recovery_fence"] = float(old["recovery_fence"])
+                if fault == "cross_run":
+                    old["response"]["run_id"] = "run_not_original"
+                if fault == "late":
+                    old["completed_at"] += 1000
+                if fault == "early":
+                    old["completed_at"] = 0
+                c.execute(update(events).where(events.c.id.in_(ids)).values(data=old))
+            elif fault == "cancel":
+                c.execute(update(runs).where(runs.c.id == rid).values(cancel_intent=True))
+            elif fault == "wrong_attempt":
+                aids = list(c.execute(select(attempts.c.id).where(attempts.c.run_id == rid)).scalars())
+                mirror = next(r for r in roots if r["run_id"] != rid)
+                other = next((a for a in aids if a != mirror["run_id"]), rid)
+                c.execute(update(events).where(events.c.id == mirror["id"]).values(run_id=other))
+            elif fault == "slot":
+                c.execute(
+                    update(protocol_request_slots)
+                    .where(protocol_request_slots.c.run_id == rid)
+                    .values(fence=999)
+                )
+            elif fault == "content":
+                c.execute(
+                    update(resources)
+                    .where(resources.c.project_id == original["project"])
+                    .values(content="changed content")
+                )
+            elif fault.startswith("runtime_") or fault.startswith("principal_"):
+                actor = c.execute(
+                    select(
+                        runs.c.runtime_id if fault.startswith("runtime_") else runs.c.principal_id
+                    ).where(runs.c.id == rid)
+                ).scalar_one()
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"], grants.c.principal_id == actor)
+                    .values(
+                        **(
+                            {"revoked": True}
+                            if fault.endswith("revoked")
+                            else {"expires_at": time.time() - 1}
+                        )
+                    )
+                )
+            elif fault in {"revoked", "expired"}:
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"])
+                    .values(
+                        **({"revoked": True} if fault == "revoked" else {"expires_at": time.time() - 1})
+                    )
+                )
+            elif fault in {"usage", "wire"}:
+                row = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+                if fault == "usage":
+                    c.execute(update(attempts).where(attempts.c.id == row["id"]).values(usage={}))
+                else:
+                    params = dict(row["parameters"])
+                    params["protocol_wire"] = {}
+                    c.execute(
+                        update(attempts).where(attempts.c.id == row["id"]).values(parameters=params)
+                    )
+        if fault == "sidecar":
+            sidecar.write_text("{}")
+        with TestClient(create_app(store, settings)) as client:
+            response = readonly(sealed, lambda original=original: read(client, original))
+        assert response.status_code in {400, 403, 409}, response.text
+>       assert response.json()["error"]["code"] in {
+            "VERIFICATION_FAILED",
+            "PERMISSION_DENIED",
+            "VERSION_CONFLICT",
+        }
+E       AssertionError: assert 'GRANT_REVOKED' in {'PERMISSION_DENIED', 'VERIFICATION_FAILED', 'VERSION_CONFLICT'}
+
+tests/test_protocol_completion_readback.py:341: AssertionError
+_______ test_failures_are_readonly_conflicts_not_missing[source-expired] _______
+
+sealed = (<sim2act.db.Store object at 0x7f83237a83e0>, Settings(database_url='sqlite:////workspace/sim2act-completion-readback-...rkspace/sim2act-completion-readback-final/test_failures_are_readonly_con21/run_5062b844bf304b2490bfde023a99525e.json'))
+fault = 'expired'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "missing_run",
+            "missing_attempt",
+            "duplicate",
+            "wrong_family",
+            "response_namespace",
+            "response_extra",
+            "response_bool",
+            "request_bool",
+            "recovery_float",
+            "cross_run",
+            "wrong_attempt",
+            "slot",
+            "content",
+            "runtime_revoked",
+            "principal_revoked",
+            "runtime_expired",
+            "principal_expired",
+            "late",
+            "early",
+            "cancel",
+            "revoked",
+            "expired",
+            "sidecar",
+            "usage",
+            "wire",
+        ],
+    )
+    def test_failures_are_readonly_conflicts_not_missing(sealed, fault):
+        store, settings, original, sidecar = sealed
+        rid = original["run"]
+        with store.tx() as c:
+            kind = source.COMPLETED if original["phase"] == "source" else extract.COMPLETED
+            roots = c.execute(select(events).where(events.c.kind == kind)).mappings().all()
+            ids = [r["id"] for r in roots]
+            old = copy.deepcopy(next(r["data"] for r in roots if r["run_id"] == rid))
+            if fault.startswith("missing_"):
+                c.execute(
+                    delete(events).where(
+                        events.c.id.in_(
+                            [r["id"] for r in roots if (r["run_id"] == rid) == (fault == "missing_run")]
+                        )
+                    )
+                )
+            elif fault == "duplicate":
+                row = dict(roots[0])
+                row["id"] = "event_extra_completion_readback"
+                c.execute(insert(events).values(**row))
+            elif fault == "wrong_family":
+                c.execute(
+                    update(events)
+                    .where(events.c.id.in_(ids))
+                    .values(kind=extract.COMPLETED if kind == source.COMPLETED else source.COMPLETED)
+                )
+            elif fault in {
+                "response_namespace",
+                "response_extra",
+                "response_bool",
+                "request_bool",
+                "recovery_float",
+                "cross_run",
+                "late",
+                "early",
+            }:
+                if fault == "response_namespace":
+                    old["response"]["namespace"] = "protocol-review.v1"
+                if fault == "response_extra":
+                    old["response"]["extra"] = 1
+                if fault == "response_bool":
+                    old["response"]["provider_requests"] = False
+                if fault == "request_bool":
+                    old["request"]["expected_version"] = True
+                if fault == "recovery_float":
+                    old["recovery_fence"] = float(old["recovery_fence"])
+                if fault == "cross_run":
+                    old["response"]["run_id"] = "run_not_original"
+                if fault == "late":
+                    old["completed_at"] += 1000
+                if fault == "early":
+                    old["completed_at"] = 0
+                c.execute(update(events).where(events.c.id.in_(ids)).values(data=old))
+            elif fault == "cancel":
+                c.execute(update(runs).where(runs.c.id == rid).values(cancel_intent=True))
+            elif fault == "wrong_attempt":
+                aids = list(c.execute(select(attempts.c.id).where(attempts.c.run_id == rid)).scalars())
+                mirror = next(r for r in roots if r["run_id"] != rid)
+                other = next((a for a in aids if a != mirror["run_id"]), rid)
+                c.execute(update(events).where(events.c.id == mirror["id"]).values(run_id=other))
+            elif fault == "slot":
+                c.execute(
+                    update(protocol_request_slots)
+                    .where(protocol_request_slots.c.run_id == rid)
+                    .values(fence=999)
+                )
+            elif fault == "content":
+                c.execute(
+                    update(resources)
+                    .where(resources.c.project_id == original["project"])
+                    .values(content="changed content")
+                )
+            elif fault.startswith("runtime_") or fault.startswith("principal_"):
+                actor = c.execute(
+                    select(
+                        runs.c.runtime_id if fault.startswith("runtime_") else runs.c.principal_id
+                    ).where(runs.c.id == rid)
+                ).scalar_one()
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"], grants.c.principal_id == actor)
+                    .values(
+                        **(
+                            {"revoked": True}
+                            if fault.endswith("revoked")
+                            else {"expires_at": time.time() - 1}
+                        )
+                    )
+                )
+            elif fault in {"revoked", "expired"}:
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"])
+                    .values(
+                        **({"revoked": True} if fault == "revoked" else {"expires_at": time.time() - 1})
+                    )
+                )
+            elif fault in {"usage", "wire"}:
+                row = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+                if fault == "usage":
+                    c.execute(update(attempts).where(attempts.c.id == row["id"]).values(usage={}))
+                else:
+                    params = dict(row["parameters"])
+                    params["protocol_wire"] = {}
+                    c.execute(
+                        update(attempts).where(attempts.c.id == row["id"]).values(parameters=params)
+                    )
+        if fault == "sidecar":
+            sidecar.write_text("{}")
+        with TestClient(create_app(store, settings)) as client:
+            response = readonly(sealed, lambda original=original: read(client, original))
+        assert response.status_code in {400, 403, 409}, response.text
+>       assert response.json()["error"]["code"] in {
+            "VERIFICATION_FAILED",
+            "PERMISSION_DENIED",
+            "VERSION_CONFLICT",
+        }
+E       AssertionError: assert 'GRANT_REVOKED' in {'PERMISSION_DENIED', 'VERIFICATION_FAILED', 'VERSION_CONFLICT'}
+
+tests/test_protocol_completion_readback.py:341: AssertionError
+__ test_failures_are_readonly_conflicts_not_missing[extract-runtime_revoked] ___
+
+sealed = (<sim2act.db.Store object at 0x7f8321b97920>, Settings(database_url='sqlite:////workspace/sim2act-completion-readback-...rkspace/sim2act-completion-readback-final/test_failures_are_readonly_con38/run_ee268db83af7478c8736278657804fb9.json'))
+fault = 'runtime_revoked'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "missing_run",
+            "missing_attempt",
+            "duplicate",
+            "wrong_family",
+            "response_namespace",
+            "response_extra",
+            "response_bool",
+            "request_bool",
+            "recovery_float",
+            "cross_run",
+            "wrong_attempt",
+            "slot",
+            "content",
+            "runtime_revoked",
+            "principal_revoked",
+            "runtime_expired",
+            "principal_expired",
+            "late",
+            "early",
+            "cancel",
+            "revoked",
+            "expired",
+            "sidecar",
+            "usage",
+            "wire",
+        ],
+    )
+    def test_failures_are_readonly_conflicts_not_missing(sealed, fault):
+        store, settings, original, sidecar = sealed
+        rid = original["run"]
+        with store.tx() as c:
+            kind = source.COMPLETED if original["phase"] == "source" else extract.COMPLETED
+            roots = c.execute(select(events).where(events.c.kind == kind)).mappings().all()
+            ids = [r["id"] for r in roots]
+            old = copy.deepcopy(next(r["data"] for r in roots if r["run_id"] == rid))
+            if fault.startswith("missing_"):
+                c.execute(
+                    delete(events).where(
+                        events.c.id.in_(
+                            [r["id"] for r in roots if (r["run_id"] == rid) == (fault == "missing_run")]
+                        )
+                    )
+                )
+            elif fault == "duplicate":
+                row = dict(roots[0])
+                row["id"] = "event_extra_completion_readback"
+                c.execute(insert(events).values(**row))
+            elif fault == "wrong_family":
+                c.execute(
+                    update(events)
+                    .where(events.c.id.in_(ids))
+                    .values(kind=extract.COMPLETED if kind == source.COMPLETED else source.COMPLETED)
+                )
+            elif fault in {
+                "response_namespace",
+                "response_extra",
+                "response_bool",
+                "request_bool",
+                "recovery_float",
+                "cross_run",
+                "late",
+                "early",
+            }:
+                if fault == "response_namespace":
+                    old["response"]["namespace"] = "protocol-review.v1"
+                if fault == "response_extra":
+                    old["response"]["extra"] = 1
+                if fault == "response_bool":
+                    old["response"]["provider_requests"] = False
+                if fault == "request_bool":
+                    old["request"]["expected_version"] = True
+                if fault == "recovery_float":
+                    old["recovery_fence"] = float(old["recovery_fence"])
+                if fault == "cross_run":
+                    old["response"]["run_id"] = "run_not_original"
+                if fault == "late":
+                    old["completed_at"] += 1000
+                if fault == "early":
+                    old["completed_at"] = 0
+                c.execute(update(events).where(events.c.id.in_(ids)).values(data=old))
+            elif fault == "cancel":
+                c.execute(update(runs).where(runs.c.id == rid).values(cancel_intent=True))
+            elif fault == "wrong_attempt":
+                aids = list(c.execute(select(attempts.c.id).where(attempts.c.run_id == rid)).scalars())
+                mirror = next(r for r in roots if r["run_id"] != rid)
+                other = next((a for a in aids if a != mirror["run_id"]), rid)
+                c.execute(update(events).where(events.c.id == mirror["id"]).values(run_id=other))
+            elif fault == "slot":
+                c.execute(
+                    update(protocol_request_slots)
+                    .where(protocol_request_slots.c.run_id == rid)
+                    .values(fence=999)
+                )
+            elif fault == "content":
+                c.execute(
+                    update(resources)
+                    .where(resources.c.project_id == original["project"])
+                    .values(content="changed content")
+                )
+            elif fault.startswith("runtime_") or fault.startswith("principal_"):
+                actor = c.execute(
+                    select(
+                        runs.c.runtime_id if fault.startswith("runtime_") else runs.c.principal_id
+                    ).where(runs.c.id == rid)
+                ).scalar_one()
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"], grants.c.principal_id == actor)
+                    .values(
+                        **(
+                            {"revoked": True}
+                            if fault.endswith("revoked")
+                            else {"expires_at": time.time() - 1}
+                        )
+                    )
+                )
+            elif fault in {"revoked", "expired"}:
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"])
+                    .values(
+                        **({"revoked": True} if fault == "revoked" else {"expires_at": time.time() - 1})
+                    )
+                )
+            elif fault in {"usage", "wire"}:
+                row = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+                if fault == "usage":
+                    c.execute(update(attempts).where(attempts.c.id == row["id"]).values(usage={}))
+                else:
+                    params = dict(row["parameters"])
+                    params["protocol_wire"] = {}
+                    c.execute(
+                        update(attempts).where(attempts.c.id == row["id"]).values(parameters=params)
+                    )
+        if fault == "sidecar":
+            sidecar.write_text("{}")
+        with TestClient(create_app(store, settings)) as client:
+            response = readonly(sealed, lambda original=original: read(client, original))
+        assert response.status_code in {400, 403, 409}, response.text
+>       assert response.json()["error"]["code"] in {
+            "VERIFICATION_FAILED",
+            "PERMISSION_DENIED",
+            "VERSION_CONFLICT",
+        }
+E       AssertionError: assert 'GRANT_REVOKED' in {'PERMISSION_DENIED', 'VERIFICATION_FAILED', 'VERSION_CONFLICT'}
+
+tests/test_protocol_completion_readback.py:341: AssertionError
+_ test_failures_are_readonly_conflicts_not_missing[extract-principal_revoked] __
+
+sealed = (<sim2act.db.Store object at 0x7f8321347f20>, Settings(database_url='sqlite:////workspace/sim2act-completion-readback-...rkspace/sim2act-completion-readback-final/test_failures_are_readonly_con39/run_ee268db83af7478c8736278657804fb9.json'))
+fault = 'principal_revoked'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "missing_run",
+            "missing_attempt",
+            "duplicate",
+            "wrong_family",
+            "response_namespace",
+            "response_extra",
+            "response_bool",
+            "request_bool",
+            "recovery_float",
+            "cross_run",
+            "wrong_attempt",
+            "slot",
+            "content",
+            "runtime_revoked",
+            "principal_revoked",
+            "runtime_expired",
+            "principal_expired",
+            "late",
+            "early",
+            "cancel",
+            "revoked",
+            "expired",
+            "sidecar",
+            "usage",
+            "wire",
+        ],
+    )
+    def test_failures_are_readonly_conflicts_not_missing(sealed, fault):
+        store, settings, original, sidecar = sealed
+        rid = original["run"]
+        with store.tx() as c:
+            kind = source.COMPLETED if original["phase"] == "source" else extract.COMPLETED
+            roots = c.execute(select(events).where(events.c.kind == kind)).mappings().all()
+            ids = [r["id"] for r in roots]
+            old = copy.deepcopy(next(r["data"] for r in roots if r["run_id"] == rid))
+            if fault.startswith("missing_"):
+                c.execute(
+                    delete(events).where(
+                        events.c.id.in_(
+                            [r["id"] for r in roots if (r["run_id"] == rid) == (fault == "missing_run")]
+                        )
+                    )
+                )
+            elif fault == "duplicate":
+                row = dict(roots[0])
+                row["id"] = "event_extra_completion_readback"
+                c.execute(insert(events).values(**row))
+            elif fault == "wrong_family":
+                c.execute(
+                    update(events)
+                    .where(events.c.id.in_(ids))
+                    .values(kind=extract.COMPLETED if kind == source.COMPLETED else source.COMPLETED)
+                )
+            elif fault in {
+                "response_namespace",
+                "response_extra",
+                "response_bool",
+                "request_bool",
+                "recovery_float",
+                "cross_run",
+                "late",
+                "early",
+            }:
+                if fault == "response_namespace":
+                    old["response"]["namespace"] = "protocol-review.v1"
+                if fault == "response_extra":
+                    old["response"]["extra"] = 1
+                if fault == "response_bool":
+                    old["response"]["provider_requests"] = False
+                if fault == "request_bool":
+                    old["request"]["expected_version"] = True
+                if fault == "recovery_float":
+                    old["recovery_fence"] = float(old["recovery_fence"])
+                if fault == "cross_run":
+                    old["response"]["run_id"] = "run_not_original"
+                if fault == "late":
+                    old["completed_at"] += 1000
+                if fault == "early":
+                    old["completed_at"] = 0
+                c.execute(update(events).where(events.c.id.in_(ids)).values(data=old))
+            elif fault == "cancel":
+                c.execute(update(runs).where(runs.c.id == rid).values(cancel_intent=True))
+            elif fault == "wrong_attempt":
+                aids = list(c.execute(select(attempts.c.id).where(attempts.c.run_id == rid)).scalars())
+                mirror = next(r for r in roots if r["run_id"] != rid)
+                other = next((a for a in aids if a != mirror["run_id"]), rid)
+                c.execute(update(events).where(events.c.id == mirror["id"]).values(run_id=other))
+            elif fault == "slot":
+                c.execute(
+                    update(protocol_request_slots)
+                    .where(protocol_request_slots.c.run_id == rid)
+                    .values(fence=999)
+                )
+            elif fault == "content":
+                c.execute(
+                    update(resources)
+                    .where(resources.c.project_id == original["project"])
+                    .values(content="changed content")
+                )
+            elif fault.startswith("runtime_") or fault.startswith("principal_"):
+                actor = c.execute(
+                    select(
+                        runs.c.runtime_id if fault.startswith("runtime_") else runs.c.principal_id
+                    ).where(runs.c.id == rid)
+                ).scalar_one()
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"], grants.c.principal_id == actor)
+                    .values(
+                        **(
+                            {"revoked": True}
+                            if fault.endswith("revoked")
+                            else {"expires_at": time.time() - 1}
+                        )
+                    )
+                )
+            elif fault in {"revoked", "expired"}:
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"])
+                    .values(
+                        **({"revoked": True} if fault == "revoked" else {"expires_at": time.time() - 1})
+                    )
+                )
+            elif fault in {"usage", "wire"}:
+                row = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+                if fault == "usage":
+                    c.execute(update(attempts).where(attempts.c.id == row["id"]).values(usage={}))
+                else:
+                    params = dict(row["parameters"])
+                    params["protocol_wire"] = {}
+                    c.execute(
+                        update(attempts).where(attempts.c.id == row["id"]).values(parameters=params)
+                    )
+        if fault == "sidecar":
+            sidecar.write_text("{}")
+        with TestClient(create_app(store, settings)) as client:
+            response = readonly(sealed, lambda original=original: read(client, original))
+        assert response.status_code in {400, 403, 409}, response.text
+>       assert response.json()["error"]["code"] in {
+            "VERIFICATION_FAILED",
+            "PERMISSION_DENIED",
+            "VERSION_CONFLICT",
+        }
+E       AssertionError: assert 'GRANT_REVOKED' in {'PERMISSION_DENIED', 'VERIFICATION_FAILED', 'VERSION_CONFLICT'}
+
+tests/test_protocol_completion_readback.py:341: AssertionError
+__ test_failures_are_readonly_conflicts_not_missing[extract-runtime_expired] ___
+
+sealed = (<sim2act.db.Store object at 0x7f83214d0e00>, Settings(database_url='sqlite:////workspace/sim2act-completion-readback-...rkspace/sim2act-completion-readback-final/test_failures_are_readonly_con40/run_ee268db83af7478c8736278657804fb9.json'))
+fault = 'runtime_expired'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "missing_run",
+            "missing_attempt",
+            "duplicate",
+            "wrong_family",
+            "response_namespace",
+            "response_extra",
+            "response_bool",
+            "request_bool",
+            "recovery_float",
+            "cross_run",
+            "wrong_attempt",
+            "slot",
+            "content",
+            "runtime_revoked",
+            "principal_revoked",
+            "runtime_expired",
+            "principal_expired",
+            "late",
+            "early",
+            "cancel",
+            "revoked",
+            "expired",
+            "sidecar",
+            "usage",
+            "wire",
+        ],
+    )
+    def test_failures_are_readonly_conflicts_not_missing(sealed, fault):
+        store, settings, original, sidecar = sealed
+        rid = original["run"]
+        with store.tx() as c:
+            kind = source.COMPLETED if original["phase"] == "source" else extract.COMPLETED
+            roots = c.execute(select(events).where(events.c.kind == kind)).mappings().all()
+            ids = [r["id"] for r in roots]
+            old = copy.deepcopy(next(r["data"] for r in roots if r["run_id"] == rid))
+            if fault.startswith("missing_"):
+                c.execute(
+                    delete(events).where(
+                        events.c.id.in_(
+                            [r["id"] for r in roots if (r["run_id"] == rid) == (fault == "missing_run")]
+                        )
+                    )
+                )
+            elif fault == "duplicate":
+                row = dict(roots[0])
+                row["id"] = "event_extra_completion_readback"
+                c.execute(insert(events).values(**row))
+            elif fault == "wrong_family":
+                c.execute(
+                    update(events)
+                    .where(events.c.id.in_(ids))
+                    .values(kind=extract.COMPLETED if kind == source.COMPLETED else source.COMPLETED)
+                )
+            elif fault in {
+                "response_namespace",
+                "response_extra",
+                "response_bool",
+                "request_bool",
+                "recovery_float",
+                "cross_run",
+                "late",
+                "early",
+            }:
+                if fault == "response_namespace":
+                    old["response"]["namespace"] = "protocol-review.v1"
+                if fault == "response_extra":
+                    old["response"]["extra"] = 1
+                if fault == "response_bool":
+                    old["response"]["provider_requests"] = False
+                if fault == "request_bool":
+                    old["request"]["expected_version"] = True
+                if fault == "recovery_float":
+                    old["recovery_fence"] = float(old["recovery_fence"])
+                if fault == "cross_run":
+                    old["response"]["run_id"] = "run_not_original"
+                if fault == "late":
+                    old["completed_at"] += 1000
+                if fault == "early":
+                    old["completed_at"] = 0
+                c.execute(update(events).where(events.c.id.in_(ids)).values(data=old))
+            elif fault == "cancel":
+                c.execute(update(runs).where(runs.c.id == rid).values(cancel_intent=True))
+            elif fault == "wrong_attempt":
+                aids = list(c.execute(select(attempts.c.id).where(attempts.c.run_id == rid)).scalars())
+                mirror = next(r for r in roots if r["run_id"] != rid)
+                other = next((a for a in aids if a != mirror["run_id"]), rid)
+                c.execute(update(events).where(events.c.id == mirror["id"]).values(run_id=other))
+            elif fault == "slot":
+                c.execute(
+                    update(protocol_request_slots)
+                    .where(protocol_request_slots.c.run_id == rid)
+                    .values(fence=999)
+                )
+            elif fault == "content":
+                c.execute(
+                    update(resources)
+                    .where(resources.c.project_id == original["project"])
+                    .values(content="changed content")
+                )
+            elif fault.startswith("runtime_") or fault.startswith("principal_"):
+                actor = c.execute(
+                    select(
+                        runs.c.runtime_id if fault.startswith("runtime_") else runs.c.principal_id
+                    ).where(runs.c.id == rid)
+                ).scalar_one()
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"], grants.c.principal_id == actor)
+                    .values(
+                        **(
+                            {"revoked": True}
+                            if fault.endswith("revoked")
+                            else {"expires_at": time.time() - 1}
+                        )
+                    )
+                )
+            elif fault in {"revoked", "expired"}:
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"])
+                    .values(
+                        **({"revoked": True} if fault == "revoked" else {"expires_at": time.time() - 1})
+                    )
+                )
+            elif fault in {"usage", "wire"}:
+                row = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+                if fault == "usage":
+                    c.execute(update(attempts).where(attempts.c.id == row["id"]).values(usage={}))
+                else:
+                    params = dict(row["parameters"])
+                    params["protocol_wire"] = {}
+                    c.execute(
+                        update(attempts).where(attempts.c.id == row["id"]).values(parameters=params)
+                    )
+        if fault == "sidecar":
+            sidecar.write_text("{}")
+        with TestClient(create_app(store, settings)) as client:
+            response = readonly(sealed, lambda original=original: read(client, original))
+        assert response.status_code in {400, 403, 409}, response.text
+>       assert response.json()["error"]["code"] in {
+            "VERIFICATION_FAILED",
+            "PERMISSION_DENIED",
+            "VERSION_CONFLICT",
+        }
+E       AssertionError: assert 'GRANT_REVOKED' in {'PERMISSION_DENIED', 'VERIFICATION_FAILED', 'VERSION_CONFLICT'}
+
+tests/test_protocol_completion_readback.py:341: AssertionError
+_ test_failures_are_readonly_conflicts_not_missing[extract-principal_expired] __
+
+sealed = (<sim2act.db.Store object at 0x7f8321a955b0>, Settings(database_url='sqlite:////workspace/sim2act-completion-readback-...rkspace/sim2act-completion-readback-final/test_failures_are_readonly_con41/run_ee268db83af7478c8736278657804fb9.json'))
+fault = 'principal_expired'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "missing_run",
+            "missing_attempt",
+            "duplicate",
+            "wrong_family",
+            "response_namespace",
+            "response_extra",
+            "response_bool",
+            "request_bool",
+            "recovery_float",
+            "cross_run",
+            "wrong_attempt",
+            "slot",
+            "content",
+            "runtime_revoked",
+            "principal_revoked",
+            "runtime_expired",
+            "principal_expired",
+            "late",
+            "early",
+            "cancel",
+            "revoked",
+            "expired",
+            "sidecar",
+            "usage",
+            "wire",
+        ],
+    )
+    def test_failures_are_readonly_conflicts_not_missing(sealed, fault):
+        store, settings, original, sidecar = sealed
+        rid = original["run"]
+        with store.tx() as c:
+            kind = source.COMPLETED if original["phase"] == "source" else extract.COMPLETED
+            roots = c.execute(select(events).where(events.c.kind == kind)).mappings().all()
+            ids = [r["id"] for r in roots]
+            old = copy.deepcopy(next(r["data"] for r in roots if r["run_id"] == rid))
+            if fault.startswith("missing_"):
+                c.execute(
+                    delete(events).where(
+                        events.c.id.in_(
+                            [r["id"] for r in roots if (r["run_id"] == rid) == (fault == "missing_run")]
+                        )
+                    )
+                )
+            elif fault == "duplicate":
+                row = dict(roots[0])
+                row["id"] = "event_extra_completion_readback"
+                c.execute(insert(events).values(**row))
+            elif fault == "wrong_family":
+                c.execute(
+                    update(events)
+                    .where(events.c.id.in_(ids))
+                    .values(kind=extract.COMPLETED if kind == source.COMPLETED else source.COMPLETED)
+                )
+            elif fault in {
+                "response_namespace",
+                "response_extra",
+                "response_bool",
+                "request_bool",
+                "recovery_float",
+                "cross_run",
+                "late",
+                "early",
+            }:
+                if fault == "response_namespace":
+                    old["response"]["namespace"] = "protocol-review.v1"
+                if fault == "response_extra":
+                    old["response"]["extra"] = 1
+                if fault == "response_bool":
+                    old["response"]["provider_requests"] = False
+                if fault == "request_bool":
+                    old["request"]["expected_version"] = True
+                if fault == "recovery_float":
+                    old["recovery_fence"] = float(old["recovery_fence"])
+                if fault == "cross_run":
+                    old["response"]["run_id"] = "run_not_original"
+                if fault == "late":
+                    old["completed_at"] += 1000
+                if fault == "early":
+                    old["completed_at"] = 0
+                c.execute(update(events).where(events.c.id.in_(ids)).values(data=old))
+            elif fault == "cancel":
+                c.execute(update(runs).where(runs.c.id == rid).values(cancel_intent=True))
+            elif fault == "wrong_attempt":
+                aids = list(c.execute(select(attempts.c.id).where(attempts.c.run_id == rid)).scalars())
+                mirror = next(r for r in roots if r["run_id"] != rid)
+                other = next((a for a in aids if a != mirror["run_id"]), rid)
+                c.execute(update(events).where(events.c.id == mirror["id"]).values(run_id=other))
+            elif fault == "slot":
+                c.execute(
+                    update(protocol_request_slots)
+                    .where(protocol_request_slots.c.run_id == rid)
+                    .values(fence=999)
+                )
+            elif fault == "content":
+                c.execute(
+                    update(resources)
+                    .where(resources.c.project_id == original["project"])
+                    .values(content="changed content")
+                )
+            elif fault.startswith("runtime_") or fault.startswith("principal_"):
+                actor = c.execute(
+                    select(
+                        runs.c.runtime_id if fault.startswith("runtime_") else runs.c.principal_id
+                    ).where(runs.c.id == rid)
+                ).scalar_one()
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"], grants.c.principal_id == actor)
+                    .values(
+                        **(
+                            {"revoked": True}
+                            if fault.endswith("revoked")
+                            else {"expires_at": time.time() - 1}
+                        )
+                    )
+                )
+            elif fault in {"revoked", "expired"}:
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"])
+                    .values(
+                        **({"revoked": True} if fault == "revoked" else {"expires_at": time.time() - 1})
+                    )
+                )
+            elif fault in {"usage", "wire"}:
+                row = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+                if fault == "usage":
+                    c.execute(update(attempts).where(attempts.c.id == row["id"]).values(usage={}))
+                else:
+                    params = dict(row["parameters"])
+                    params["protocol_wire"] = {}
+                    c.execute(
+                        update(attempts).where(attempts.c.id == row["id"]).values(parameters=params)
+                    )
+        if fault == "sidecar":
+            sidecar.write_text("{}")
+        with TestClient(create_app(store, settings)) as client:
+            response = readonly(sealed, lambda original=original: read(client, original))
+        assert response.status_code in {400, 403, 409}, response.text
+>       assert response.json()["error"]["code"] in {
+            "VERIFICATION_FAILED",
+            "PERMISSION_DENIED",
+            "VERSION_CONFLICT",
+        }
+E       AssertionError: assert 'GRANT_REVOKED' in {'PERMISSION_DENIED', 'VERIFICATION_FAILED', 'VERSION_CONFLICT'}
+
+tests/test_protocol_completion_readback.py:341: AssertionError
+______ test_failures_are_readonly_conflicts_not_missing[extract-revoked] _______
+
+sealed = (<sim2act.db.Store object at 0x7f83233dcd10>, Settings(database_url='sqlite:////workspace/sim2act-completion-readback-...rkspace/sim2act-completion-readback-final/test_failures_are_readonly_con45/run_ee268db83af7478c8736278657804fb9.json'))
+fault = 'revoked'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "missing_run",
+            "missing_attempt",
+            "duplicate",
+            "wrong_family",
+            "response_namespace",
+            "response_extra",
+            "response_bool",
+            "request_bool",
+            "recovery_float",
+            "cross_run",
+            "wrong_attempt",
+            "slot",
+            "content",
+            "runtime_revoked",
+            "principal_revoked",
+            "runtime_expired",
+            "principal_expired",
+            "late",
+            "early",
+            "cancel",
+            "revoked",
+            "expired",
+            "sidecar",
+            "usage",
+            "wire",
+        ],
+    )
+    def test_failures_are_readonly_conflicts_not_missing(sealed, fault):
+        store, settings, original, sidecar = sealed
+        rid = original["run"]
+        with store.tx() as c:
+            kind = source.COMPLETED if original["phase"] == "source" else extract.COMPLETED
+            roots = c.execute(select(events).where(events.c.kind == kind)).mappings().all()
+            ids = [r["id"] for r in roots]
+            old = copy.deepcopy(next(r["data"] for r in roots if r["run_id"] == rid))
+            if fault.startswith("missing_"):
+                c.execute(
+                    delete(events).where(
+                        events.c.id.in_(
+                            [r["id"] for r in roots if (r["run_id"] == rid) == (fault == "missing_run")]
+                        )
+                    )
+                )
+            elif fault == "duplicate":
+                row = dict(roots[0])
+                row["id"] = "event_extra_completion_readback"
+                c.execute(insert(events).values(**row))
+            elif fault == "wrong_family":
+                c.execute(
+                    update(events)
+                    .where(events.c.id.in_(ids))
+                    .values(kind=extract.COMPLETED if kind == source.COMPLETED else source.COMPLETED)
+                )
+            elif fault in {
+                "response_namespace",
+                "response_extra",
+                "response_bool",
+                "request_bool",
+                "recovery_float",
+                "cross_run",
+                "late",
+                "early",
+            }:
+                if fault == "response_namespace":
+                    old["response"]["namespace"] = "protocol-review.v1"
+                if fault == "response_extra":
+                    old["response"]["extra"] = 1
+                if fault == "response_bool":
+                    old["response"]["provider_requests"] = False
+                if fault == "request_bool":
+                    old["request"]["expected_version"] = True
+                if fault == "recovery_float":
+                    old["recovery_fence"] = float(old["recovery_fence"])
+                if fault == "cross_run":
+                    old["response"]["run_id"] = "run_not_original"
+                if fault == "late":
+                    old["completed_at"] += 1000
+                if fault == "early":
+                    old["completed_at"] = 0
+                c.execute(update(events).where(events.c.id.in_(ids)).values(data=old))
+            elif fault == "cancel":
+                c.execute(update(runs).where(runs.c.id == rid).values(cancel_intent=True))
+            elif fault == "wrong_attempt":
+                aids = list(c.execute(select(attempts.c.id).where(attempts.c.run_id == rid)).scalars())
+                mirror = next(r for r in roots if r["run_id"] != rid)
+                other = next((a for a in aids if a != mirror["run_id"]), rid)
+                c.execute(update(events).where(events.c.id == mirror["id"]).values(run_id=other))
+            elif fault == "slot":
+                c.execute(
+                    update(protocol_request_slots)
+                    .where(protocol_request_slots.c.run_id == rid)
+                    .values(fence=999)
+                )
+            elif fault == "content":
+                c.execute(
+                    update(resources)
+                    .where(resources.c.project_id == original["project"])
+                    .values(content="changed content")
+                )
+            elif fault.startswith("runtime_") or fault.startswith("principal_"):
+                actor = c.execute(
+                    select(
+                        runs.c.runtime_id if fault.startswith("runtime_") else runs.c.principal_id
+                    ).where(runs.c.id == rid)
+                ).scalar_one()
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"], grants.c.principal_id == actor)
+                    .values(
+                        **(
+                            {"revoked": True}
+                            if fault.endswith("revoked")
+                            else {"expires_at": time.time() - 1}
+                        )
+                    )
+                )
+            elif fault in {"revoked", "expired"}:
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"])
+                    .values(
+                        **({"revoked": True} if fault == "revoked" else {"expires_at": time.time() - 1})
+                    )
+                )
+            elif fault in {"usage", "wire"}:
+                row = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+                if fault == "usage":
+                    c.execute(update(attempts).where(attempts.c.id == row["id"]).values(usage={}))
+                else:
+                    params = dict(row["parameters"])
+                    params["protocol_wire"] = {}
+                    c.execute(
+                        update(attempts).where(attempts.c.id == row["id"]).values(parameters=params)
+                    )
+        if fault == "sidecar":
+            sidecar.write_text("{}")
+        with TestClient(create_app(store, settings)) as client:
+            response = readonly(sealed, lambda original=original: read(client, original))
+        assert response.status_code in {400, 403, 409}, response.text
+>       assert response.json()["error"]["code"] in {
+            "VERIFICATION_FAILED",
+            "PERMISSION_DENIED",
+            "VERSION_CONFLICT",
+        }
+E       AssertionError: assert 'GRANT_REVOKED' in {'PERMISSION_DENIED', 'VERIFICATION_FAILED', 'VERSION_CONFLICT'}
+
+tests/test_protocol_completion_readback.py:341: AssertionError
+______ test_failures_are_readonly_conflicts_not_missing[extract-expired] _______
+
+sealed = (<sim2act.db.Store object at 0x7f8323490e00>, Settings(database_url='sqlite:////workspace/sim2act-completion-readback-...rkspace/sim2act-completion-readback-final/test_failures_are_readonly_con46/run_ee268db83af7478c8736278657804fb9.json'))
+fault = 'expired'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "missing_run",
+            "missing_attempt",
+            "duplicate",
+            "wrong_family",
+            "response_namespace",
+            "response_extra",
+            "response_bool",
+            "request_bool",
+            "recovery_float",
+            "cross_run",
+            "wrong_attempt",
+            "slot",
+            "content",
+            "runtime_revoked",
+            "principal_revoked",
+            "runtime_expired",
+            "principal_expired",
+            "late",
+            "early",
+            "cancel",
+            "revoked",
+            "expired",
+            "sidecar",
+            "usage",
+            "wire",
+        ],
+    )
+    def test_failures_are_readonly_conflicts_not_missing(sealed, fault):
+        store, settings, original, sidecar = sealed
+        rid = original["run"]
+        with store.tx() as c:
+            kind = source.COMPLETED if original["phase"] == "source" else extract.COMPLETED
+            roots = c.execute(select(events).where(events.c.kind == kind)).mappings().all()
+            ids = [r["id"] for r in roots]
+            old = copy.deepcopy(next(r["data"] for r in roots if r["run_id"] == rid))
+            if fault.startswith("missing_"):
+                c.execute(
+                    delete(events).where(
+                        events.c.id.in_(
+                            [r["id"] for r in roots if (r["run_id"] == rid) == (fault == "missing_run")]
+                        )
+                    )
+                )
+            elif fault == "duplicate":
+                row = dict(roots[0])
+                row["id"] = "event_extra_completion_readback"
+                c.execute(insert(events).values(**row))
+            elif fault == "wrong_family":
+                c.execute(
+                    update(events)
+                    .where(events.c.id.in_(ids))
+                    .values(kind=extract.COMPLETED if kind == source.COMPLETED else source.COMPLETED)
+                )
+            elif fault in {
+                "response_namespace",
+                "response_extra",
+                "response_bool",
+                "request_bool",
+                "recovery_float",
+                "cross_run",
+                "late",
+                "early",
+            }:
+                if fault == "response_namespace":
+                    old["response"]["namespace"] = "protocol-review.v1"
+                if fault == "response_extra":
+                    old["response"]["extra"] = 1
+                if fault == "response_bool":
+                    old["response"]["provider_requests"] = False
+                if fault == "request_bool":
+                    old["request"]["expected_version"] = True
+                if fault == "recovery_float":
+                    old["recovery_fence"] = float(old["recovery_fence"])
+                if fault == "cross_run":
+                    old["response"]["run_id"] = "run_not_original"
+                if fault == "late":
+                    old["completed_at"] += 1000
+                if fault == "early":
+                    old["completed_at"] = 0
+                c.execute(update(events).where(events.c.id.in_(ids)).values(data=old))
+            elif fault == "cancel":
+                c.execute(update(runs).where(runs.c.id == rid).values(cancel_intent=True))
+            elif fault == "wrong_attempt":
+                aids = list(c.execute(select(attempts.c.id).where(attempts.c.run_id == rid)).scalars())
+                mirror = next(r for r in roots if r["run_id"] != rid)
+                other = next((a for a in aids if a != mirror["run_id"]), rid)
+                c.execute(update(events).where(events.c.id == mirror["id"]).values(run_id=other))
+            elif fault == "slot":
+                c.execute(
+                    update(protocol_request_slots)
+                    .where(protocol_request_slots.c.run_id == rid)
+                    .values(fence=999)
+                )
+            elif fault == "content":
+                c.execute(
+                    update(resources)
+                    .where(resources.c.project_id == original["project"])
+                    .values(content="changed content")
+                )
+            elif fault.startswith("runtime_") or fault.startswith("principal_"):
+                actor = c.execute(
+                    select(
+                        runs.c.runtime_id if fault.startswith("runtime_") else runs.c.principal_id
+                    ).where(runs.c.id == rid)
+                ).scalar_one()
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"], grants.c.principal_id == actor)
+                    .values(
+                        **(
+                            {"revoked": True}
+                            if fault.endswith("revoked")
+                            else {"expires_at": time.time() - 1}
+                        )
+                    )
+                )
+            elif fault in {"revoked", "expired"}:
+                c.execute(
+                    update(grants)
+                    .where(grants.c.project_id == original["project"])
+                    .values(
+                        **({"revoked": True} if fault == "revoked" else {"expires_at": time.time() - 1})
+                    )
+                )
+            elif fault in {"usage", "wire"}:
+                row = c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings().first()
+                if fault == "usage":
+                    c.execute(update(attempts).where(attempts.c.id == row["id"]).values(usage={}))
+                else:
+                    params = dict(row["parameters"])
+                    params["protocol_wire"] = {}
+                    c.execute(
+                        update(attempts).where(attempts.c.id == row["id"]).values(parameters=params)
+                    )
+        if fault == "sidecar":
+            sidecar.write_text("{}")
+        with TestClient(create_app(store, settings)) as client:
+            response = readonly(sealed, lambda original=original: read(client, original))
+        assert response.status_code in {400, 403, 409}, response.text
+>       assert response.json()["error"]["code"] in {
+            "VERIFICATION_FAILED",
+            "PERMISSION_DENIED",
+            "VERSION_CONFLICT",
+        }
+E       AssertionError: assert 'GRANT_REVOKED' in {'PERMISSION_DENIED', 'VERIFICATION_FAILED', 'VERSION_CONFLICT'}
+
+tests/test_protocol_completion_readback.py:341: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_protocol_completion_readback.py::test_failures_are_readonly_conflicts_not_missing[source-runtime_revoked]
+FAILED tests/test_protocol_completion_readback.py::test_failures_are_readonly_conflicts_not_missing[source-principal_revoked]
+FAILED tests/test_protocol_completion_readback.py::test_failures_are_readonly_conflicts_not_missing[source-runtime_expired]
+FAILED tests/test_protocol_completion_readback.py::test_failures_are_readonly_conflicts_not_missing[source-principal_expired]
+FAILED tests/test_protocol_completion_readback.py::test_failures_are_readonly_conflicts_not_missing[source-revoked]
+FAILED tests/test_protocol_completion_readback.py::test_failures_are_readonly_conflicts_not_missing[source-expired]
+FAILED tests/test_protocol_completion_readback.py::test_failures_are_readonly_conflicts_not_missing[extract-runtime_revoked]
+FAILED tests/test_protocol_completion_readback.py::test_failures_are_readonly_conflicts_not_missing[extract-principal_revoked]
+FAILED tests/test_protocol_completion_readback.py::test_failures_are_readonly_conflicts_not_missing[extract-runtime_expired]
+FAILED tests/test_protocol_completion_readback.py::test_failures_are_readonly_conflicts_not_missing[extract-principal_expired]
+FAILED tests/test_protocol_completion_readback.py::test_failures_are_readonly_conflicts_not_missing[extract-revoked]
+FAILED tests/test_protocol_completion_readback.py::test_failures_are_readonly_conflicts_not_missing[extract-expired]
+12 failed, 48 passed, 1 warning in 18.63s

@@ -3,7 +3,7 @@
 let protocolGeneration=0,protocolContext=null,protocolCatalog=[],protocolMaterials=[];
 const protocolIntents=new Map();
 function protocolCurrent(ctx){return protocolContext===ctx&&ctx.generation===protocolGeneration&&ctx.token===token&&ctx.project===$("project-select").value;}
-function clearProtocol(){clearProtocolCompletion();protocolGeneration++;protocolContext=null;protocolCatalog=[];protocolMaterials=[];$("protocol-detail").hidden=true;$("protocol-result").textContent="";$("protocol-state").textContent="";$("protocol-cold-form").hidden=true;$("protocol-extract").hidden=true;$("protocol-recover-retry").hidden=true;$("protocol-source-submit").disabled=true;$("protocol-contract").replaceChildren();$("protocol-source-materials").replaceChildren();$("protocol-inputs").replaceChildren();$("protocol-source-goal").textContent="";$("protocol-source-status").textContent="";$("protocol-run-id").textContent="";$("protocol-cold-inputs").replaceChildren();$("protocol-cold-materials").replaceChildren();$("protocol-cold-contract").replaceChildren();}
+function clearProtocol(){clearProtocolCompletionReadback();clearProtocolCompletion();protocolGeneration++;protocolContext=null;protocolCatalog=[];protocolMaterials=[];$("protocol-detail").hidden=true;$("protocol-result").textContent="";$("protocol-state").textContent="";$("protocol-cold-form").hidden=true;$("protocol-extract").hidden=true;$("protocol-recover-retry").hidden=true;$("protocol-source-submit").disabled=true;$("protocol-contract").replaceChildren();$("protocol-source-materials").replaceChildren();$("protocol-inputs").replaceChildren();$("protocol-source-goal").textContent="";$("protocol-source-status").textContent="";$("protocol-run-id").textContent="";$("protocol-cold-inputs").replaceChildren();$("protocol-cold-materials").replaceChildren();$("protocol-cold-contract").replaceChildren();}
 async function protocolRequest(ctx,path,method="GET",body){const r=await fetch(path,{method,headers:{Authorization:`Bearer ${ctx.token}`,"Content-Type":"application/json"},...(body?{body:JSON.stringify(body)}:{})});const data=await r.json();if(!r.ok){const error=new Error(data.error?.code||"请求失败");error.detail=data.error?.message;error.httpStatus=r.status;throw error;}return data;}
 function protocolStatus(ctx,text){if(protocolCurrent(ctx))$("protocol-state").textContent=text;}
 function protocolContract(id){return protocolCatalog.find(item=>item.contract_id===id);}
@@ -47,17 +47,17 @@ async function refreshProtocol(materialRead=null){
     renderProtocolSource();
   }catch(error){if(protocolCurrent(ctx)&&readCurrent())$("protocol-source-status").textContent=error.message;}
 }
-function renderProtocolRun(ctx){if(!protocolCurrent(ctx)||!ctx.run||$("projects").hidden)return;const run=ctx.run;$("protocol-detail").hidden=false;$("protocol-run-id").textContent=run.run_id;protocolStatus(ctx,protocolReviewProjectionUnconfirmed(ctx)?"当前协议状态不可确认；原成果与核查投影已关闭，请只读重新核对。":`${run.phase} · ${run.status} · 语义 ${run.semantic_status} · ${run.semantic_review} · owner ${run.owner_semantic_acceptance||"PENDING"}。注册核查不等于 owner 对真实任务签收；未发布。`);$("protocol-result").textContent=protocolReviewProjectionUnconfirmed(ctx)?"":JSON.stringify(run.result||run.error||{},null,2);$("protocol-extract").hidden=protocolReviewProjectionUnconfirmed(ctx)||!(run.phase==="source"&&run.status==="SUCCEEDED"&&run.semantic_status==="PASS"&&run.semantic_review==="APPROVED");$("protocol-cold-form").hidden=!(run.phase==="extract"&&run.status==="SUCCEEDED"&&run.result?.compiled_plan);$("protocol-recover").disabled=ctx.busy;$("protocol-recover-retry").hidden=!ctx.recoveryPending;renderProtocolCompletion(ctx);renderProtocolReview(ctx);if(!$("protocol-cold-form").hidden){const plan=run.result.compiled_plan;if(ctx.renderedPlan===plan.plan_fingerprint)return;ctx.renderedPlan=plan.plan_fingerprint;ctx.plan=plan;$("protocol-cold-contract").replaceChildren(...protocolCatalog.filter(item=>item.phase==="cold").map(item=>new Option(`${item.family} · v${item.version}`,item.contract_id)));renderProtocolCold();}}
+function renderProtocolRun(ctx){if(!protocolCurrent(ctx)||!ctx.run||$("projects").hidden)return;const run=ctx.run;$("protocol-detail").hidden=false;$("protocol-run-id").textContent=run.run_id;protocolStatus(ctx,protocolProjectionUnconfirmed(ctx)?"当前协议状态不可确认；原成果与核查投影已关闭，请只读重新核对。":`${run.phase} · ${run.status} · 语义 ${run.semantic_status} · ${run.semantic_review} · owner ${run.owner_semantic_acceptance||"PENDING"}。注册核查不等于 owner 对真实任务签收；未发布。`);$("protocol-result").textContent=protocolProjectionUnconfirmed(ctx)?"":JSON.stringify(run.result||run.error||{},null,2);$("protocol-extract").hidden=protocolProjectionUnconfirmed(ctx)||!(run.phase==="source"&&run.status==="SUCCEEDED"&&run.semantic_status==="PASS"&&run.semantic_review==="APPROVED");$("protocol-cold-form").hidden=protocolProjectionUnconfirmed(ctx)||!(run.phase==="extract"&&run.status==="SUCCEEDED"&&run.result?.compiled_plan);$("protocol-recover").disabled=ctx.busy;$("protocol-recover-retry").hidden=!ctx.recoveryPending;renderProtocolCompletion(ctx);renderProtocolReview(ctx);renderProtocolCompletionReadback(ctx);if(!$("protocol-cold-form").hidden){const plan=run.result.compiled_plan;if(ctx.renderedPlan===plan.plan_fingerprint)return;ctx.renderedPlan=plan.plan_fingerprint;ctx.plan=plan;$("protocol-cold-contract").replaceChildren(...protocolCatalog.filter(item=>item.phase==="cold").map(item=>new Option(`${item.family} · v${item.version}`,item.contract_id)));renderProtocolCold();}}
 function renderProtocolCold(){const ctx=protocolContext,contract=protocolContract($("protocol-cold-contract").value);if(!ctx?.plan||!protocolCurrent(ctx)||!contract)return;protocolInputFields($("protocol-cold-inputs"),contract.public_inputs,ctx.coldInputContract===contract.contract_id);ctx.coldInputContract=contract.contract_id;const allowed=protocolMaterials.filter(resource=>contract.resource_hashes.includes(resource.hash));$("protocol-cold-materials").replaceChildren(...Object.entries(ctx.plan.candidate.resources).map(([name,id])=>{const source=protocolMaterials.find(resource=>resource.id===id);const label=protocolMaterialField(`${name} · 来源 ${source?.name||id}`,allowed,allowed.length===1?allowed[0].id:"");label.querySelector("select").dataset.binding=name;return label;}));$("protocol-cold-submit").disabled=contract.resource_hashes.some(hash=>!allowed.some(resource=>resource.hash===hash));}
-async function showProtocolRun(id,ctx=protocolContext){if(!ctx||!protocolCurrent(ctx)||$("projects").hidden)return;const selection=++ctx.selection,workspace=workspaceSelectionGeneration;try{const run=await protocolRequest(ctx,`/api/projects/${ctx.project}/protocol/runs/${id}`);if(!protocolCurrent(ctx)||selection!==ctx.selection||activeRun!==id||workspace!==workspaceSelectionGeneration||$("projects").hidden)return;if(ctx.run?.run_id!==run.run_id)ctx.recoveryPending=null;ctx.run=run;acceptProtocolReviewBackgroundRead(ctx,run,selection);renderProtocolRun(ctx);}catch(error){if(protocolCurrent(ctx)&&selection===ctx.selection&&workspace===workspaceSelectionGeneration&&!$("projects").hidden){ctx.run=null;ctx.plan=null;ctx.renderedPlan=null;$("protocol-cold-inputs").replaceChildren();$("protocol-cold-materials").replaceChildren();$("protocol-detail").hidden=true;$("protocol-result").textContent="";protocolStatus(ctx,error.message);throw error;}}}
+async function showProtocolRun(id,ctx=protocolContext){if(!ctx||!protocolCurrent(ctx)||$("projects").hidden)return;const selection=++ctx.selection,workspace=workspaceSelectionGeneration;try{const run=await protocolRequest(ctx,`/api/projects/${ctx.project}/protocol/runs/${id}`);if(!protocolCurrent(ctx)||selection!==ctx.selection||activeRun!==id||workspace!==workspaceSelectionGeneration||$("projects").hidden)return;if(ctx.run?.run_id!==run.run_id)ctx.recoveryPending=null;ctx.run=run;acceptProtocolReviewBackgroundRead(ctx,run,selection);acceptProtocolCompletionReadbackBackground(ctx,run,selection);renderProtocolRun(ctx);}catch(error){if(protocolCurrent(ctx)&&selection===ctx.selection&&workspace===workspaceSelectionGeneration&&!$("projects").hidden){ctx.run=null;ctx.plan=null;ctx.renderedPlan=null;$("protocol-cold-inputs").replaceChildren();$("protocol-cold-materials").replaceChildren();$("protocol-detail").hidden=true;$("protocol-result").textContent="";protocolStatus(ctx,error.message);throw error;}}}
 async function renderSelectedProtocol(run,id,current=()=>true){if(!current())return;await refreshProtocol();const ctx=protocolContext;if(!ctx||!protocolCurrent(ctx)||activeRun!==id||!current())return;await showProtocolRun(id,ctx);if(!current()||!protocolCurrent(ctx)||activeRun!==id||ctx.run?.run_id!==id)return;$("result").textContent="协议成果与核对状态见下方。";$("commands").replaceChildren();$("reconcile-panel").hidden=true;$("events").textContent="";$("raw-result").textContent="";}
 async function protocolSubmit(phase,payload){const ctx=protocolContext;if(!ctx||!protocolCurrent(ctx)||ctx.busy)return;const fingerprint=JSON.stringify({token:ctx.token,project:ctx.project,phase,payload});let intent=protocolIntents.get(fingerprint);if(!intent){intent={body:{...payload,request_key:crypto.randomUUID()}};protocolIntents.set(fingerprint,intent);}const intentEpoch=ctx.intent,selectedRun=activeRun;ctx.busy=true;protocolStatus(ctx,"正在提交；已接受任务不会随页面关闭取消。");try{const made=await protocolRequest(ctx,`/api/projects/${ctx.project}/protocol/${phase}`,"POST",intent.body);if(!protocolCurrent(ctx)||ctx.intent!==intentEpoch||activeRun!==selectedRun)return;activeRun=made.run_id;ctx.run=made;ctx.recoveryPending=null;renderProtocolRun(ctx);await showProtocolRun(made.run_id,ctx);}catch(error){if(ctx.intent===intentEpoch&&activeRun===selectedRun)protocolStatus(ctx,`${error.message}。提交回执不明时，仅再次提交同一输入可使用原请求键核对；不会自动重发。`);}finally{ctx.busy=false;if(protocolCurrent(ctx)&&ctx.intent===intentEpoch&&ctx.run)renderProtocolRun(ctx);}}
 async function recoverProtocol(retry=false){const ctx=protocolContext,run=ctx?.run;if(!ctx||!run||!protocolCurrent(ctx)||ctx.busy)return;let pending=ctx.recoveryPending;if(!retry){pending={expected_version:run.version,expected_fence:run.fence,request_key:crypto.randomUUID()};ctx.recoveryPending=pending;}if(!pending)return;ctx.busy=true;try{const receipt=await protocolRequest(ctx,`/api/projects/${ctx.project}/protocol/runs/${run.run_id}/recover`,"POST",pending);if(!protocolCurrent(ctx)||ctx.run?.run_id!==run.run_id)return;ctx.recoveryPending=null;await showProtocolRun(run.run_id,ctx);if(!protocolCurrent(ctx)||activeRun!==run.run_id||ctx.run?.run_id!==run.run_id)return;protocolStatus(ctx,`核对结果 ${receipt.recovery} · provider请求 ${receipt.provider_requests} · 不自动重发。${receipt.global_send_blocked?"共享发送已停止。":""}`);}catch(error){if(protocolCurrent(ctx)&&ctx.run?.run_id===run.run_id){protocolStatus(ctx,`${error.message}。可用原核对键重新读取，不继续执行。`);$("protocol-recover-retry").hidden=false;}}finally{ctx.busy=false;if(protocolCurrent(ctx))$("protocol-recover").disabled=false;}}
 $("protocol-contract").onchange=renderProtocolSource;$("protocol-cold-contract").onchange=renderProtocolCold;
 $("protocol-source-form").onsubmit=safe(()=>{const contract=protocolContract($("protocol-contract").value);if(!contract)throw Error("请先读取注册任务");const resources=[...$("protocol-source-materials").querySelectorAll("select")].map(field=>field.value);if(resources.some(id=>!id)||new Set(resources).size!==resources.length)throw Error("请选择不同的匹配材料");return protocolSubmit("source",{contract_id:contract.contract_id,goal:contract.public_goal,inputs:protocolInputs($("protocol-inputs")),resource_ids:resources});});
-$("protocol-extract").onclick=safe(()=>{const run=protocolContext?.run;if(!run||protocolReviewProjectionUnconfirmed(protocolContext)||run.phase!=="source"||run.status!=="SUCCEEDED"||run.semantic_status!=="PASS")throw Error("来源尚未通过独立注册核查");return protocolSubmit("extract",{source_run_id:run.run_id,expected_source_fingerprint:run.result_fingerprint});});
+$("protocol-extract").onclick=safe(()=>{const run=protocolContext?.run;if(!run||protocolProjectionUnconfirmed(protocolContext)||run.phase!=="source"||run.status!=="SUCCEEDED"||run.semantic_status!=="PASS")throw Error("来源尚未通过独立注册核查");return protocolSubmit("extract",{source_run_id:run.run_id,expected_source_fingerprint:run.result_fingerprint});});
 $("protocol-cold-form").onsubmit=safe(()=>{const ctx=protocolContext,contract=protocolContract($("protocol-cold-contract").value);if(!ctx?.plan||!contract)throw Error("请先读取协议草案与冷输入契约");const bindings=Object.fromEntries([...$("protocol-cold-materials").querySelectorAll("select")].map(field=>[field.dataset.binding,field.value]));if(Object.values(bindings).some(id=>!id)||new Set(Object.values(bindings)).size!==Object.values(bindings).length)throw Error("请选择不同的新材料");return protocolSubmit("cold",{contract_id:contract.contract_id,extraction_run_id:ctx.run.run_id,expected_plan_fingerprint:ctx.plan.plan_fingerprint,inputs:protocolInputs($("protocol-cold-inputs")),resource_bindings:bindings});});
-$("protocol-read").onclick=safe(()=>{const ctx=protocolContext;if(ctx?.run)return showProtocolRun(ctx.run.run_id,ctx);});$("protocol-recover").onclick=safe(()=>recoverProtocol());$("protocol-recover-retry").onclick=safe(()=>recoverProtocol(true));
+$("protocol-read").onclick=safe(()=>{const ctx=protocolContext;if(ctx?.run)return readProtocolFreshRun(ctx);});$("protocol-recover").onclick=safe(()=>recoverProtocol());$("protocol-recover-retry").onclick=safe(()=>recoverProtocol(true));
 
 // A completion command is separate from state-only /recover and never sends a model request.
 // Page memory retains the exact command across Run/project selection; nothing stores a bearer on disk.
@@ -78,7 +78,7 @@ function protocolCompletionWorkspaceChanged(){
   ctx.intent=(ctx.intent||0)+1;ctx.selection++;
   ctx.completionSignature=null;ctx.reviewSignature=null;
   if($("projects").hidden){
-    if(ctx.run)ctx.run={...ctx.run,result:null,result_fingerprint:null,error:null};
+    if(ctx.run)ctx.run={...ctx.run,result:null,result_fingerprint:null};
     ctx.plan=null;ctx.renderedPlan=null;
     $("protocol-result").textContent="";$("protocol-extract").hidden=true;$("protocol-cold-form").hidden=true;
     $("protocol-cold-inputs").replaceChildren();$("protocol-cold-materials").replaceChildren();
@@ -193,6 +193,7 @@ $("protocol-completion-retry").onclick=safe(()=>completeProtocolExtraction(true)
 const protocolReviewIntents=new Map();
 const protocolReviewReads=new WeakMap();
 function clearProtocolReview(){
+  clearProtocolCompletionReadback();
   $("protocol-review").hidden=true;
   $("protocol-review-confirm").checked=false;
   $("protocol-review-submit").disabled=true;
@@ -234,24 +235,24 @@ function protocolReviewReadMatches(run,entry){
 function renderProtocolReview(ctx){
   if(!protocolCurrent(ctx)||!ctx.run||$("projects").hidden){clearProtocolReview();return;}
   const run=ctx.run,entry=protocolReviewIntents.get(protocolCompletionKey(ctx,run.run_id));
-  const eligible=protocolReviewEligible(run),pending=["sending","unknown","accepted-read-error"].includes(entry?.state);
+  const eligible=!protocolCompletionProjectionUnconfirmed(ctx)&&protocolReviewEligible(run),pending=["sending","unknown","accepted-read-error"].includes(entry?.state);
   // Keep a completed evaluation visible without offering another key for the same result.
   $("protocol-review").hidden=!eligible&&!pending&&entry?.state!=="accepted";
   const signature=JSON.stringify([ctx.intent,workspaceSelectionGeneration,run.run_id,run.contract_id,run.result_fingerprint,run.version,run.fence]);
   if(ctx.reviewSignature!==signature){ctx.reviewSignature=signature;$("protocol-review-confirm").checked=false;}
-  const blocked=ctx.busy||pending||entry?.state==="accepted"||ctx.reviewLocateClosed===run.run_id;
+  const blocked=ctx.busy||pending||entry?.state==="accepted"||ctx.reviewLocateClosed===run.run_id||protocolCompletionProjectionUnconfirmed(ctx);
   $("protocol-review-confirm").disabled=!eligible||blocked;
   $("protocol-review-submit").hidden=!eligible||pending||entry?.state==="accepted";
   $("protocol-review-submit").disabled=!eligible||blocked||!$("protocol-review-confirm").checked;
   $("protocol-review-retry").hidden=!["unknown","accepted-read-error"].includes(entry?.state);
-  $("protocol-review-retry").disabled=ctx.busy||ctx.reviewLocateClosed===run.run_id;
+  $("protocol-review-retry").disabled=ctx.busy||ctx.reviewLocateClosed===run.run_id||protocolCompletionProjectionUnconfirmed(ctx);
   $("protocol-review-retry").textContent=entry?.state==="accepted-read-error"?"重新读取核查状态（不再提交）":"用原核查键核对";
   $("protocol-review-locate").disabled=ctx.busy||!["source","cold"].includes(run.phase);
   $("protocol-review-locate-status").textContent=ctx.reviewLocateRun===run.run_id?ctx.reviewLocateMessage:
     "可只读找回当前任务的已接受核查；无记录不证明未提交，不恢复未持久化的 UNKNOWN。";
-  $("protocol-review-locate-receipt").textContent=entry?.state==="accepted"&&protocolReviewReadMatches(run,entry)?
+  $("protocol-review-locate-receipt").textContent=entry?.state==="accepted"&&!protocolCompletionProjectionUnconfirmed(ctx)&&protocolReviewReadMatches(run,entry)?
     JSON.stringify({request:entry.body,receipt:entry.receipt},null,2):"";
-  $("protocol-review-status").textContent=entry?.message||`冻结契约 ${run.contract_id}；核查不会代替真实任务签收。冷页可只读找回已接受核查；未持久化的未知请求不能据此恢复。`;
+  $("protocol-review-status").textContent=protocolCompletionProjectionUnconfirmed(ctx)?"当前成果不可确认；只读重新核对完成回执，不继续核查。":entry?.message||`冻结契约 ${run.contract_id}；核查不会代替真实任务签收。冷页可只读找回已接受核查；未持久化的未知请求不能据此恢复。`;
 }
 async function readProtocolReview(ctx,entry,current){
   const selection=++ctx.selection,readGeneration=entry.readGeneration=(entry.readGeneration||0)+1;
@@ -273,7 +274,7 @@ async function readProtocolReview(ctx,entry,current){
 }
 async function requestProtocolReview(retry=false){
   const ctx=protocolContext,run=ctx?.run;
-  if(!ctx||!run||!protocolCurrent(ctx)||$("projects").hidden||activeRun!==run.run_id||ctx.busy||ctx.reviewLocateClosed===run.run_id)return;
+  if(!ctx||!run||!protocolCurrent(ctx)||$("projects").hidden||activeRun!==run.run_id||ctx.busy||ctx.reviewLocateClosed===run.run_id||protocolCompletionProjectionUnconfirmed(ctx))return;
   const key=protocolCompletionKey(ctx,run.run_id);
   let entry=protocolReviewIntents.get(key);
   if(retry){
@@ -336,7 +337,7 @@ function invalidateProtocolReviewProjection(ctx){
     entry.message="当前核查状态不可确认；原请求键保持不变，仅可只读重核，不可继续。";
   }
   ctx.reviewProjectionInvalid=ctx.run.run_id;
-  ctx.run={...ctx.run,result:null,result_fingerprint:null,error:null};ctx.plan=null;ctx.renderedPlan=null;
+  ctx.run={...ctx.run,result:null,result_fingerprint:null};ctx.plan=null;ctx.renderedPlan=null;
   protocolStatus(ctx,"当前协议状态不可确认；原成果与核查投影已关闭，请只读重新核对。");
   $("protocol-result").textContent="";$("protocol-extract").hidden=true;$("protocol-cold-form").hidden=true;
   $("protocol-cold-inputs").replaceChildren();$("protocol-cold-materials").replaceChildren();
@@ -398,3 +399,126 @@ async function locateProtocolReview(){
   }
 }
 $("protocol-review-locate").onclick=safe(locateProtocolReview);
+
+// Persisted completion readback is separate from completion commands and reviews.
+const protocolCompletionReadbacks=new Map(),protocolCompletionReadbackReads=new WeakMap();
+function clearProtocolCompletionReadback(){
+  $("protocol-completion-locate").disabled=true;
+  $("protocol-completion-locate-status").textContent="";
+  $("protocol-completion-locate-receipt").textContent="";
+}
+function protocolCompletionProjectionUnconfirmed(ctx){
+  return !!ctx?.run&&ctx.completionProjectionInvalid===ctx.run.run_id;
+}
+function protocolProjectionUnconfirmed(ctx){
+  return protocolReviewProjectionUnconfirmed(ctx)||protocolCompletionProjectionUnconfirmed(ctx);
+}
+function protocolCompletionLocatedMatches(run,entry){
+  return protocolCompletionReadMatches(run,entry)&&!run.error&&run.result!==null&&typeof run.result==="object"&&
+    run.owner_semantic_acceptance==="PENDING"&&run.formal_publication_enabled===false;
+}
+function renderProtocolCompletionReadback(ctx){
+  if(!protocolCurrent(ctx)||!ctx.run||$("projects").hidden){clearProtocolCompletionReadback();return;}
+  const run=ctx.run,entry=protocolCompletionReadbacks.get(protocolCompletionKey(ctx,run.run_id));
+  $("protocol-completion-locate").disabled=ctx.busy||!["source","extract"].includes(run.phase);
+  $("protocol-completion-locate-status").textContent=protocolCompletionProjectionUnconfirmed(ctx)?
+    "当前完成状态不可确认；仅可只读重核，不生成新键、不再次提交。":
+    entry?.message||ctx.completionReadbackNotice||"仅找回已持久完成命令的原键与回执；无记录不证明未执行，不恢复未持久 UNKNOWN。";
+  $("protocol-completion-locate-receipt").textContent=entry?.state==="accepted"&&!protocolProjectionUnconfirmed(ctx)&&protocolCompletionLocatedMatches(run,entry)?
+    JSON.stringify({request:entry.body,receipt:entry.receipt},null,2):"";
+}
+function invalidateProtocolCompletionReadback(ctx,entry){
+  if(entry){entry.state="read-error";entry.message="当前完成状态不可确认；原历史键与回执保留，仅可只读重核。";}
+  ctx.completionProjectionInvalid=ctx.run.run_id;
+  ctx.completionReadbackNotice="历史完成回执不可确认；没有找到不等于未执行，不生成新键。";
+  ctx.run={...ctx.run,result:null,result_fingerprint:null};ctx.plan=null;ctx.renderedPlan=null;
+  $("protocol-result").textContent="";$("protocol-extract").hidden=true;$("protocol-cold-form").hidden=true;
+  $("protocol-cold-inputs").replaceChildren();$("protocol-cold-materials").replaceChildren();
+  protocolStatus(ctx,"当前完成状态不可确认；原成果投影已关闭，请只读重新核对。");
+}
+async function readProtocolFreshRun(ctx){
+  if(!protocolCurrent(ctx)||!ctx.run||$("projects").hidden||activeRun!==ctx.run.run_id)return;
+  const rid=ctx.run.run_id,workspace=workspaceSelectionGeneration,intent=ctx.intent=(ctx.intent||0)+1;
+  const selection=ctx.selection+1;
+  // Explicit fresh inspection restores the original Run view, not a missing
+  // optional completion command. Automatic polling never clears this closure.
+  await showProtocolRun(rid,ctx);
+  if(!protocolCurrent(ctx)||ctx.intent!==intent||ctx.selection!==selection||workspace!==workspaceSelectionGeneration||
+    $("projects").hidden||activeRun!==rid||ctx.run?.run_id!==rid)return;
+  ctx.completionProjectionInvalid=null;
+  const entry=protocolCompletionReadbacks.get(protocolCompletionKey(ctx,rid));
+  if(entry&&entry.state!=="accepted"){
+    entry.readGeneration=(entry.readGeneration||0)+1;protocolCompletionReadbackReads.delete(entry);
+    entry.state="read-error";entry.message="当前Run已新鲜复读；历史完成回执仍不可确认，仅可另行只读找回。";
+  }
+  ctx.completionReadbackNotice="当前Run已新鲜复读；未找到的历史完成回执不会因此补造。";
+  renderProtocolRun(ctx);
+}
+function protocolCompletionLocated(value,run){
+  const keys=["namespace","run_id","phase","state","request","receipt"];
+  if(!value||typeof value!=="object"||Array.isArray(value)||Object.keys(value).length!==keys.length||
+    !keys.every(k=>Object.hasOwn(value,k))||value.namespace!=="protocol-completion-readback.v1"||
+    value.run_id!==run.run_id||value.phase!==run.phase||!["source","extract"].includes(value.phase))return null;
+  if(value.state==="NOT_FOUND")return value.request===null&&value.receipt===null?{missing:true}:null;
+  const body=value.request,fields=["expected_version","expected_fence","request_key"];
+  if(value.state!=="FOUND"||!body||typeof body!=="object"||Array.isArray(body)||Object.keys(body).length!==3||
+    !fields.every(k=>Object.hasOwn(body,k))||!Number.isSafeInteger(body.expected_version)||body.expected_version<1||
+    !Number.isSafeInteger(body.expected_version+1)||!Number.isSafeInteger(body.expected_fence)||body.expected_fence<0||
+    !Number.isSafeInteger(body.expected_fence+1)||typeof body.request_key!=="string"||!/^[A-Za-z0-9_-]{1,100}$/.test(body.request_key)||
+    !protocolCompletionReceipt(value.receipt,run.run_id,body,run.phase)||value.receipt.cached!==false)return null;
+  return {rid:run.run_id,phase:run.phase,body:Object.freeze({...body}),receipt:value.receipt,state:"reading"};
+}
+function acceptProtocolCompletionReadback(ctx,entry,run){
+  entry.readGeneration=(entry.readGeneration||0)+1;entry.state="accepted";
+  entry.message="原完成回执已找回、当前成果已复读；仅只读恢复，不代替独立核查或 owner 签收，未发布。";
+  ctx.completionProjectionInvalid=null;ctx.run=run;
+}
+function acceptProtocolCompletionReadbackBackground(ctx,run,selection){
+  const entry=protocolCompletionReadbacks.get(protocolCompletionKey(ctx,run.run_id)),witness=entry&&protocolCompletionReadbackReads.get(entry);
+  if(!["reading","read-error"].includes(entry?.state)||!witness||witness.ctx!==ctx||selection<=witness.selection||
+    !witness.current()||!protocolCompletionLocatedMatches(run,entry))return;
+  acceptProtocolCompletionReadback(ctx,entry,run);
+}
+async function readProtocolCompletionReadback(ctx,entry,current){
+  const selection=++ctx.selection,generation=entry.readGeneration=(entry.readGeneration||0)+1;
+  protocolCompletionReadbackReads.set(entry,{ctx,selection,current});
+  try{
+    const run=await protocolRequest(ctx,`/api/projects/${ctx.project}/protocol/runs/${entry.rid}`);
+    if(!protocolCompletionLocatedMatches(run,entry))throw Error("当前成果与原完成回执不匹配");
+    if(entry.readGeneration!==generation||!current()||selection!==ctx.selection)return;
+    acceptProtocolCompletionReadback(ctx,entry,run);renderProtocolRun(ctx);
+  }catch(error){
+    if(entry.readGeneration!==generation||!current())return;
+    invalidateProtocolCompletionReadback(ctx,entry);renderProtocolRun(ctx);
+  }
+}
+async function locateProtocolCompletion(){
+  const ctx=protocolContext,run=ctx?.run;
+  if(!ctx||!run||!protocolCurrent(ctx)||$("projects").hidden||activeRun!==run.run_id||ctx.busy||
+    !["source","extract"].includes(run.phase))return;
+  const intent=ctx.intent,workspace=workspaceSelectionGeneration;
+  const current=()=>protocolCurrent(ctx)&&ctx.intent===intent&&workspace===workspaceSelectionGeneration&&
+    !$("projects").hidden&&activeRun===run.run_id&&ctx.run?.run_id===run.run_id;
+  const key=protocolCompletionKey(ctx,run.run_id);
+  ctx.busy=true;++ctx.selection;renderProtocolCompletionReadback(ctx);
+  try{
+    const value=await protocolRequest(ctx,`/api/projects/${ctx.project}/protocol/runs/${run.run_id}/completion-receipt`);
+    if(!current())return;
+    const entry=protocolCompletionLocated(value,run);
+    if(!entry||entry.missing)throw Error("没有可认证的持久完成回执；不能推断未执行");
+    for(const old of [protocolCompletionIntents.get(key),protocolCompletionReadbacks.get(key)]){
+      if(old&&!Object.keys(entry.body).every(k=>old.body[k]===entry.body[k]))throw Error("原完成键或参数不一致");
+    }
+    protocolCompletionReadbacks.set(key,entry);
+    await readProtocolCompletionReadback(ctx,entry,current);
+  }catch(error){
+    if(current()){
+      const old=protocolCompletionReadbacks.get(key);
+      if(old){old.readGeneration=(old.readGeneration||0)+1;protocolCompletionReadbackReads.delete(old);}
+      invalidateProtocolCompletionReadback(ctx,old);renderProtocolRun(ctx);
+    }
+  }finally{
+    ctx.busy=false;if(current())renderProtocolCompletionReadback(ctx);
+  }
+}
+$("protocol-completion-locate").onclick=safe(locateProtocolCompletion);

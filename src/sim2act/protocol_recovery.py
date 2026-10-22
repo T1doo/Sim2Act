@@ -285,6 +285,12 @@ def _response(run, reason, global_send_blocked):
 def mount(app, store, identity, settings):
     user_dependency = Depends(identity)
 
+    from .protocol_completion_readback import read_receipt
+
+    @app.get("/api/projects/{pid}/protocol/runs/{rid}/completion-receipt")
+    def read_completion_receipt(pid: str, rid: str, user=user_dependency):
+        return read_receipt(store, user, pid, rid, settings)
+
     @app.post("/api/projects/{pid}/protocol/runs/{rid}/recover")
     def recover_run(pid: str, rid: str, body: RecoveryInput, user=user_dependency):
         with store.tx() as c:
