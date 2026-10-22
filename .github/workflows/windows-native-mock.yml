@@ -76,7 +76,8 @@ jobs:
       (contains(github.event.head_commit.message, '[source-review-ui-once-20261022]') ||
        contains(github.event.head_commit.message, '[review-readback-ui-once-20261022]') ||
        contains(github.event.head_commit.message, '[completion-readback-ui-once-20261022]') ||
-       contains(github.event.head_commit.message, '[workspace-visual-once-20261022]'))
+       contains(github.event.head_commit.message, '[workspace-visual-once-20261022]') ||
+       contains(github.event.head_commit.message, '[workspace-density-once-20261022]'))
     runs-on: windows-2025
     timeout-minutes: 4
     defaults:
@@ -141,7 +142,7 @@ jobs:
       - name: Explicit sealed review action in protected installed Edge
         timeout-minutes: 4
         run: |
-          $WorkspaceVisual = '${{ contains(github.event.head_commit.message, '[workspace-visual-once-20261022]') }}' -eq 'true'
+          $WorkspaceVisual = '${{ contains(github.event.head_commit.message, '[workspace-visual-once-20261022]') || contains(github.event.head_commit.message, '[workspace-density-once-20261022]') }}' -eq 'true'
           $Readback = '${{ contains(github.event.head_commit.message, '[review-readback-ui-once-20261022]') }}' -eq 'true'
           $CompletionReadback = '${{ contains(github.event.head_commit.message, '[completion-readback-ui-once-20261022]') }}' -eq 'true'
           if ($WorkspaceVisual) { ./scripts/WindowsExtractCompletionUI.ps1 -WorkspaceVisual }

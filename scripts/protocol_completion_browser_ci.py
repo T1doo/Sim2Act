@@ -34,7 +34,7 @@ def write(root, name, value):
 def collect(root):
     outputs = {}
     total = 0
-    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "read-failed.png", "cold.png", "source-failed.png", "source-refreshed.png", "extract-failed.png", "extract-refreshed.png", "store-content-hashes.json", "failure.png", "before-projects-wide.png", "before-projects-narrow.png", "after-projects-wide.png", "after-projects-narrow.png", "after-apps-wide.png", "after-apps-narrow.png", "after-resources-wide.png", "after-resources-narrow.png", "after-source-receipt-wide.png", "after-source-error-narrow.png"):
+    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "read-failed.png", "cold.png", "source-failed.png", "source-refreshed.png", "extract-failed.png", "extract-refreshed.png", "store-content-hashes.json", "failure.png", "before-projects-wide.png", "before-projects-narrow.png", "after-projects-wide.png", "after-projects-narrow.png", "after-apps-wide.png", "after-apps-narrow.png", "after-resources-wide.png", "after-resources-narrow.png", "after-source-receipt-wide.png", "after-source-error-narrow.png", "maintenance-expanded-wide.png", "project-create-narrow.png"):
         file = root / name
         if not file.exists():
             continue

@@ -1,73 +1,84 @@
 'use strict';
-// One explicitly selected visual window. Actual production scripts + sealed API;
-// old HTML/CSS bytes are served only for the two labelled before frames.
-const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),crypto=require('node:crypto');
-const repo=path.resolve(__dirname,'../..'),before=path.join(repo,'docs/evidence/workspace-refinement-native-20261022/before');
-function baselineAsset(url){
- const name=url==='/'?'index.html':url==='/app.css'?'app.css':null;
- if(!name)return null;
- const body=fs.readFileSync(path.join(before,name)),expected={'index.html':'e47994e83f35e17779a1bc37292e7273688fc86f54758e3d875b67234c151b22','app.css':'4a39c8afbf8911a0e97094fcee09d6114ddd85ed65e0c9a63b2a65ddccecf329'};
- assert.equal(crypto.createHash('sha256').update(body).digest('hex'),expected[name],'Exact old source bytes required');
- return {status:200,contentType:name.endsWith('.html')?'text/html; charset=utf-8':'text/css; charset=utf-8',body};
-}
-async function runWorkspaceVisual({page,info,result,check,shot,until,choose,audit,setBaseline,setFailLocator}){
- result.visual={before_source:'51bcbcde3d9188420081802aa9aa35aebe5d009a',candidate_source:'b538ce79b80db7bca4016fcf5b825d39adfc4be1',layouts:[],focus:[],baseline_assets:Object.fromEntries(['index.html','app.css'].map(name=>[name,crypto.createHash('sha256').update(fs.readFileSync(path.join(before,name))).digest('hex')]))};
- const view=async(width,height=900)=>page.setViewportSize({width,height});
- const top=async()=>{await page.locator('#projects > h1, #projects .workspace-heading').first().scrollIntoViewIfNeeded();await page.evaluate(()=>scrollTo(0,0));};
- await view(1366);await top();await shot('before-projects-wide.png');
- await view(390,844);await top();await shot('before-projects-narrow.png');
- setBaseline(false);
- await view(1366);await page.goto(info.base,{waitUntil:'domcontentloaded'});
- await page.locator('#token').fill('secret test token');await page.locator('#connect').click();await page.locator('#login').waitFor({state:'hidden'});await audit();
- check('candidate full page is current production template',await page.locator('#projects-title').count()===1&&await page.locator('#project-tools').count()===1);
- // Seed focus, then use genuine keyboard activation/navigation, not a controller replacement.
- await page.locator('.skip-link').focus();await page.keyboard.press('Enter');
- check('keyboard skip link reaches actual main landmark',await page.evaluate(()=>document.activeElement.id==='main-content'));
- const summary=page.locator('#project-tools > summary');await summary.focus();
- const ring=await summary.evaluate(e=>({outline:getComputedStyle(e).outlineStyle,width:getComputedStyle(e).outlineWidth,focused:e.matches(':focus-visible')}));result.visual.focus.push({element:'maintenance summary',...ring});
- check('keyboard focus is visibly outlined',ring.focused&&ring.outline!=='none'&&parseFloat(ring.width)>=2);
- await page.keyboard.press('Enter');check('real keyboard opens maintenance with all four original tools',await page.locator('#project-tools').getAttribute('open')!==null&&await page.locator('#pn-read').isVisible()&&await page.locator('#text-logic-history').isVisible()&&await page.locator('#text-continuation-list').isVisible()&&await page.locator('#csv-logic-history').isVisible());
- await page.keyboard.press('Space');check('real keyboard collapses tools without changing original hidden gates',await page.locator('#project-tools').getAttribute('open')===null&&!await page.locator('#pn-read').isVisible());
- await page.keyboard.press('Tab');check('Tab passes closed tool controls to actual task form',await page.evaluate(()=>document.activeElement.id==='goal'));
- async function layout(workspace,width){
-  await view(width,width<500?844:900);
-  const measure=await page.evaluate(id=>{
-   const root=document.getElementById(id),visible=e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden';
-   const nodes=[...root.querySelectorAll('button,input,select,textarea,summary,pre')].filter(visible);
-   return {workspace:id,width:innerWidth,documentWidth:document.documentElement.scrollWidth,overflow:nodes.filter(e=>{const r=e.getBoundingClientRect();return r.left<-.5||r.right>innerWidth+1;}).map(e=>e.id||e.tagName),smallButtons:nodes.filter(e=>e.tagName==='BUTTON'&&e.getBoundingClientRect().height<43.5).map(e=>e.id),hiddenLeaks:[...document.querySelectorAll('[hidden]')].filter(visible).map(e=>e.id)};
-  },workspace);result.visual.layouts.push(measure);
-  check(`${workspace} at ${width}px has no horizontal/control overflow or hidden gate leak`,measure.documentWidth<=width+1&&measure.overflow.length===0&&measure.hiddenLeaks.length===0&&measure.smallButtons.length===0);
+// Explicit after-only density window. Before frames are the prior sealed native originals.
+const assert=require('node:assert/strict');
+function baselineAsset(){throw Error('Density window never substitutes production assets');}
+async function runWorkspaceVisual({page,info,result,check,shot,until,choose,audit,setFailLocator,setEmptyProjects}){
+ const item=info.cases[0];assert.equal(item.current.phase,'source');
+ result.visual={capture_revision:'workspace-density-v1',product_source:'e4313c9d9c76fe10d4668983ce0e7cfadc3c1fcc',before_native_execution:'0d0241d85d282854475c567c92673a957dfc5e06',before_product:'b538ce79b80db7bca4016fcf5b825d39adfc4be1',before_margin_fix:'5bd814277e21ead3d1b7a71c4db13679016bfe07 (static only before this run)',layouts:[],focus:[],density:[],content:[]};
+ const view=async(width)=>page.setViewportSize({width,height:width<500?844:900});
+ async function stable(){
+  await until(()=>document.getElementById('health').textContent.startsWith('健康检查：')&&!backgroundRefreshInFlight&&!protocolContext?.busy);
+  await page.mouse.move(1,1);await page.waitForTimeout(180);
+  await page.evaluate(()=>document.fonts.ready);
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  check('capture uses sampled health and idle background read, not initial loading text',!(await page.locator('#health').textContent()).includes('正在检查'));
  }
+ async function frame(name){await stable();await shot(name);}
+ async function geometry(workspace,width){
+  await view(width);
+  const m=await page.evaluate(id=>{
+   const visible=e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden';
+   const nodes=[...document.getElementById(id).querySelectorAll('button,input,select,textarea,summary,pre')].filter(visible);
+   const head=[...document.querySelector('header').children].filter(visible).map(e=>({id:e.id||e.tagName,r:e.getBoundingClientRect().toJSON()}));
+   const overlaps=[];for(let i=0;i<head.length;i++)for(let j=i+1;j<head.length;j++){const a=head[i],b=head[j];if(Math.min(a.r.right,b.r.right)-Math.max(a.r.left,b.r.left)>1&&Math.min(a.r.bottom,b.r.bottom)-Math.max(a.r.top,b.r.top)>1)overlaps.push([a.id,b.id]);}
+   return {workspace:id,width:innerWidth,documentWidth:document.documentElement.scrollWidth,health:document.getElementById('health').textContent,header:head,overlaps,overflow:nodes.filter(e=>{const r=e.getBoundingClientRect();return r.left<-.5||r.right>innerWidth+1;}).map(e=>e.id||e.tagName),smallButtons:nodes.filter(e=>e.tagName==='BUTTON'&&e.getBoundingClientRect().height<43.5).map(e=>e.id),hiddenLeaks:[...document.querySelectorAll('[hidden]')].filter(visible).map(e=>e.id)};
+  },workspace);result.visual.layouts.push(m);
+  check(`${workspace} ${width}px stable health has no header overlap/overflow/hidden leak`,m.documentWidth<=width+1&&!m.overlaps.length&&!m.overflow.length&&!m.hiddenLeaks.length&&!m.smallButtons.length);
+ }
+ async function density(workspace,width){
+  await view(width);await page.evaluate(()=>scrollTo(0,0));await stable();
+  const metric=await page.evaluate(id=>{
+   const primary=id==='projects'?'task-result-panel':id==='apps'?'application-use':'resource-materials';
+   return {workspace:id,width:innerWidth,primary,top:document.getElementById(primary).getBoundingClientRect().top,scopeBottom:document.getElementById('project-context').getBoundingClientRect().bottom};
+  },workspace);result.visual.density.push(metric);
+  check(`${workspace} ${width}px primary card reaches first viewport`,metric.top<(width===390?(workspace==='projects'?500:450):400));
+ }
+ await stable();await choose(info.run);
+ assert.deepEqual(JSON.parse(await page.locator('#protocol-result').textContent()),item.current.result);
+ await page.locator('#protocol-evidence > summary').click();
+ const resultPre=page.locator('#protocol-result');await resultPre.focus();await page.keyboard.press('PageDown');await page.waitForFunction(()=>document.getElementById('protocol-result').scrollTop>0,null,{timeout:2000});check('full original result accepts keyboard scrolling',await resultPre.evaluate(e=>document.activeElement===e&&e.matches(':focus-visible')&&getComputedStyle(e).outlineStyle!=='none'));await resultPre.evaluate(e=>{e.scrollTop=0;});
+ check('real selected Source evidence is in the primary result canvas',await page.locator('#task-result-panel #protocol-detail').isVisible()&&await page.locator('#protocol-evidence').getAttribute('open')!==null);
+ result.visual.content.push({kind:'Source',run:item.current.run_id,exact_result:true,status:item.current.status,semantic:item.current.semantic_status,owner:item.current.owner_semantic_acceptance});
  for(const workspace of ['projects','apps','resources']){
   if(workspace!=='projects')await page.locator(`[data-tab="${workspace}"]`).click();
-  for(const width of [1366,768,390,320])await layout(workspace,width);
+  if(workspace==='resources'){
+   const proof=info.captured.result.evidence.tool_trace[0].data;
+   await page.locator('#materials > .row').filter({hasText:proof.hash.slice(0,12)}).getByRole('button',{name:'查看',exact:true}).click();
+   await page.locator('#resource-preview').waitFor({state:'visible'});assert.equal(await page.locator('#resource-preview').textContent(),proof.content);
+   result.visual.content.push({kind:'saved material',exact_original_text:true,resource:proof.resource_id});
+  }
+  for(const width of [1366,768,390,320])await geometry(workspace,width);
   for(const [label,width] of [['wide',1366],['narrow',390]]){
-   await view(width,width<500?844:900);await page.evaluate(()=>scrollTo(0,0));await shot(`after-${workspace}-${label}.png`);
+   await density(workspace,width);await frame(`after-${workspace}-${label}.png`);
+  }
+  if(workspace==='apps'){
+   const gap=await page.evaluate(()=>{const a=document.getElementById('natural-first-start').getBoundingClientRect(),b=document.getElementById('local-records-new').getBoundingClientRect();return {sameRow:Math.abs(a.top-b.top)<2,gap:b.left-a.right};});result.visual.app_actions=gap;check('narrow creation actions retain a visible gap when on one row',!gap.sameRow||gap.gap>=7.5);
   }
  }
+ const materialForm=page.locator('#resource-create > summary');await materialForm.focus();await page.keyboard.press('Enter');await page.keyboard.press('Tab');check('material creation disclosure exposes original file control without selection or submit',await page.locator('#resource-form').isVisible()&&await page.evaluate(()=>document.activeElement.id==='resource-file'));await materialForm.click();
  await page.locator('[data-tab="projects"]').click();await view(1366);await choose(info.run);
- const item=info.cases[0];assert.equal(item.current.phase,'source');
- async function locate(){
-  await page.locator('#protocol-completion-locate').click();
-  await until(id=>!protocolContext.busy&&protocolCompletionReadbacks.get(protocolCompletionKey(protocolContext,id))?.state==='accepted',item.current.run_id);
-  assert.deepEqual(JSON.parse(await page.locator('#protocol-completion-locate-receipt').textContent()),{request:item.locator.request,receipt:item.locator.receipt});
-  assert.deepEqual(JSON.parse(await page.locator('#protocol-result').textContent()),item.current.result);
- }
- await locate();
- const receipt=page.locator('#protocol-completion-locate-receipt');await receipt.focus();
- const scrollBefore=await receipt.evaluate(e=>e.scrollTop);await page.keyboard.press('PageDown');
- await page.waitForFunction(previous=>document.getElementById('protocol-completion-locate-receipt').scrollTop>previous,scrollBefore,{timeout:2000});
- const scroll=await receipt.evaluate(e=>({active:document.activeElement===e,height:e.clientHeight,fullHeight:e.scrollHeight,scrollTop:e.scrollTop,outline:getComputedStyle(e).outlineStyle,focusVisible:e.matches(':focus-visible')}));result.visual.focus.push({element:'full original completion receipt',...scroll});
- check('original full receipt is keyboard scrollable with visible focus',scroll.active&&scroll.height<=240&&scroll.fullHeight>scroll.height&&scroll.scrollTop>0&&scroll.focusVisible&&scroll.outline!=='none');
- await layout('projects',390);await layout('projects',1366);
- await page.locator('#protocol-state').scrollIntoViewIfNeeded();await shot('after-source-receipt-wide.png');
- setFailLocator(item.current.run_id);await page.locator('#protocol-completion-locate').click();
- await until(()=>!protocolContext.busy&&document.getElementById('protocol-state').textContent.includes('不可确认'));
- check('read error clears current output without changing actual Run or enabling actions',await page.evaluate(()=>protocolContext.run.status==='WAITING_APPROVAL'&&document.getElementById('protocol-result').textContent===''&&document.getElementById('protocol-extract').hidden&&document.getElementById('protocol-cold-form').hidden));
- await view(390,844);await page.locator('#protocol-state').scrollIntoViewIfNeeded();await shot('after-source-error-narrow.png');
- await locate();
- check('new fresh GET restores the exact original receipt and original key',await page.locator('#protocol-completion-locate-receipt').textContent().then(s=>s.includes(item.locator.request.request_key)));
- check('visual work used only bounded GET with no new command or page errors',result.counts.business_post===0&&result.counts.blocked===0&&result.pageErrors.length===0&&await page.evaluate(()=>protocolCompletionIntents.size===0&&protocolReviewIntents.size===0));
+ const taskForm=page.locator('#task-create > summary');await taskForm.focus();await page.keyboard.press('Enter');await page.keyboard.press('Tab');check('task creation disclosure exposes original goal field without submit',await page.locator('#run-form').isVisible()&&await page.evaluate(()=>document.activeElement.id==='goal'));await taskForm.click();
+ await page.locator('.skip-link').focus();await page.keyboard.press('Enter');check('skip link focuses real main',await page.evaluate(()=>document.activeElement.id==='main-content'));
+ const summary=page.locator('#project-tools > summary');await summary.focus();await page.keyboard.press('Enter');
+ check('maintenance keyboard opening reveals all four unchanged tools',await page.locator('#pn-read').isVisible()&&await page.locator('#text-logic-history').isVisible()&&await page.locator('#text-continuation-list').isVisible()&&await page.locator('#csv-logic-history').isVisible());
+ await summary.scrollIntoViewIfNeeded();await frame('maintenance-expanded-wide.png');await page.keyboard.press('Space');check('maintenance keyboard closes original tools',!await page.locator('#pn-read').isVisible());
+ await view(390);await page.locator('#project-create > summary').focus();await page.keyboard.press('Enter');await page.keyboard.press('Tab');
+ check('creation disclosure reveals original form and keyboard name focus',await page.locator('#project-form').isVisible()&&await page.evaluate(()=>document.activeElement.id==='project-name'));
+ await page.evaluate(()=>scrollTo(0,0));await frame('project-create-narrow.png');await page.locator('#project-create > summary').click();
+ async function locate(){await page.locator('#protocol-completion-locate').click();await until(id=>!protocolContext.busy&&protocolCompletionReadbacks.get(protocolCompletionKey(protocolContext,id))?.state==='accepted',item.current.run_id);assert.deepEqual(JSON.parse(await page.locator('#protocol-completion-locate-receipt').textContent()),{request:item.locator.request,receipt:item.locator.receipt});assert.deepEqual(JSON.parse(await page.locator('#protocol-result').textContent()),item.current.result);}
+ await locate();await view(1366);const receipt=page.locator('#protocol-completion-locate-receipt');await receipt.focus();const prior=await receipt.evaluate(e=>e.scrollTop);await page.keyboard.press('PageDown');await page.waitForFunction(p=>document.getElementById('protocol-completion-locate-receipt').scrollTop>p,prior,{timeout:2000});
+ const focus=await receipt.evaluate(e=>({active:document.activeElement===e,visible:e.matches(':focus-visible'),outline:getComputedStyle(e).outlineStyle,top:e.scrollTop}));result.visual.focus.push(focus);check('real receipt retains keyboard scrolling/focus',focus.active&&focus.visible&&focus.outline!=='none'&&focus.top>prior);
+ await receipt.scrollIntoViewIfNeeded();await frame('after-source-receipt-wide.png');
+ setFailLocator(item.current.run_id);await page.locator('#protocol-completion-locate').click();await until(()=>!protocolContext.busy&&document.getElementById('protocol-state').textContent.includes('不可确认'));
+ check('failed read clears primary result and closes routes without changing Run',await page.evaluate(()=>document.getElementById('protocol-result').textContent===''&&document.getElementById('protocol-extract').hidden&&document.getElementById('protocol-cold-form').hidden&&protocolContext.run.status==='WAITING_APPROVAL'));
+ await view(390);await page.locator('#protocol-state').scrollIntoViewIfNeeded();await frame('after-source-error-narrow.png');check('stable error capture remains unconfirmed with no old result',await page.evaluate(()=>document.getElementById('protocol-state').textContent.includes('不可确认')&&document.getElementById('protocol-result').textContent===''));await locate();
+ await geometry('projects',390);await geometry('projects',1366);
+ // One extra genuine page load exercises the empty-project entry after a labelled
+ // read-only response filter. It grants nothing and never submits creation.
+ setEmptyProjects(true);
+ await page.goto(info.base,{waitUntil:'domcontentloaded'});await page.locator('#token').fill('secret test token');await page.locator('#connect').click();await page.locator('#login').waitFor({state:'hidden'});await page.locator('.scope-note > summary').click();await page.locator('#project-context-open').click();
+ check('controlled empty project read opens original creation form before real focus, zero submit',await page.locator('#project-form').isVisible()&&await page.evaluate(()=>document.activeElement.id==='project-name'));result.visual.empty_project='controlled GET response [] after authenticated successful server read; not a new account or project';
+ check('read-only visual work made no command or blocked overrun',result.counts.business_post===0&&result.counts.blocked===0&&result.pageErrors.length===0);
  result.receipts=result.located.map(x=>x.receipt);result.visual.original_key=item.locator.request.request_key;result.status='PASS';
 }
 module.exports={baselineAsset,runWorkspaceVisual};
