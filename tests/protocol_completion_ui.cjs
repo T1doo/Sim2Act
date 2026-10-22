@@ -17,7 +17,7 @@ function setup(run=runData(),handler){
  calls=[];elements=new Map(ids.map(id=>[id,{id,hidden:false,disabled:false,checked:false,value:'',textContent:'',replaceChildren(){this.textContent='';},querySelectorAll(){return [];}}]));
  elements.get('project-select').value=project;
  respond=handler||((url,options)=>options.method==='POST'?{data:receipt(JSON.parse(options.body))}:{data:completed(entry().body)});
- ctx=vm.createContext({token:'synthetic-A',activeRun:run.run_id,console,crypto:{randomUUID:crypto.randomUUID},Option:function(){},safe:fn=>fn,
+ ctx=vm.createContext({token:'synthetic-A',activeRun:run.run_id,workspaceSelectionGeneration:0,console,crypto:{randomUUID:crypto.randomUUID},Option:function(){},safe:fn=>fn,
   document:{getElementById(id){assert(elements.has(id),'real HTML id required: '+id);return elements.get(id);}},
   fetch:async(url,options={})=>{const call={url,method:options.method||'GET',body:options.body?JSON.parse(options.body):null};calls.push(call);const value=await respond(url,options);return {ok:(value.status||200)<400,status:value.status||200,json:async()=>value.data};}});
  ctx.$=id=>ctx.document.getElementById(id);vm.runInContext(source,ctx,{filename:'protocol.js'});
@@ -56,11 +56,12 @@ async function logic(){
  check(entry().state==='accepted-read-error'&&!elements.get('protocol-completion-retry').hidden&&!elements.get('protocol-result').textContent,'accepted response plus failed read clears output and exposes read-only recovery');
  const posts=postCalls().length;respond=()=>({data:completed(entry().body)});await retry();
  check(postCalls().length===posts&&entry().state==='accepted','known accepted recovery performs only GET');
- for(const kind of ['run-ABA','project-ABA','identity-ABA']){
+ for(const kind of ['run-ABA','project-ABA','identity-ABA','workspace-ABA']){
   let release;setup(runData(),(url,options)=>options.method==='POST'?new Promise(r=>release=()=>r({data:receipt(JSON.parse(options.body))})):{data:completed(entry().body)});
   const pending=start();await Promise.resolve();check(postCalls().length===1,'in-flight command started once '+kind);
   await start();check(postCalls().length===1,'busy command blocks double click '+kind);
   if(kind==='run-ABA'){choose(runData({run_id:otherRid}));choose(runData());}
+  else if(kind==='workspace-ABA'){evaluate('workspaceSelectionGeneration++;$("projects").hidden=true;protocolCompletionWorkspaceChanged();workspaceSelectionGeneration++;$("projects").hidden=false;protocolCompletionWorkspaceChanged();');}
   else{
    evaluate('clearProtocol();');
    if(kind==='project-ABA'){elements.get('project-select').value=otherProject;evaluate('clearProtocol();');elements.get('project-select').value=project;}
@@ -75,6 +76,8 @@ async function logic(){
  let releaseRead;setup(runData(),(url,options)=>options.method==='POST'?{data:receipt(JSON.parse(options.body))}:new Promise(r=>releaseRead=()=>r({data:completed({expected_version:2,expected_fence:1})})));
  const pending=start();for(let n=0;n<10&&!releaseRead;n++)await Promise.resolve();assert(releaseRead);choose(runData({run_id:otherRid}));choose(runData());releaseRead();await pending;
  check(evaluate('protocolContext.run.result===null')&&!elements.get('protocol-result').textContent.includes('compiled_plan'),'late detail GET cannot repaint after Run ABA');
+ let releaseWorkspaceRead;setup(runData(),(url,options)=>options.method==='POST'?{data:receipt(JSON.parse(options.body))}:new Promise(r=>releaseWorkspaceRead=()=>r({data:completed({expected_version:2,expected_fence:1})})));
+ const workspacePending=start();for(let n=0;n<10&&!releaseWorkspaceRead;n++)await Promise.resolve();assert(releaseWorkspaceRead);evaluate('workspaceSelectionGeneration++;$("projects").hidden=true;protocolCompletionWorkspaceChanged();workspaceSelectionGeneration++;$("projects").hidden=false;protocolCompletionWorkspaceChanged();');releaseWorkspaceRead();await workspacePending;check(evaluate('protocolContext.run.result===null')&&!elements.get('protocol-result').textContent.includes('compiled_plan'),'late accepted detail GET cannot repaint after workspace close/return');
  setup(runData(),(url)=>({data:{recovery:'CONTINUATION_NOT_IMPLEMENTED',provider_requests:0,global_send_blocked:false}}));
  // Old state-only action remains independent; avoid its separate GET by changing selection after response.
  respond=async()=>{choose(runData({run_id:otherRid}));return {data:{recovery:'CONTINUATION_NOT_IMPLEMENTED',provider_requests:0,global_send_blocked:false}};};

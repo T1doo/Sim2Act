@@ -2,7 +2,7 @@ name: Windows Server native MOCK engineering
 
 on:
   push:
-    branches: [dev/f1-foundation]
+    branches: [dev/f1-foundation, dev/production-trial-stages-20261018]
     paths:
       - .gitattributes
       - .github/workflows/windows-native-mock.yml
@@ -22,6 +22,7 @@ concurrency:
 
 jobs:
   native-mock:
+    if: github.ref == 'refs/heads/dev/f1-foundation'
     runs-on: windows-2025
     timeout-minutes: 15
     defaults:
@@ -65,3 +66,41 @@ jobs:
       - name: Stop owned API-worker and temporary PostgreSQL
         if: always()
         run: ./scripts/WindowsCI.ps1 -Phase Cleanup
+
+  extract-completion-ui-once:
+    if: >-
+      github.repository == 'T1doo/Sim2Act' &&
+      github.event.repository.private == false &&
+      github.ref == 'refs/heads/dev/production-trial-stages-20261018' &&
+      github.run_attempt == 1 &&
+      contains(github.event.head_commit.message, '[extract-ui-native-once-20261022]')
+    runs-on: windows-2025
+    timeout-minutes: 4
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      SIM2ACT_MODEL_MODE: mock
+      SIM2ACT_LIVE_ENABLED: 'false'
+      SIM2ACT_INTERN_TOKEN: ''
+      INTERN_API_TOKEN: ''
+      PYTHONUTF8: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      PIP_NO_CACHE_DIR: '1'
+    steps:
+      - name: Start the single 180-second work budget before setup
+        timeout-minutes: 1
+        run: |
+          "SIM2ACT_UI_UNTIL=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() + 180000)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        timeout-minutes: 1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        timeout-minutes: 1
+        with:
+          python-version: '3.12.10'
+          architecture: x64
+      - name: Only sealed extraction completion in protected installed Edge
+        timeout-minutes: 4
+        run: ./scripts/WindowsExtractCompletionUI.ps1

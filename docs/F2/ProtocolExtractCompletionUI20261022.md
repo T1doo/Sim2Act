@@ -11,3 +11,5 @@
 产品仅改 `web/protocol.js` 和 `web/index.html`，原完成后端、事务、租约/期限、预算、模型调用与旧恢复接口未变。新增定向验证 **2 PASS / 0.95秒 / 0新Worker / 0新Mock**：实际控制器的回执/竞态/键保留，以及隔离 SQLite 封存事实上的真实 loopback HTTP 按钮 POST→GET，严格原计划/回执相同，非完成账表及 sidecar 不变。没有重复37/20项或进程恢复窗口。
 
 [证据与失败原件](../evidence/protocol-extract-completion-ui-20261022/README.md)。Node 最小元素适配器不是 DOM、原生浏览器或视觉/布局验收；JSDOM 未安装，未安装依赖或更改浏览器安全配置。PG、Windows、真实模型、G0、Cold2/W5、整阶段和正式发布均不在本片验收范围。
+
+后续静态审查发现并修复工作区离开/返回 ABA：`app.js` 在切换后通知协议控制器失效选择；`protocol.js` 对完成/详情读取及 finally 同时核捕获的工作区代次和 projects 可见性，清旧成果但保留 Run 元数据和原键。新增定向两项 PASS，受保护原生浏览器准备与严格边界见[后续证据](../evidence/protocol-extract-ui-workspace-20261022/README.md)，不得将 VM 当浏览器验收。

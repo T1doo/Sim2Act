@@ -1035,6 +1035,7 @@ function selectWorkspace(id,preserveFirstGuide=null) {
   workspaceSelectionGeneration++;
   if(preserveFirstGuide&&naturalFirstGuide===preserveFirstGuide)preserveFirstGuide.workspace=workspaceSelectionGeneration;
   ["projects","apps","resources"].forEach(tab=>$(tab).hidden=tab !== id);
+  if(typeof protocolCompletionWorkspaceChanged === "function")protocolCompletionWorkspaceChanged();
   if(typeof resetOrdinaryRubricAcknowledgement === "function")resetOrdinaryRubricAcknowledgement();
   if(id === "apps" && typeof resumeCsvOwnerReview === "function")resumeCsvOwnerReview();
   if(id === "apps" && typeof resumeCsvGoalRevision === "function")resumeCsvGoalRevision();
