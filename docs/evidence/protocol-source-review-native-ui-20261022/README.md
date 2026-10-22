@@ -30,3 +30,5 @@ All four original **1366×900** screenshots were actually opened: initial unchec
 No old Source completion result is used to sign this newer control. Cold HTTP, PostgreSQL, real provider, G0, whole F2/R0, refreshed/closed-page key recovery and native cross-Run ABA remain unverified. Historical failed/Forbidden evidence remains unchanged.
 
 Independent post-run review also re-decoded 8/8 originals, checked all runtime/frozen hashes and actually viewed all four screenshots. Its limited control-area/runtime ACK is in `review.md`; it did not rerun products/tests/CI or recompute the deleted runtime DB.
+
+Raw Windows JSON retains CRLF bytes. The runtime-local attributes classify its CR as a line ending for whitespace checks; original files are not normalized or rewritten.
