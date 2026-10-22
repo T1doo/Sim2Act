@@ -1,10 +1,11 @@
 # Same official Windows/installed Edge route. This supervisor holds the exact
 # created Python process handle throughout setup, browser work and cleanup.
-param([switch]$DeleteOnly)
+param([switch]$DeleteOnly, [switch]$Source)
 $ErrorActionPreference = 'Stop'
 if (-not $IsWindows -or $env:GITHUB_ACTIONS -ne 'true') { throw 'Actual Windows runner required' }
 $Until = [double]$env:SIM2ACT_UI_UNTIL
-$Root = Join-Path $env:RUNNER_TEMP "sim2act-extract-ui-${env:GITHUB_RUN_ID}-1"
+$Phase = if ($Source) { "source" } else { "extract" }
+$Root = Join-Path $env:RUNNER_TEMP "sim2act-${Phase}-ui-${env:GITHUB_RUN_ID}-1"
 $RepoRoot = Split-Path $PSScriptRoot -Parent
 if ($DeleteOnly) {
     # Invoked only after Python exits and DLLs are no longer loaded. Literal
@@ -29,6 +30,7 @@ $Process.StartInfo.FileName = [IO.Path]::GetFullPath($Python)
 $Process.StartInfo.UseShellExecute = $false
 $Process.StartInfo.WorkingDirectory = $RepoRoot
 $Process.StartInfo.ArgumentList.Add((Join-Path $PSScriptRoot 'protocol_completion_browser_ci.py'))
+if ($Source) { $Process.StartInfo.ArgumentList.Add('--source') }
 $Receipt = [ordered]@{started=$false; timed_out=$false; forced_tree_stop=$false; process_exited=$false; exit_code=$null}
 try {
     $Remaining = $Until - [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
@@ -78,6 +80,7 @@ try {
                 $Delete.StartInfo.UseShellExecute=$false
                 $Delete.StartInfo.WorkingDirectory=$RepoRoot
                 foreach ($Arg in @('-NoProfile','-NonInteractive','-File',$PSCommandPath,'-DeleteOnly')) { $Delete.StartInfo.ArgumentList.Add($Arg) }
+                if ($Source) { $Delete.StartInfo.ArgumentList.Add('-Source') }
                 if (-not $Delete.Start()) { throw 'Owned cleanup did not start' }
                 if (-not $Delete.WaitForExit([int][Math]::Max(0,$Remaining-1000))) {
                     $Delete.Kill($true)

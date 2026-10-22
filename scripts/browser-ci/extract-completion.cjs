@@ -20,7 +20,12 @@ const {execFileSync}=require('node:child_process');
 const {chromium}=require('playwright-core');
 const root=process.argv[2],python=process.argv[3];
 const info=JSON.parse(fs.readFileSync(path.join(root,'info.json'),'utf8'));
-const result={status:'UNKNOWN',scope:'real installed Edge / production full page / sealed synthetic SQLite',checks:[],receipts:[],screenshots:0,counts:{business_get:0,static_get:0,completion_post:0,blocked:0},requests:[],pageErrors:[],sandbox:[]};
+assert.ok(['source','extract'].includes(info.phase),'Unknown explicit completion phase');
+const source=info.phase==='source';
+if(source)assert.ok(!Object.hasOwn(info,'other'),'Source fixture must not manufacture another Run');
+else assert.equal(typeof info.other,'string');
+const completionPath=`/api/projects/${info.project}/protocol/runs/${info.run}/${source?'complete-source':'complete-extraction'}`;
+const result={status:'UNKNOWN',phase:info.phase,nativeCrossRunABA:source?'NOT_TESTED_SINGLE_RUN_FIXTURE':'COVERED_RUN_SWITCH',screenshotFiles:[],scope:'real installed Edge / production full page / sealed synthetic SQLite',checks:[],receipts:[],screenshots:0,counts:{business_get:0,static_get:0,completion_post:0,blocked:0},requests:[],pageErrors:[],sandbox:[]};
 // Exactly the already reviewed installed-Edge route, not a new launch policy.
 const removedSecurityDefaults=[
  '--enable-unsafe-swiftshader','--unsafely-disable-devtools-self-xss-warnings',
@@ -39,7 +44,7 @@ function check(name,condition){assert.ok(condition,name);result.checks.push(name
 function write(){fs.writeFileSync(path.join(root,'browser.json'),JSON.stringify(result,null,2));}
 function failWindow(error){cancelled=true;cancellation.abort(error);fail(error);}
 async function cleanupWait(promise,until){let clock;try{return await Promise.race([promise,new Promise((_,reject)=>{clock=setTimeout(()=>reject(Error('Shared cleanup deadline')),Math.max(1,until-Date.now()));})]);}finally{clearTimeout(clock);}}
-async function shot(name){assert.ok(result.screenshots<4);result.screenshots++;await page.screenshot({path:path.join(root,name),fullPage:false,timeout:3000});}
+async function shot(name){assert.ok(result.screenshots<4);result.screenshots++;await page.screenshot({path:path.join(root,name),fullPage:false,timeout:3000});const data=fs.readFileSync(path.join(root,name));result.screenshotFiles.push({name,bytes:data.length,sha256:require('node:crypto').createHash('sha256').update(data).digest('hex'),visualReview:'PENDING_PIXEL_REVIEW'});}
 async function until(fn,arg){await page.waitForFunction(fn,arg,{timeout:8000});}
 function row(id){return page.locator('#runs > .row').filter({hasText:id.slice(0,16)}).getByRole('button',{name:'查看任务',exact:true});}
 async function choose(id){await row(id).click();await until(id=>protocolContext?.run?.run_id===id&&document.getElementById('protocol-run-id').textContent===id,id);}
@@ -68,15 +73,29 @@ async function run(){
   const business=url.pathname.startsWith('/api/')||url.pathname==='/health';
   let kind;
   if(allowed&&method==='GET')kind=business?'business_get':'static_get';
-  else if(allowed&&method==='POST'&&url.pathname===`/api/projects/${info.project}/protocol/runs/${info.run}/complete-extraction`)kind='completion_post';
+  else if(allowed&&method==='POST'&&url.pathname===completionPath)kind='completion_post';
   else allowed=false;
   if(kind){result.counts[kind]++;allowed=result.counts[kind]<=(kind==='business_get'?30:kind==='completion_post'?3:40);}
   if(!allowed||cancelled||Date.now()>=info.until_ms){result.counts.blocked++;result.rejectedRequest??={method,path:url.pathname,kind,counts:{...result.counts},cancelled,at_ms:Date.now(),until_ms:info.until_ms};await route.abort();throw Error('Business/request/time budget stop; no retry');}
   result.requests.push({method,path:url.pathname,kind});
   if(method==='POST'){
    bodies.push(request.postDataJSON());
+   const body=bodies[bodies.length-1];
+   assert.deepEqual(Object.keys(body).sort(),['expected_fence','expected_version','request_key']);
+   assert.equal(body.expected_version,info.expected_version);assert.equal(body.expected_fence,info.expected_fence);
+   assert.match(body.request_key,/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+   if(bodies.length>1)assert.deepEqual(body,bodies[0]);
+   result.commandBodies=bodies;write();
    const response=await route.fetch({maxRedirects:0,maxRetries:0,timeout:8000});
    assert.equal(response.status(),200);const receipt=await response.json();result.receipts.push(receipt);
+   if(source){
+    assert.deepEqual(Object.keys(receipt).sort(),['namespace','run_id','status','version','fence','result_fingerprint','provider_requests','automatic_resend','cached'].sort());
+    assert.equal(receipt.namespace,'protocol-source-completion.v2');assert.equal(receipt.run_id,info.run);
+    assert.equal(receipt.status,'WAITING_APPROVAL');assert.equal(receipt.version,body.expected_version+1);
+    assert.equal(receipt.fence,body.expected_fence+1);assert.match(receipt.result_fingerprint,/^[a-f0-9]{64}$/);
+    assert.equal(receipt.provider_requests,0);assert.equal(receipt.automatic_resend,false);assert.equal(receipt.cached,bodies.length===2);
+   }
+   write();
    if(bodies.length===1){await route.abort('connectionfailed');return;}
    assert.equal(bodies.length,2);failGet=true;await route.fulfill({response});return;
   }
@@ -105,19 +124,35 @@ async function run(){
  await until(()=>!protocolContext.busy&&document.getElementById('protocol-completion-status').textContent.includes('UNKNOWN'));
  check('double click made exactly one actual POST; lost receipt remains UNKNOWN',bodies.length===1&&await page.locator('#protocol-completion-submit').isDisabled());
  await shot('unknown.png');
- await choose(info.other);await choose(info.run);
- check('same-page Run switch retains original UNKNOWN command',await page.locator('#protocol-completion-retry').isVisible());
+ if(source){
+  await page.locator('[data-tab="apps"]').click();await page.locator('[data-tab="projects"]').click();
+  check('real workspace close/return retains Source UNKNOWN command without another Run',await page.locator('#protocol-completion-retry').isVisible()&&bodies.length===1);
+ }else{
+  await choose(info.other);await choose(info.run);
+  check('same-page Run switch retains original UNKNOWN command',await page.locator('#protocol-completion-retry').isVisible());
+ }
  await page.locator('#protocol-completion-retry').click();
  await until(()=>!protocolContext.busy&&document.getElementById('protocol-completion-status').textContent.includes('成果读取未通过'));
  assert.deepEqual(bodies[1],bodies[0]);
  assert.deepEqual(result.receipts[1],{...result.receipts[0],cached:true});
  check('same original body/key returned exact cached receipt; result read failed closed',bodies.length===2&&!(await page.locator('#protocol-result').textContent()).includes('compiled_plan')&&await page.locator('#protocol-cold-form').isHidden());
  await page.locator('#protocol-completion-retry').click();
- await until(()=>!protocolContext.busy&&protocolContext.run?.result?.compiled_plan);
+ if(source)await until(fp=>!protocolContext.busy&&protocolContext.run?.phase==='source'&&protocolContext.run?.status==='WAITING_APPROVAL'&&protocolContext.run?.result_fingerprint===fp&&!!protocolContext.run?.result?.protocol_result,result.receipts[0].result_fingerprint);
+ else await until(()=>!protocolContext.busy&&protocolContext.run?.result?.compiled_plan);
  check('known accepted read failure recovers by GET only',bodies.length===2);
  const actual=JSON.parse(await page.locator('#protocol-result').textContent());
- assert.deepEqual(actual.protocol_result,info.captured.result);assert.deepEqual(actual.compiled_plan,info.captured.compiled);
- check('exact original compiled plan and source receipt rendered',true);
+ assert.deepEqual(actual.protocol_result,info.captured.result);
+ if(source){
+  assert.equal(Object.hasOwn(actual,'compiled_plan'),false);
+  const state=await page.evaluate(()=>({status:protocolContext.run.status,semantic:protocolContext.run.semantic_status,result_fingerprint:protocolContext.run.result_fingerprint}));
+  assert.deepEqual(state,{status:'WAITING_APPROVAL',semantic:'UNKNOWN',result_fingerprint:result.receipts[0].result_fingerprint});
+  check('exact Source result and original receipts rendered, awaiting independent review',true);
+  check('Source technical completion unlocks neither extraction nor Cold',await page.locator('#protocol-extract').isHidden()&&await page.locator('#protocol-cold-form').isHidden());
+  result.sourceResult=state;
+ }else{
+  assert.deepEqual(actual.compiled_plan,info.captured.compiled);
+  check('exact original compiled plan and source receipt rendered',true);
+ }
  check('completed command has no new completion submit control',await page.locator('#protocol-completion').isHidden());
  await page.locator('#protocol-detail').scrollIntoViewIfNeeded();await shot('completed.png');
  // Hold one genuine detail response, close/return the real workspace, then
@@ -128,7 +163,7 @@ async function run(){
  const count=result.requests.length,returned=page.waitForResponse(response=>response.request()===heldRequest);
  releaseHeld();const [,response]=await wait(Promise.all([delivery,returned]));assert.equal(await wait(response.finished()),null);
  await wait(page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))));
- check('workspace close/return clears content and late detail cannot restore it',await page.locator('#protocol-result').textContent()===''&&await page.locator('#protocol-cold-form').isHidden());
+ check('workspace close/return clears content and late detail cannot restore it',await page.locator('#protocol-result').textContent()===''&&await page.locator('#protocol-cold-form').isHidden()&&(!source||await page.locator('#protocol-extract').isHidden()));
  check('no new command after workspace return',bodies.length===2);
  result.closeReturnRequestOffset=count;
  check('no DOM script errors',result.pageErrors.length===0);
