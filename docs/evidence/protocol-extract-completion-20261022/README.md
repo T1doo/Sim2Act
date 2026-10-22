@@ -12,7 +12,7 @@
 
 反例覆盖错槽、wire、跨 Run、缺 usage、V1/缺 origin、STARTED/UNKNOWN、多请求、错误 phase/bounded、未决操作、原始 namespace、sidecar/双槽不一致、halt、撤权、原期限、取消、暂停、活动租约、错版本/fence；每例独立复制真实已提交夹具，拒绝前后完整表指纹与 sidecar 相同。另在实际完成写点注入故障，以及完成写后撤权/取消/时钟过期，整组回滚。不是 W5 五写组。
 
-原进程以 BaseException 在已持久化 accepted 之后、原完成函数入口中断；新 Store 冷连接没有 runner，测试将 call/reserve/accept 设为立即失败。正常线程均 join，测试进程 exit0；没有重启旧实例、创建其他写入者或停止未知进程。终态进程检查另存 `cleanup.json`。证据 lock 文件保留，不能把文件存在当作锁仍被持有。
+同一 pytest 进程中的原 Worker 调用以 BaseException 在已持久化 accepted 之后、原完成函数入口中断；新 Store 冷连接没有 runner，测试将 call/reserve/accept 设为立即失败。这37项不证明 API/Worker 进程重启或 PostgreSQL 并发。正常线程均 join，测试进程 exit0；没有恢复旧实例、创建其他写入者或停止未知进程。终态进程检查另存 `cleanup.json`。证据 lock 文件保留，不能把文件存在当作锁仍被持有。
 
 ## 开发原件和独审
 
@@ -28,3 +28,5 @@
 Ruff 与 diff 空白检查通过。`mypy-initial.log` 保留3项未改动 `_cold_typed_native_candidate.py:188–189` ModuleSpec/loader诊断，本轮不能报 mypy PASS。唯一既有 Starlette/httpx 测试依赖警告保留，未为消警安装依赖。
 
 原件位于 `/workspace/sim2act-extract-completion-20261022`，各文件哈希见 `originals-manifest.json`；最终复制原件另有本目录 `MANIFEST.json`。不删除失败原件、不补零未知观测、不将此窄恢复视作通用 UNKNOWN、真实源、PG 并发、Win32 锁或产品整体验收。
+
+随后在同一冻结产品源码上完成的[独立进程恢复验证](../protocol-extract-process-recovery-20261022/README.md)另计：原 Worker/API 进程退出后才启动新 API，4 Mock 准备、恢复0 Mock。不把它倒填为本目录37项原来已证明的范围，不合并兼容回归发送数。

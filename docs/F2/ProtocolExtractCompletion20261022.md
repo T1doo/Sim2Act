@@ -14,4 +14,6 @@
 
 最终冻结源码的隔离合成测试 **37 PASS，10.17 秒，8 次 Mock**；原兼容回归 **20 PASS，7.95 秒**。恢复前后业务计划、指纹、原回执和所有非完成账表保持一致，写点故障及提交前撤权/取消/过期均全回滚。实验推进后的实际 Cold 回执 verifier 无发送通过。独审发现并闭合历史阶段误拒；源码限定 ACK，不冒称独审执行测试。
 
+上述37项为同 pytest 进程的新 Store/冷连接。随后不改产品源码，另做[一次独立进程恢复](../evidence/protocol-extract-process-recovery-20261022/README.md)：原 Worker/API 进程 exit0 后，新 API 在同原 SQLite/sidecar 上按原完成命令键完成，准备4 Mock、恢复0 Mock；旧 fence 写前拒绝、同键幂等、原期限及账表保持，两个进程正常退出。仍用显式合成业务时钟，不代表 OS 重启、真实时钟 G0 或 PG 并发。
+
 [完整证据、失败原件、源码冻结与范围](../evidence/protocol-extract-completion-20261022/README.md)。本片未运行真实时钟 G0、P-B Cold2、W5、真实模型、PG、Windows、UI 或远端 CI；不签整体 F2、模型语义或真实账户验收。mypy 仍有未改动 native loader 的 3 项既存诊断，不能称类型检查通过。

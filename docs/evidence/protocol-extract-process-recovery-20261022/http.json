@@ -1,0 +1,1548 @@
+[
+  {
+    "method": "POST",
+    "path": "http://127.0.0.1:55083/api/projects/proj_144a96ff01254ed1add6b2e9d3b0f9fb/protocol/runs/run_ee268db83af7478c8736278657804fb9/complete-extraction",
+    "request": {
+      "expected_version": 1,
+      "expected_fence": 1,
+      "request_key": "process-complete-known"
+    },
+    "status": 200,
+    "response": {
+      "namespace": "protocol-extract-completion.v2",
+      "run_id": "run_ee268db83af7478c8736278657804fb9",
+      "status": "SUCCEEDED",
+      "version": 2,
+      "fence": 2,
+      "plan_fingerprint": "be4de7e8e7044e7a1cb70f5b2c36f27adabb52c7557214f83231ccefc727820f",
+      "provider_requests": 0,
+      "automatic_resend": false,
+      "cached": false
+    }
+  },
+  {
+    "method": "GET",
+    "path": "http://127.0.0.1:55083/api/projects/proj_144a96ff01254ed1add6b2e9d3b0f9fb/protocol/runs/run_ee268db83af7478c8736278657804fb9",
+    "request": null,
+    "status": 200,
+    "response": {
+      "namespace": "protocol_jobs.v1",
+      "semantic_status": "NOT_RUN",
+      "semantic_review": "NOT_RUN",
+      "owner_semantic_acceptance": "PENDING",
+      "run_id": "run_ee268db83af7478c8736278657804fb9",
+      "phase": "extract",
+      "status": "SUCCEEDED",
+      "version": 2,
+      "fence": 2,
+      "result": {
+        "protocol_result": {
+          "kind": "model-protocol.v1",
+          "candidate": {
+            "schema_version": "model-protocol.v1",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "format": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "format"
+              ],
+              "additionalProperties": false
+            },
+            "resources": {
+              "material_0": "res_e52cddc73f5f4ed0b259b0139114ffd1"
+            },
+            "steps": [
+              {
+                "id": "read_0",
+                "kind": "registered_tool",
+                "depends_on": [],
+                "inputs": {
+                  "resource_id": {
+                    "source": "data",
+                    "ref": "material_0",
+                    "field": "resource_id"
+                  }
+                },
+                "tool_ref": "resource.read"
+              },
+              {
+                "id": "interpret",
+                "kind": "language",
+                "depends_on": [
+                  "read_0"
+                ],
+                "inputs": {
+                  "format": {
+                    "source": "input",
+                    "ref": "input",
+                    "field": "format"
+                  },
+                  "material_0": {
+                    "source": "step",
+                    "ref": "read_0",
+                    "field": "content"
+                  }
+                },
+                "instruction": "只依据本包，逐条提取义务、条件、例外与原文行号；判断案例下一步。未写明的事实标UNKNOWN，不执行动作。",
+                "output_schema": {
+                  "type": "object",
+                  "properties": {
+                    "obligations": {
+                      "type": "object",
+                      "properties": {
+                        "submit_form": {
+                          "type": "object",
+                          "properties": {
+                            "actor": {
+                              "type": "string"
+                            },
+                            "action": {
+                              "type": "string"
+                            },
+                            "condition": {
+                              "type": "string"
+                            },
+                            "lines": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer"
+                              },
+                              "maxItems": 16
+                            },
+                            "deadline": {
+                              "type": "object",
+                              "properties": {
+                                "amount": {
+                                  "type": "integer"
+                                },
+                                "unit": {
+                                  "type": "string"
+                                },
+                                "start_event": {
+                                  "type": "string"
+                                },
+                                "absolute_date": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "amount",
+                                "unit",
+                                "start_event",
+                                "absolute_date"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "actor",
+                            "action",
+                            "condition",
+                            "lines",
+                            "deadline"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "submit_proof": {
+                          "type": "object",
+                          "properties": {
+                            "actor": {
+                              "type": "string"
+                            },
+                            "action": {
+                              "type": "string"
+                            },
+                            "condition": {
+                              "type": "string"
+                            },
+                            "lines": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer"
+                              },
+                              "maxItems": 16
+                            },
+                            "deadline": {
+                              "type": "object",
+                              "properties": {
+                                "amount": {
+                                  "type": "integer"
+                                },
+                                "unit": {
+                                  "type": "string"
+                                },
+                                "start_event": {
+                                  "type": "string"
+                                },
+                                "absolute_date": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "amount",
+                                "unit",
+                                "start_event",
+                                "absolute_date"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "actor",
+                            "action",
+                            "condition",
+                            "lines",
+                            "deadline"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "prior_approval": {
+                          "type": "object",
+                          "properties": {
+                            "actor": {
+                              "type": "string"
+                            },
+                            "action": {
+                              "type": "string"
+                            },
+                            "condition": {
+                              "type": "object",
+                              "properties": {
+                                "field": {
+                                  "type": "string"
+                                },
+                                "operator": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "integer"
+                                },
+                                "unit": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "field",
+                                "operator",
+                                "value",
+                                "unit"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "lines": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer"
+                              },
+                              "maxItems": 16
+                            },
+                            "order": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "actor",
+                            "action",
+                            "condition",
+                            "lines",
+                            "order"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "missing_proof_block": {
+                          "type": "object",
+                          "properties": {
+                            "actor": {
+                              "type": "string"
+                            },
+                            "action": {
+                              "type": "string"
+                            },
+                            "condition": {
+                              "type": "string"
+                            },
+                            "lines": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer"
+                              },
+                              "maxItems": 16
+                            },
+                            "release_condition": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "actor",
+                            "action",
+                            "condition",
+                            "lines",
+                            "release_condition"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "unchanged_deadline": {
+                          "type": "object",
+                          "properties": {
+                            "actor": {
+                              "type": "string"
+                            },
+                            "action": {
+                              "type": "string"
+                            },
+                            "condition": {
+                              "type": "string"
+                            },
+                            "lines": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer"
+                              },
+                              "maxItems": 16
+                            },
+                            "deadline": {
+                              "type": "object",
+                              "properties": {
+                                "amount": {
+                                  "type": "integer"
+                                },
+                                "unit": {
+                                  "type": "string"
+                                },
+                                "start_event": {
+                                  "type": "string"
+                                },
+                                "absolute_date": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "amount",
+                                "unit",
+                                "start_event",
+                                "absolute_date"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "no_extension_or_restart": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "actor",
+                            "action",
+                            "condition",
+                            "lines",
+                            "deadline",
+                            "no_extension_or_restart"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "submit_form",
+                        "submit_proof",
+                        "prior_approval",
+                        "missing_proof_block",
+                        "unchanged_deadline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "case": {
+                      "type": "object",
+                      "properties": {
+                        "decision": {
+                          "type": "string"
+                        },
+                        "may_submit_now": {
+                          "type": "boolean"
+                        },
+                        "blocking_rule": {
+                          "type": "string"
+                        },
+                        "required_next_step": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "decision",
+                        "may_submit_now",
+                        "blocking_rule",
+                        "required_next_step"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "absolute_deadline": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "obligations",
+                    "case",
+                    "absolute_deadline"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "obligations": {
+                  "type": "object",
+                  "properties": {
+                    "submit_form": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "submit_proof": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "prior_approval": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "object",
+                          "properties": {
+                            "field": {
+                              "type": "string"
+                            },
+                            "operator": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "field",
+                            "operator",
+                            "value",
+                            "unit"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "order": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "order"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "missing_proof_block": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "release_condition": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "release_condition"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "unchanged_deadline": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "no_extension_or_restart": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline",
+                        "no_extension_or_restart"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "submit_form",
+                    "submit_proof",
+                    "prior_approval",
+                    "missing_proof_block",
+                    "unchanged_deadline"
+                  ],
+                  "additionalProperties": false
+                },
+                "case": {
+                  "type": "object",
+                  "properties": {
+                    "decision": {
+                      "type": "string"
+                    },
+                    "may_submit_now": {
+                      "type": "boolean"
+                    },
+                    "blocking_rule": {
+                      "type": "string"
+                    },
+                    "required_next_step": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "decision",
+                    "may_submit_now",
+                    "blocking_rule",
+                    "required_next_step"
+                  ],
+                  "additionalProperties": false
+                },
+                "absolute_deadline": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "obligations",
+                "case",
+                "absolute_deadline"
+              ],
+              "additionalProperties": false
+            },
+            "outputs": {
+              "obligations": {
+                "source": "step",
+                "ref": "interpret",
+                "field": "obligations"
+              },
+              "case": {
+                "source": "step",
+                "ref": "interpret",
+                "field": "case"
+              },
+              "absolute_deadline": {
+                "source": "step",
+                "ref": "interpret",
+                "field": "absolute_deadline"
+              }
+            }
+          },
+          "candidate_fingerprint": "822909d0e4fb3fe94b9b7f124082d4e7cbf7f919eb281846b260c42d15f45695",
+          "source_proof": {
+            "status": "SUCCEEDED",
+            "semantic_status": "PASS",
+            "evidence_fingerprint": "6f99a6bfd47bb28b6f5b230a9a83e0506a0b1ccd60bccae21473d39d7e0d362d",
+            "goal_fingerprint": "39f63734a07c7e8ab8daf56667a9bcb6e134054fd816cb737365dc62a902f01a",
+            "input_fingerprint": "cab7b1bd8362ec533a9ff5f926dcaed1ac180daba1c576a30e8ef0a1df2c8be6",
+            "output_fingerprint": "9df835e43821135a5a7abc60a905b1d7459dfbb4db7a2ca6dd0d3c4e443a8c9d",
+            "trace_fingerprint": "67593c513ab8c5b8fb09bbb9299e54c00fc0be2c9ef4df08a1fe1c1ca8331d13",
+            "checks": [
+              {
+                "check_id": "frozen-source-readback.v1",
+                "status": "PASS"
+              },
+              {
+                "check_id": "exact-json-semantic.v1",
+                "status": "PASS"
+              }
+            ]
+          },
+          "source_proof_fingerprint": "14c129018a70554f90a2cccf2517277e889aeb56164294bfd08ba4e6b551643f",
+          "candidate_receipt": {
+            "scope_fingerprint": "abb0881aa6b255d4cefba1e69c03980ae420cd83717ed9b2b984ddb5287c8e13",
+            "stage": "extract_a",
+            "slot": 0,
+            "candidate_fingerprint": "822909d0e4fb3fe94b9b7f124082d4e7cbf7f919eb281846b260c42d15f45695",
+            "source_proof_fingerprint": "14c129018a70554f90a2cccf2517277e889aeb56164294bfd08ba4e6b551643f",
+            "receipt_version": "protocol-extract-completion.v2",
+            "origin_fingerprint": "f582d42a44eb686f616981b9a94e49c1c27c9c0dfda263c82baf5cf5136d560b",
+            "safe_response_fingerprint": "23d3094b9e0da4bdca88d4de2fb466b50f34c8d3ba975cb1b7d35c3bed5aa541",
+            "usage": {
+              "status": "known",
+              "tokens": {
+                "prompt_tokens": 10,
+                "completion_tokens": 10,
+                "total_tokens": 20
+              }
+            },
+            "attempt_id": "attempt_865b259b46ea44b5a92a13437c4a2035",
+            "extraction_run_id": "run_ee268db83af7478c8736278657804fb9",
+            "namespace": "protocol-attempt-receipt.v2"
+          },
+          "executable_by_existing_apprun": false,
+          "semantic_status": "NOT_RUN"
+        },
+        "completed_fence": 2,
+        "completed_run_version": 2,
+        "operation_refs": [],
+        "attempt_refs": [
+          "attempt_865b259b46ea44b5a92a13437c4a2035"
+        ],
+        "scope": {
+          "approval_id": "run_ee268db83af7478c8736278657804fb9",
+          "project_id": "proj_144a96ff01254ed1add6b2e9d3b0f9fb",
+          "resource_ids": [
+            "res_e52cddc73f5f4ed0b259b0139114ffd1"
+          ],
+          "tool_refs": [
+            "resource.read"
+          ],
+          "max_requests": 1,
+          "mode": "offline",
+          "model": "intern-s2"
+        },
+        "operation_seals": [],
+        "attempt_seals": [
+          {
+            "attempt_id": "attempt_865b259b46ea44b5a92a13437c4a2035",
+            "safe_response_fingerprint": "23d3094b9e0da4bdca88d4de2fb466b50f34c8d3ba975cb1b7d35c3bed5aa541",
+            "usage": {
+              "status": "known",
+              "tokens": {
+                "prompt_tokens": 10,
+                "completion_tokens": 10,
+                "total_tokens": 20
+              }
+            },
+            "model_identity": {
+              "requested_model": "intern-s2",
+              "raw_returned_model": "intern-s2",
+              "normalized_returned_model": "intern-s2",
+              "normalization_policy_version": "intern-s2-returned-name.v1",
+              "enforced": true,
+              "verdict": "ACCEPTED"
+            },
+            "parameters_fingerprint": "102322491ebcfc64be5877cd0e9736272a767db9de257dbd9e84a1848d784ee2",
+            "request_model": "intern-s2",
+            "response_model": "intern-s2",
+            "mode": "MOCK",
+            "status": "RECEIVED"
+          }
+        ],
+        "compiled_plan": {
+          "kind": "protocol-compiled-plan.v1",
+          "compiler_version": "model-protocol-compiler.v1",
+          "candidate": {
+            "schema_version": "model-protocol.v1",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "format": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "format"
+              ],
+              "additionalProperties": false
+            },
+            "resources": {
+              "material_0": "res_e52cddc73f5f4ed0b259b0139114ffd1"
+            },
+            "steps": [
+              {
+                "id": "read_0",
+                "kind": "registered_tool",
+                "depends_on": [],
+                "inputs": {
+                  "resource_id": {
+                    "source": "data",
+                    "ref": "material_0",
+                    "field": "resource_id"
+                  }
+                },
+                "tool_ref": "resource.read"
+              },
+              {
+                "id": "interpret",
+                "kind": "language",
+                "depends_on": [
+                  "read_0"
+                ],
+                "inputs": {
+                  "format": {
+                    "source": "input",
+                    "ref": "input",
+                    "field": "format"
+                  },
+                  "material_0": {
+                    "source": "step",
+                    "ref": "read_0",
+                    "field": "content"
+                  }
+                },
+                "instruction": "只依据本包，逐条提取义务、条件、例外与原文行号；判断案例下一步。未写明的事实标UNKNOWN，不执行动作。",
+                "output_schema": {
+                  "type": "object",
+                  "properties": {
+                    "obligations": {
+                      "type": "object",
+                      "properties": {
+                        "submit_form": {
+                          "type": "object",
+                          "properties": {
+                            "actor": {
+                              "type": "string"
+                            },
+                            "action": {
+                              "type": "string"
+                            },
+                            "condition": {
+                              "type": "string"
+                            },
+                            "lines": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer"
+                              },
+                              "maxItems": 16
+                            },
+                            "deadline": {
+                              "type": "object",
+                              "properties": {
+                                "amount": {
+                                  "type": "integer"
+                                },
+                                "unit": {
+                                  "type": "string"
+                                },
+                                "start_event": {
+                                  "type": "string"
+                                },
+                                "absolute_date": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "amount",
+                                "unit",
+                                "start_event",
+                                "absolute_date"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "actor",
+                            "action",
+                            "condition",
+                            "lines",
+                            "deadline"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "submit_proof": {
+                          "type": "object",
+                          "properties": {
+                            "actor": {
+                              "type": "string"
+                            },
+                            "action": {
+                              "type": "string"
+                            },
+                            "condition": {
+                              "type": "string"
+                            },
+                            "lines": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer"
+                              },
+                              "maxItems": 16
+                            },
+                            "deadline": {
+                              "type": "object",
+                              "properties": {
+                                "amount": {
+                                  "type": "integer"
+                                },
+                                "unit": {
+                                  "type": "string"
+                                },
+                                "start_event": {
+                                  "type": "string"
+                                },
+                                "absolute_date": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "amount",
+                                "unit",
+                                "start_event",
+                                "absolute_date"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "actor",
+                            "action",
+                            "condition",
+                            "lines",
+                            "deadline"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "prior_approval": {
+                          "type": "object",
+                          "properties": {
+                            "actor": {
+                              "type": "string"
+                            },
+                            "action": {
+                              "type": "string"
+                            },
+                            "condition": {
+                              "type": "object",
+                              "properties": {
+                                "field": {
+                                  "type": "string"
+                                },
+                                "operator": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "integer"
+                                },
+                                "unit": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "field",
+                                "operator",
+                                "value",
+                                "unit"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "lines": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer"
+                              },
+                              "maxItems": 16
+                            },
+                            "order": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "actor",
+                            "action",
+                            "condition",
+                            "lines",
+                            "order"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "missing_proof_block": {
+                          "type": "object",
+                          "properties": {
+                            "actor": {
+                              "type": "string"
+                            },
+                            "action": {
+                              "type": "string"
+                            },
+                            "condition": {
+                              "type": "string"
+                            },
+                            "lines": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer"
+                              },
+                              "maxItems": 16
+                            },
+                            "release_condition": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "actor",
+                            "action",
+                            "condition",
+                            "lines",
+                            "release_condition"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "unchanged_deadline": {
+                          "type": "object",
+                          "properties": {
+                            "actor": {
+                              "type": "string"
+                            },
+                            "action": {
+                              "type": "string"
+                            },
+                            "condition": {
+                              "type": "string"
+                            },
+                            "lines": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer"
+                              },
+                              "maxItems": 16
+                            },
+                            "deadline": {
+                              "type": "object",
+                              "properties": {
+                                "amount": {
+                                  "type": "integer"
+                                },
+                                "unit": {
+                                  "type": "string"
+                                },
+                                "start_event": {
+                                  "type": "string"
+                                },
+                                "absolute_date": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "amount",
+                                "unit",
+                                "start_event",
+                                "absolute_date"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "no_extension_or_restart": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "actor",
+                            "action",
+                            "condition",
+                            "lines",
+                            "deadline",
+                            "no_extension_or_restart"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "submit_form",
+                        "submit_proof",
+                        "prior_approval",
+                        "missing_proof_block",
+                        "unchanged_deadline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "case": {
+                      "type": "object",
+                      "properties": {
+                        "decision": {
+                          "type": "string"
+                        },
+                        "may_submit_now": {
+                          "type": "boolean"
+                        },
+                        "blocking_rule": {
+                          "type": "string"
+                        },
+                        "required_next_step": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "decision",
+                        "may_submit_now",
+                        "blocking_rule",
+                        "required_next_step"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "absolute_deadline": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "obligations",
+                    "case",
+                    "absolute_deadline"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "output_schema": {
+              "type": "object",
+              "properties": {
+                "obligations": {
+                  "type": "object",
+                  "properties": {
+                    "submit_form": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "submit_proof": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "prior_approval": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "object",
+                          "properties": {
+                            "field": {
+                              "type": "string"
+                            },
+                            "operator": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "field",
+                            "operator",
+                            "value",
+                            "unit"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "order": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "order"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "missing_proof_block": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "release_condition": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "release_condition"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "unchanged_deadline": {
+                      "type": "object",
+                      "properties": {
+                        "actor": {
+                          "type": "string"
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "string"
+                        },
+                        "lines": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 16
+                        },
+                        "deadline": {
+                          "type": "object",
+                          "properties": {
+                            "amount": {
+                              "type": "integer"
+                            },
+                            "unit": {
+                              "type": "string"
+                            },
+                            "start_event": {
+                              "type": "string"
+                            },
+                            "absolute_date": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "amount",
+                            "unit",
+                            "start_event",
+                            "absolute_date"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "no_extension_or_restart": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "actor",
+                        "action",
+                        "condition",
+                        "lines",
+                        "deadline",
+                        "no_extension_or_restart"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "submit_form",
+                    "submit_proof",
+                    "prior_approval",
+                    "missing_proof_block",
+                    "unchanged_deadline"
+                  ],
+                  "additionalProperties": false
+                },
+                "case": {
+                  "type": "object",
+                  "properties": {
+                    "decision": {
+                      "type": "string"
+                    },
+                    "may_submit_now": {
+                      "type": "boolean"
+                    },
+                    "blocking_rule": {
+                      "type": "string"
+                    },
+                    "required_next_step": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "decision",
+                    "may_submit_now",
+                    "blocking_rule",
+                    "required_next_step"
+                  ],
+                  "additionalProperties": false
+                },
+                "absolute_deadline": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "obligations",
+                "case",
+                "absolute_deadline"
+              ],
+              "additionalProperties": false
+            },
+            "outputs": {
+              "obligations": {
+                "source": "step",
+                "ref": "interpret",
+                "field": "obligations"
+              },
+              "case": {
+                "source": "step",
+                "ref": "interpret",
+                "field": "case"
+              },
+              "absolute_deadline": {
+                "source": "step",
+                "ref": "interpret",
+                "field": "absolute_deadline"
+              }
+            }
+          },
+          "candidate_fingerprint": "822909d0e4fb3fe94b9b7f124082d4e7cbf7f919eb281846b260c42d15f45695",
+          "source_proof": {
+            "status": "SUCCEEDED",
+            "semantic_status": "PASS",
+            "evidence_fingerprint": "6f99a6bfd47bb28b6f5b230a9a83e0506a0b1ccd60bccae21473d39d7e0d362d",
+            "goal_fingerprint": "39f63734a07c7e8ab8daf56667a9bcb6e134054fd816cb737365dc62a902f01a",
+            "input_fingerprint": "cab7b1bd8362ec533a9ff5f926dcaed1ac180daba1c576a30e8ef0a1df2c8be6",
+            "output_fingerprint": "9df835e43821135a5a7abc60a905b1d7459dfbb4db7a2ca6dd0d3c4e443a8c9d",
+            "trace_fingerprint": "67593c513ab8c5b8fb09bbb9299e54c00fc0be2c9ef4df08a1fe1c1ca8331d13",
+            "checks": [
+              {
+                "check_id": "frozen-source-readback.v1",
+                "status": "PASS"
+              },
+              {
+                "check_id": "exact-json-semantic.v1",
+                "status": "PASS"
+              }
+            ]
+          },
+          "source_proof_fingerprint": "14c129018a70554f90a2cccf2517277e889aeb56164294bfd08ba4e6b551643f",
+          "candidate_receipt": {
+            "scope_fingerprint": "abb0881aa6b255d4cefba1e69c03980ae420cd83717ed9b2b984ddb5287c8e13",
+            "stage": "extract_a",
+            "slot": 0,
+            "candidate_fingerprint": "822909d0e4fb3fe94b9b7f124082d4e7cbf7f919eb281846b260c42d15f45695",
+            "source_proof_fingerprint": "14c129018a70554f90a2cccf2517277e889aeb56164294bfd08ba4e6b551643f",
+            "receipt_version": "protocol-extract-completion.v2",
+            "origin_fingerprint": "f582d42a44eb686f616981b9a94e49c1c27c9c0dfda263c82baf5cf5136d560b",
+            "safe_response_fingerprint": "23d3094b9e0da4bdca88d4de2fb466b50f34c8d3ba975cb1b7d35c3bed5aa541",
+            "usage": {
+              "status": "known",
+              "tokens": {
+                "prompt_tokens": 10,
+                "completion_tokens": 10,
+                "total_tokens": 20
+              }
+            },
+            "attempt_id": "attempt_865b259b46ea44b5a92a13437c4a2035",
+            "extraction_run_id": "run_ee268db83af7478c8736278657804fb9",
+            "namespace": "protocol-attempt-receipt.v2"
+          },
+          "executable_by_existing_apprun": false,
+          "semantic_status": "NOT_RUN",
+          "source_run_id": "run_c1429ba898554fad91fe90c86b81f931",
+          "source_result_fingerprint": "eee1268caa11b3fcc6d86532d6a034ec4370509a84fd966aacab8f4b192bd3a7",
+          "plan_fingerprint": "be4de7e8e7044e7a1cb70f5b2c36f27adabb52c7557214f83231ccefc727820f"
+        }
+      },
+      "result_fingerprint": "92f249da7c26cf99803d6b513b3e338377fac9b17bde225ab24e16300f119489",
+      "error": null,
+      "cached": false,
+      "formal_publication_enabled": false
+    }
+  },
+  {
+    "method": "POST",
+    "path": "http://127.0.0.1:55083/api/projects/proj_144a96ff01254ed1add6b2e9d3b0f9fb/protocol/runs/run_ee268db83af7478c8736278657804fb9/complete-extraction",
+    "request": {
+      "expected_version": 1,
+      "expected_fence": 1,
+      "request_key": "process-complete-known"
+    },
+    "status": 200,
+    "response": {
+      "namespace": "protocol-extract-completion.v2",
+      "run_id": "run_ee268db83af7478c8736278657804fb9",
+      "status": "SUCCEEDED",
+      "version": 2,
+      "fence": 2,
+      "plan_fingerprint": "be4de7e8e7044e7a1cb70f5b2c36f27adabb52c7557214f83231ccefc727820f",
+      "provider_requests": 0,
+      "automatic_resend": false,
+      "cached": true
+    }
+  }
+]
