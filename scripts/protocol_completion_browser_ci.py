@@ -186,14 +186,25 @@ def main():
         env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(site), str(REPO / "src")]))
         output = (root / "driver.log").open("wb")
         node = subprocess.Popen(["node", "scripts/browser-ci/extract-completion.cjs", str(root), sys.executable], cwd=REPO, env=env, stdout=output, stderr=subprocess.STDOUT)
+        node_process = psutil.Process(node.pid)
+        node_process.create_time()  # Bind this process identity once, not by later PID lookup.
 
         def monitor():
             while not monitor_stop.wait(0.1):
+                if node.poll() is not None:
+                    break
                 try:
-                    for child in psutil.Process(node.pid).children(recursive=True):
+                    for child in node_process.children(recursive=True):
+                        try:
+                            created = child.create_time()
+                        except psutil.NoSuchProcess:
+                            continue  # A short-lived child cannot stop the root watcher.
                         with owned_lock:
-                            owned[(child.pid, child.create_time())] = child
+                            owned[(child.pid, created)] = child
                 except psutil.NoSuchProcess:
+                    if node.poll() is None:
+                        result["monitor_error"] = "NODE_IDENTITY_DISAPPEARED_WHILE_HANDLE_LIVE"
+                        (root / "stop").touch()
                     break
                 except BaseException as error:
                     result["monitor_error"] = type(error).__name__
