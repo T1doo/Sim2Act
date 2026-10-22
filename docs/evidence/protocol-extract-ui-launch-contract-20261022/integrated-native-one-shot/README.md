@@ -1,4 +1,4 @@
-# Integrated protected UI window: CI success, runtime review pending
+# Integrated protected UI window: CI and parent-verified runtime PASS; pixels pending
 
 One actual [run39750948446/job119731075616](https://github.com/T1doo/Sim2Act/actions/runs/39750948446/job/119731075616), attempt1, head `8a310311e4f2015bf9d5e3bfb702ee08d6a45be9`. Parent explicitly authorized this one window after limited review of `b186839be101cb3831b817e9f10864e111a92cf1`. No automatic retry, real-model/G0/Cold2/W5 work or permission change.
 
@@ -8,6 +8,14 @@ Original [run](run.json), [jobs](jobs.json), [check](check.json) and [annotation
 
 Unchanged authorized limits:180s work from before setup, shared10s cleanup with Node at most4s inside it,30businessGET/3completionPOST/40staticGET/4screenshots; original2500ms polling and all assertions/security checks, installed protected Edge, zero new model/Worker. Limits are configuration, not measured counters.
 
-**Current evidence boundary:** CI metadata passed. Original result/browser/inventory/launch-contract, outer cleanup receipt and PNGs have not yet reached this workspace. Actual request/model counters, close/return/late-response assertions, cleanup/fixture/dependency deletion wording, runtime loaded source and actual pixel quality are pending. The script's success predicates support a harness-level inference; this archive does not substitute that for independent raw-receipt or visual inspection. `result.json` keeps these fields null. Parent has been asked to transfer existing output from the authorized normal GitHub page or existing local paths. No old denied signed-log download was retried, no alternate download route or second window was used.
+**Initial archive boundary (4fa7e04e):** CI metadata passed, but original runtime output had not reached this workspace. `result.json` and its original manifest preserve that historical pending snapshot; the update below supersedes the listed runtime unknowns only to its stated provenance. No old denied signed-log download was retried, no alternate download route or second window was used.
 
 Read-only independent review checked the one-line trigger diff, equal empty-commit tree, seven source hashes and original metadata/empty-run queries. It did not execute tests, access logs or inspect screenshots. Earlier failed windows, the visual branch8PASS/1FAIL and baseline cold-result timeout remain preserved; this metadata result does not erase or close those broader findings. Final desktop/mobile/focus/layout review still needs its actual pixels and coverage statement.
+
+## Parent's subsequent normal-page runtime verification
+
+The exact received [delegation text](parent-runtime-report.txt) and [structured transcription](parent-verified-runtime.json) preserve the parent review of the original [step output](https://github.com/T1doo/Sim2Act/actions/runs/39750948446/job/119731075616#step:5:25). This is authenticated normal-page verification by the parent, not a local raw-log download or a new run.
+
+Browser PASS:29businessGET/27staticGET/2completionPOST/0blocked/3screenshots, pageErrors empty;14checks include workspace close/return, late response cannot repaint, and no new command. The server's separate businessGET count is28; it must not be summed or substituted for the intercepted browser count. Result exactness/accounting/original deadlines true, model_calls/new_worker/new_source/new_extract all0. API stopped, fixture deleted and within_deadline true; AnyIO/browser/installer alive lists and errors empty, node_exit0. This closes the observed synthetic SQLite/real protected Windows Edge DOM completion and normal cleanup slice; it does not sign G0, a production model/account, PostgreSQL or semantic/owner acceptance.
+
+Runtime inventory hashes, the outer dependency-directory deletion receipt and actual PNG pixels were not included in the transferred text. This task's normal public-page tool returns “Sign in to view logs” and no PNG; it has not retried the denied signed-log route. Pixels therefore remain NOT_REVIEWED here, despite three images being produced. No additional CI is requested or performed merely to obtain them. The cold-page baseline test failure is being investigated separately and remains unclosed by this run.
