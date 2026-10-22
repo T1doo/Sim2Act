@@ -290,7 +290,14 @@ class BudgetedProvider:
         wire_guard = self.wire_guard
         body, chars = self._request_body(messages, tools)
         if request_binding is not None:
-            from .protocol_extract_completion import check_actual_wire
+            from .protocol_extract_completion import VERSION as EXTRACT_V2
+            from .protocol_source_completion import VERSION as SOURCE_V2
+            if request_binding.get("namespace") == EXTRACT_V2:
+                from .protocol_extract_completion import check_actual_wire
+            elif request_binding.get("namespace") == SOURCE_V2:
+                from .protocol_source_completion import check_actual_wire
+            else:
+                raise DomainError("VERSION_CONFLICT", "Unknown request origin namespace")
             check_actual_wire(request_binding, body, self.scope, self.stage)
             request_binding = copy.deepcopy(request_binding)
         # Private JSON copies break aliases to caller-owned input and authorization hooks.

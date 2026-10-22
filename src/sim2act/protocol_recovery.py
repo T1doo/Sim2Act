@@ -303,3 +303,14 @@ def mount(app, store, identity, settings):
                     runs.c.principal_id == user)).scalar() != pid:
                 raise DomainError("PERMISSION_DENIED")
         return complete_extract(store, user, rid, body, settings)
+
+    from .protocol_source_completion import complete_source
+
+    @app.post("/api/projects/{pid}/protocol/runs/{rid}/complete-source")
+    def complete_received_source(pid: str, rid: str, body: CompletionInput, user=user_dependency):
+        with store.tx() as c:
+            store.own_project(c, user, pid)
+            if c.execute(select(runs.c.project_id).where(
+                    runs.c.id == rid, runs.c.principal_id == user)).scalar() != pid:
+                raise DomainError("PERMISSION_DENIED")
+        return complete_source(store, user, rid, body, settings)

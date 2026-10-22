@@ -1121,6 +1121,8 @@ def process_job(worker, run):
             result = protocol.complete_task(
                 payload["goal"], payload["inputs"], payload["resource_ids"]
             )
+            from .protocol_source_completion import persist_ready
+            persist_ready(worker, run, snapshot, runner.provider, result)
         elif phase == "extract":
             if snapshot.get("bounded_check_namespace"):
                 from .conditional_runs import extract_candidate

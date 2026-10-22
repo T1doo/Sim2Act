@@ -34,9 +34,18 @@ async function retry(){return elements.get('protocol-completion-retry').onclick(
 function postCalls(){return calls.filter(c=>c.method==='POST');}
 async function logic(){
  setup();await elements.get('protocol-completion-submit').onclick();check(calls.length===0,'unchecked explicit completion sends nothing');
- for(const changed of [{phase:'source'},{phase:'cold'},{namespace:'bounded-check.v1'},{status:'PAUSED'},{status:'CANCELLED'},{error:{code:'OUTCOME_UNKNOWN'}},{version:true},{fence:false}]){
+ for(const changed of [{phase:'cold'},{namespace:'bounded-check.v1'},{status:'PAUSED'},{status:'CANCELLED'},{error:{code:'OUTCOME_UNKNOWN'}},{version:true},{fence:false}]){
   setup(runData(changed));await start();check(calls.length===0,'unsupported current state cannot submit '+JSON.stringify(changed));
  }
+ setup(runData({phase:'source'}),(url,options)=>({data:options.method==='POST'?{
+  namespace:'protocol-source-completion.v2',run_id:rid,status:'WAITING_APPROVAL',version:3,fence:2,
+  result_fingerprint:fp,provider_requests:0,automatic_resend:false,cached:false
+ } : runData({phase:'source',status:'WAITING_APPROVAL',version:3,fence:2,semantic_status:'UNKNOWN',
+  result_fingerprint:fp,result:{protocol_result:{semantic_status:'UNKNOWN'}}})}));
+ await start();check(entry().state==='accepted'&&postCalls()[0].url.endsWith('/complete-source')&&calls.length===2,'Source completion uses its closed endpoint and remains awaiting review');
+ check(elements.get('protocol-extract').hidden&&elements.get('protocol-cold-form').hidden,'Source technical completion cannot enable extraction or Cold');
+ const sourceBody=entry().body;
+ check(!evaluate(`protocolCompletionReceipt(${JSON.stringify(receipt(sourceBody))},activeRun,protocolCompletionIntents.get(protocolCompletionKey(protocolContext,activeRun)).body,'source')`),'extract receipt cannot satisfy Source completion');
  setup();await start();check(entry().state==='accepted'&&postCalls().length===1&&calls.length===2,'confirmed completion uses existing endpoint then reads same Run');
  check(Object.keys(postCalls()[0].body).sort().join(',')==='expected_fence,expected_version,request_key'&&postCalls()[0].url.endsWith('/complete-extraction'),'completion uploads only closed command fields');
  check(elements.get('protocol-completion').hidden&&!elements.get('protocol-cold-form').hidden,'successful actual controller reveals existing completed-plan route');

@@ -322,6 +322,9 @@ class ProtocolAttemptRunner:
         try:
             from .protocol_extract_completion import bind_request
             origin = bind_request(worker, run, self.snapshot, self.provider, aid, messages, tools)
+            if origin is None:
+                from .protocol_source_completion import bind_request as bind_source_request
+                origin = bind_source_request(worker, run, self.snapshot, self.provider, aid, messages, tools)
             raw = (self.provider.call(messages, tools) if origin is None else
                 self.provider.call(messages, tools, request_binding=origin))
             identity = returned_model_identity(worker.s.model, raw.get("model"), enforced=True)

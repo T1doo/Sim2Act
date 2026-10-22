@@ -84,25 +84,30 @@ function protocolCompletionWorkspaceChanged(){
   }else if(ctx.run)renderProtocolCompletion(ctx);
 }
 function protocolCompletionEligible(run){
-  return run?.namespace==="protocol_jobs.v1"&&run.phase==="extract"&&run.result===null&&
+  return run?.namespace==="protocol_jobs.v1"&&["extract","source"].includes(run.phase)&&run.result===null&&
     ["RUNNING","WAITING_RESOURCE","RECONCILING"].includes(run.status)&&
     run.error?.code!=="OUTCOME_UNKNOWN"&&Number.isSafeInteger(run.version)&&run.version>=1&&
     Number.isSafeInteger(run.fence)&&run.fence>=0&&Number.isSafeInteger(run.version+1)&&Number.isSafeInteger(run.fence+1);
 }
-function protocolCompletionReceipt(value,rid,body){
-  const keys=["namespace","run_id","status","version","fence","plan_fingerprint","provider_requests","automatic_resend","cached"];
+function protocolCompletionReceipt(value,rid,body,phase="extract"){
+  if(!["source","extract"].includes(phase))return false;
+  const source=phase==="source",field=source?"result_fingerprint":"plan_fingerprint";
+  const keys=["namespace","run_id","status","version","fence",field,"provider_requests","automatic_resend","cached"];
   return value!==null&&typeof value==="object"&&!Array.isArray(value)&&
     Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key))&&
-    value.namespace==="protocol-extract-completion.v2"&&value.run_id===rid&&value.status==="SUCCEEDED"&&
+    value.namespace===(source?"protocol-source-completion.v2":"protocol-extract-completion.v2")&&value.run_id===rid&&value.status===(source?"WAITING_APPROVAL":"SUCCEEDED")&&
     Number.isSafeInteger(value.version)&&value.version===body.expected_version+1&&
     Number.isSafeInteger(value.fence)&&value.fence===body.expected_fence+1&&
-    typeof value.plan_fingerprint==="string"&&/^[a-f0-9]{64}$/.test(value.plan_fingerprint)&&
+    typeof value[field]==="string"&&/^[a-f0-9]{64}$/.test(value[field])&&
     value.provider_requests===0&&value.automatic_resend===false&&typeof value.cached==="boolean";
 }
 function protocolCompletionReadMatches(run,entry){
   const receipt=entry.receipt;
-  return !!receipt&&run?.namespace==="protocol_jobs.v1"&&run.phase==="extract"&&
-    run.run_id===entry.rid&&run.status==="SUCCEEDED"&&run.version===receipt.version&&run.fence===receipt.fence&&
+  if(!receipt||run?.namespace!=="protocol_jobs.v1"||run.run_id!==entry.rid||run.fence!==receipt.fence)return false;
+  if(entry.phase==="source")return run.phase==="source"&&run.result_fingerprint===receipt.result_fingerprint&&
+    ((run.status==="WAITING_APPROVAL"&&run.version===receipt.version&&run.semantic_status==="UNKNOWN")||
+     (run.status==="SUCCEEDED"&&run.version===receipt.version+1&&run.semantic_status==="PASS"&&run.semantic_review==="APPROVED"));
+  return run.phase==="extract"&&run.status==="SUCCEEDED"&&run.version===receipt.version&&
     run.result?.compiled_plan?.plan_fingerprint===receipt.plan_fingerprint;
 }
 function renderProtocolCompletion(ctx){
@@ -128,7 +133,7 @@ async function readProtocolCompletion(ctx,entry,current){
     const run=await protocolRequest(ctx,`/api/projects/${ctx.project}/protocol/runs/${entry.rid}`);
     if(!protocolCompletionReadMatches(run,entry))throw Error("完成成果与回执不匹配");
     if(!current()||selection!==ctx.selection)return;
-    entry.state="accepted";entry.message="已完成原提取；没有新增模型请求。语义验收和发布状态仍按原成果显示。";
+    entry.state="accepted";entry.message=entry.phase==="source"?"已结算原来源任务；没有新增模型请求。技术完成后仍须独立审核；当前状态按原成果显示。":"已完成原提取；没有新增模型请求。语义验收和发布状态仍按原成果显示。";
     ctx.run=run;renderProtocolRun(ctx);
   }catch(error){
     entry.state="accepted-read-error";entry.message="完成回执已确认，成果读取未通过；只能重新读取原成果，不再提交完成命令。";
@@ -150,7 +155,7 @@ async function completeProtocolExtraction(retry=false){
   }else{
     if(!protocolCompletionEligible(run)||!$("protocol-completion-confirm").checked||
         ["sending","unknown","accepted-read-error","accepted"].includes(entry?.state))return;
-    entry={rid:run.run_id,body:Object.freeze({expected_version:run.version,expected_fence:run.fence,request_key:crypto.randomUUID()}),state:"new",uncertain:false};
+    entry={rid:run.run_id,phase:run.phase,body:Object.freeze({expected_version:run.version,expected_fence:run.fence,request_key:crypto.randomUUID()}),state:"new",uncertain:false};
     protocolCompletionIntents.set(key,entry);
   }
   const intent=ctx.intent,workspace=workspaceSelectionGeneration,current=()=>protocolCurrent(ctx)&&ctx.intent===intent&&workspace===workspaceSelectionGeneration&&!$("projects").hidden&&activeRun===entry.rid&&ctx.run?.run_id===entry.rid;
@@ -159,10 +164,11 @@ async function completeProtocolExtraction(retry=false){
     if(entry.state==="accepted-read-error"){
       renderProtocolCompletion(ctx);await readProtocolCompletion(ctx,entry,current);return;
     }
-    entry.state="sending";entry.message="正在核对并尝试结算原提取；没有发起模型请求。";renderProtocolCompletion(ctx);
+    entry.state="sending";entry.message="正在核对并尝试结算原任务；没有发起模型请求。";renderProtocolCompletion(ctx);
     try{
-      const receipt=await protocolRequest(ctx,`/api/projects/${ctx.project}/protocol/runs/${entry.rid}/complete-extraction`,"POST",entry.body);
-      if(!protocolCompletionReceipt(receipt,entry.rid,entry.body))throw Error("完成回执未通过核对");
+      const endpoint=entry.phase==="source"?"complete-source":"complete-extraction";
+      const receipt=await protocolRequest(ctx,`/api/projects/${ctx.project}/protocol/runs/${entry.rid}/${endpoint}`,"POST",entry.body);
+      if(!protocolCompletionReceipt(receipt,entry.rid,entry.body,entry.phase))throw Error("完成回执未通过核对");
       entry.receipt=receipt;entry.state="accepted-read-error";entry.message="完成回执已确认，正在读取原成果。";
     }catch(error){
       const rejected=!entry.uncertain&&Number.isInteger(error.httpStatus)&&error.httpStatus>=400&&error.httpStatus<500&&![408,425,429].includes(error.httpStatus);
