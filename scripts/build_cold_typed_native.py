@@ -18,6 +18,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output-dir', required=True, type=Path)
     parser.add_argument('--sanitize-address', action='store_true')
+    parser.add_argument('--component', choices=('typed', 'row'), default='typed')
     args = parser.parse_args()
     if (sys.implementation.name != 'cpython' or sys.version !=
             '3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]'
@@ -27,10 +28,11 @@ def main():
     include = Path(sysconfig.get_path('include'))
     if compiler is None or not (include / 'Python.h').is_file() or not (include / 'pyconfig.h').is_file():
         raise SystemExit('Missing installed cc, Python.h or pyconfig.h; nothing installed')
-    source = Path(__file__).resolve().parents[1] / 'src/sim2act/_cold_typed_native_impl.c'
+    stem = '_cold_typed_native_impl' if args.component == 'typed' else '_cold_row_native_impl'
+    source = Path(__file__).resolve().parents[1] / ('src/sim2act/' + stem + '.c')
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    target = output_dir / ('_cold_typed_native_impl' + sysconfig.get_config_var('EXT_SUFFIX'))
+    target = output_dir / (stem + sysconfig.get_config_var('EXT_SUFFIX'))
     source_sha = hashlib.sha256(source.read_bytes()).hexdigest()
     command = [compiler, '-shared', '-fPIC', '-O2', '-Wall', '-Wextra', '-Werror',
         '-DSIM2ACT_VISITOR_SOURCE_SHA="' + source_sha + '"',
