@@ -75,7 +75,8 @@ jobs:
       github.run_attempt == 1 &&
       (contains(github.event.head_commit.message, '[source-review-ui-once-20261022]') ||
        contains(github.event.head_commit.message, '[review-readback-ui-once-20261022]') ||
-       contains(github.event.head_commit.message, '[completion-readback-ui-once-20261022]'))
+       contains(github.event.head_commit.message, '[completion-readback-ui-once-20261022]') ||
+       contains(github.event.head_commit.message, '[workspace-visual-once-20261022]'))
     runs-on: windows-2025
     timeout-minutes: 4
     defaults:
@@ -114,6 +115,8 @@ jobs:
             /scripts/browser-ci/package.json
             /scripts/browser-ci/package-lock.json
             /scripts/browser-ci/extract-completion.cjs
+            /scripts/browser-ci/workspace-visual.cjs
+            /docs/evidence/workspace-refinement-native-20261022/before/
             /docs/evidence/protocol-cold-review-http-20261022/fixture.json
             /docs/evidence/protocol-cold-review-http-20261022/MANIFEST.json
             /docs/evidence/protocol-cold-review-http-20261022/runtime/after.sqlite.gz
@@ -138,8 +141,10 @@ jobs:
       - name: Explicit sealed review action in protected installed Edge
         timeout-minutes: 4
         run: |
+          $WorkspaceVisual = '${{ contains(github.event.head_commit.message, '[workspace-visual-once-20261022]') }}' -eq 'true'
           $Readback = '${{ contains(github.event.head_commit.message, '[review-readback-ui-once-20261022]') }}' -eq 'true'
           $CompletionReadback = '${{ contains(github.event.head_commit.message, '[completion-readback-ui-once-20261022]') }}' -eq 'true'
-          if ($CompletionReadback) { ./scripts/WindowsExtractCompletionUI.ps1 -CompletionReadback }
+          if ($WorkspaceVisual) { ./scripts/WindowsExtractCompletionUI.ps1 -WorkspaceVisual }
+          elseif ($CompletionReadback) { ./scripts/WindowsExtractCompletionUI.ps1 -CompletionReadback }
           elseif ($Readback) { ./scripts/WindowsExtractCompletionUI.ps1 -ReviewReadback }
           else { ./scripts/WindowsExtractCompletionUI.ps1 -SourceReview }

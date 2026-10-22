@@ -34,7 +34,7 @@ def write(root, name, value):
 def collect(root):
     outputs = {}
     total = 0
-    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "read-failed.png", "cold.png", "source-failed.png", "source-refreshed.png", "extract-failed.png", "extract-refreshed.png", "store-content-hashes.json", "failure.png"):
+    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "read-failed.png", "cold.png", "source-failed.png", "source-refreshed.png", "extract-failed.png", "extract-refreshed.png", "store-content-hashes.json", "failure.png", "before-projects-wide.png", "before-projects-narrow.png", "after-projects-wide.png", "after-projects-narrow.png", "after-apps-wide.png", "after-apps-narrow.png", "after-resources-wide.png", "after-resources-narrow.png", "after-source-receipt-wide.png", "after-source-error-narrow.png"):
         file = root / name
         if not file.exists():
             continue
@@ -45,8 +45,8 @@ def collect(root):
     return outputs
 
 
-def emit(outputs, phase="extract", review=False, readback=False, completion_readback=False):
-    prefix = "SIM2ACT_COMPLETION_READBACK_UI" if completion_readback else "SIM2ACT_REVIEW_READBACK_UI" if readback else "SIM2ACT_SOURCE_REVIEW_UI" if review else "SIM2ACT_SOURCE_UI" if phase == "source" else "SIM2ACT_EXTRACT_UI"
+def emit(outputs, phase="extract", review=False, readback=False, completion_readback=False, workspace_visual=False):
+    prefix = "SIM2ACT_WORKSPACE_VISUAL_UI" if workspace_visual else "SIM2ACT_COMPLETION_READBACK_UI" if completion_readback else "SIM2ACT_REVIEW_READBACK_UI" if readback else "SIM2ACT_SOURCE_REVIEW_UI" if review else "SIM2ACT_SOURCE_UI" if phase == "source" else "SIM2ACT_EXTRACT_UI"
     for name, data in outputs.items():
         encoded = base64.b64encode(data).decode()
         print(prefix + "_FILE " + json.dumps(dict(name=name, bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), chunks=(len(encoded) + 3999) // 4000)))
@@ -55,7 +55,7 @@ def emit(outputs, phase="extract", review=False, readback=False, completion_read
     sys.stdout.flush()
 
 
-def launch_paths(root, deadline, phase="extract", review=False, readback=False, completion_readback=False):
+def launch_paths(root, deadline, phase="extract", review=False, readback=False, completion_readback=False, workspace_visual=False):
     if review and phase != "source":
         raise ValueError("Only sealed Source supports registered review UI")
     evidence = evidence_for(phase)
@@ -107,6 +107,8 @@ def launch_paths(root, deadline, phase="extract", review=False, readback=False, 
         required += required_files()
     else:
         required += [str((evidence / name).relative_to(REPO)) for name in ("original.json", "after.sqlite.gz" if review else "before.sqlite.gz", "original-received-sidecar.json")]
+    if workspace_visual:
+        required += ["scripts/browser-ci/workspace-visual.cjs", "docs/evidence/workspace-refinement-native-20261022/before/index.html", "docs/evidence/workspace-refinement-native-20261022/before/app.css"]
     required += [f"docs/evidence/protocol-store-loop-20261006/evaluation/{name}.json" for name in ("a-source", "a-cold", "b-source", "b-cold")]
     for name in required:
         file(name, REPO / name)
@@ -127,12 +129,13 @@ def join_api_threads(thread, deadline, attempt):
 
 
 def main():
-    assert sys.argv[1:] in ([], ["--source"], ["--source-review"], ["--review-readback"], ["--completion-readback"]), "Unknown phase arguments; no fallback"
+    assert sys.argv[1:] in ([], ["--source"], ["--source-review"], ["--review-readback"], ["--completion-readback"], ["--workspace-visual"]), "Unknown phase arguments; no fallback"
     phase = "source" if sys.argv[1:] else "extract"
     review = sys.argv[1:] == ["--source-review"]
-    completion_readback = sys.argv[1:] == ["--completion-readback"]
+    workspace_visual = sys.argv[1:] == ["--workspace-visual"]
+    completion_readback = workspace_visual or sys.argv[1:] == ["--completion-readback"]
     readback = completion_readback or sys.argv[1:] == ["--review-readback"]
-    action = "completion-readback" if completion_readback else "review-readback" if readback else "review" if review else "completion"
+    action = "workspace-visual" if workspace_visual else "completion-readback" if completion_readback else "review-readback" if readback else "review" if review else "completion"
     get_limit = 100 if completion_readback else 60 if readback else 30
     static_limit = 120 if completion_readback else 60 if readback else 40
     evidence = evidence_for(phase)
@@ -143,7 +146,7 @@ def main():
     until = time.monotonic() + (absolute - REAL_TIME())
     root = Path(os.environ["RUNNER_TEMP"]) / (f"sim2act-{action if readback else phase + ('-review' if review else '')}-ui-" + os.environ["GITHUB_RUN_ID"] + "-1")
     root.mkdir()  # New window only; never reuse a consumed directory.
-    result = dict(status="UNKNOWN", phase=phase, action=action, scope="SYNTHETIC SQLite / real Windows Edge DOM; not G0 or production source", limits=dict(work_seconds=180, cleanup_seconds=10, business_get=get_limit, static_get=static_limit, screenshots=4, **{"business_post" if readback else "review_post" if review else "completion_post": 0 if readback else 3}), model_calls=0, new_worker=0, new_source=0, new_extract=0)
+    result = dict(status="UNKNOWN", phase=phase, action=action, scope="SYNTHETIC SQLite / real Windows Edge DOM; not G0 or production source", limits=dict(work_seconds=180, cleanup_seconds=10, business_get=get_limit, static_get=static_limit, screenshots=10 if workspace_visual else 4, **{"business_post" if readback else "review_post" if review else "completion_post": 0 if readback else 3}), model_calls=0, new_worker=0, new_source=0, new_extract=0)
     if readback:
         result["phases"] = ["source", "extract"] if completion_readback else ["source", "cold"]
     node = server = thread = store = counts = None
@@ -184,7 +187,7 @@ def main():
 
     try:
         remaining()
-        paths = launch_paths(root, until, phase, review, readback, completion_readback)
+        paths = launch_paths(root, until, phase, review, readback, completion_readback, workspace_visual)
         remaining()
         # Existing project lock/SDK/license, official registries, no lifecycle
         # scripts, new SDK, browser installation, Actions cache or artifact.
@@ -330,6 +333,9 @@ def main():
                 time.sleep(0.01)
         commit = subprocess.check_output([paths["git"], "rev-parse", "HEAD"], cwd=REPO, timeout=remaining(), text=True).strip()
         hashes = {name: hashlib.sha256((REPO / name).read_bytes()).hexdigest() for name in ("src/sim2act/web/app.js", "src/sim2act/web/app.css", "src/sim2act/web/protocol.js", "src/sim2act/web/index.html", "scripts/protocol_completion_browser_ci.py", "scripts/browser-ci/extract-completion.cjs", "scripts/browser-ci/package-lock.json", "scripts/OwnedBrowserSetup.ps1", "scripts/windows_browser_ci.py", "scripts/WindowsExtractCompletionUI.ps1", ".github/workflows/windows-native-mock.yml", "src/sim2act/protocol_jobs.py", "src/sim2act/protocol_reviews.py", *(["scripts/protocol_completion_readback_fixture.py", "src/sim2act/protocol_completion_readback.py", "src/sim2act/protocol_recovery.py", "src/sim2act/protocol_source_completion.py", "src/sim2act/protocol_extract_completion.py"] if completion_readback else ["scripts/protocol_review_readback_fixture.py"] if readback else []))}
+        if workspace_visual:
+            for name in ("scripts/browser-ci/workspace-visual.cjs", "docs/evidence/workspace-refinement-native-20261022/before/index.html", "docs/evidence/workspace-refinement-native-20261022/before/app.css"):
+                hashes[name] = hashlib.sha256((REPO / name).read_bytes()).hexdigest()
         write(root, "inventory.json", dict(commit=commit, source_sha256=hashes, source_lf_sha256={name: hashlib.sha256((REPO / name).read_bytes().replace(b"\r\n", b"\n")).hexdigest() for name in hashes}, synthetic_clock=business_at, browser_install=False, added_sdk=False))
         info = dict(phase=phase, action=action, base=f"http://127.0.0.1:{port}", project=original["project"], run=original["run"], captured=original["captured"], until_ms=absolute * 1000,
                     expected_version=before_run["version"], expected_fence=before_run["fence"])
@@ -388,14 +394,18 @@ def main():
             output.close()
         assert node.returncode == 0, "Native DOM driver failed; no rerun"
         browser = json.loads((root / "browser.json").read_text(encoding="utf-8"))
-        assert browser["status"] == "PASS" and browser["screenshots"] <= 4
+        assert browser["status"] == "PASS" and browser["screenshots"] <= (10 if workspace_visual else 4)
         assert counts["blocked"] == 0 and not forbidden_calls and "monitor_error" not in result
         after = snapshot()
         if completion_readback:
             assert after == before and counts["business_post"] == browser["counts"]["business_post"] == 0
             assert fingerprint(cases([store, extra_store], [settings, extra_settings], originals)) == fingerprint(original_cases)
-            assert fingerprint(browser["located"]) == fingerprint([original_cases[0]["locator"]]*2 + [original_cases[1]["locator"]]*2)
-            assert all(x["hard_refresh"] and x["cold_page"] for x in browser["phase_results"])
+            if workspace_visual:
+                assert fingerprint(browser["located"]) == fingerprint([original_cases[0]["locator"]]*2)
+                assert len(browser["visual"]["layouts"]) == 14 and browser["screenshots"] == 10
+            else:
+                assert fingerprint(browser["located"]) == fingerprint([original_cases[0]["locator"]]*2 + [original_cases[1]["locator"]]*2)
+                assert all(x["hard_refresh"] and x["cold_page"] for x in browser["phase_results"])
             write(root, "store-content-hashes.json", dict(before=before, after=after, sql_verbs=sql_verbs))
             result["sql_verbs"] = dict(sql_verbs)
             with store.engine.connect() as c:
@@ -558,7 +568,7 @@ def main():
             result["status"] = "UNKNOWN"
         outputs["result.json"] = json.dumps(result, ensure_ascii=False, indent=2).encode()
         attempt("write_final_result", lambda: write(root, "result.json", result))
-        attempt("emit_evidence", lambda: emit(outputs, phase, review, readback, completion_readback))
+        attempt("emit_evidence", lambda: emit(outputs, phase, review, readback, completion_readback, workspace_visual))
     return exit_code if result["status"] == "PASS" else 1
 
 

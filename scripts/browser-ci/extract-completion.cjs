@@ -21,7 +21,9 @@ const {chromium}=require('playwright-core');
 const root=process.argv[2],python=process.argv[3];
 const info=JSON.parse(fs.readFileSync(path.join(root,'info.json'),'utf8'));
 assert.ok(['source','extract'].includes(info.phase),'Unknown explicit completion phase');
-const source=info.phase==='source',review=info.action==='review',completionReadback=info.action==='completion-readback',readback=completionReadback||info.action==='review-readback';
+const workspaceVisual=info.action==='workspace-visual';
+const visual=workspaceVisual?require('./workspace-visual.cjs'):null;let beforeAssets=workspaceVisual;
+const source=info.phase==='source',review=info.action==='review',completionReadback=workspaceVisual||info.action==='completion-readback',readback=completionReadback||info.action==='review-readback';
 assert.ok(info.action==='completion'||review||readback,'Unknown explicit action');
 assert.ok(!review||source,'Review fixture only supports sealed Source');
 const control=review||readback?'protocol-review':'protocol-completion',postKind=readback?'business_post':review?'review_post':'completion_post';
@@ -50,7 +52,7 @@ function check(name,condition){assert.ok(condition,name);result.checks.push(name
 function write(){fs.writeFileSync(path.join(root,'browser.json'),JSON.stringify(result,null,2));}
 function failWindow(error){cancelled=true;cancellation.abort(error);fail(error);}
 async function cleanupWait(promise,until){let clock;try{return await Promise.race([promise,new Promise((_,reject)=>{clock=setTimeout(()=>reject(Error('Shared cleanup deadline')),Math.max(1,until-Date.now()));})]);}finally{clearTimeout(clock);}}
-async function shot(name){assert.ok(result.screenshots<4);result.screenshots++;await page.screenshot({path:path.join(root,name),fullPage:false,timeout:3000});const data=fs.readFileSync(path.join(root,name));result.screenshotFiles.push({name,bytes:data.length,sha256:require('node:crypto').createHash('sha256').update(data).digest('hex'),visualReview:'PENDING_PIXEL_REVIEW'});}
+async function shot(name){assert.ok(result.screenshots<(workspaceVisual?10:4));result.screenshots++;await page.screenshot({path:path.join(root,name),fullPage:false,timeout:3000});const data=fs.readFileSync(path.join(root,name));result.screenshotFiles.push({name,bytes:data.length,sha256:require('node:crypto').createHash('sha256').update(data).digest('hex'),visualReview:'PENDING_PIXEL_REVIEW'});}
 async function until(fn,arg){await page.waitForFunction(fn,arg,{timeout:8000});}
 function row(id){return page.locator('#runs > .row').filter({hasText:id.slice(0,16)}).getByRole('button',{name:'查看任务',exact:true});}
 async function choose(id){await row(id).click();await until(id=>protocolContext?.run?.run_id===id&&document.getElementById('protocol-run-id').textContent===id,id);}
@@ -218,6 +220,7 @@ async function run(){
   if(!allowed||cancelled||Date.now()>=info.until_ms){result.counts.blocked++;result.rejectedRequest??={method,path:url.pathname,kind,counts:{...result.counts},cancelled,at_ms:Date.now(),until_ms:info.until_ms};await route.abort();throw Error('Business/request/time budget stop; no retry');}
   const record={method,origin:url.origin,path:url.pathname+url.search,kind,at_ms:Date.now()};result.requests.push(record);requestRecords.set(request,record);
   let finish;requestLifetimes.set(record,{done:new Promise(resolve=>finish=resolve),finish:()=>finish()});
+  if(workspaceVisual&&beforeAssets&&method==='GET'&&!business){const asset=visual.baselineAsset(url.pathname);if(asset){record.baseline_asset=true;await route.fulfill(asset);return;}}
   if(readback&&url.pathname===`/api/projects/${info.project}/protocol/runs/${info.run}`&&readbackHoldDetails){
    record.test_hold='detail request paused before server only for failure capture';
    let release;const delayed=new Promise(resolve=>release=resolve);readbackDetailReleases.add(release);
@@ -281,6 +284,7 @@ async function run(){
  await page.locator('#token').fill('secret test token');
  await page.locator('#connect').click();await page.locator('#login').waitFor({state:'hidden'});
  check('original project selected from real authenticated UI',await page.locator('#project-select').inputValue()===info.project);
+ if(workspaceVisual){await visual.runWorkspaceVisual({page,info,result,check,shot,until,choose,audit,setBaseline:value=>{beforeAssets=value;},setFailLocator:value=>{completionFailLocator=value;}});return;}
  if(completionReadback){await runCompletionReadback();return;}
  if(readback){await runReadback();return;}
  await choose(info.run);
@@ -353,7 +357,7 @@ async function run(){
  });
  const work=run();
  try{await Promise.race([work,budget]);}
- catch(error){result.status='FAIL';result.error=error.stack;console.error(error.stack);if(page&&!page.isClosed()&&result.screenshots<4&&Date.now()<info.until_ms)try{await shot('failure.png');}catch{};}
+ catch(error){result.status='FAIL';result.error=error.stack;console.error(error.stack);if(page&&!page.isClosed()&&result.screenshots<(workspaceVisual?10:4)&&Date.now()<info.until_ms)try{await shot('failure.png');}catch{};}
  finally{
   clearTimeout(timer);clearInterval(watcher);cancelled=true;cancellation.abort(Error('Owned window cleanup'));if(releaseHeld)releaseHeld();releaseReadbackDetails();
   // One shared ten seconds, not a new allowance for each process. Node uses

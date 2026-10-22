@@ -1,11 +1,11 @@
 # Same official Windows/installed Edge route. This supervisor holds the exact
 # created Python process handle throughout setup, browser work and cleanup.
-param([switch]$DeleteOnly, [switch]$Source, [switch]$SourceReview, [switch]$ReviewReadback, [switch]$CompletionReadback)
+param([switch]$DeleteOnly, [switch]$Source, [switch]$SourceReview, [switch]$ReviewReadback, [switch]$CompletionReadback, [switch]$WorkspaceVisual)
 $ErrorActionPreference = 'Stop'
 if (-not $IsWindows -or $env:GITHUB_ACTIONS -ne 'true') { throw 'Actual Windows runner required' }
 $Until = [double]$env:SIM2ACT_UI_UNTIL
-if (([int][bool]$Source + [int][bool]$SourceReview + [int][bool]$ReviewReadback + [int][bool]$CompletionReadback) -gt 1) { throw 'Conflicting explicit modes' }
-$Phase = if ($CompletionReadback) { "completion-readback" } elseif ($ReviewReadback) { "review-readback" } elseif ($SourceReview) { "source-review" } elseif ($Source) { "source" } else { "extract" }
+if (([int][bool]$Source + [int][bool]$SourceReview + [int][bool]$ReviewReadback + [int][bool]$CompletionReadback + [int][bool]$WorkspaceVisual) -gt 1) { throw 'Conflicting explicit modes' }
+$Phase = if ($WorkspaceVisual) { "workspace-visual" } elseif ($CompletionReadback) { "completion-readback" } elseif ($ReviewReadback) { "review-readback" } elseif ($SourceReview) { "source-review" } elseif ($Source) { "source" } else { "extract" }
 $Root = Join-Path $env:RUNNER_TEMP "sim2act-${Phase}-ui-${env:GITHUB_RUN_ID}-1"
 $RepoRoot = Split-Path $PSScriptRoot -Parent
 if ($DeleteOnly) {
@@ -31,7 +31,7 @@ $Process.StartInfo.FileName = [IO.Path]::GetFullPath($Python)
 $Process.StartInfo.UseShellExecute = $false
 $Process.StartInfo.WorkingDirectory = $RepoRoot
 $Process.StartInfo.ArgumentList.Add((Join-Path $PSScriptRoot 'protocol_completion_browser_ci.py'))
-if ($CompletionReadback) { $Process.StartInfo.ArgumentList.Add('--completion-readback') } elseif ($ReviewReadback) { $Process.StartInfo.ArgumentList.Add('--review-readback') } elseif ($SourceReview) { $Process.StartInfo.ArgumentList.Add('--source-review') } elseif ($Source) { $Process.StartInfo.ArgumentList.Add('--source') }
+if ($WorkspaceVisual) { $Process.StartInfo.ArgumentList.Add('--workspace-visual') } elseif ($CompletionReadback) { $Process.StartInfo.ArgumentList.Add('--completion-readback') } elseif ($ReviewReadback) { $Process.StartInfo.ArgumentList.Add('--review-readback') } elseif ($SourceReview) { $Process.StartInfo.ArgumentList.Add('--source-review') } elseif ($Source) { $Process.StartInfo.ArgumentList.Add('--source') }
 $Receipt = [ordered]@{started=$false; timed_out=$false; forced_tree_stop=$false; process_exited=$false; exit_code=$null}
 try {
     $Remaining = $Until - [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
@@ -81,7 +81,7 @@ try {
                 $Delete.StartInfo.UseShellExecute=$false
                 $Delete.StartInfo.WorkingDirectory=$RepoRoot
                 foreach ($Arg in @('-NoProfile','-NonInteractive','-File',$PSCommandPath,'-DeleteOnly')) { $Delete.StartInfo.ArgumentList.Add($Arg) }
-                if ($CompletionReadback) { $Delete.StartInfo.ArgumentList.Add('-CompletionReadback') } elseif ($ReviewReadback) { $Delete.StartInfo.ArgumentList.Add('-ReviewReadback') } elseif ($SourceReview) { $Delete.StartInfo.ArgumentList.Add('-SourceReview') } elseif ($Source) { $Delete.StartInfo.ArgumentList.Add('-Source') }
+                if ($WorkspaceVisual) { $Delete.StartInfo.ArgumentList.Add('-WorkspaceVisual') } elseif ($CompletionReadback) { $Delete.StartInfo.ArgumentList.Add('-CompletionReadback') } elseif ($ReviewReadback) { $Delete.StartInfo.ArgumentList.Add('-ReviewReadback') } elseif ($SourceReview) { $Delete.StartInfo.ArgumentList.Add('-SourceReview') } elseif ($Source) { $Delete.StartInfo.ArgumentList.Add('-Source') }
                 if (-not $Delete.Start()) { throw 'Owned cleanup did not start' }
                 if (-not $Delete.WaitForExit([int][Math]::Max(0,$Remaining-1000))) {
                     $Delete.Kill($true)
