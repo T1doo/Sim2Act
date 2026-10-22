@@ -18,7 +18,13 @@ $Signature = Get-AuthenticodeSignature -LiteralPath $Edge
 if ($Signature.Status -ne 'Valid' -or $Signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation') { throw 'Installed Edge signature rejected' }
 @{ edge_version=(Get-Item $Edge).VersionInfo.ProductVersion; signature=[string]$Signature.Status; signer=$Signature.SignerCertificate.Subject; install_browser=$false } | ConvertTo-Json -Compress | Write-Output
 $Process = [System.Diagnostics.Process]::new()
-$Process.StartInfo.FileName = (Get-Command python -CommandType Application).Source
+# setup-python supplies one exact toolcache root. PATH lookup can return both
+# that interpreter and a WindowsApps execution alias; never concatenate them
+# or try an alternate executable when this authoritative path is unavailable.
+if ([string]::IsNullOrWhiteSpace($env:pythonLocation) -or $env:pythonLocation -match '[\r\n]') { throw 'Selected Python root missing or ambiguous' }
+$Python = Join-Path $env:pythonLocation 'python.exe'
+if (-not [IO.Path]::IsPathFullyQualified($Python) -or -not (Test-Path -LiteralPath $Python -PathType Leaf)) { throw 'Exact selected Python executable unavailable; no PATH fallback' }
+$Process.StartInfo.FileName = [IO.Path]::GetFullPath($Python)
 $Process.StartInfo.UseShellExecute = $false
 $Process.StartInfo.ArgumentList.Add('scripts/protocol_completion_browser_ci.py')
 $Receipt = [ordered]@{started=$false; timed_out=$false; forced_tree_stop=$false; process_exited=$false; exit_code=$null}

@@ -15,3 +15,5 @@
 本地先有一条闭包初验，随后对最终harness收紧strict输出和禁写bytecode；共两次隔离ASGI调用（各15业务GET/1完成POST/27静态GET），合计2次完成POST、30业务GET，0真实HTTP/socket、0Mock/模型/Worker。未重跑恢复37/20或任何G0前缀。初验原件留在 `/workspace/sim2act-ui-sparse-20261022`；最终原件 `/workspace/sim2act-ui-sparse-strict-20261022`，本目录 `checkout.json/result.json/probe.log/launch.log/postcheck.json` 为最终归档，选中源码在ASGI结束后再次逐件核字节相同。`opened`记录包括解释器尝试不存在的pycache路径，不能当作成功读取次数。
 
 此结果只证明冻结候选的Linux离线运行依赖及语义路径；不证明Windows/.NET、已安装Edge/sandbox、真实DOM、网络速度、生产账户、G0/Cold2/W5或真实模型。独审通过前不启动新CI。新窗口与上次失败原件分开，新run目录，失败保全且不自动重试。
+
+后续授权的唯一新CI已[完整归档](native-one-shot/README.md)：同60秒上限下稀疏checkout约7秒success，Python设置/Edge签名检查通过；实际Python进程启动前因多条PATH结果拼接失败，原生UI仍NOT_RUN，0业务/截图/模型。已独审最小精确解释器路径修复，但修复仅静态，未重开CI。本文 `runtime-manifest.json` 保持原7085/ba3候选事实绑定，新的PS源码hash和未验边界独立记于 `native-one-shot/repair.json`，不混充测试版本。
