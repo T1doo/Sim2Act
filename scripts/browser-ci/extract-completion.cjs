@@ -1,4 +1,19 @@
 'use strict';
+// Private harness waits must settle on cancellation; closing Edge cannot
+// resolve a Promise created by this script (for example a not-yet-seen GET).
+function stoppedWait(promise,signal){
+ return new Promise((resolve,reject)=>{
+  let done=false;
+  const settle=(fn,value)=>{if(done)return;done=true;signal.removeEventListener('abort',abort);fn(value);};
+  const abort=()=>settle(reject,signal.reason);
+  signal.addEventListener('abort',abort,{once:true});
+  Promise.resolve(promise).then(value=>settle(resolve,value),error=>settle(reject,error));
+  if(signal.aborted)abort();
+ });
+}
+function cleanupDeadlines(now,workUntil){const shared=Math.min(now+10000,workUntil+10000);return {shared,node:Math.min(shared,now+4000)};}
+module.exports={stoppedWait,cleanupDeadlines};
+if(require.main===module){
 // Real DOM and production scripts, actual sealed SQLite API. No VM adapter.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {execFileSync}=require('node:child_process');
@@ -18,10 +33,11 @@ const removedSecurityDefaults=[
  'msEdgeUpdateLaunchServicesPreferredVersion'].join(',')
 ];
 let browser,page,timer,watcher,failGet=false,holdGet=false,held,releaseHeld,heldRequest,delivered,cancelled=false,fail;
+const cancellation=new AbortController(),wait=promise=>stoppedWait(promise,cancellation.signal);
 const bodies=[];
 function check(name,condition){assert.ok(condition,name);result.checks.push(name);}
 function write(){fs.writeFileSync(path.join(root,'browser.json'),JSON.stringify(result,null,2));}
-function failWindow(error){cancelled=true;fail(error);}
+function failWindow(error){cancelled=true;cancellation.abort(error);fail(error);}
 async function cleanupWait(promise,until){let clock;try{return await Promise.race([promise,new Promise((_,reject)=>{clock=setTimeout(()=>reject(Error('Shared cleanup deadline')),Math.max(1,until-Date.now()));})]);}finally{clearTimeout(clock);}}
 async function shot(name){assert.ok(result.screenshots<4);result.screenshots++;await page.screenshot({path:path.join(root,name),fullPage:false,timeout:3000});}
 async function until(fn,arg){await page.waitForFunction(fn,arg,{timeout:8000});}
@@ -55,7 +71,7 @@ async function run(){
   else if(allowed&&method==='POST'&&url.pathname===`/api/projects/${info.project}/protocol/runs/${info.run}/complete-extraction`)kind='completion_post';
   else allowed=false;
   if(kind){result.counts[kind]++;allowed=result.counts[kind]<=(kind==='business_get'?30:kind==='completion_post'?3:40);}
-  if(!allowed||cancelled||Date.now()>=info.until_ms){result.counts.blocked++;await route.abort();throw Error('Business/request/time budget stop; no retry');}
+  if(!allowed||cancelled||Date.now()>=info.until_ms){result.counts.blocked++;result.rejectedRequest??={method,path:url.pathname,kind,counts:{...result.counts},cancelled,at_ms:Date.now(),until_ms:info.until_ms};await route.abort();throw Error('Business/request/time budget stop; no retry');}
   result.requests.push({method,path:url.pathname,kind});
   if(method==='POST'){
    bodies.push(request.postDataJSON());
@@ -68,7 +84,7 @@ async function run(){
    if(failGet){failGet=false;await route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({error:{code:'CONTROLLED_RESPONSE_READ_FAILURE'}})});return;}
    if(holdGet){
     holdGet=false;const response=await route.fetch({maxRedirects:0,maxRetries:0,timeout:8000});
-    heldRequest=request;held();await new Promise(resolve=>releaseHeld=resolve);await route.fulfill({response});delivered();return;
+    heldRequest=request;held();await wait(new Promise(resolve=>releaseHeld=resolve));await wait(route.fulfill({response}));delivered();return;
    }
   }
   await route.continue();
@@ -107,11 +123,11 @@ async function run(){
  // Hold one genuine detail response, close/return the real workspace, then
  // release it. No page-global/controller function or timer is replaced.
  const reached=new Promise(resolve=>held=resolve),delivery=new Promise(resolve=>delivered=resolve);holdGet=true;
- await page.locator('#protocol-read').click();await reached;
+ await page.locator('#protocol-read').click();await wait(reached);
  await page.locator('[data-tab="apps"]').click();await page.locator('[data-tab="projects"]').click();
  const count=result.requests.length,returned=page.waitForResponse(response=>response.request()===heldRequest);
- releaseHeld();await delivery;const response=await returned;assert.equal(await response.finished(),null);
- await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ releaseHeld();const [,response]=await wait(Promise.all([delivery,returned]));assert.equal(await wait(response.finished()),null);
+ await wait(page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))));
  check('workspace close/return clears content and late detail cannot restore it',await page.locator('#protocol-result').textContent()===''&&await page.locator('#protocol-cold-form').isHidden());
  check('no new command after workspace return',bodies.length===2);
  result.closeReturnRequestOffset=count;
@@ -120,6 +136,7 @@ async function run(){
  // Page memory is deliberately not persisted: no refresh/close key recovery
  // claim, storage write, or second browser window.
  result.refreshKeyRecovery='NOT_SUPPORTED_PAGE_MEMORY_ONLY';
+ if(cancelled)throw cancellation.signal.reason;
  result.status='PASS';
 }
 (async()=>{
@@ -131,9 +148,11 @@ async function run(){
  try{await Promise.race([work,budget]);}
  catch(error){result.status='FAIL';result.error=error.stack;console.error(error.stack);if(page&&!page.isClosed()&&result.screenshots<4&&Date.now()<info.until_ms)try{await shot('failure.png');}catch{};}
  finally{
-  clearTimeout(timer);clearInterval(watcher);if(releaseHeld)releaseHeld();
-  cancelled=true;
-  const cleanupUntil=Math.min(Date.now()+10000,info.until_ms+10000);fs.writeFileSync(path.join(root,'cleanup-until.json'),JSON.stringify(cleanupUntil/1000));
+  clearTimeout(timer);clearInterval(watcher);cancelled=true;cancellation.abort(Error('Owned window cleanup'));if(releaseHeld)releaseHeld();
+  // One shared ten seconds, not a new allowance for each process. Node uses
+  // at most four, leaving the coordinator six for monitor/API/AnyIO cleanup.
+  const deadlines=cleanupDeadlines(Date.now(),info.until_ms),cleanupUntil=deadlines.node;fs.writeFileSync(path.join(root,'cleanup-until.json'),JSON.stringify(deadlines.shared/1000));
+  result.cleanupDeadlines={shared_ms:deadlines.shared,node_ms:deadlines.node};
   try{
    if(browser)await cleanupWait(browser.close(),cleanupUntil);
    await cleanupWait(work.catch(()=>{}),cleanupUntil); // No orphaned launch/run continuation.
@@ -142,5 +161,9 @@ async function run(){
   }
   catch(error){result.status='UNKNOWN';result.cleanupError=error.message;}
   write();if(result.status!=='PASS')process.exitCode=1;
+  // A failed browser.close may retain Node handles. Return control to the
+  // parent for exact owned-process cleanup; never turn this into PASS.
+  if(result.cleanupError)process.exit(1);
  }
 })().catch(error=>{result.status='UNKNOWN';result.error=error.stack;write();process.exitCode=1;});
+}

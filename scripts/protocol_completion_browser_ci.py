@@ -102,6 +102,16 @@ def launch_paths(root, deadline):
     return paths
 
 
+def join_api_threads(thread, deadline, attempt):
+    """Normal loop/thread shutdown within the coordinator's shared remainder."""
+    if thread:
+        attempt("api_join", lambda: thread.join(max(0, deadline - time.monotonic())))
+    for worker in threading.enumerate():
+        if worker.name == "AnyIO worker thread":
+            attempt("anyio_join", lambda worker=worker: worker.join(max(0, deadline - time.monotonic())))
+    return [worker.name for worker in threading.enumerate() if worker.name == "AnyIO worker thread" and worker.is_alive()]
+
+
 def main():
     assert os.name == "nt" and os.environ.get("GITHUB_ACTIONS") == "true"
     assert os.environ.get("GITHUB_RUN_ATTEMPT") == "1", "No rerun"
@@ -111,7 +121,7 @@ def main():
     root = Path(os.environ["RUNNER_TEMP"]) / ("sim2act-extract-ui-" + os.environ["GITHUB_RUN_ID"] + "-1")
     root.mkdir()  # New window only; never reuse a consumed directory.
     result = dict(status="UNKNOWN", scope="SYNTHETIC SQLite / real Windows Edge DOM; not G0 or production source", limits=dict(work_seconds=180, cleanup_seconds=10, completion_post=3, business_get=30, screenshots=4), model_calls=0, new_worker=0, new_source=0, new_extract=0)
-    node = server = thread = store = None
+    node = server = thread = store = counts = None
     monitor_stop = threading.Event()
     watcher = None
     forbidden_calls = []
@@ -313,6 +323,7 @@ def main():
             prior = attempt("shared_cleanup_deadline", lambda: json.loads(shared.read_text()))
             if prior is not None:
                 cleanup_until = min(cleanup_until, time.monotonic() + max(0, prior - REAL_TIME()))
+        result["coordinator_cleanup_seconds_at_entry"] = max(0, cleanup_until - time.monotonic())
         attempt("request_stop", lambda: (root / "stop").touch())
         if server:
             server.should_exit = True
@@ -347,12 +358,7 @@ def main():
         for installer in setup:
             if installer.poll() is None:
                 attempt("installer_supervisor_wait", lambda installer=installer: installer.wait(timeout=max(0.01, cleanup_until - time.monotonic())))
-        if thread:
-            attempt("api_join", lambda: thread.join(max(0, cleanup_until - time.monotonic())))
-        for worker in threading.enumerate():
-            if worker.name == "AnyIO worker thread":
-                attempt("anyio_join", lambda worker=worker: worker.join(max(0, cleanup_until - time.monotonic())))
-        anyio_alive = [worker.name for worker in threading.enumerate() if worker.name == "AnyIO worker thread" and worker.is_alive()]
+        anyio_alive = join_api_threads(thread, cleanup_until, attempt)
         time.time = REAL_TIME
         alive = [pid for (pid, _), process in registered if attempt(f"owned_{pid}_final", process.is_running)]
         installers_alive = [p.pid for p in setup if p.poll() is None]
@@ -365,6 +371,9 @@ def main():
                     result["status"] = "UNKNOWN"
         result["cleanup"] = dict(api_stopped=not thread or not thread.is_alive(), anyio_alive=anyio_alive, node_exit=None if node is None else node.poll(), owned_browser_descendants_alive=alive, installer_supervisors_alive=installers_alive, errors=cleanup_errors)
         result["setup_receipts"] = receipts
+        if counts is not None:
+            with counter_lock:
+                result["server_counts"] = dict(counts)
         result["forbidden_attempts"] = forbidden_calls
         if alive or anyio_alive or installers_alive or thread and thread.is_alive() or time.monotonic() > cleanup_until:
             result["status"] = "UNKNOWN"
