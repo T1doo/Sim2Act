@@ -4,12 +4,12 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
 import signal
 import subprocess
 import sys
 import time
 import uuid
+from pathlib import Path
 
 
 def write(path, value):
@@ -35,9 +35,12 @@ def disk(root):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--typed-build', type=Path, required=True)
-    parser.add_argument('--row-build', type=Path, required=True)
+    parser.add_argument('--case', choices=('row', 'frontier'), default='row')
+    parser.add_argument('--typed-build', type=Path)
+    parser.add_argument('--row-build', type=Path)
     args = parser.parse_args()
+    if args.case == 'row' and (args.typed_build is None or args.row_build is None):
+        parser.error('row comparison requires the original two explicit builds')
     repo = Path(__file__).resolve().parents[1]
     output = args.output.resolve()
     output.mkdir()  # Never overwrite, restore an old DB or automatically retry.
@@ -50,16 +53,18 @@ def main():
     head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo, text=True).strip()
     write(output / 'technical-grant.json', dict(
         classification='SINGLE_USE_SYNTHETIC_TEST_ONLY_NOT_ACCOUNT_OR_MODEL_AUTHORITY',
-        id=uuid.uuid4().hex, head=head, status='consumed-for-one-launch',
+        id=uuid.uuid4().hex, head=head, case=args.case, status='consumed-for-one-launch',
         limits=dict(mock_exchanges=7, mock_entries=9, total_seconds=600,
             cleanup_seconds=10, sampled_disk_bytes=64*1024**2, sample_interval_seconds=0.1),
         semantic_clock_only=True, real_models=0, cold2=False, w5=False))
     command = [sys.executable, '-m', 'pytest', '-q', '-s',
-        'tests/test_cold_row_native_pair.py', '--basetemp=' + str(output / 'run'),
+        ('tests/test_cold_row_native_pair.py' if args.case == 'row'
+            else 'tests/test_cold_frontier_complete_pair.py'), '--basetemp=' + str(output / 'run'),
         '--junitxml=' + str(output / 'pair.xml')]
-    env = dict(os.environ, COLD_NATIVE_TEST_DIR=str(args.typed_build.resolve()),
-        COLD_ROW_TEST_DIR=str(args.row_build.resolve()),
-        COLD_MOCK_PROGRESS_PATH=str(output / 'mock-progress.json'))
+    env = dict(os.environ, COLD_MOCK_PROGRESS_PATH=str(output / 'mock-progress.json'))
+    if args.case == 'row':
+        env.update(COLD_NATIVE_TEST_DIR=str(args.typed_build.resolve()),
+            COLD_ROW_TEST_DIR=str(args.row_build.resolve()))
     errors, samples = [], []
     process, reason, peak = None, None, 0
     denied_signal, gone = False, False
@@ -165,7 +170,7 @@ def main():
         unchanged = collect('source-freeze', lambda: all(
             hashlib.sha256((repo/p).read_bytes()).hexdigest() == h for p,h in frozen.items()))
         def result_check():
-            results = list(output.rglob('row-pair.json'))
+            results = list(output.rglob('row-pair.json' if args.case == 'row' else 'frontier-pair.json'))
             if len(results) != 1:
                 return False
             result = json.loads(results[0].read_text())
@@ -177,7 +182,7 @@ def main():
                 and result.get('real_models') == 0 and result.get('cold2') is False
                 and result.get('w5') is False)
         complete = collect('semantic-result', result_check, False)
-        intervals = [b-a for a,b in zip(samples, samples[1:])]
+        intervals = [b-a for a,b in zip(samples, samples[1:], strict=False)]
         receipt.update(pid=None if process is None else process.pid,
             returncode=None if process is None else process.returncode, stop_reason=reason,
             elapsed_seconds=time.monotonic()-start, cleanup_elapsed_seconds=cleanup_elapsed,
