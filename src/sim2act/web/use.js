@@ -295,6 +295,11 @@ function csvRunDownloadControl(v,run){
 }
 async function readApplicationUse(v){
  const generation=++v.readGeneration,connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration,current=()=>applicationUseCurrent(v)&&generation===v.readGeneration&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration;
+ if(current()){
+  $("use-info").dataset.readState="loading";
+  $("use-info").textContent="正在重新读取当前版本与结果；此前历史不作为本次新确认。";
+  $("use-refresh").disabled=$("use-submit").disabled=$("use-column").disabled=true;
+ }
  try{
   const instance=await api(`/api/internal/instances/${v.id}`);if(!current())return;
   if(instance.project_id!==v.project||instance.source_app_id!==v.appId||instance.id!==v.id||instance.formal_publication_enabled!==false)throw Error("VERSION_CONFLICT");
@@ -355,6 +360,7 @@ async function readApplicationUse(v){
   if(!current())return;
   applicationUseButtons(v);
  }catch(error){if(!current())return;clearApplicationUseData(v);throw error;}
+ finally{if(current())applicationUseButtons(v);}
 }
 async function submitApplicationUse(v,recover=false){
  if(!applicationUseCurrent(v)||v.busy||v.csvGoalRevision?.busy||csvMaterialAccessLocked(v))return;

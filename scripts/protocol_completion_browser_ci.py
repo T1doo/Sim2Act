@@ -34,7 +34,7 @@ def write(root, name, value):
 def collect(root):
     outputs = {}
     total = 0
-    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "read-failed.png", "cold.png", "source-failed.png", "source-refreshed.png", "extract-failed.png", "extract-refreshed.png", "store-content-hashes.json", "failure.png", "before-projects-wide.png", "before-projects-narrow.png", "after-projects-wide.png", "after-projects-narrow.png", "after-apps-wide.png", "after-apps-narrow.png", "after-resources-wide.png", "after-resources-narrow.png", "after-source-receipt-wide.png", "after-source-error-narrow.png", "maintenance-expanded-wide.png", "project-create-narrow.png", "app-result-wide.png", "app-result-narrow.png", "app-read-error-narrow.png", "content-result.json"):
+    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "read-failed.png", "cold.png", "source-failed.png", "source-refreshed.png", "extract-failed.png", "extract-refreshed.png", "store-content-hashes.json", "failure.png", "before-projects-wide.png", "before-projects-narrow.png", "after-projects-wide.png", "after-projects-narrow.png", "after-apps-wide.png", "after-apps-narrow.png", "after-resources-wide.png", "after-resources-narrow.png", "after-source-receipt-wide.png", "after-source-error-narrow.png", "maintenance-expanded-wide.png", "project-create-narrow.png", "app-result-wide.png", "app-result-narrow.png", "app-read-error-narrow.png", "content-result.json", "app-loading-wide.png", "app-empty-narrow.png", "app-read-error-wide.png"):
         file = root / name
         if not file.exists():
             continue
@@ -108,7 +108,7 @@ def launch_paths(root, deadline, phase="extract", review=False, readback=False, 
     else:
         required += [str((evidence / name).relative_to(REPO)) for name in ("original.json", "after.sqlite.gz" if review else "before.sqlite.gz", "original-received-sidecar.json")]
     if workspace_visual:
-        required += ["scripts/browser-ci/workspace-visual.cjs", "scripts/readonly_content_fixture.py", "src/sim2act/web/use.js", "docs/evidence/research-desk-content-20261023/saved-csv.json", "docs/evidence/research-desk-content-20261023/saved-csv.sqlite.gz", "docs/evidence/workspace-refinement-native-20261022/before/index.html", "docs/evidence/workspace-refinement-native-20261022/before/app.css"]
+        required += ["scripts/browser-ci/workspace-visual.cjs", "scripts/readonly_content_fixture.py", "src/sim2act/web/use.js", "src/sim2act/web/csv-owner.js", "src/sim2act/web/csv-goal-revision.js", "docs/evidence/research-desk-content-20261023/saved-csv.json", "docs/evidence/research-desk-content-20261023/saved-csv.sqlite.gz", "docs/evidence/workspace-refinement-native-20261022/before/index.html", "docs/evidence/workspace-refinement-native-20261022/before/app.css"]
     required += [f"docs/evidence/protocol-store-loop-20261006/evaluation/{name}.json" for name in ("a-source", "a-cold", "b-source", "b-cold")]
     for name in required:
         file(name, REPO / name)
@@ -353,14 +353,14 @@ def main():
         commit = subprocess.check_output([paths["git"], "rev-parse", "HEAD"], cwd=REPO, timeout=remaining(), text=True).strip()
         hashes = {name: hashlib.sha256((REPO / name).read_bytes()).hexdigest() for name in ("src/sim2act/web/app.js", "src/sim2act/web/app.css", "src/sim2act/web/protocol.js", "src/sim2act/web/index.html", "scripts/protocol_completion_browser_ci.py", "scripts/browser-ci/extract-completion.cjs", "scripts/browser-ci/package-lock.json", "scripts/OwnedBrowserSetup.ps1", "scripts/windows_browser_ci.py", "scripts/WindowsExtractCompletionUI.ps1", ".github/workflows/windows-native-mock.yml", "src/sim2act/protocol_jobs.py", "src/sim2act/protocol_reviews.py", *(["scripts/protocol_completion_readback_fixture.py", "src/sim2act/protocol_completion_readback.py", "src/sim2act/protocol_recovery.py", "src/sim2act/protocol_source_completion.py", "src/sim2act/protocol_extract_completion.py"] if completion_readback else ["scripts/protocol_review_readback_fixture.py"] if readback else []))}
         if workspace_visual:
-            for name in ("scripts/browser-ci/workspace-visual.cjs", "scripts/readonly_content_fixture.py", "src/sim2act/web/use.js", "docs/evidence/research-desk-content-20261023/saved-csv.json", "docs/evidence/research-desk-content-20261023/saved-csv.sqlite.gz", "docs/evidence/workspace-refinement-native-20261022/before/index.html", "docs/evidence/workspace-refinement-native-20261022/before/app.css"):
+            for name in ("scripts/browser-ci/workspace-visual.cjs", "scripts/readonly_content_fixture.py", "src/sim2act/web/use.js", "src/sim2act/web/csv-owner.js", "src/sim2act/web/csv-goal-revision.js", "docs/evidence/research-desk-content-20261023/saved-csv.json", "docs/evidence/research-desk-content-20261023/saved-csv.sqlite.gz", "docs/evidence/workspace-refinement-native-20261022/before/index.html", "docs/evidence/workspace-refinement-native-20261022/before/app.css"):
                 hashes[name] = hashlib.sha256((REPO / name).read_bytes()).hexdigest()
         lf_hashes = {name: hashlib.sha256((REPO / name).read_bytes().replace(b"\r\n", b"\n")).hexdigest() for name in hashes}
         write(root, "inventory.json", dict(commit=commit, source_sha256=hashes, source_lf_sha256=lf_hashes, synthetic_clock=business_at, browser_install=False, added_sdk=False))
         info = dict(phase=phase, action=action, base=f"http://127.0.0.1:{port}", project=original["project"], run=original["run"], captured=original["captured"], until_ms=absolute * 1000,
                     expected_version=before_run["version"], expected_fence=before_run["fence"])
         if workspace_visual:
-            info["visual_source"] = dict(commit=commit, asset_lf_sha256={name: lf_hashes[name] for name in ("src/sim2act/web/app.js", "src/sim2act/web/app.css", "src/sim2act/web/protocol.js", "src/sim2act/web/index.html", "src/sim2act/web/use.js")})
+            info["visual_source"] = dict(commit=commit, asset_lf_sha256={name: lf_hashes[name] for name in ("src/sim2act/web/app.js", "src/sim2act/web/app.css", "src/sim2act/web/protocol.js", "src/sim2act/web/index.html", "src/sim2act/web/use.js", "src/sim2act/web/csv-owner.js", "src/sim2act/web/csv-goal-revision.js")})
         if completion_readback:
             original_cases = cases([store, extra_store], [settings, extra_settings], originals)
             info["cases"] = [dict(item, base=base) for item, base in zip(original_cases, [info["base"], f"http://127.0.0.1:{extra_port}"], strict=True)]
@@ -431,7 +431,7 @@ def main():
             assert after == before and counts["business_post"] == browser["counts"]["business_post"] == 0
             assert fingerprint(cases([store, extra_store], [settings, extra_settings], originals)) == fingerprint(original_cases)
             if workspace_visual:
-                assert fingerprint(browser["located"]) == fingerprint([original_cases[0]["locator"]]*2)
+                assert not browser["located"]  # This content window makes no locator request.
                 assert len(browser["visual"]["layouts"]) == 8 and browser["screenshots"] == 10
             else:
                 assert fingerprint(browser["located"]) == fingerprint([original_cases[0]["locator"]]*2 + [original_cases[1]["locator"]]*2)

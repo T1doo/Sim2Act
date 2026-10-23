@@ -1,0 +1,25 @@
+'use strict';
+const fs=require('node:fs'),assert=require('node:assert/strict'),{JSDOM}=require('jsdom');
+const dom=new JSDOM(fs.readFileSync('src/sim2act/web/index.html','utf8'),{runScripts:'dangerously'}),w=dom.window,d=w.document,checks=[];
+w.$=id=>d.getElementById(id);w.safe=fn=>fn;
+const install=text=>{const s=d.createElement('script');s.textContent=text;d.body.append(s);};
+install(`let token='actor-a',identityConnectionGeneration=1,workspaceSelectionGeneration=1;`);
+d.getElementById('project-select').append(new w.Option('project','project-a'));d.getElementById('project-select').value='project-a';
+install(fs.readFileSync('src/sim2act/web/use.js','utf8'));
+const check=(ok,label)=>{assert(ok,label);checks.push(label);};
+let reject,requests=0;
+w.api=()=>{requests++;return new Promise((_resolve,no)=>reject=no);};
+const make=()=>w.eval(`applicationUse={id:'instance-a',appId:'app-a',identity:token,project:'project-a',generation:applicationUseGeneration,readGeneration:0,busy:false,selected:null};applicationUse`);
+(async()=>{try{
+ const view=make();w.testView=view;const first=w.eval('readApplicationUse(testView)');
+ check(d.getElementById('use-info').dataset.readState==='loading'&&d.getElementById('use-info').textContent.includes('此前历史不作为本次新确认'),'read immediately distinguishes pending fresh confirmation');
+ check(d.getElementById('use-refresh').disabled&&d.getElementById('use-submit').disabled&&d.getElementById('use-column').disabled,'original controls disabled while read is pending');
+ reject(Error('synthetic read denied'));await assert.rejects(first,/synthetic read denied/);
+ check(d.getElementById('use-info').dataset.readState==='error'&&d.getElementById('use-output').textContent===''&&d.getElementById('use-form').hidden,'failure replaces loading and clears old result');
+ check(!d.getElementById('use-refresh').disabled,'explicit read-only recovery becomes available after failure');
+ const second=w.eval('readApplicationUse(testView)');check(d.getElementById('use-info').dataset.readState==='loading','retry provides immediate new loading feedback');
+ const oldReject=reject;w.eval(`clearApplicationUse();token='actor-b';identityConnectionGeneration++;`);make();d.getElementById('use-info').textContent='new actor current view';oldReject(Error('late old view denial'));await second;
+ check(d.getElementById('use-info').textContent==='new actor current view'&&!d.getElementById('use-info').dataset.readState,'old read cannot overwrite or enable a new actor view');
+ check(requests===2,'no automatic retry or new business command');
+ console.log(JSON.stringify({status:'PASS',scope:'original read renderer / JSDOM, synthetic deferred rejection only',checks,adapter_calls:requests,actual_http:0,post:0,models:0},null,2));
+}finally{dom.window.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

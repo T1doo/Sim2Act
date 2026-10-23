@@ -71,6 +71,24 @@ function row(text, action, label) {
   if (action) {const b = document.createElement("button"); b.textContent = label; b.onclick = safe(action); div.append(" ", b);}
   return div;
 }
+
+// These are same-page section links, not alternate commands or permission modes.
+(function currentProjectSection(){
+ if(typeof requestAnimationFrame!=="function")return;
+ const links=[...document.querySelectorAll(".section-links a")],sections=links.map(a=>document.getElementById(a.getAttribute("href").slice(1)));
+ if(!links.length||sections.some(s=>!s))return;
+ let queued=false;
+ const update=()=>{
+  queued=false;if($("projects").hidden)return;
+  const line=Math.min(160,innerHeight*.25);let selected=0,nearest=-Infinity;
+  for(let i=0;i<sections.length;i++){const top=sections[i].getBoundingClientRect().top;if(top<=line&&top>nearest){selected=i;nearest=top;}}
+  links.forEach((a,i)=>{if(i===selected)a.setAttribute("aria-current","location");else a.removeAttribute("aria-current");});
+ };
+ const schedule=()=>{if(!queued){queued=true;requestAnimationFrame(update);}};
+ for(const name of ["scroll","resize","hashchange"])addEventListener(name,schedule,{passive:true});
+ if(typeof MutationObserver==="function")new MutationObserver(schedule).observe($("projects"),{attributes:true,attributeFilter:["hidden"]});
+ schedule();
+})();
 let resourceDownloadGeneration = 0;
 const resourceDownloadRequests = new Set();
 function resourceDownloadContext() {

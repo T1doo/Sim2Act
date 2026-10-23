@@ -562,15 +562,16 @@ $("protocol-completion-locate").onclick=safe(locateProtocolCompletion);
   for(const [label,value] of [["语义状态",run.semantic_status||"UNKNOWN"],["独立核查",run.semantic_review==="WAITING_APPROVAL"?"等待核查":run.semantic_review||"UNKNOWN"],["人工验收",run.owner_semantic_acceptance||"PENDING"],["发布状态",run.formal_publication_enabled===false?"未发布":"未确认"]]){
    const pair=document.createElement("div");pair.append(text("dt",label),text("dd",value));fields.append(pair);
   }
-  state.append(fields,text("p","注册核查不替代人工签收；技术执行成功也不代表目标语义通过。","reading-boundary"));
+  state.append(fields);
   const identifiers=document.createElement("details");identifiers.className="reading-identifiers";
-  identifiers.append(text("summary","完整状态与标识"),text("pre",expected));state.append(identifiers);
+  identifiers.append(text("summary","完整状态与标识"),text("pre",`${run.run_id}\n${expected}`),text("p","注册核查不替代人工签收；技术执行成功也不代表目标语义通过。","reading-boundary"));state.append(identifiers);
   state.hidden=false;status.dataset.presented="true";
   const payload=run.result?.protocol_result;
   if(run.phase!=="source"||!object(payload)||payload.kind!=="model-protocol.v1"||!object(payload.evidence?.output))return;
   const output=payload.evidence.output;
-  summary.append(text("h3","已记录的来源结论"),text("p","以下仅整理原成果的可读展示，语义与人工验收状态以上方为准。","reading-boundary"));
+  summary.append(text("h3","已记录的来源结论"));
   if(typeof output.case?.required_next_step==="string")summary.append(text("p",output.case.required_next_step,"reading-next-step"));
+  summary.append(text("p","以下仅整理原成果的可读展示，语义与人工验收状态以上方为准。","reading-boundary"));
   if(object(output.case)){
    const facts=document.createElement("dl");facts.className="reading-case";
    for(const key of ["decision","may_submit_now","blocking_rule"]){if(Object.hasOwn(output.case,key)){facts.append(text("dt",{decision:"原记录判断",may_submit_now:"当前是否可提交",blocking_rule:"阻断规则"}[key]),text("dd",scalar(output.case[key])));}}
