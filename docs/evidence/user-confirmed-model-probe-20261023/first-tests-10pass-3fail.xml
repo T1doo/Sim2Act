@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="13" time="0.076" timestamp="2026-10-23T03:46:44.957512+00:00" hostname="6097ec571c91"><testcase classname="tests.test_user_confirmed_model_probe" name="test_success_one_request_same_identity_and_exclusive_directory" time="0.002" /><testcase classname="tests.test_user_confirmed_model_probe" name="test_missing_configuration_never_enters_adapter[env0-CONFIGURATION_MISMATCH]" time="0.000" /><testcase classname="tests.test_user_confirmed_model_probe" name="test_missing_configuration_never_enters_adapter[env1-CREDENTIAL_NOT_CONFIGURED]" time="0.000" /><testcase classname="tests.test_user_confirmed_model_probe" name="test_invalid_response_no_retry_or_unsafe_output[raw0-MODEL_OUTPUT_INVALID]" time="0.001" /><testcase classname="tests.test_user_confirmed_model_probe" name="test_invalid_response_no_retry_or_unsafe_output[raw1-MODEL_TIMEOUT_OR_TRUNCATED]" time="0.001" /><testcase classname="tests.test_user_confirmed_model_probe" name="test_invalid_response_no_retry_or_unsafe_output[raw2-DIAGNOSTIC_OUTPUT_MISMATCH]" time="0.001" /><testcase classname="tests.test_user_confirmed_model_probe" name="test_invalid_response_no_retry_or_unsafe_output[raw3-CREDENTIAL_ECHO_REDACTED]" time="0.001" /><testcase classname="tests.test_user_confirmed_model_probe" name="test_unknown_usage_preserved" time="0.001" /><testcase classname="tests.test_user_confirmed_model_probe" name="test_upstream_refusal_no_retry_or_body_leak[403-RESOURCE_UNAVAILABLE]" time="0.001"><failure message="KeyError: 'credential_echo_redacted'">tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-4/test_upstream_refusal_no_retry0')
+status = 403, code = 'RESOURCE_UNAVAILABLE'
+
+    @pytest.mark.parametrize("status,code", [(403, "RESOURCE_UNAVAILABLE"), (429, "RATE_LIMITED")])
+    def test_upstream_refusal_no_retry_or_body_leak(tmp_path, status, code):
+        report, seen, _ = execute(tmp_path, lambda _: httpx.Response(status, text=TOKEN))
+        assert len(seen) == 1 and report["error_code"] == code and report["retries"] == 0
+&gt;       assert report["credential_echo_redacted"] is True
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'credential_echo_redacted'
+
+tests/test_user_confirmed_model_probe.py:92: KeyError</failure></testcase><testcase classname="tests.test_user_confirmed_model_probe" name="test_upstream_refusal_no_retry_or_body_leak[429-RATE_LIMITED]" time="0.001"><failure message="KeyError: 'credential_echo_redacted'">tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-4/test_upstream_refusal_no_retry1')
+status = 429, code = 'RATE_LIMITED'
+
+    @pytest.mark.parametrize("status,code", [(403, "RESOURCE_UNAVAILABLE"), (429, "RATE_LIMITED")])
+    def test_upstream_refusal_no_retry_or_body_leak(tmp_path, status, code):
+        report, seen, _ = execute(tmp_path, lambda _: httpx.Response(status, text=TOKEN))
+        assert len(seen) == 1 and report["error_code"] == code and report["retries"] == 0
+&gt;       assert report["credential_echo_redacted"] is True
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'credential_echo_redacted'
+
+tests/test_user_confirmed_model_probe.py:92: KeyError</failure></testcase><testcase classname="tests.test_user_confirmed_model_probe" name="test_timeout_keeps_unknown_outcome_and_never_retries" time="0.001"><failure message="AssertionError: assert ('RESPONSE_BODY_CAPTURED' == 'UNKNOWN'&#10;  &#10;  - UNKNOWN&#10;  + RESPONSE_BODY_CAPTURED)">tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-4/test_timeout_keeps_unknown_out0')
+
+    def test_timeout_keeps_unknown_outcome_and_never_retries(tmp_path):
+        def timeout(request):
+            raise httpx.ReadTimeout(TOKEN, request=request)
+    
+        report, seen, _ = execute(tmp_path, timeout)
+        assert len(seen) == 1 and report["error_code"] == "MODEL_TIMEOUT_OR_TRUNCATED"
+&gt;       assert report["provider_received"] == "UNKNOWN" and report["retries"] == 0
+E       AssertionError: assert ('RESPONSE_BODY_CAPTURED' == 'UNKNOWN'
+E         
+E         - UNKNOWN
+E         + RESPONSE_BODY_CAPTURED)
+
+tests/test_user_confirmed_model_probe.py:102: AssertionError</failure></testcase><testcase classname="tests.test_user_confirmed_model_probe" name="test_changed_wire_denied_before_transport" time="0.001" /><testcase classname="tests.test_user_confirmed_model_probe" name="test_bounded_stream_marks_incomplete" time="0.001" /></testsuite></testsuites>
