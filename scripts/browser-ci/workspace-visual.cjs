@@ -7,7 +7,7 @@ async function runWorkspaceVisual({page,info,result,check,shot,until,choose,audi
  const source=info.visual_source;assert.match(source.commit,/^[a-f0-9]{40}$/);
  assert.deepEqual(Object.keys(source.asset_lf_sha256).sort(),['app.css','app.js','csv-goal-revision.js','csv-owner.js','index.html','protocol.js','use.js'].map(n=>'src/sim2act/web/'+n).sort());
  for(const hash of Object.values(source.asset_lf_sha256))assert.match(hash,/^[a-f0-9]{64}$/);
- result.visual={capture_revision:'final-state-reading-v1',product_source:source.commit,product_asset_lf_sha256:{...source.asset_lf_sha256},prior_native_execution:'944545ac9e26b3e11a1e5c383e5cb318430fa301',prior_followup_product:'5fec2a068d80bbbec3f30eb78b5024b528a7aeb2',layouts:[],states:[],motion:[]};
+ result.visual={capture_revision:'saved-result-columns-v1',product_source:source.commit,product_asset_lf_sha256:{...source.asset_lf_sha256},prior_native_execution:'8670b863c33732dec2d4552bb8061cebb680ce03',prior_followup_product:'9b64790b9fc1df6db11734541ae472388c67189b',layouts:[],states:[],motion:[]};
  const view=width=>page.setViewportSize({width,height:width<500?844:900});
  async function stable(){
   await until(()=>document.getElementById('health').textContent.startsWith('健康检查：')&&!backgroundRefreshInFlight&&!protocolContext?.busy&&!applicationUse?.busy);
@@ -41,6 +41,7 @@ async function runWorkspaceVisual({page,info,result,check,shot,until,choose,audi
  try{
   await until(()=>document.getElementById('use-info').dataset.readState==='loading');
   check('opening has immediate real read feedback and no run control before completion',await page.locator('#use-form').isHidden()&&await page.locator('#use-info').textContent().then(t=>t.includes('正在')));
+  check('native pending read keeps every original control locked after reconciliation',await page.evaluate(()=>{applicationUseButtons(applicationUse);return ['use-refresh','use-submit','use-column','use-recover'].every(id=>document.getElementById(id).disabled);}));
   await frame('app-loading-wide.png',1366,'#use-info');
   result.visual.motion.push(await page.locator('#use-info').evaluate(e=>({stage:'normal loading',reduce:matchMedia('(prefers-reduced-motion: reduce)').matches,animation:getComputedStyle(e,'::before').animationName,duration:getComputedStyle(e,'::before').animationDuration})));
  }finally{held.release();}
@@ -55,7 +56,20 @@ async function runWorkspaceVisual({page,info,result,check,shot,until,choose,audi
  const saved=await page.evaluate(c=>{const run=applicationUse.instance.runs.find(r=>r.id===c.run_id);return {historical:applicationUse.historical,status:run.status,result:run.result};},content);assert.deepEqual(saved,{historical:true,status:'SUCCEEDED',result:content.result.result});
  check('completed historical result and all scope limits stay exact',await page.locator('.csv-result-total strong').textContent()==='30'&&await page.locator('#use-output').textContent().then(t=>t.includes('目标语义验收未执行')));
  for(const width of [1366,390])await geometry('apps',width);
- await frame('app-result-wide.png',1366,'#use-output');await frame('app-result-narrow.png',390,'#use-output');
+ await frame('app-result-wide.png',1366,'#use-output');
+ const directory=page.locator('#application-use > .grid > section').first();
+ const columns=await page.evaluate(()=>{const grid=document.querySelector('#application-use > .grid'),left=grid.firstElementChild,right=grid.lastElementChild,a=left.getBoundingClientRect(),b=right.getBoundingClientRect(),control=left.querySelector('button').getBoundingClientRect();return {width:innerWidth,scrollY,position:getComputedStyle(left).position,alignSelf:getComputedStyle(left).alignSelf,left:{top:a.top,bottom:a.bottom,width:a.width,clientHeight:left.clientHeight,scrollHeight:left.scrollHeight},right:{width:b.width},directoryControl:{top:control.top,bottom:control.bottom},height:innerHeight};});
+ result.visual.states.push({name:'wide saved result with reachable directory',...columns});
+ check('wide results use the larger column while original directory action remains in view',columns.position==='sticky'&&columns.alignSelf==='start'&&columns.left.width>=240&&columns.right.width>columns.left.width&&columns.directoryControl.top>=0&&columns.directoryControl.bottom<=columns.height&&columns.left.top>=0&&columns.left.bottom<=columns.height);
+ await directory.getByRole('button').first().focus();
+ const focusOrder=[],limit=await directory.locator('button,input,select,textarea,summary,a[href],[tabindex]').count()+2;
+ for(let i=0;i<limit;i++){await page.keyboard.press('Tab');const value=await page.evaluate(()=>{const e=document.activeElement;return {within:document.querySelector('#application-use > .grid > section').contains(e),label:e.id||e.textContent.slice(0,80)};});focusOrder.push(value);if(!value.within)break;}
+ check('native Tab leaves the directory without a keyboard trap',focusOrder.length>0&&!focusOrder.at(-1).within);
+ await page.keyboard.press('Shift+Tab');check('native Shift Tab returns to directory with visible focus',await page.evaluate(()=>{const e=document.activeElement;return document.querySelector('#application-use > .grid > section').contains(e)&&e.matches(':focus-visible')&&getComputedStyle(e).outlineStyle!=='none';}));
+ result.visual.states.push({name:'directory keyboard navigation',focusOrder});
+ await frame('app-result-narrow.png',390,'#use-output');
+ const narrow=await directory.evaluate(e=>({position:getComputedStyle(e).position,overflowY:getComputedStyle(e).overflowY,maxHeight:getComputedStyle(e).maxHeight}));result.visual.states.push({name:'narrow unchanged directory flow',...narrow});
+ check('narrow directory stays in normal flow without a nested height limit',narrow.position==='static'&&narrow.maxHeight==='none'&&narrow.overflowY==='visible');
  check('optional permission editing follows result history rather than preceding recovery',await page.evaluate(()=>!!(document.getElementById('use-history').compareDocumentPosition(document.getElementById('csv-material-access'))&Node.DOCUMENT_POSITION_FOLLOWING)));
  setFailContent();await page.locator('#use-refresh').click();await until(()=>document.getElementById('use-info').dataset.readState==='error');
  check('read failure removes old result and new-run form without altering persisted Run',await page.locator('#use-output').textContent()===''&&await page.locator('#use-form').isHidden());
