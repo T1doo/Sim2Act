@@ -336,9 +336,12 @@ def main():
         if workspace_visual:
             for name in ("scripts/browser-ci/workspace-visual.cjs", "docs/evidence/workspace-refinement-native-20261022/before/index.html", "docs/evidence/workspace-refinement-native-20261022/before/app.css"):
                 hashes[name] = hashlib.sha256((REPO / name).read_bytes()).hexdigest()
-        write(root, "inventory.json", dict(commit=commit, source_sha256=hashes, source_lf_sha256={name: hashlib.sha256((REPO / name).read_bytes().replace(b"\r\n", b"\n")).hexdigest() for name in hashes}, synthetic_clock=business_at, browser_install=False, added_sdk=False))
+        lf_hashes = {name: hashlib.sha256((REPO / name).read_bytes().replace(b"\r\n", b"\n")).hexdigest() for name in hashes}
+        write(root, "inventory.json", dict(commit=commit, source_sha256=hashes, source_lf_sha256=lf_hashes, synthetic_clock=business_at, browser_install=False, added_sdk=False))
         info = dict(phase=phase, action=action, base=f"http://127.0.0.1:{port}", project=original["project"], run=original["run"], captured=original["captured"], until_ms=absolute * 1000,
                     expected_version=before_run["version"], expected_fence=before_run["fence"])
+        if workspace_visual:
+            info["visual_source"] = dict(commit=commit, asset_lf_sha256={name: lf_hashes[name] for name in ("src/sim2act/web/app.js", "src/sim2act/web/app.css", "src/sim2act/web/protocol.js", "src/sim2act/web/index.html")})
         if completion_readback:
             original_cases = cases([store, extra_store], [settings, extra_settings], originals)
             info["cases"] = [dict(item, base=base) for item, base in zip(original_cases, [info["base"], f"http://127.0.0.1:{extra_port}"], strict=True)]

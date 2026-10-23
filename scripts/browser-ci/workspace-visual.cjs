@@ -4,7 +4,10 @@ const assert=require('node:assert/strict');
 function baselineAsset(){throw Error('Density window never substitutes production assets');}
 async function runWorkspaceVisual({page,info,result,check,shot,until,choose,audit,setFailLocator,setEmptyProjects}){
  const item=info.cases[0];assert.equal(item.current.phase,'source');
- result.visual={capture_revision:'workspace-density-v1',product_source:'e4313c9d9c76fe10d4668983ce0e7cfadc3c1fcc',before_native_execution:'0d0241d85d282854475c567c92673a957dfc5e06',before_product:'b538ce79b80db7bca4016fcf5b825d39adfc4be1',before_margin_fix:'5bd814277e21ead3d1b7a71c4db13679016bfe07 (static only before this run)',layouts:[],focus:[],density:[],content:[]};
+ const source=info.visual_source;assert.ok(source,'Actual checkout metadata is required');assert.match(source.commit,/^[a-f0-9]{40}$/);
+ assert.deepEqual(Object.keys(source.asset_lf_sha256).sort(),['src/sim2act/web/app.css','src/sim2act/web/app.js','src/sim2act/web/index.html','src/sim2act/web/protocol.js']);
+ for(const hash of Object.values(source.asset_lf_sha256))assert.match(hash,/^[a-f0-9]{64}$/);
+ result.visual={capture_revision:'workspace-density-v2',product_source:source.commit,product_asset_lf_sha256:{...source.asset_lf_sha256},before_native_execution:'0d0241d85d282854475c567c92673a957dfc5e06',before_product:'b538ce79b80db7bca4016fcf5b825d39adfc4be1',before_margin_fix:'5bd814277e21ead3d1b7a71c4db13679016bfe07 (static only before this run)',layouts:[],focus:[],density:[],content:[]};
  const view=async(width)=>page.setViewportSize({width,height:width<500?844:900});
  async function stable(){
   await until(()=>document.getElementById('health').textContent.startsWith('健康检查：')&&!backgroundRefreshInFlight&&!protocolContext?.busy);
