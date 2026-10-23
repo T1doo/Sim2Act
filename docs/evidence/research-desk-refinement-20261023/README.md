@@ -7,3 +7,5 @@
 静态DOM/控件/hidden与纯色对比通过；初禁用文字4.3556已加深至4.8274。原completion UI4P；report DOM首轮因NODE_PATH缺jsdom失败，保留ui-first.xml，纠正进程NODE_PATH后仅重跑该项。不是浏览器像素或设备流畅度。
 
 原受保护Edge窗口计划180+清理10秒、100业务GET/120static/0POST/10PNG、0新模型WorkerSourceextract，复用封存Source/材料事实。第一窗口39936621184实际FAIL：projects1366主卡top406.6875>=400，原阈值未放宽。5原件（1PNG）逐字节校验。API/浏览器退出、无存活列表且时限内，fixture_deleted=false，不称完整清理PASS。用户进一步否定模板，第二版重做连贯工作面，见iteration-2/design.md；新像素待验。用户电脑不使用。
+
+第二版执行5f814c4831d84f5cdec0636c49740a6ad1c97429于run39938146670通过，15原件10PNG全部逐字节校验。作者已亲看10图；详见[实际前后对照](iteration-2/visual-review.md)。此为新视觉阶段成果，非“全部页面/设备动效/生产门已完成”。
