@@ -7,7 +7,7 @@ async function runWorkspaceVisual({page,info,result,check,shot,until,choose,audi
  const source=info.visual_source;assert.ok(source,'Actual checkout metadata is required');assert.match(source.commit,/^[a-f0-9]{40}$/);
  assert.deepEqual(Object.keys(source.asset_lf_sha256).sort(),['src/sim2act/web/app.css','src/sim2act/web/app.js','src/sim2act/web/index.html','src/sim2act/web/protocol.js']);
  for(const hash of Object.values(source.asset_lf_sha256))assert.match(hash,/^[a-f0-9]{64}$/);
- result.visual={capture_revision:'research-desk-v1',product_source:source.commit,product_asset_lf_sha256:{...source.asset_lf_sha256},before_native_execution:'0ac62f629fd0f82accdf3888149693d182310089',before_product:'7af1af2e7def68d44554bf1d37454fe4971bf478',before_source:'sealed workspace-density-native-20261023 originals; current baseline web bytes matched before edits',layouts:[],focus:[],density:[],content:[]};
+ result.visual={capture_revision:'research-desk-v2',product_source:source.commit,product_asset_lf_sha256:{...source.asset_lf_sha256},before_native_execution:'0ac62f629fd0f82accdf3888149693d182310089',before_product:'7af1af2e7def68d44554bf1d37454fe4971bf478',before_source:'sealed workspace-density-native-20261023 originals; current baseline web bytes matched before edits',layouts:[],focus:[],density:[],content:[]};
  const view=async(width)=>page.setViewportSize({width,height:width<500?844:900});
  async function stable(){
   await until(()=>document.getElementById('health').textContent.startsWith('健康检查：')&&!backgroundRefreshInFlight&&!protocolContext?.busy);

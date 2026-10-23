@@ -1,0 +1,1 @@
+confirmed_model_probe_review 限定源码ACK：Grid明确banner/header/login/nav/main/footer，skip link绝对定位不占格；身份按钮、窄屏导航与单栏保留。SVG aria-hidden/nonfocusable，onclick仍绑定原button。原ID/hidden/disabled与确认边界不变，非隐藏安全说明降低高度。首轮FAIL保留，v2像素待验。未改文件/PC/CI。
