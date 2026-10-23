@@ -1791,7 +1791,7 @@ class _ColdGraphRead:
         self.key = self.input_key(_validate=True)
         self.check(self.store, c)
 
-    def input_bytes(self, *, _validate=False, _frontier_inputs=None, _return_frontier_values=False):
+    def input_bytes(self, *, _validate=False, _frontier_inputs=None):
         from .natural_live_admission import (
             PBTrialContract,
             _trial_typed_equal,
@@ -1801,14 +1801,6 @@ class _ColdGraphRead:
 
         require(self._accounted_frontier is None or _frontier_inputs is not None,
             "Native candidate continuity cannot be exported as legacy origin bytes")
-        require(type(_return_frontier_values) is bool)
-        if _return_frontier_values:
-            from ._cold_accounted_native import _Frontier
-            require(type(self._accounted_frontier) is _Frontier
-                and self._accounted_frontier.graph is self and self.phase == 'pre'
-                and type(_frontier_inputs) is dict
-                and _frontier_inputs is self._accounted_frontier.projected and self.active,
-                'Private frontier values require the current native scope')
         b = self.binding
         require(type(b) is ProductionTrialBinding and type(b.contract) is PBTrialContract,
             "Exact Cold graph trial binding required")
@@ -1840,8 +1832,6 @@ class _ColdGraphRead:
                 account=b.account_id, version=b.version, fingerprint=b.contract_fingerprint))
         if _validate:
             _cold_graph_validate_inputs(values)
-        if _return_frontier_values:
-            return values
         return _cold_graph_bytes(values)
 
     def _frontier_input_key(self, inputs):

@@ -4,7 +4,6 @@ Only pre-origin SQLite graphs qualify. Legacy byte exports remain legacy; the
 candidate's private continuity frontier never enters a persisted proof.
 """
 
-import hashlib
 import math
 import sys
 from contextlib import contextmanager
@@ -14,16 +13,12 @@ from typing import Any
 
 from sqlalchemy.engine import RowMapping
 
-from . import _cold_frontier_compare as _comparison
 from . import cold_accounted as o
 from . import natural_live_admission as gate
 from . import natural_spec_runtime as rt
 from . import production_trial_policy as policy
 from ._cold_accounted_budget import _Capacity, _Ledger, _Projection, _Unsupported
 from ._cold_accounted_values import _Node, _Packet
-
-_COMPARE_ROW = rt._cold_graph_row_storage
-_COMPARE_LIMITS = rt._cold_graph_limit_values
 
 # No public setting enables this protocol. The one original first/second
 # transaction has exactly these post-selection additions (second observation is
@@ -344,11 +339,6 @@ class _Frontier:
             self.tokens[role] = ('owned-accounted-native-continuity.v1', role, packet.digest)
         self.run_token = ('owned-accounted-native-run.v1', self.tokens['generate'])
         self.expected = self.key()
-        self.compare_limits = mode._native.config.frontier_compare
-        gate.require(self.compare_limits is None or type(self.compare_limits) is _comparison._Limits)
-        self.compare_baseline = None
-        self.compare_declined = False
-        self.compare_counts = dict(selected=0, legacy=0, baselines=0, unsuitable=0)
 
     @staticmethod
     def _refresh(destination, original, excluded):
@@ -359,24 +349,11 @@ class _Frontier:
             if key not in excluded:
                 destination[key] = value
 
-    def values(self, *, _pending=None):
+    def values(self):
         graph, values = self.graph, self.projected
-        excluded = ('cold-trial:accounted-source',
+        self._refresh(values, graph.inputs, ('cold-trial:accounted-source',
                                             'cold-trial:accounted-generate',
-                                            'cold-trial:complete')
-        if _pending is None:
-            self._refresh(values, graph.inputs, excluded)
-        else:
-            # Original graph.add already checked the old graph and validated
-            # the incoming edge. Do not bless drift during that construction
-            # when publishing the optional replacement baseline.
-            gate.require(type(_pending) is str and _pending not in values
-                and type(graph.inputs) is dict and len(graph.inputs) == len(values) + 1
-                and all(type(k) is str for k in graph.inputs) and _pending in graph.inputs)
-            for key in values:
-                gate.require(key in graph.inputs)
-                if key not in excluded:
-                    values[key] = graph.inputs[key]
+                                            'cold-trial:complete'))
         for role in ('source', 'generate'):
             key = 'cold-trial:accounted-' + role
             gate.require(graph.inputs[key] is self.raw[role])
@@ -395,70 +372,17 @@ class _Frontier:
     def key(self):
         return self.graph._frontier_input_key(self.values())
 
-    def _comparison_snapshot(self, values):
-        if (rt._cold_graph_row_storage is not _COMPARE_ROW
-                or rt._cold_graph_limit_values is not _COMPARE_LIMITS):
-            return None  # Unknown callbacks select legacy, before validation.
-        return _comparison._select(values, self.compare_limits,
-            row_type=rt._ColdGraphRowMapping, quoted_type=rt._ColdGraphQuotedName,
-            limits_type=rt.Limits, row_storage=_COMPARE_ROW, limit_values=_COMPARE_LIMITS,
-            cursor_meta=rt._ColdGraphCursorMeta, simple_meta=rt._ColdGraphSimpleMeta)
-
-    def _current(self):
-        if self.compare_limits is None or self.compare_declined:
-            self.compare_counts['legacy'] += 1
-            return self.key() == self.expected
-        values = self.graph.input_bytes(_frontier_inputs=self.values(), _return_frontier_values=True)
-        snapshot = self._comparison_snapshot(values)
-        if snapshot is None:
-            self.compare_counts['unsuitable'] += 1
-            # No verifier was selected/executed. The original full fresh SHA
-            # remains authoritative; no allocation-ledger failure was caught.
-            if self.compare_baseline is None:
-                self.compare_declined = True
-            self.compare_counts['legacy'] += 1
-            return self.key() == self.expected
-        if self.compare_baseline is None:
-            original_expected = self.expected
-            digest = hashlib.sha256(b'SIM2ACT_NATIVE_ACCOUNTED_FRONTIER_V1\x00')
-            digest.update(rt._cold_graph_bytes(values))
-            gate.require(digest.hexdigest() == original_expected, 'Native mutable frontier changed')
-            # Revisit the whole live envelope after the old codec. Otherwise a
-            # codec/GC interleaving B -> A could endorse a captured B with SHA(A).
-            # First snapshot + second scratch are both bounded (at most twice
-            # compare_limits.units); neither includes mutable borrowed values.
-            fresh = self._comparison_snapshot(self.graph.input_bytes(
-                _frontier_inputs=self.values(), _return_frontier_values=True))
-            gate.require(fresh is not None and _comparison._same(fresh, snapshot)
-                and self.expected is original_expected, 'Frontier changed while constructing comparison baseline')
-            fresh = None
-            # Snapshot is immutable; this binding is local to the exact scope
-            # and original hash version. No business or owned handle is issued.
-            self.compare_baseline = self, self.graph.nonce, self.expected, snapshot
-            self.compare_counts['baselines'] += 1
-            return True
-        owner, nonce, expected, baseline = self.compare_baseline
-        gate.require(owner is self and nonce is self.graph.nonce and expected == self.expected)
-        self.compare_counts['selected'] += 1
-        # Once selected, mismatch/exception is final. Never retry old verification.
-        return _comparison._same(snapshot, baseline)
-
     def check(self):
         gate.require(type(self.mode) is o._OwnedPrewriteMode and self.mode.graph is self.graph
                      and type(self.mode._native) is _NativeCandidate
                      and self.mode._native.graph is self.graph and self.mode._native.mode is self.mode
                      and self.mode._native.frontier is self and self.graph._accounted_frontier is self)
-        gate.require(self.mode.active and self._current(),
+        gate.require(self.mode.active and self.key() == self.expected,
                      'Native mutable frontier changed')
 
     def added(self, name, *, run_facts=None):
         gate.require(name in self.mode._native.future_roots and name not in self.projected,
                      'Unexpected native continuation root')
-        if self.compare_limits is not None:
-            old = self.graph._frontier_input_key(self.values(_pending=name))
-            gate.require(old == self.expected, 'Existing native frontier changed while adding a root')
-        self.compare_baseline = None
-        self.compare_declined = False
         from ._cold_accounted_receipts import _receipt_for_frontier
         receipt = _receipt_for_frontier(self)
         if receipt is not None and name in receipt.names:
@@ -480,7 +404,6 @@ class _Frontier:
 class _NativeConfig:
     bounds: object
     limits: object
-    frontier_compare: object = None
 
 
 class _NativeCandidate:
@@ -674,9 +597,6 @@ class _NativeCandidate:
         self.completed.clear()
 
     def release(self):
-        frontier = getattr(self, 'frontier', None)
-        if type(frontier) is _Frontier and frontier.mode is self.mode:
-            frontier.compare_baseline = None
         arena = getattr(self, 'arena', None)
         if arena is not None:
             arena.release()

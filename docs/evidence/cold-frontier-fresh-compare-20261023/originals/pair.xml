@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="440.927" timestamp="2026-10-23T01:31:04.432288+00:00" hostname="6097ec571c91"><testcase classname="tests.test_cold_frontier_complete_pair" name="test_one_complete_frontier_pair" time="440.558"><failure message="AssertionError: Semantic regression exceeded real 300-second test budget">tmp_path = PosixPath('/tmp/sim2act-frontier-complete-pair-20261023/run/test_one_complete_frontier_pai0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f135fe066c0&gt;
+
+    def test_one_complete_frontier_pair(tmp_path, monkeypatch):
+        # Must use the existing bounded supervisor for this full synthetic pair.
+        progress = Path(os.environ['COLD_MOCK_PROGRESS_PATH'])
+        def record(value):
+            pending = progress.with_suffix('.pending')
+            pending.write_text(json.dumps(value) + '\n')
+            pending.replace(progress)
+        class RecordedCap(MockCap):
+            def enter(self, exchange):
+                super().enter(exchange)
+                record(dict(mock_exchange_admissions=self.exchanges,
+                    mock_entry_admissions=self.methods, stage=self.stage, source_delegates=self.delegates))
+        source_paths = [*sorted(Path('src/sim2act').glob('*.py')),
+            *sorted(Path('src/sim2act').glob('*.c')), *sorted(Path('tests').glob('*.py'))]
+        frozen = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in source_paths}
+        clock, threads = SemanticClock(monkeypatch), set(threading.enumerate())
+        cap = RecordedCap(monkeypatch)
+        cap.exchange_limit, cap.method_limit = 7, 9
+        record(dict(mock_exchange_admissions=0, mock_entry_admissions=0,
+                    stage=cap.stage, source_delegates=0))
+        with monkeypatch.context() as patch:
+            template = build_prefix(tmp_path / 'prefix', patch, clock, cap)
+        observers, reports = [], {}
+        for name, enabled in (('original', False), ('fresh-comparison', True)):
+            with monkeypatch.context() as patch:
+                clock.healthy()
+                counter = iter(range(1_000_000, 1_100_000))
+                patch.setattr(uuid, 'uuid4', lambda counter=counter: uuid.UUID(int=next(counter)))
+                patch.setattr(tail, 'config', lambda enabled=enabled:
+                    replace(config(), frontier_compare=BOUNDS if enabled else None))
+                case = restore_case(template, tmp_path / name, patch, clock)
+                case.cold_id = template.cold_id
+                cap.new_case()
+                observer = PairObservation(case, clock)
+                observer.install(patch)
+                event.listen(case.store.engine, 'before_cursor_execute', observer.before_sql)
+                try:
+                    worker = case.factory(case.store, case.data[1],
+                        goal_planner_transport=apps.transport([], apps.COLD))
+                    cpu, wall = time.thread_time_ns(), time.monotonic_ns()
+                    with pytest.raises(TailStop) as stopped:
+&gt;                       worker.once()
+
+tests/test_cold_frontier_complete_pair.py:69: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/worker.py:898: in once
+    self.process(run)
+src/sim2act/worker.py:564: in process
+    process_job(self, run)
+src/sim2act/app_jobs.py:1476: in process_job
+    return pa_spec_apps.process_job(worker, run)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_spec_apps.py:2321: in process_job
+    return process(worker, run, advance_fn=advance_and_renew, _heartbeat_state=heartbeat_state)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/text_workflows.py:1077: in process_job
+    again = (advance_fn or advance)(worker, run)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_spec_apps.py:2310: in advance_and_renew
+    again = advance(worker, current, _heartbeat_state=heartbeat_state)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/delivery_graph_apps.py:55: in call
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_spec_apps.py:2090: in advance
+    return advance_model(worker, run, _heartbeat_state=_heartbeat_state)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:3823: in advance_model
+    with _cold_model_before(worker, c, current, graph_call, limits) as cold:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+tests/test_cold_configured_semantic_tail.py:188: in observed
+    self.clock.healthy()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;cold_semantic_clock.SemanticClock object at 0x7f135fc5eed0&gt;
+
+    def healthy(self):
+        if self.real() - self.started &gt; 300:
+&gt;           raise AssertionError('Semantic regression exceeded real 300-second test budget')
+E           AssertionError: Semantic regression exceeded real 300-second test budget
+
+tests/cold_semantic_clock.py:87: AssertionError</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,124 @@
+F
+=================================== FAILURES ===================================
+_______________________ test_one_complete_frontier_pair ________________________
+
+tmp_path = PosixPath('/tmp/sim2act-frontier-complete-pair-20261023/run/test_one_complete_frontier_pai0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f135fe066c0>
+
+    def test_one_complete_frontier_pair(tmp_path, monkeypatch):
+        # Must use the existing bounded supervisor for this full synthetic pair.
+        progress = Path(os.environ['COLD_MOCK_PROGRESS_PATH'])
+        def record(value):
+            pending = progress.with_suffix('.pending')
+            pending.write_text(json.dumps(value) + '\n')
+            pending.replace(progress)
+        class RecordedCap(MockCap):
+            def enter(self, exchange):
+                super().enter(exchange)
+                record(dict(mock_exchange_admissions=self.exchanges,
+                    mock_entry_admissions=self.methods, stage=self.stage, source_delegates=self.delegates))
+        source_paths = [*sorted(Path('src/sim2act').glob('*.py')),
+            *sorted(Path('src/sim2act').glob('*.c')), *sorted(Path('tests').glob('*.py'))]
+        frozen = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in source_paths}
+        clock, threads = SemanticClock(monkeypatch), set(threading.enumerate())
+        cap = RecordedCap(monkeypatch)
+        cap.exchange_limit, cap.method_limit = 7, 9
+        record(dict(mock_exchange_admissions=0, mock_entry_admissions=0,
+                    stage=cap.stage, source_delegates=0))
+        with monkeypatch.context() as patch:
+            template = build_prefix(tmp_path / 'prefix', patch, clock, cap)
+        observers, reports = [], {}
+        for name, enabled in (('original', False), ('fresh-comparison', True)):
+            with monkeypatch.context() as patch:
+                clock.healthy()
+                counter = iter(range(1_000_000, 1_100_000))
+                patch.setattr(uuid, 'uuid4', lambda counter=counter: uuid.UUID(int=next(counter)))
+                patch.setattr(tail, 'config', lambda enabled=enabled:
+                    replace(config(), frontier_compare=BOUNDS if enabled else None))
+                case = restore_case(template, tmp_path / name, patch, clock)
+                case.cold_id = template.cold_id
+                cap.new_case()
+                observer = PairObservation(case, clock)
+                observer.install(patch)
+                event.listen(case.store.engine, 'before_cursor_execute', observer.before_sql)
+                try:
+                    worker = case.factory(case.store, case.data[1],
+                        goal_planner_transport=apps.transport([], apps.COLD))
+                    cpu, wall = time.thread_time_ns(), time.monotonic_ns()
+                    with pytest.raises(TailStop) as stopped:
+>                       worker.once()
+
+tests/test_cold_frontier_complete_pair.py:69: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/worker.py:898: in once
+    self.process(run)
+src/sim2act/worker.py:564: in process
+    process_job(self, run)
+src/sim2act/app_jobs.py:1476: in process_job
+    return pa_spec_apps.process_job(worker, run)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_spec_apps.py:2321: in process_job
+    return process(worker, run, advance_fn=advance_and_renew, _heartbeat_state=heartbeat_state)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/text_workflows.py:1077: in process_job
+    again = (advance_fn or advance)(worker, run)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_spec_apps.py:2310: in advance_and_renew
+    again = advance(worker, current, _heartbeat_state=heartbeat_state)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/delivery_graph_apps.py:55: in call
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/sim2act/pa_spec_apps.py:2090: in advance
+    return advance_model(worker, run, _heartbeat_state=_heartbeat_state)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:3823: in advance_model
+    with _cold_model_before(worker, c, current, graph_call, limits) as cold:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+tests/test_cold_configured_semantic_tail.py:188: in observed
+    self.clock.healthy()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <cold_semantic_clock.SemanticClock object at 0x7f135fc5eed0>
+
+    def healthy(self):
+        if self.real() - self.started > 300:
+>           raise AssertionError('Semantic regression exceeded real 300-second test budget')
+E           AssertionError: Semantic regression exceeded real 300-second test budget
+
+tests/cold_semantic_clock.py:87: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/test_cold_frontier_complete_pair.py::test_one_complete_frontier_pair
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-33 (beat)
+  
+  Traceback (most recent call last):
+    File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/threading.py", line 1075, in _bootstrap_inner
+      self.run()
+    File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/threading.py", line 1012, in run
+      self._target(*self._args, **self._kwargs)
+    File "/workspace/Sim2Act/src/sim2act/text_workflows.py", line 973, in beat
+      while not stopped.wait(worker.s.lease_seconds / 3):
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/Sim2Act/tests/cold_semantic_clock.py", line 74, in waited
+      return self.event_wait(event, timeout, sys._getframe(1))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/workspace/Sim2Act/tests/cold_semantic_clock.py", line 140, in event_wait
+      self.healthy()
+    File "/workspace/Sim2Act/tests/cold_semantic_clock.py", line 87, in healthy
+      raise AssertionError('Semantic regression exceeded real 300-second test budget')
+  AssertionError: Semantic regression exceeded real 300-second test budget
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cold_frontier_complete_pair.py::test_one_complete_frontier_pair
+1 failed, 2 warnings in 440.93s (0:07:20)
