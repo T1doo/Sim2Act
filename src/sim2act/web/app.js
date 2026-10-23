@@ -141,7 +141,10 @@ function resourceMaterialRow(resource) {
   button.type = "button";
   button.textContent = "下载文件";
   button.onclick = safe(() => downloadResource(resource, context, button));
-  div.append(" ", button);
+  const description = document.createElement("div"), name = document.createElement("strong"), metadata = document.createElement("span"), actions = document.createElement("div");
+  description.className = "resource-description"; name.className = "resource-name"; metadata.className = "resource-metadata"; actions.className = "resource-actions";
+  name.textContent = resource.name; metadata.textContent = `${resource.format.toUpperCase()} · ${resource.hash.slice(0, 12)}`;
+  description.append(name, metadata); actions.append(viewButton, button); div.classList.add("resource-row"); div.replaceChildren(description, actions);
   return div;
 }
 $("project-select").addEventListener("change", () => {resourceDownloadGeneration++;invalidateResourcePreview();});

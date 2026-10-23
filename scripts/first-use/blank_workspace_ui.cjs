@@ -122,7 +122,7 @@ async function boot() {
       assert.equal(mode, 'cold'); const old = JSON.parse(fs.readFileSync(previous, 'utf8'));
       check($('project-select').value === old.project_id, 'cold installed page selects same persistent project');
       phase = 'cold-directory'; w.document.querySelector('[data-tab="apps"]').click();
-      const row = [...$('use-list').children].find(el => el.dataset.appId === old.app_id);
+      const row = [...$('use-list').children].find(el => el.dataset.appId === old.app_id && el.dataset.useFamily === 'CSV' && el.dataset.instanceId === old.instance_id);
       check(!!row, 'same saved application discoverable in unified directory'); await action(row.querySelector('button'));
       check(w.eval('applicationUse.id') === old.instance_id && !$('use-form').hidden, 'directory opens same persisted instance');
       const history = [...$('use-history').querySelectorAll('button')]; check(history.length === 1, 'exactly one persistent application Run available');

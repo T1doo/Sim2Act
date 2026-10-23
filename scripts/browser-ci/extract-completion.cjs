@@ -22,7 +22,7 @@ const root=process.argv[2],python=process.argv[3];
 const info=JSON.parse(fs.readFileSync(path.join(root,'info.json'),'utf8'));
 assert.ok(['source','extract'].includes(info.phase),'Unknown explicit completion phase');
 const workspaceVisual=info.action==='workspace-visual';
-const visual=workspaceVisual?require('./workspace-visual.cjs'):null;let beforeAssets=false,visualEmptyProjects=false;
+const visual=workspaceVisual?require('./workspace-visual.cjs'):null;let beforeAssets=false,visualEmptyProjects=false,contentFailRead=false;
 const source=info.phase==='source',review=info.action==='review',completionReadback=workspaceVisual||info.action==='completion-readback',readback=completionReadback||info.action==='review-readback';
 assert.ok(info.action==='completion'||review||readback,'Unknown explicit action');
 assert.ok(!review||source,'Review fixture only supports sealed Source');
@@ -211,6 +211,7 @@ async function run(){
   try{
   const request=route.request(),url=new URL(request.url()),method=request.method();
   let allowed=completionReadback?info.cases.some(item=>url.origin===item.base):url.origin===info.base;
+  if(workspaceVisual&&url.origin===info.content.base)allowed=true;
   const business=url.pathname.startsWith('/api/')||url.pathname==='/health';
   let kind;
   if(allowed&&method==='GET')kind=business?'business_get':'static_get';
@@ -220,6 +221,7 @@ async function run(){
   if(!allowed||cancelled||Date.now()>=info.until_ms){result.counts.blocked++;result.rejectedRequest??={method,path:url.pathname,kind,counts:{...result.counts},cancelled,at_ms:Date.now(),until_ms:info.until_ms};await route.abort();throw Error('Business/request/time budget stop; no retry');}
   const record={method,origin:url.origin,path:url.pathname+url.search,kind,at_ms:Date.now()};result.requests.push(record);requestRecords.set(request,record);
   let finish;requestLifetimes.set(record,{done:new Promise(resolve=>finish=resolve),finish:()=>finish()});
+  if(workspaceVisual&&contentFailRead&&method==='GET'&&url.origin===info.content.base&&url.pathname===`/api/internal/instances/${info.content.instance_id}`){contentFailRead=false;record.controlled_response='403 content read-failure';await route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({error:{code:'CONTROLLED_CONTENT_READ_FAILURE'}})});return;}
   if(workspaceVisual&&visualEmptyProjects&&method==='GET'&&url.pathname==='/api/projects'){const response=await route.fetch({maxRedirects:0,maxRetries:0,timeout:8000});assert.equal(response.status(),200);record.controlled_response='authenticated project list filtered to [] for empty entry only';await route.fulfill({response,json:[]});return;}
   if(workspaceVisual&&beforeAssets&&method==='GET'&&!business){const asset=visual.baselineAsset(url.pathname);if(asset){record.baseline_asset=true;await route.fulfill(asset);return;}}
   if(readback&&url.pathname===`/api/projects/${info.project}/protocol/runs/${info.run}`&&readbackHoldDetails){
@@ -285,7 +287,7 @@ async function run(){
  await page.locator('#token').fill('secret test token');
  await page.locator('#connect').click();await page.locator('#login').waitFor({state:'hidden'});
  check('original project selected from real authenticated UI',await page.locator('#project-select').inputValue()===info.project);
- if(workspaceVisual){await visual.runWorkspaceVisual({page,info,result,check,shot,until,choose,audit,setBaseline:value=>{beforeAssets=value;},setFailLocator:value=>{completionFailLocator=value;},setEmptyProjects:value=>{visualEmptyProjects=value;}});return;}
+ if(workspaceVisual){await visual.runWorkspaceVisual({page,info,result,check,shot,until,choose,audit,setFailLocator:value=>{completionFailLocator=value;},setFailContent:()=>{contentFailRead=true;}});return;}
  if(completionReadback){await runCompletionReadback();return;}
  if(readback){await runReadback();return;}
  await choose(info.run);

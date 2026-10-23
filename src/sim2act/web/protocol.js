@@ -523,3 +523,83 @@ async function locateProtocolCompletion(){
   }
 }
 $("protocol-completion-locate").onclick=safe(locateProtocolCompletion);
+
+// Progressive read-only presentation. Original controllers remain the sole
+// authority for selection, disclosure of results, commands and invalidation.
+// If this browser cannot observe DOM changes, the original complete view stays.
+(function installProtocolReadingView(){
+ if(typeof MutationObserver!=="function"||typeof document.createElement!=="function")return;
+ const detail=$("protocol-detail"),raw=$("protocol-result"),status=$("protocol-state");
+ const state=document.createElement("section"),summary=document.createElement("section");
+ state.id="protocol-state-view";state.setAttribute("aria-live","polite");
+ summary.id="protocol-reading-view";summary.setAttribute("aria-label","当前成果摘要（未替代独立核查）");
+ detail.insertBefore(state,status);detail.insertBefore(summary,$("protocol-evidence"));
+ const text=(tag,value,cls)=>{const e=document.createElement(tag);e.textContent=value;if(cls)e.className=cls;return e;};
+ const scalar=value=>typeof value==="string"?value:JSON.stringify(value);
+ const object=value=>value!==null&&typeof value==="object"&&!Array.isArray(value);
+ let shownContext=null,shownValue=null;
+ const clear=()=>{shownContext=null;shownValue=null;state.replaceChildren();summary.replaceChildren();state.hidden=true;summary.hidden=true;delete status.dataset.presented;delete status.dataset.readState;};
+ function render(){
+  const ctx=protocolContext,run=ctx?.run;
+  if(!ctx||!run||!protocolCurrent(ctx)||detail.hidden||$("projects").hidden||activeRun!==run.run_id){clear();return;}
+  if(protocolProjectionUnconfirmed(ctx)){
+   clear();
+   state.append(text("h3","当前成果不可确认","reading-error-title"));state.hidden=false;
+   status.dataset.readState="error";return; // Original error and read action stay visible.
+  }
+  const expected=`${run.phase} · ${run.status} · 语义 ${run.semantic_status} · ${run.semantic_review} · owner ${run.owner_semantic_acceptance||"PENDING"}。注册核查不等于 owner 对真实任务签收；未发布。`;
+  if(status.textContent!==expected||raw.textContent!==JSON.stringify(run.result||run.error||{},null,2)){clear();return;}
+  // Every current/invalidated/full-text witness above is still evaluated on
+  // each refresh. Retain only identical presentation DOM, not a validation PASS.
+  // This preserves open disclosures and selections through unchanged polling.
+  const value=JSON.stringify(run);
+  if(shownContext===ctx&&shownValue===value)return;
+  clear();shownContext=ctx;shownValue=value;
+  const phase={source:"来源成果",extract:"协议草案",cold:"新材料运行"}[run.phase]||run.phase;
+  const technical={WAITING_APPROVAL:"等待独立核查",SUCCEEDED:"技术执行成功",RUNNING:"正在执行",QUEUED:"等待执行",FAILED:"执行失败",UNKNOWN:"执行状态未知",PARTIAL:"仅部分完成"}[run.status]||run.status;
+  state.append(text("h3",`${phase}：${technical}`));
+  const fields=document.createElement("dl");fields.className="state-facts";
+  for(const [label,value] of [["语义状态",run.semantic_status||"UNKNOWN"],["独立核查",run.semantic_review==="WAITING_APPROVAL"?"等待核查":run.semantic_review||"UNKNOWN"],["人工验收",run.owner_semantic_acceptance||"PENDING"],["发布状态",run.formal_publication_enabled===false?"未发布":"未确认"]]){
+   const pair=document.createElement("div");pair.append(text("dt",label),text("dd",value));fields.append(pair);
+  }
+  state.append(fields,text("p","注册核查不替代人工签收；技术执行成功也不代表目标语义通过。","reading-boundary"));
+  const identifiers=document.createElement("details");identifiers.className="reading-identifiers";
+  identifiers.append(text("summary","完整状态与标识"),text("pre",expected));state.append(identifiers);
+  state.hidden=false;status.dataset.presented="true";
+  const payload=run.result?.protocol_result;
+  if(run.phase!=="source"||!object(payload)||payload.kind!=="model-protocol.v1"||!object(payload.evidence?.output))return;
+  const output=payload.evidence.output;
+  summary.append(text("h3","已记录的来源结论"),text("p","以下仅整理原成果的可读展示，语义与人工验收状态以上方为准。","reading-boundary"));
+  if(typeof output.case?.required_next_step==="string")summary.append(text("p",output.case.required_next_step,"reading-next-step"));
+  if(object(output.case)){
+   const facts=document.createElement("dl");facts.className="reading-case";
+   for(const key of ["decision","may_submit_now","blocking_rule"]){if(Object.hasOwn(output.case,key)){facts.append(text("dt",{decision:"原记录判断",may_submit_now:"当前是否可提交",blocking_rule:"阻断规则"}[key]),text("dd",scalar(output.case[key])));}}
+   summary.append(facts);
+  }
+  if(Object.hasOwn(output,"absolute_deadline"))summary.append(text("p",`绝对截止时间：${scalar(output.absolute_deadline)}`,output.absolute_deadline==="UNKNOWN"?"reading-unknown":"reading-fact"));
+  if(object(output.obligations)){
+   const list=document.createElement("ol");list.className="reading-obligations";
+   // This is explicitly a summary; full fields and original aliases remain in
+   // the unchanged JSON disclosure. No missing facts are filled or inferred.
+   for(const [key,item] of Object.entries(output.obligations).slice(0,12)){
+    if(!object(item)||typeof item.action!=="string")continue;
+    const li=document.createElement("li");li.append(text("strong",item.action));
+    if(typeof item.actor==="string")li.append(text("p",`适用对象：${item.actor}`));
+    if(Object.hasOwn(item,"condition")){
+     const c=item.condition,known=object(c)&&["field","operator","value"].every(k=>Object.hasOwn(c,k))&&Object.keys(c).every(k=>["field","operator","value","unit"].includes(k));
+     li.append(text("p",`条件：${known?`${scalar(c.field)} ${scalar(c.operator)} ${scalar(c.value)}${Object.hasOwn(c,"unit")?` ${scalar(c.unit)}`:""}`:scalar(c)}`));
+    }
+    if(object(item.deadline))for(const [key,value] of Object.entries(item.deadline))li.append(text("p",`${{amount:"期限数量",unit:"期限单位",start_event:"起算事件",absolute_date:"绝对日期"}[key]||key}：${scalar(value)}`,value==="UNKNOWN"?"reading-unknown":""));
+    if(Array.isArray(item.lines))li.append(text("small",`原文行号：${item.lines.map(scalar).join("、")}`));
+    li.append(text("small",`记录标识：${key}`));list.append(li);
+   }
+   if(list.children.length)summary.append(list);
+   if(Object.keys(output.obligations).length>12)summary.append(text("p","摘要仅列前12项；全部记录请展开下方完整成果。"));
+  }
+  summary.hidden=false;
+ }
+ const observer=new MutationObserver(render);
+ for(const node of [raw,status])observer.observe(node,{subtree:true,childList:true,characterData:true});
+ for(const node of [detail,$("projects")])observer.observe(node,{attributes:true,attributeFilter:["hidden"]});
+ render();
+})();

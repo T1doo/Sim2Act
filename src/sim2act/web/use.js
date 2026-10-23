@@ -3,6 +3,7 @@
 let applicationUse=null,applicationUseGeneration=0,applicationUseListGeneration=0,applicationUseContextGeneration=0;
 const applicationUseRequests=new Map();
 const applicationUseDownloads=new Set();
+const applicationUseDirectoryViews=new WeakMap();
 const csvUseApp=a=>a?.candidate?.manifest?.validation_suite_ref==="receipt.readback.v1" && a.candidate.actions?.length===1 && a.candidate.actions[0].executor?.kind==="registered_tool" && a.candidate.actions[0].executor.ref==="data.aggregate_csv";
 const literalUseApp=a=>a?.input_guidance?.mode==="REGISTERED_LITERAL"&&a.candidate?.manifest?.validation_suite_ref==="source.literal_evidence.v1"&&a.candidate.actions?.length===1&&a.candidate.actions[0].executor?.kind==="registered_tool"&&a.candidate.actions[0].executor.ref==="text.literal_evidence";
 const closedTextUseApp=a=>a?.input_guidance?.mode==="CLOSED_TEXT_WORKFLOW"&&a.candidate?.namespace==="closed-text-four-step.v1"&&a.candidate.manifest?.validation_suite_ref==="text.four_step_readback.v1"&&a.candidate.actions?.length===4&&["resource.read","text.literal_evidence","text.literal_evidence","text.citation_report"].every((ref,index)=>{const e=a.candidate.actions[index].executor;return e?.kind==="registered_tool"&&e.ref===ref&&e.version==="1";});
@@ -20,6 +21,7 @@ function clearApplicationUse(clearList=false){
  applicationUseGeneration++;applicationUse=null;
  if(clearList)clearConditionalChecks(true);
  for(const id of ["use-info","use-output","use-history","use-provenance","use-column","use-acceptance"])$(id).replaceChildren();
+ delete $("use-info").dataset.readState;
  $("use-form").hidden=true;$("use-refresh").hidden=true;$("use-recover").hidden=true;
  if(clearList){applicationUseListGeneration++;applicationUseContextGeneration++;$("use-list").replaceChildren();}
 }
@@ -98,7 +100,25 @@ async function refreshApplicationUse(apps){
    item.dataset.useFamily="CSV_DAG";item.dataset.appId=app.id;item.dataset.instanceId=instance.id;rows.push(item);
   }
  }
- if(current()){$("use-list").replaceChildren(...(rows.length?rows:[row("暂无可使用的保存实例。可点击上方“从 Goal 创建自然应用”，逐步确认候选、内部版本和实例；此处不会自动创建或授权。") ]));renderNaturalFirstGuide();}
+ if(current()){
+  for(const item of rows){
+   const app=apps.find(a=>a.id===item.dataset.appId),kind={CSV:"CSV 单步汇总",CSV_DAG:"CSV 多步流程",CSV_MATERIAL_ACCESS:"CSV 材料授权 · 最长24小时",LOCAL_RECORDS:"本地记录与状态",CLOSED_TEXT_WORKFLOW:"四步文本流程",CSV_FULL_REPORT:"完整 CSV 报告",LITERAL_TEXT:"字面检索",NATURAL_PA:"P-A 目标生成",NATURAL_PB:"P-B 任务提取"}[item.dataset.useFamily];
+   if(!app||!kind)continue;
+   const original=item.firstChild,button=item.querySelector("button");
+   if(original?.nodeType!==3||!button)continue;
+   const full=original.textContent,name=document.createElement("strong"),meta=document.createElement("p"),notes=document.createElement("details"),title=document.createElement("summary"),copy=document.createElement("p");
+   name.textContent=app.name;meta.textContent=`${kind} · 内部未发布。${[...new Set(full.match(/UNKNOWN|NOT_RUN|PENDING/g)||[])].join(" / ")}`;
+   title.textContent="适用范围与限制";copy.textContent=full;notes.append(title,copy);
+   const signature=JSON.stringify([identity,connection,project,item.dataset.useFamily,item.dataset.appId,item.dataset.instanceId||null,app.name,full]);
+   const previous=[...$("use-list").children].find(old=>applicationUseDirectoryViews.get(old)===signature);
+   notes.open=!!previous?.querySelector("details")?.open;
+   applicationUseDirectoryViews.set(item,signature);
+   item.classList.add("application-directory-item");original.remove();item.prepend(name,meta);item.append(notes);
+   // The same original button/guarded closure stays attached. Opening remains
+   // a fresh authorized read; the full original restrictions are expandable.
+  }
+  $("use-list").replaceChildren(...(rows.length?rows:[row("暂无可使用的保存实例。可点击上方“从 Goal 创建自然应用”，逐步确认候选、内部版本和实例；此处不会自动创建或授权。") ]));renderNaturalFirstGuide();
+ }
 }
 function savedDagUseLabel(version){
  const labels={"internal.csv-read-sum.v1":"读取 → 求和","internal.csv-read-sum-report.v1":"读取 → 求和 → 报告","internal.csv-read-two-sums.v1":"读取 → 双求和","internal.project-csv-read-sum-report.v1":"项目固定读取 → 求和 → 报告"};
@@ -193,6 +213,7 @@ function clearApplicationUseData(v){
  for(const id of ["use-output","use-history","use-provenance","use-column","use-acceptance"])$(id).replaceChildren();
  $("use-form").hidden=true;$("use-refresh").hidden=false;
  $("use-info").textContent="当前版本或结果无法读取，请核对授权、来源和版本。读取失败不表示任务执行失败。";
+ $("use-info").dataset.readState="error";
  applicationUseButtons(v);
  if(v.selected&&typeof renderCsvOwnerReview==="function")renderCsvOwnerReview(v,null,null,true);
  if(typeof renderCsvMaterialAccess==="function"&&(v.authOnly||v.app?.candidate?.generation))renderCsvMaterialAccess(v);
@@ -301,6 +322,7 @@ async function readApplicationUse(v){
   $("use-column").replaceChildren(...(materialProvenance?[new Option(revision.input.column,revision.input.column)]:app.input_guidance.columns.filter(c=>c.numeric&&(!revision||c.name===revision.input.column)).map(c=>new Option(c.name,c.name))));
   if([...$("use-column").options].some(o=>o.value===(pending?.state==="unknown"?pending.body.input.column:previous)))$("use-column").value=pending?.state==="unknown"?pending.body.input.column:previous;
   $("use-info").textContent=`${app.name} · 未发布内部版本 · 固定材料 ${material} · 只读CSV求和；仅数值列可变，0模型请求，目标语义验收未执行。`;
+  delete $("use-info").dataset.readState;
   if(materialProvenance)$("use-info").textContent+=` 当前材料 SHA-256 ${materialHash}；原 Goal 来源 ${materialProvenance.original_goal_resources.join("、")}。`;
   if(revision)$("use-info").textContent+=` 当前 Goal v${revision.goal.version}：${revision.goal.snapshot.content.goal}；固定列 ${revision.input.column}。`;
   $("use-provenance").textContent=JSON.stringify({instance_id:v.id,release_id:instance.release_id,revision:instance.revision,release_fingerprint:instance.release_fingerprint,resource_id:material,...(materialProvenance?{resource_hash:materialHash,material_revision:materialProvenance}:{}),source:app.candidate.task_proof||app.candidate.extraction||null},null,2);
