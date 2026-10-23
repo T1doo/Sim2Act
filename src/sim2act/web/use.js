@@ -179,12 +179,12 @@ function applicationUseButtons(v){
  const pending=applicationUseRequests.get(applicationUseKey(v));
  const pendingLocked=pending&&["sending","unknown","accepted-read-error"].includes(pending.state),locked=!!v.csvGoalRevision?.busy||pendingLocked||(typeof csvMaterialAccessLocked==="function"&&csvMaterialAccessLocked(v));
  if(pendingLocked&&[...$("use-column").options].some(o=>o.value===pending.body.input.column))$("use-column").value=pending.body.input.column;
- $("use-submit").disabled=v.busy||locked||!$("use-column").value;
- $("use-column").disabled=v.busy||locked;
+ $("use-submit").disabled=v.busy||!!v.reading||locked||!$("use-column").value;
+ $("use-column").disabled=v.busy||!!v.reading||locked;
  $("use-recover").hidden=!pending||!["unknown","accepted-read-error"].includes(pending.state);
- $("use-recover").disabled=v.busy;
+ $("use-recover").disabled=v.busy||!!v.reading;
  $("use-recover").textContent=pending?.state==="unknown"?"恢复同一运行的接受回执":"重新读取已接受运行";
- $("use-refresh").disabled=v.busy;
+ $("use-refresh").disabled=v.busy||!!v.reading;
 }
 async function openApplicationUse(appId,id){
  clearApp();clearApplicationUse();
@@ -296,9 +296,10 @@ function csvRunDownloadControl(v,run){
 async function readApplicationUse(v){
  const generation=++v.readGeneration,connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration,current=()=>applicationUseCurrent(v)&&generation===v.readGeneration&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration;
  if(current()){
+  v.reading=generation;
   $("use-info").dataset.readState="loading";
   $("use-info").textContent="正在重新读取当前版本与结果；此前历史不作为本次新确认。";
-  $("use-refresh").disabled=$("use-submit").disabled=$("use-column").disabled=true;
+  applicationUseButtons(v);
  }
  try{
   const instance=await api(`/api/internal/instances/${v.id}`);if(!current())return;
@@ -360,10 +361,10 @@ async function readApplicationUse(v){
   if(!current())return;
   applicationUseButtons(v);
  }catch(error){if(!current())return;clearApplicationUseData(v);throw error;}
- finally{if(current())applicationUseButtons(v);}
+ finally{if(v.reading===generation)delete v.reading;if(current())applicationUseButtons(v);}
 }
 async function submitApplicationUse(v,recover=false){
- if(!applicationUseCurrent(v)||v.busy||v.csvGoalRevision?.busy||csvMaterialAccessLocked(v))return;
+ if(!applicationUseCurrent(v)||v.busy||v.reading||v.csvGoalRevision?.busy||csvMaterialAccessLocked(v))return;
  const key=applicationUseKey(v);let pending=applicationUseRequests.get(key);
  if(!recover){
   if(!v.instance||pending&&["sending","unknown","accepted-read-error"].includes(pending.state))return;
@@ -401,7 +402,7 @@ async function submitApplicationUse(v,recover=false){
 }
 $("use-form").onsubmit=safe(()=>submitApplicationUse(applicationUse));
 $("use-recover").onclick=safe(()=>submitApplicationUse(applicationUse,true));
-$("use-refresh").onclick=safe(async()=>{const v=applicationUse;if(v&&applicationUseCurrent(v)&&!v.busy)await readApplicationUse(v);});
+$("use-refresh").onclick=safe(async()=>{const v=applicationUse;if(v&&applicationUseCurrent(v)&&!v.busy&&!v.reading)await readApplicationUse(v);});
 
 // Explicit source selection only; no cached claims survive a context change or cold page.
 let conditionalContext=null,conditionalGeneration=0;

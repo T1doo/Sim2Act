@@ -15,7 +15,7 @@ function renderCsvReviewStart(v,release){
  node.append(label,details);$('use-form').append(node);
 }
 function csvOwnerRedact(v){for(const id of ['use-output','use-provenance','use-column','use-history'])$(id).replaceChildren();$('use-csv-review-start')?.remove();v.instance=null;$('use-form').hidden=true;$('use-info').textContent='当前材料或版本不可核验；仅保留本人声明元数据及停止入口。';}
-function resumeCsvOwnerReview(){const v=applicationUse;if(applicationUseCurrent(v)&&v.selected){csvOwnerView=null;$('csv-owner-review')?.remove();safe(()=>readApplicationUse(v))();}}
+function resumeCsvOwnerReview(){const v=applicationUse;if(applicationUseCurrent(v)&&(v.selected||$('use-info').dataset.readState==='loading')){csvOwnerView=null;$('csv-owner-review')?.remove();safe(()=>readApplicationUse(v))();}}
 function renderCsvOwnerReview(v,run,release,metadataOnly=false){
  const rid=v.selected;if(!rid)return;
  $('csv-owner-review')?.remove();
