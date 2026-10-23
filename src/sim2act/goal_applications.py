@@ -421,12 +421,19 @@ def _initial_messages_from_facts(contract, material):
     if contract.application_generation.version in SPEC_GENERATIONS:
         from .pa_spec_apps import _initial_messages_from_facts as spec_messages
         return spec_messages(contract, material)
+    return _literal_initial_messages(contract.source_goal_card.model_dump(),
+        contract.application_generation.model_dump(exclude_none=True), material,
+        contract.limits.model_dump())
+
+
+def _literal_initial_messages(saved_goal, server_ids, material, limits):
+    """Original literal prompt over already authorized facts; grants no authority."""
     from .agent_apps import schemas
 
     action_input, output = schemas()
     value = {
-        "saved_goal": contract.source_goal_card.model_dump(),
-        "server_ids": contract.application_generation.model_dump(exclude_none=True),
+        "saved_goal": saved_goal,
+        "server_ids": server_ids,
         "source": {k: material[k] for k in ("resource_id", "hash", "format")},
         "action_schema": ActionSpec.model_json_schema(),
         "manifest_schema": AppManifest.model_json_schema(),
@@ -436,10 +443,10 @@ def _initial_messages_from_facts(contract, material):
             "output": output,
             "check": "source.literal_evidence.v1",
             "permissions": ["resource.read"],
-            "limits": contract.limits.model_dump(),
+            "limits": limits,
             "one_step": True,
             "source_hash": material["hash"],
-            "goal": contract.source_goal_card.snapshot["content"],
+            "goal": saved_goal["snapshot"]["content"],
             "case_sensitive": True,
             "whole_matching_lines": True,
             "semantic_status": "UNKNOWN",
@@ -1279,23 +1286,31 @@ def _parse_candidate_core(reader, message, limits):
     reader.check()
     contract, material = reader.source()
     selected = contract.application_generation
+    _require_literal_candidate_binding(value, manifest, action, app_id=selected.app_id,
+        action_id=selected.action_id, goal_id=contract.source_goal_card.card_id,
+        material=material, goal=contract.source_goal_card.snapshot["content"], limits=contract.limits)
+    reader.check()
+    return value
+
+
+def _require_literal_candidate_binding(value, manifest, action, *, app_id, action_id,
+                                       goal_id, material, goal, limits):
+    """Pure original comparisons; compilation and fresh source proofs stay with callers."""
     if (
         action.executor.ref != "text.literal_evidence"
-        or manifest.app_id != selected.app_id
-        or action.action_id != selected.action_id
-        or manifest.goal_ref != contract.source_goal_card.card_id
+        or manifest.app_id != app_id
+        or action.action_id != action_id
+        or manifest.goal_ref != goal_id
         or manifest.revision != 1
         or action.revision != 1
         or manifest.data_bindings[0].resource_ref != material["resource_id"]
         or value["source_hash"] != material["hash"]
-        or value["goal"] != contract.source_goal_card.snapshot["content"]
-        or manifest.runtime_limits != contract.limits
+        or value["goal"] != goal
+        or manifest.runtime_limits != limits
     ):
         raise DomainError(
             "VERSION_CONFLICT", "Provider changed frozen IDs, source, full goal or budget"
         )
-    reader.check()
-    return value
 
 
 def verified_candidate(store, c, run, limits):

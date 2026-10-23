@@ -1,0 +1,645 @@
+{
+  "state": "PREVIEW_ONLY",
+  "candidate": {
+    "goal": {
+      "title": "Literal source lookup",
+      "goal": "Return all whole matching lines and exact line numbers; do not infer meaning",
+      "known": [
+        "Matching is case sensitive"
+      ],
+      "assumptions": [],
+      "unresolved": [
+        "The meaning of these statements requires owner review"
+      ],
+      "constraints": [
+        "Return every matching whole line",
+        "Do not summarize or infer obligations"
+      ],
+      "acceptance_checks": [
+        "Compare returned lines against the authorized source"
+      ],
+      "resource_refs": [
+        "res_3d373ca20fb2468a8e7acf1761a0a448"
+      ]
+    },
+    "source_hash": "fd3eb3a9edd7ef93620c24aa6581db98c9278320c49bc464ed124e02603838e9",
+    "manifest": {
+      "schema_version": "1.0-draft",
+      "app_id": "app_f0cb92f80be500ef9cd657dca3115018",
+      "revision": 1,
+      "origin": "goal",
+      "goal_ref": "goal_05da863bb47f45aabf732a72a70a4d88",
+      "source_run_ref": null,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string",
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "term"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "resource_id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "enum": [
+              1
+            ]
+          },
+          "source_hash": {
+            "type": "string"
+          },
+          "term": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start_line": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "end_line": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "quote": {
+                  "type": "string",
+                  "maxLength": 4096
+                }
+              },
+              "required": [
+                "start_line",
+                "end_line",
+                "quote"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 16
+          },
+          "semantic_status": {
+            "type": "string",
+            "enum": [
+              "UNKNOWN"
+            ]
+          }
+        },
+        "required": [
+          "resource_id",
+          "revision",
+          "source_hash",
+          "term",
+          "citations",
+          "semantic_status"
+        ],
+        "additionalProperties": false
+      },
+      "outputs": {
+        "resource_id": {
+          "source": "step",
+          "ref": "evidence",
+          "field": "resource_id"
+        },
+        "revision": {
+          "source": "step",
+          "ref": "evidence",
+          "field": "revision"
+        },
+        "source_hash": {
+          "source": "step",
+          "ref": "evidence",
+          "field": "source_hash"
+        },
+        "term": {
+          "source": "step",
+          "ref": "evidence",
+          "field": "term"
+        },
+        "citations": {
+          "source": "step",
+          "ref": "evidence",
+          "field": "citations"
+        },
+        "semantic_status": {
+          "source": "step",
+          "ref": "evidence",
+          "field": "semantic_status"
+        }
+      },
+      "views": [
+        {
+          "component_ref": "table",
+          "output_field": "citations"
+        }
+      ],
+      "workflow": [
+        {
+          "step_id": "evidence",
+          "binding_id": "agent",
+          "depends_on": [],
+          "inputs": {
+            "resource_id": {
+              "source": "data",
+              "ref": "source",
+              "field": "resource_id"
+            },
+            "term": {
+              "source": "input",
+              "field": "term"
+            }
+          }
+        }
+      ],
+      "action_bindings": [
+        {
+          "binding_id": "agent",
+          "action_id": "action_9b1dbd46686493b1c23cbadf577b5686",
+          "revision": 1
+        }
+      ],
+      "data_bindings": [
+        {
+          "binding_id": "source",
+          "resource_ref": "res_3d373ca20fb2468a8e7acf1761a0a448"
+        }
+      ],
+      "runtime_identity_requirements": {
+        "mode": "user_and_app_intersection"
+      },
+      "permission_requirements": [
+        {
+          "tool_ref": "resource.read",
+          "resource_ref": "res_3d373ca20fb2468a8e7acf1761a0a448"
+        }
+      ],
+      "dependency_lock": [
+        {
+          "kind": "resource",
+          "ref": "res_3d373ca20fb2468a8e7acf1761a0a448",
+          "version": "1"
+        },
+        {
+          "kind": "tool",
+          "ref": "text.literal_evidence",
+          "version": "1"
+        },
+        {
+          "kind": "check",
+          "ref": "source.literal_evidence.v1",
+          "version": "1"
+        }
+      ],
+      "validation_suite_ref": "source.literal_evidence.v1",
+      "runtime_limits": {
+        "max_requests": 2,
+        "max_tools": 1,
+        "max_repairs": 0,
+        "max_total_tokens": 64000,
+        "max_output_tokens": 1024,
+        "run_seconds": 300
+      },
+      "data_schema_version": 1
+    },
+    "actions": [
+      {
+        "schema_version": "1.0-draft",
+        "action_id": "action_9b1dbd46686493b1c23cbadf577b5686",
+        "revision": 1,
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "resource_id": {
+              "type": "string"
+            },
+            "term": {
+              "type": "string",
+              "maxLength": 80
+            }
+          },
+          "required": [
+            "resource_id",
+            "term"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "resource_id": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "integer",
+              "enum": [
+                1
+              ]
+            },
+            "source_hash": {
+              "type": "string"
+            },
+            "term": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "citations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "start_line": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "end_line": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "quote": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "required": [
+                  "start_line",
+                  "end_line",
+                  "quote"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 16
+            },
+            "semantic_status": {
+              "type": "string",
+              "enum": [
+                "UNKNOWN"
+              ]
+            }
+          },
+          "required": [
+            "resource_id",
+            "revision",
+            "source_hash",
+            "term",
+            "citations",
+            "semantic_status"
+          ],
+          "additionalProperties": false
+        },
+        "executor": {
+          "kind": "registered_tool",
+          "ref": "text.literal_evidence",
+          "version": "1"
+        },
+        "allowed_tool_refs": [],
+        "dependencies": [
+          {
+            "kind": "resource",
+            "ref": "res_3d373ca20fb2468a8e7acf1761a0a448",
+            "version": "1"
+          }
+        ],
+        "permission_requirements": [
+          {
+            "tool_ref": "resource.read",
+            "resource_ref": "res_3d373ca20fb2468a8e7acf1761a0a448"
+          }
+        ],
+        "effect": "read",
+        "preconditions": [],
+        "postcheck_refs": [
+          "source.literal_evidence.v1"
+        ],
+        "limits": {
+          "max_requests": 2,
+          "max_tools": 1,
+          "max_repairs": 0,
+          "max_total_tokens": 64000,
+          "max_output_tokens": 1024,
+          "run_seconds": 300
+        },
+        "idempotency": "read_only",
+        "reconcile_ref": "operation.lookup.v1",
+        "error_contract": [
+          "INVALID_INPUT"
+        ]
+      }
+    ]
+  },
+  "candidate_fingerprint": "37fb1bf42a2c5d7b060fd96e2c3e5a72b181c0f7741f4f6b09569b94a4589b5c",
+  "validation": {
+    "state": "PREFLIGHTED_DRAFT",
+    "publishable": false,
+    "execution_performed": false,
+    "not_an_executable_plan": true,
+    "topological_order": [
+      "evidence"
+    ],
+    "budget_envelope": {
+      "max_requests": 2,
+      "max_tools": 1,
+      "max_repairs": 0,
+      "max_total_tokens": 64000,
+      "run_seconds": 300
+    },
+    "resource_refs": [
+      "res_3d373ca20fb2468a8e7acf1761a0a448"
+    ],
+    "candidate_fingerprint_basis": {
+      "schema_version": "1.0-draft",
+      "app_id": "app_f0cb92f80be500ef9cd657dca3115018",
+      "revision": 1,
+      "origin": "goal",
+      "goal_ref": "goal_05da863bb47f45aabf732a72a70a4d88",
+      "source_run_ref": null,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string",
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "term"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "resource_id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "enum": [
+              1
+            ]
+          },
+          "source_hash": {
+            "type": "string"
+          },
+          "term": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start_line": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "end_line": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "quote": {
+                  "type": "string",
+                  "maxLength": 4096
+                }
+              },
+              "required": [
+                "start_line",
+                "end_line",
+                "quote"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 16
+          },
+          "semantic_status": {
+            "type": "string",
+            "enum": [
+              "UNKNOWN"
+            ]
+          }
+        },
+        "required": [
+          "resource_id",
+          "revision",
+          "source_hash",
+          "term",
+          "citations",
+          "semantic_status"
+        ],
+        "additionalProperties": false
+      },
+      "outputs": {
+        "resource_id": {
+          "source": "step",
+          "ref": "evidence",
+          "field": "resource_id"
+        },
+        "revision": {
+          "source": "step",
+          "ref": "evidence",
+          "field": "revision"
+        },
+        "source_hash": {
+          "source": "step",
+          "ref": "evidence",
+          "field": "source_hash"
+        },
+        "term": {
+          "source": "step",
+          "ref": "evidence",
+          "field": "term"
+        },
+        "citations": {
+          "source": "step",
+          "ref": "evidence",
+          "field": "citations"
+        },
+        "semantic_status": {
+          "source": "step",
+          "ref": "evidence",
+          "field": "semantic_status"
+        }
+      },
+      "views": [
+        {
+          "component_ref": "table",
+          "output_field": "citations"
+        }
+      ],
+      "workflow": [
+        {
+          "step_id": "evidence",
+          "binding_id": "agent",
+          "depends_on": [],
+          "inputs": {
+            "resource_id": {
+              "source": "data",
+              "ref": "source",
+              "field": "resource_id"
+            },
+            "term": {
+              "source": "input",
+              "ref": null,
+              "field": "term"
+            }
+          }
+        }
+      ],
+      "action_bindings": [
+        {
+          "binding_id": "agent",
+          "action_id": "action_9b1dbd46686493b1c23cbadf577b5686",
+          "revision": 1
+        }
+      ],
+      "data_bindings": [
+        {
+          "binding_id": "source",
+          "resource_ref": "res_3d373ca20fb2468a8e7acf1761a0a448"
+        }
+      ],
+      "runtime_identity_requirements": {
+        "mode": "user_and_app_intersection"
+      },
+      "permission_requirements": [
+        {
+          "tool_ref": "resource.read",
+          "resource_ref": "res_3d373ca20fb2468a8e7acf1761a0a448"
+        }
+      ],
+      "dependency_lock": [
+        {
+          "kind": "resource",
+          "ref": "res_3d373ca20fb2468a8e7acf1761a0a448",
+          "version": "1"
+        },
+        {
+          "kind": "tool",
+          "ref": "text.literal_evidence",
+          "version": "1"
+        },
+        {
+          "kind": "check",
+          "ref": "source.literal_evidence.v1",
+          "version": "1"
+        }
+      ],
+      "validation_suite_ref": "source.literal_evidence.v1",
+      "runtime_limits": {
+        "max_requests": 2,
+        "max_tools": 1,
+        "max_repairs": 0,
+        "max_total_tokens": 64000,
+        "max_output_tokens": 1024,
+        "run_seconds": 300
+      },
+      "data_schema_version": 1
+    },
+    "execution_mode": "REGISTERED_LITERAL",
+    "semantic_status": "UNKNOWN"
+  },
+  "samples": [
+    {
+      "input": {
+        "term": "Cedar"
+      },
+      "result": {
+        "resource_id": "res_3d373ca20fb2468a8e7acf1761a0a448",
+        "revision": 1,
+        "source_hash": "fd3eb3a9edd7ef93620c24aa6581db98c9278320c49bc464ed124e02603838e9",
+        "term": "Cedar",
+        "citations": [
+          {
+            "start_line": 1,
+            "end_line": 1,
+            "quote": "Cedar valve check at dawn."
+          },
+          {
+            "start_line": 3,
+            "end_line": 3,
+            "quote": "Cedar backup owner undecided."
+          }
+        ],
+        "semantic_status": "UNKNOWN"
+      }
+    },
+    {
+      "input": {
+        "term": "Moss"
+      },
+      "result": {
+        "resource_id": "res_3d373ca20fb2468a8e7acf1761a0a448",
+        "revision": 1,
+        "source_hash": "fd3eb3a9edd7ef93620c24aa6581db98c9278320c49bc464ed124e02603838e9",
+        "term": "Moss",
+        "citations": [
+          {
+            "start_line": 2,
+            "end_line": 2,
+            "quote": "Moss valve check at noon."
+          }
+        ],
+        "semantic_status": "UNKNOWN"
+      }
+    },
+    {
+      "input": {
+        "term": "cedar"
+      },
+      "result": {
+        "resource_id": "res_3d373ca20fb2468a8e7acf1761a0a448",
+        "revision": 1,
+        "source_hash": "fd3eb3a9edd7ef93620c24aa6581db98c9278320c49bc464ed124e02603838e9",
+        "term": "cedar",
+        "citations": [],
+        "semantic_status": "UNKNOWN"
+      }
+    },
+    {
+      "input": {
+        "term": "absent"
+      },
+      "result": {
+        "resource_id": "res_3d373ca20fb2468a8e7acf1761a0a448",
+        "revision": 1,
+        "source_hash": "fd3eb3a9edd7ef93620c24aa6581db98c9278320c49bc464ed124e02603838e9",
+        "term": "absent",
+        "citations": [],
+        "semantic_status": "UNKNOWN"
+      }
+    }
+  ],
+  "model_identity": {
+    "requested_model": "intern-s2",
+    "raw_returned_model": "Intern-S2",
+    "normalized_returned_model": "intern-s2",
+    "normalization_policy_version": "intern-s2-returned-name.v1",
+    "enforced": true,
+    "verdict": "ACCEPTED"
+  },
+  "usage": {
+    "status": "known",
+    "tokens": {
+      "prompt_tokens": 100,
+      "completion_tokens": 900,
+      "total_tokens": 1000
+    }
+  },
+  "provider_call_performed_by_entry": false,
+  "generation_provenance": "NOT_ATTESTED",
+  "application_execution_performed": false,
+  "publishable": false,
+  "semantic_status": "UNKNOWN",
+  "goal_acceptance": "NOT_RUN"
+}
