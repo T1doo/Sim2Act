@@ -29,7 +29,7 @@ Base: `30fe9127a6340cab1bae132f5fd6a53669bd7371`. The parent independently revie
 
 One existing protected installed-Edge CI window: absolute180s work including setup, shared10s cleanup, global browser100businessGET/120static/0POST/10PNG across Source/Extract/content origins. No real models, new Worker/Source/extract, new browser/SDK or permission. Original CSP and sandbox remain. Three APIs retain separate stores; CSV gets its own child/clock. Parent and content server counters are reported separately. The browser's counter is aggregate, including controlled403 responses not reaching a server.
 
-Final native output is pending this exact candidate's run. Prior30fe/5f814c48 screenshots must not sign this candidate. No fps, G0, real provider, PostgreSQL, user-PC or overall product acceptance is claimed.
+Native execution944545ac9e26b3e11a1e5c383e5cb318430fa301 passed in run39942792391/job120378064525. See visual-review.md for exact evidence and limitations. The subsequent three content-presentation fixes are not covered by those pixels. Prior30fe/5f814c48 screenshots also must not sign them. No fps, G0, real provider, PostgreSQL, user-PC or overall product acceptance is claimed.
 
 ## Image sharing
 

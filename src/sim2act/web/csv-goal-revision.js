@@ -304,6 +304,11 @@ function renderCsvGoalRevision(v,release){
 const csvMaterialAccessIntents=new Map();let csvMaterialAccessView=null;
 const csvMaterialAccessKey=v=>JSON.stringify([v.identity,v.project,v.appId]);
 const csvAccessPending=p=>!!p&&["sending","unknown","accepted-read-error"].includes(p.state);
+function mountCsvMaterialAccess(v,node){
+ // Selected-run results and their recovery stay before optional scope editing.
+ // The explicit authorization-only view still opens directly on its controls.
+ (v.authOnly?$("use-info"):$("use-provenance").closest("details")).after(node);
+}
 function csvMaterialAccessLocked(v){return !!v?.csvMaterialAccess?.busy||csvAccessPending(csvMaterialAccessIntents.get(csvMaterialAccessKey(v))?.current);}
 function clearCsvMaterialAccess(v=null){
  const c=csvMaterialAccessView;if(v&&c?.v!==v)return;
@@ -422,6 +427,6 @@ function renderCsvMaterialAccess(v){
   csvFullReportLabel("我已核对App运行身份、材料/hash、两项权限、全部实例作用范围与最长24小时，明确追加授权",ack),grant,
   csvFullReportLabel("我已核对当前Grant及版本，明确撤回所选App/材料的READ与SUM；不影响其他材料或主体",stopAck),stop,
   csvFullReportLabel("原请求键（只读恢复沿用）",key),recover,csvFullReportLabel("重开页面后粘贴原请求键",lookup),lookupKind,find,next,status,proof);
- $("use-info").after(node);status.textContent=entry.current?"保留原请求键；先只读核对当前授权状态，旧回执不代表权限仍有效。":"先读取并明确选择已有材料；打开页面不会授权。";
+ mountCsvMaterialAccess(v,node);status.textContent=entry.current?"保留原请求键；先只读核对当前授权状态，旧回执不代表权限仍有效。":"先读取并明确选择已有材料；打开页面不会授权。";
  c.controls=controls;controls();
 }

@@ -335,7 +335,9 @@ async function readApplicationUse(v){
    const label=v.historical?"已选择的历史运行":"本次运行";
    $("use-output").append(row(`${label} ${run.id} · ${run.status} · 结果版本 ${run.result_version??"尚无"}`));
    if(run.status==="SUCCEEDED"&&run.result){
-    $("use-output").append(row(`${run.result.column} 合计 ${run.result.sum}，共 ${run.result.count} 条。工具结果已核验；目标语义验收未执行。`));
+    const total=document.createElement("div"),label=document.createElement("span"),value=document.createElement("strong"),note=document.createElement("p");
+    total.className="row csv-result-total";label.textContent=`${run.result.column} 合计 `;value.textContent=run.result.sum;note.textContent=`，共 ${run.result.count} 条。工具结果已核验；目标语义验收未执行。`;
+    total.append(label,value,note);$("use-output").append(total);
     const download=csvRunDownloadControl(v,run);if(download)$("use-output").append(download);
    }
    else $("use-output").append(row(run.error?.code?`本次没有可展示的新结果：${run.error.code}。` : "尚无本次新结果；下方历史成功不表示本次成功。"));

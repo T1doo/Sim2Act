@@ -11,7 +11,8 @@ function renderCsvReviewStart(v,release){
  const preview=document.createElement('pre');preview.id='use-csv-review-scope';
  function changed(){ack.checked=false;v.csvReviewScope=csvReviewStartScope(v);preview.textContent=JSON.stringify({scope:'SUM_ONLY_WITHOUT_MD',release_id:release.id,release_fingerprint:release.fingerprint,instance_id:v.id,revision:v.instance?.revision,resource_id:v.app.candidate.manifest.data_bindings[0].resource_ref,source_hash:v.app.candidate.source_hash,column:$('use-column').value},null,2);}
  const column=$('use-column');if(v.csvReviewChange){column.removeEventListener('change',v.csvReviewChange);column.removeEventListener('input',v.csvReviewChange);}v.csvReviewChange=changed;changed();column.addEventListener('change',changed);column.addEventListener('input',changed);ack.onchange=()=>{if(v.csvReviewScope!==csvReviewStartScope(v))changed();};
- node.append(label,preview);$('use-form').append(node);
+ const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='查看本次声明的精确范围';details.append(summary,preview);
+ node.append(label,details);$('use-form').append(node);
 }
 function csvOwnerRedact(v){for(const id of ['use-output','use-provenance','use-column','use-history'])$(id).replaceChildren();$('use-csv-review-start')?.remove();v.instance=null;$('use-form').hidden=true;$('use-info').textContent='当前材料或版本不可核验；仅保留本人声明元数据及停止入口。';}
 function resumeCsvOwnerReview(){const v=applicationUse;if(applicationUseCurrent(v)&&v.selected){csvOwnerView=null;$('csv-owner-review')?.remove();safe(()=>readApplicationUse(v))();}}
