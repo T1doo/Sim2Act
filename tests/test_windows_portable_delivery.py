@@ -1,0 +1,169 @@
+"""Offline launcher/assembly contracts, not Windows runtime acceptance."""
+
+import importlib.util
+import io
+import json
+import zipfile
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def load(name):
+    spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / (name + ".py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize("value", [
+    {}, {"event": "SYNTHETIC_WORKSPACE_READY", "mode": "LIVE", "url": "http://127.0.0.1:9"},
+    {"event": "SYNTHETIC_WORKSPACE_READY", "mode": "SYNTHETIC_TEST_ONLY", "url": "http://evil:9"},
+    {"event": "SYNTHETIC_WORKSPACE_READY", "mode": "SYNTHETIC_TEST_ONLY", "url": "http://127.0.0.1:65536"},
+    {"event": "SYNTHETIC_WORKSPACE_READY", "mode": "SYNTHETIC_TEST_ONLY", "url": "http://127.0.0.1:9/path"},
+])
+def test_no_browser_for_unconfirmed_or_nonlocal_url(value):
+    assert load("portable_desktop").ready_url(json.dumps(value)) is None
+
+
+def test_ready_exact_loopback():
+    module = load("portable_desktop")
+    assert module.ready_url("not JSON") is None
+    assert module.ready_url(json.dumps(dict(event="SYNTHETIC_WORKSPACE_READY",
+           mode="SYNTHETIC_TEST_ONLY", url="http://127.0.0.1:12345"))) == "http://127.0.0.1:12345"
+
+
+def configured(tmp_path, monkeypatch):
+    module = load("portable_desktop")
+    runtime = tmp_path / "runtime"
+    runtime.mkdir()
+    interpreter = runtime / "python.exe"
+    interpreter.touch()
+    edge = tmp_path / "edge.exe"
+    edge.touch()
+    monkeypatch.setattr(module, "__file__", str(tmp_path / "desktop.py"))
+    monkeypatch.setattr(module.sys, "platform", "win32")
+    monkeypatch.setattr(module.sys, "version_info", (3, 12, 10))
+    monkeypatch.setattr(module.sys, "executable", str(interpreter))
+    monkeypatch.setattr(module, "browser_path", lambda: edge)
+    return module, interpreter, edge
+
+
+def test_private_launch_ready_then_browser_and_same_data_reopen(tmp_path, monkeypatch):
+    module, interpreter, edge = configured(tmp_path, monkeypatch)
+    commands = []
+    event = json.dumps(dict(event="SYNTHETIC_WORKSPACE_READY", mode="SYNTHETIC_TEST_ONLY",
+                            url="http://127.0.0.1:12345"))
+
+    def popen(command, **kwargs):
+        commands.append((command, kwargs))
+        return SimpleNamespace(stdout=io.StringIO(event + "\n" + event + "\n"),
+                               wait=lambda **kw: 0, poll=lambda: 0, pid=999)
+
+    monkeypatch.setattr(module.subprocess, "Popen", popen)
+    assert module.main() == 0
+    assert len(commands) == 2  # Duplicate READY cannot open another browser.
+    command, options = commands[0]
+    assert command[0] == str(interpreter) and command[-1] == "--new"
+    assert "shell" not in options and "creationflags" not in options
+    assert options["env"]["TEMP"] == str(tmp_path / "temp")
+    assert commands[1][0] == [str(edge), "--user-data-dir=" + str(tmp_path / "edge-profile"),
+        "--disk-cache-dir=" + str(tmp_path / "edge-cache"), "--no-first-run",
+        "--no-default-browser-check", "http://127.0.0.1:12345"]
+    assert not (tmp_path / "preview-running.lock").exists()
+    (tmp_path / "workspace data").mkdir()
+    commands.clear()
+    assert module.main() == 0
+    assert "--new" not in commands[0][0]
+
+
+def test_failed_child_no_browser_no_retry(tmp_path, monkeypatch):
+    module, _, _ = configured(tmp_path, monkeypatch)
+    calls = []
+
+    def popen(*args, **kwargs):
+        calls.append(args)
+        return SimpleNamespace(stdout=io.StringIO("failed before READY\n"),
+                               wait=lambda: 1, poll=lambda: 1, pid=999)
+
+    monkeypatch.setattr(module.subprocess, "Popen", popen)
+    assert module.main() == 1
+    assert len(calls) == 1
+    assert not (tmp_path / "preview-running.lock").exists()
+
+
+def test_running_claim_not_removed_or_reused(tmp_path, monkeypatch):
+    module, _, _ = configured(tmp_path, monkeypatch)
+    lock = tmp_path / "preview-running.lock"
+    lock.write_text("historical unknown", encoding="ascii")
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *a, **kw: pytest.fail("must not launch"))
+    with pytest.raises(FileExistsError):
+        module.main()
+    assert lock.read_text() == "historical unknown"
+
+
+def test_builder_rejects_hash_and_zip_traversal(tmp_path):
+    builder = load("package_windows_portable")
+    path = tmp_path / "asset"
+    path.write_bytes(b"new")
+    with pytest.raises(ValueError, match="Frozen input"):
+        builder.read_asset(path, dict(bytes=3, sha256="bad"))
+    data = io.BytesIO()
+    with zipfile.ZipFile(data, "w") as archive:
+        archive.writestr("../escape", "bad")
+    with pytest.raises(ValueError, match="Unsafe archive"):
+        builder.merge_archive({}, data.getvalue(), "runtime/")
+
+
+def test_original_sqlite_startup_does_not_import_pg(tmp_path, monkeypatch):
+    import builtins
+
+    from sim2act.synthetic_workspace import NeverModel, open_workspace, settings_for, workspace_app
+    from sim2act.worker import Worker
+
+    original = builtins.__import__
+
+    def no_pg(name, *args, **kwargs):
+        if name.split(".")[0] in ("psycopg", "psycopg_binary"):
+            pytest.fail("SQLite startup imported a missing PostgreSQL driver")
+        return original(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_pg)
+    root, store, marker = open_workspace(tmp_path / "blank", new=True)
+    try:
+        settings = settings_for(root)
+        assert Worker(store, settings, NeverModel()).store is store
+        assert workspace_app(store, settings) is not None
+        assert marker["mode"] == "SYNTHETIC_TEST_ONLY"
+    finally:
+        store.engine.dispose()
+
+
+def test_exact_assembled_archive_all_bytes_and_notices():
+    builder = load("package_windows_portable")
+    directory = ROOT / "deliverables/windows-afternoon-20261023"
+    archive_path = directory / "Sim2Act-preview-win64-7794748c.zip"
+    with zipfile.ZipFile(archive_path) as archive:
+        prefix = "Sim2Act-preview/"
+        manifest = json.loads(archive.read(prefix + "portable-manifest.json"))
+        assert manifest["product_commit"] == "7794748c78041682c82f0e7fda239d2601dc91b5"
+        assert manifest["installed_runtime_wheels"] == 21
+        assert len(archive.namelist()) == len(manifest["files"]) + 1
+        for name, record in manifest["files"].items():
+            data = archive.read(prefix + name)
+            assert len(data) == record["bytes"] and builder.digest(data) == record["sha256"]
+        assert archive.read(prefix + "runtime/python312._pth") == b"python312.zip\n.\nLib\\site-packages\nimport site\n"
+        names = archive.namelist()
+        site = prefix + "runtime/Lib/site-packages/"
+        # SQLAlchemy's own PG dialect source remains intact; external drivers
+        # and their native libpq payload are deliberately absent.
+        assert not any(name.startswith((site + "psycopg/", site + "psycopg_binary/",
+                                       site + "psycopg-", site + "psycopg_binary-")) for name in names)
+        assert prefix + "runtime/LICENSE.txt" in names
+        assert any("certifi-" in name and "LICENSE" in name for name in names)
+        assert any("pydantic_core/" in name and name.endswith(".pyd") for name in names)
+        assert not any(name.endswith((".db", ".sqlite", ".env")) for name in names)
+        assert archive.read(prefix + "desktop.py") == (ROOT / "scripts/portable_desktop.py").read_bytes()
