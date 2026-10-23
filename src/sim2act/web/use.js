@@ -341,7 +341,7 @@ async function readApplicationUse(v){
    $("use-output").append(row(`${label} ${run.id} · ${run.status} · 结果版本 ${run.result_version??"尚无"}`));
    if(run.status==="SUCCEEDED"&&run.result){
     const total=document.createElement("div"),label=document.createElement("span"),value=document.createElement("strong"),note=document.createElement("p");
-    total.className="row csv-result-total";label.textContent=`${run.result.column} 合计 `;value.textContent=run.result.sum;note.textContent=`，共 ${run.result.count} 条。工具结果已核验；目标语义验收未执行。`;
+    total.className="row csv-result-total";label.textContent=`${run.result.column} 合计 `;value.textContent=run.result.sum;note.textContent=`共 ${run.result.count} 条。工具结果已核验；目标语义验收未执行。`;
     total.append(label,value,note);$("use-output").append(total);
     const download=csvRunDownloadControl(v,run);if(download)$("use-output").append(download);
    }

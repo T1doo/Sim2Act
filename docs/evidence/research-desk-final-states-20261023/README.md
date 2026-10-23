@@ -18,4 +18,4 @@ Checks also use actual Enter on the scope disclosure, real scrolling/anchor loca
 
 The same original Source and Extract stores/sidecars and already sealed CSV fixture are reused; CSV's historical clock stays in its own API child. Browser counts are global; parent and child server counts are distinct, with controlled responses not reaching a server. Full55-table vectors, sidecars/deadlines and child bytes must remain unchanged. Cleanup forced/error means UNKNOWN.
 
-Runtime and actual pixels are pending this exact frozen candidate. No Library route is used: its prior401 remains preserved and un-retried. Repo evidence is the approved delivery path.
+Actual runtime8670b863c33732dec2d4552bb8061cebb680ce03 completed with10 original PNG and normal cleanup; see visual-review.md. Only a later single-character punctuation correction is not recaptured. No Library route is used: its prior401 remains preserved and un-retried. Repo evidence is the approved delivery path.
