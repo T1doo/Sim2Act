@@ -241,11 +241,13 @@ class InternModel:
                 if response.status_code == 429:
                     error = DomainError("RATE_LIMITED", "Upstream quota denied", retryable=True)
                     if capture:
+                        error._received_status_code = response.status_code
                         _body_failure(error, response.content, True)
                     raise error
                 if response.status_code != 200:
                     error = DomainError("RESOURCE_UNAVAILABLE", "Upstream rejected request")
                     if capture:
+                        error._received_status_code = response.status_code
                         _body_failure(error, response.content, True)
                     raise error
                 return _parsed_body(response.content, capture)
@@ -296,6 +298,8 @@ class InternModel:
                     pass
             raise failure from error
         except DomainError as error:
+            if capture and response is not None:
+                error._received_status_code = response.status_code
             if capture and not hasattr(error, "_received_body"):
                 _body_failure(error, payload, False)
             raise
