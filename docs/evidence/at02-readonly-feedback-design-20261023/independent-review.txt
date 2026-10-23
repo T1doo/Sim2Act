@@ -1,0 +1,20 @@
+只读独审 /root/confirmed_model_probe_review，2026-10-23。
+
+初审指出并已落实：
+1. 分开离线fixture准备写、执行阶段fixture零写及技术grant/ledger/报告写。
+2. 准备数据限定principals2/projects1/resources1/grants2/quotas1，其余业务行0；
+   Store.resource默认给aggregate_csv，不能用它后删Grant伪装最小授权；
+   显式核原project owner及runtime，不只依赖authorize传入runtime的Grant。
+3. 关闭写连接及checkpoint后冻结DB和sidecar精确清单；写SQL/ATTACH先拒绝，
+   每次读连接先关闭才HTTP，不能复用旧快照。
+4. 凭据反射检查原始bytes及解析后JSON key/字符串，非法body不落盘不hash。
+5. 旧AT-02双主体真实反馈已接受；新设计是当前基线窄网关诊断，不冒称历史验收缺口。
+
+修订后设计ACK，未见剩余设计阻断。原authorized_read→Store.authorize→read_data
+确实保留权限与内容hash检查且本身不写业务表；不调用会写Operation的dispatch，
+不代表生产来源放行。两轮assistant/tool反馈、实际只读网关及严格oracle可作为窄诊断。
+预算明确不是上游输入token硬配额。
+
+仅设计ACK，可据此准备实现与离线验证；不构成真实请求授权、实现验收或生产来源放行。
+当前模型请求授权0。最终实现、fixture及精确body仍需冻结复审。
+审查者未编辑、未执行测试/HTTP、未读取凭据。
