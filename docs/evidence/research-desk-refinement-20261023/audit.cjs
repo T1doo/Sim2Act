@@ -1,0 +1,27 @@
+const fs=require('node:fs'), cp=require('node:child_process'), assert=require('node:assert/strict'), crypto=require('node:crypto');
+const {JSDOM}=require(process.cwd()+'/scripts/engineering-ci/node_modules/jsdom');
+const baseline='7af1af2e7def68d44554bf1d37454fe4971bf478', web='src/sim2act/web/';
+const previous=cp.execFileSync('git',['show',baseline+':'+web+'index.html'],{encoding:'utf8'});
+const current=fs.readFileSync(web+'index.html','utf8'), css=fs.readFileSync(web+'app.css','utf8');
+const oldDOM=new JSDOM(previous), newDOM=new JSDOM(current), a=oldDOM.window.document,b=newDOM.window.document;
+const controls=d=>[...d.querySelectorAll('input,select,textarea,button,option')].map(n=>({tag:n.tagName,attributes:[...n.attributes].filter(x=>!(n.id==='goal'&&x.name==='placeholder')).map(x=>[x.name,x.value]).sort(),text:n.textContent}));
+assert.deepEqual(controls(a),controls(b));
+const ids=d=>[...d.querySelectorAll('[id]')].map(x=>x.id);
+assert.deepEqual(ids(a),ids(b));assert.equal(new Set(ids(b)).size,ids(b).length);
+const hidden=d=>[...d.querySelectorAll('[hidden]')].map(x=>x.id||x.outerHTML);
+assert.deepEqual(hidden(a),hidden(b));
+assert.deepEqual([...a.scripts].map(s=>s.src),[...b.scripts].map(s=>s.src));
+for(const d of a.querySelectorAll('details'))assert.equal(d.open,(d.id?b.getElementById(d.id).open:undefined)??[...b.querySelectorAll('details')][[...a.querySelectorAll('details')].indexOf(d)].open);
+for(const n of b.querySelectorAll('.skip-link,.section-links a'))assert.ok(b.querySelector(n.getAttribute('href')));
+const style=b.createElement('style');style.textContent=css;b.head.append(style);assert.ok(style.sheet.cssRules.length>250);
+assert.match(css,/\[hidden\]\s*\{\s*display:\s*none\s*!important/);
+assert.match(css,/prefers-reduced-motion: reduce/);assert.match(css,/animation: none !important/);
+assert.equal(b.querySelector('.preview-label').textContent,'工程预览');
+for(const id of ['projects','apps','resources'])assert.equal(b.getElementById(id).querySelectorAll('h1').length,1);
+function lum(h){return h.match(/\w\w/g).map(x=>parseInt(x,16)/255).map(x=>x<=.04045?x/12.92:((x+.055)/1.055)**2.4).reduce((s,x,i)=>s+x*[.2126,.7152,.0722][i],0);}
+const contrast=[['body','1d2d3c','f4f6f9'],['muted','536476','ffffff'],['primary','ffffff','12695d'],['engineering preview','6b5831','faf7ef'],['status','3b5365','f0f5f8'],['error','8f382d','fff2ef'],['loading','31546e','edf4fa'],['disabled','5d6b76','edf1f4'],['selected nav','135e51','e7f3ef'],['eyebrow','587183','ffffff']].map(([label,fg,bg])=>{const [lo,hi]=[lum(fg),lum(bg)].sort((a,b)=>a-b);return{label,ratio:(hi+.05)/(lo+.05)};});
+for(const c of contrast)assert.ok(c.ratio>=4.5,c.label+': '+c.ratio);
+const sha=x=>crypto.createHash('sha256').update(x).digest('hex');
+const scripts=[...b.scripts].map(x=>x.src.slice(1));for(const file of scripts)assert.equal(sha(fs.readFileSync(web+file)),sha(cp.execFileSync('git',['show',baseline+':'+web+file])));
+console.log(JSON.stringify({status:'PASS',classification:'STATIC_DOM_AND_SOLID_COLOR_CONTRAST_NOT_PIXELS',baseline,ids:ids(b).length,controls:controls(b).length,hidden:hidden(b).length,js_modules_unchanged:scripts.length,css_rules:style.sheet.cssRules.length,contrast,goal_placeholder_only_control_attribute_change:true,product_files:['index.html','app.css']},null,2));
+oldDOM.window.close();newDOM.window.close();
