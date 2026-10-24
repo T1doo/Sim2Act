@@ -166,14 +166,28 @@ function resourceMaterialRow(resource) {
   return div;
 }
 $("project-select").addEventListener("change", () => {resourceDownloadGeneration++;invalidateResourcePreview();});
+function resourceDirectoryUnavailable(message, retry=false) {
+  const context=resourceDownloadContext();
+  const note=row(message,retry?async()=>{
+    if(!note.isConnected||!resourceDownloadCurrent(context))return;
+    const button=note.querySelector("button");if(button.disabled)return;button.disabled=true;
+    try{await refresh();}finally{if(note.isConnected&&resourceDownloadCurrent(context))button.disabled=false;}
+  }:null,"重新读取材料列表（只读）");
+  note.className="resource-directory-status";note.setAttribute("role","status");note.setAttribute("aria-live","polite");note.dataset.state=retry?"error":"loading";
+  $("materials").replaceChildren(note);
+}
+$("project-select").addEventListener("change", () => {
+  resourceDirectoryUnavailable($("project-select").value?"当前项目材料列表未确认，正在读取；上一项目目录已失效。":"先选择项目，再读取材料列表。");
+});
 async function refresh() {
   const pid = $("project-select").value; if (!pid) return;
-  const identity=token,generation=++runHistoryGeneration;
-  const current=()=>pid===$("project-select").value && identity===token && generation===runHistoryGeneration;
+  const identity=token,connection=identityConnectionGeneration,generation=++runHistoryGeneration;
+  const current=()=>pid===$("project-select").value && identity===token && connection===identityConnectionGeneration && generation===runHistoryGeneration;
   let materials;
   try {materials = await api(`/api/projects/${pid}/resources`);}
-  catch(error){if(current()){updateOrdinaryRunMaterials([],false);if(typeof invalidateConditionalSource === "function")invalidateConditionalSource("授权列表读取失败");}throw error;}
+  catch(error){if(!current())return;invalidateResourcePreview();resourceDirectoryUnavailable("当前项目材料列表读取失败，尚未确认；旧目录与预览已失效。可以只读重试，不表示任务执行失败。",true);updateOrdinaryRunMaterials([],false);if(typeof invalidateConditionalSource === "function")invalidateConditionalSource("授权列表读取失败");throw error;}
   if (!current()) return;
+  $("materials").replaceChildren(...materials.map(resourceMaterialRow));
   if(typeof renderResourceMaterial === "function")renderResourceMaterial();
   if(typeof reconcileConditionalSources === "function")reconcileConditionalSources(materials);
   updateOrdinaryRunMaterials(materials);
@@ -185,7 +199,6 @@ async function refresh() {
   $("goal-card-resources").replaceChildren(...materials.map(m=>{const o=new Option(m.name,m.id);o.selected=selectedGoals.includes(m.id);return o;}));
   await refreshGoalCards(pid);
   if (!current()) return;
-  $("materials").replaceChildren(...materials.map(resourceMaterialRow));
   const oldResource = $("app-resource").value;
   $("app-resource").replaceChildren(...materials.filter(x => x.format === "csv").map(x => {const o=document.createElement("option");o.value=x.id;o.textContent=x.name;return o;}));
   if (materials.some(x => x.id === oldResource)) $("app-resource").value = oldResource;

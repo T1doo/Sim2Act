@@ -1,0 +1,17 @@
+# Resource directory context and read-only recovery
+
+Base: `e7de6d512d18d477a46ba4f0895ab74647f3d80f`; both prior unpushed commits remain ancestors. Original authenticated resource discovery/current-context isolation is the product scope, not a new backend permission or recovery protocol.
+
+The actual original page/controller reproduced this defect: after displaying A's materials, selecting B and rejecting B's resource GET left A's directory visible. `red.log` is the first reproduction; `final-red.log` runs the final test script against the original base and fails on the same assertion. This was misleading frontend presentation, not proof of backend unauthorized access.
+
+Only product `app.js` changes. A project change immediately replaces the old directory with an unconfirmed loading notice. Current resource-list failure clears old directory/preview and provides an explicitly read-only retry through original `refresh()`. The retry binds the original identity/connection/project selection witness and connected status node, disables its own button during the read, and does not submit a task. Old scope failures do not repaint the current view. The original 2500ms loop, preview/download controllers and their original listener stay byte-identical.
+
+Independent review found an intermediate integration defect: a successful resource GET still waited for unrelated Protocol/Goal reads before installing its directory. A Goal failure could leave the new loading state unresolved. `integration-red.log` preserves this counterexample. The final candidate installs the authorized current resource directory immediately after its own GET/current check; later Goal errors remain errors and do not turn the whole refresh into a success. No extra API request or timer retry is added. The new status node uses the existing status styling rather than the normal resource-row styling.
+
+## Actual checks and scope
+
+`green.json`: 15 assertions over 22 finite synthetic adapter GETs, actual HTTP/POST/model zero. The original HTML and complete `app.js` execute in installed JSDOM. Covers successful switching, failed B read, guarded single-click recovery/double-click, A/B late success, detached retry, actor change/late failure, prior preview invalidation, and unchanged ordinary UNKNOWN intent/body/key. The integration counterexample invokes original `refreshGoalCards` and rejects its adapter GET. Other Goal/App phases use no-I/O stubs; the browser timer is disabled only in the harness. This is not a live server, real backend grant test, full application integration or native pixel acceptance.
+
+`preservation.json`: exact original preview/download controller plus listener (4372 bytes), original automatic refresh loop (381 bytes), HTML and CSS all match the base. Syntax checks for product/test JavaScript and `git diff --check` passed. Readonly reviewer `/root/confirmed_model_probe_review` gave final limited source ACK after the integration correction; it did not independently run tests or a browser. Counts are assertions in one final script, not 15 scenarios or accumulated runs.
+
+No browser startup/retry, sandbox change, network authentication, push, CI, model, installation, backend or database execution. No API/browser/Worker child was started. The finite test closes JSDOM, clears its watchdog and settles its held responses. The inherited warm palette and desktop-column layout remain native-pixel-unverified.
