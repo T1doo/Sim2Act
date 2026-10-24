@@ -30,6 +30,22 @@ SENT = "pa_trial_dispatched.v1"
 JOURNAL_VERSION = "UNINSTALLED-pa-journal-trial.v1"
 
 
+# Immutable SQL structure only. Every call builds fresh predicates and executes
+# both original reads; no row, digest, authority or validation result is retained.
+_JOURNAL_METADATA_PROJECTION = select(
+    rows.c.kind,
+    rows.c.snapshot["request"]["trial"]["contract_fingerprint"].as_string().label("trial_fp"),
+    rows.c.snapshot["request"]["attempt_id"].as_string().label("key_attempt"),
+    rows.c.snapshot["request"]["family"].as_string().label("key_family"),
+    rows.c.snapshot["request"]["wire_sha256"].as_string().label("wire_sha256"),
+    *[rows.c.snapshot["response"][k].as_string().label(k) for k in (
+        "run_id", "attempt_id", "principal_id", "project_id", "runtime_id",
+        "phase", "sha256", "canonical_sha256", "omission")],
+    rows.c.snapshot["response"]["byte_count"].as_integer().label("byte_count"),
+    rows.c.snapshot["response"]["received_complete"].as_boolean().label("complete"),
+)
+
+
 def _checked_trial_contract(contract, approval_key, account_id):
     from .production_evidence import _contract_data, requirements_for
 
@@ -972,7 +988,7 @@ def request_captured(worker, run, aid, wire, original_guard, provider, *, _heart
 
 def _metadata(c, run, aid, kind, *, _guard=None):
     """Late failure accounting reads digest/identity projections, never body_b64."""
-    selected = gate._trial_result(c.execute(select(rows.c.kind, rows.c.snapshot['request']['trial']['contract_fingerprint'].as_string().label('trial_fp'), rows.c.snapshot['request']['attempt_id'].as_string().label('key_attempt'), rows.c.snapshot['request']['family'].as_string().label('key_family'), rows.c.snapshot['request']['wire_sha256'].as_string().label('wire_sha256'), *[rows.c.snapshot['response'][k].as_string().label(k) for k in ('run_id', 'attempt_id', 'principal_id', 'project_id', 'runtime_id', 'phase', 'sha256', 'canonical_sha256', 'omission')], rows.c.snapshot['response']['byte_count'].as_integer().label('byte_count'), rows.c.snapshot['response']['received_complete'].as_boolean().label('complete')).where(rows.c.principal_id == run['principal_id'], rows.c.app_id == run['id'], rows.c.request_key == aid, rows.c.kind.in_([kind, kind + '_seal']))), _guard)
+    selected = gate._trial_result(c.execute(_JOURNAL_METADATA_PROJECTION.where(rows.c.principal_id == run['principal_id'], rows.c.app_id == run['id'], rows.c.request_key == aid, rows.c.kind.in_([kind, kind + '_seal']))), _guard)
     values = gate._trial_result([dict(r) for r in gate._trial_result(selected.mappings(), _guard)], _guard)
     if not values:
         return None

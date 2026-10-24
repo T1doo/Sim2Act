@@ -1,0 +1,671 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="13" skipped="0" tests="17" time="0.293" timestamp="2026-10-24T17:52:41.763462+00:00" hostname="24ce2e3069fb"><testcase classname="tests.test_journal_metadata_projection" name="test_original_metadata_results_sql_and_guards[request]" time="0.006"><failure message="NameError: name 'REQUEST' is not defined">connection = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd947260&gt;
+case = 'request'
+
+    @pytest.mark.parametrize("case", ["request", "response", "empty", "single", "seal-drift",
+        "wrong-phase", "wrong-owner", "wrong-anchor", "duplicate-anchor", "no-anchor"])
+    def test_original_metadata_results_sql_and_guards(connection, case):
+        c = connection
+        kind = trial.REQUEST if case == "request" else trial.RESPONSE
+        run = seed(c, kind=kind)
+        if case in ("empty", "single"):
+            statement = delete(rows)
+            if case == "single":
+                statement = statement.where(rows.c.kind == kind + "_seal")
+            c.execute(statement)
+        if case in ("seal-drift", "wrong-phase", "wrong-owner"):
+            for row in c.execute(select(rows)).mappings():
+                data = copy.deepcopy(row["snapshot"])
+                if case == "seal-drift" and row["kind"] == kind + "_seal":
+                    data["response"]["byte_count"] += 1
+                if case == "wrong-phase":
+                    data["response"]["phase"] = "UNKNOWN"
+                if case == "wrong-owner":
+                    data["response"]["principal_id"] = "another-user"
+                c.execute(update(rows).where(rows.c.kind == row["kind"]).values(snapshot=data))
+        if case == "wrong-anchor":
+            anchor = dict(c.execute(select(events.c.data)).scalar_one(), byte_count=99)
+            c.execute(update(events).values(data=anchor))
+        if case == "duplicate-anchor":
+            anchor = c.execute(select(events)).mappings().one()
+            c.execute(events.insert().values(**dict(anchor, id="duplicate")))
+        if case == "no-anchor":
+            c.execute(delete(events))
+&gt;       old = observe(c, legacy_metadata, run, kind=kind)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_journal_metadata_projection.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_journal_metadata_projection.py:84: in observe
+    result = ("OK", exact(implementation(c, run, aid, kind, _guard=guard)))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd947260&gt;
+run = {'id': 'run', 'principal_id': 'user', 'project_id': 'project', 'runtime_id': 'runtime'}
+aid = 'attempt', kind = 'pa_trial_request_body.v1'
+
+    def legacy_metadata(c, run, aid, kind, *, _guard=None):
+        """Late failure accounting reads digest/identity projections, never body_b64."""
+        selected = gate._trial_result(c.execute(select(rows.c.kind, rows.c.snapshot['request']['trial']['contract_fingerprint'].as_string().label('trial_fp'), rows.c.snapshot['request']['attempt_id'].as_string().label('key_attempt'), rows.c.snapshot['request']['family'].as_string().label('key_family'), rows.c.snapshot['request']['wire_sha256'].as_string().label('wire_sha256'), *[rows.c.snapshot['response'][k].as_string().label(k) for k in ('run_id', 'attempt_id', 'principal_id', 'project_id', 'runtime_id', 'phase', 'sha256', 'canonical_sha256', 'omission')], rows.c.snapshot['response']['byte_count'].as_integer().label('byte_count'), rows.c.snapshot['response']['received_complete'].as_boolean().label('complete')).where(rows.c.principal_id == run['principal_id'], rows.c.app_id == run['id'], rows.c.request_key == aid, rows.c.kind.in_([kind, kind + '_seal']))), _guard)
+        values = gate._trial_result([dict(r) for r in gate._trial_result(selected.mappings(), _guard)], _guard)
+        if not values:
+            return None
+        gate.require(len(values) == 2 and {r.pop('kind') for r in values} == {kind, kind + '_seal'})
+        gate.require(values[0] == values[1])
+        value = values[0]
+&gt;       gate.require(value['phase'] == ('RESERVED_REQUEST' if kind == REQUEST else 'RECEIVED_DECODED_BODY'))
+                                                                      ^^^^^^^
+E       NameError: name 'REQUEST' is not defined
+
+tests/test_journal_metadata_projection.py:25: NameError</failure></testcase><testcase classname="tests.test_journal_metadata_projection" name="test_original_metadata_results_sql_and_guards[response]" time="0.003"><failure message="NameError: name 'REQUEST' is not defined">connection = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd957c50&gt;
+case = 'response'
+
+    @pytest.mark.parametrize("case", ["request", "response", "empty", "single", "seal-drift",
+        "wrong-phase", "wrong-owner", "wrong-anchor", "duplicate-anchor", "no-anchor"])
+    def test_original_metadata_results_sql_and_guards(connection, case):
+        c = connection
+        kind = trial.REQUEST if case == "request" else trial.RESPONSE
+        run = seed(c, kind=kind)
+        if case in ("empty", "single"):
+            statement = delete(rows)
+            if case == "single":
+                statement = statement.where(rows.c.kind == kind + "_seal")
+            c.execute(statement)
+        if case in ("seal-drift", "wrong-phase", "wrong-owner"):
+            for row in c.execute(select(rows)).mappings():
+                data = copy.deepcopy(row["snapshot"])
+                if case == "seal-drift" and row["kind"] == kind + "_seal":
+                    data["response"]["byte_count"] += 1
+                if case == "wrong-phase":
+                    data["response"]["phase"] = "UNKNOWN"
+                if case == "wrong-owner":
+                    data["response"]["principal_id"] = "another-user"
+                c.execute(update(rows).where(rows.c.kind == row["kind"]).values(snapshot=data))
+        if case == "wrong-anchor":
+            anchor = dict(c.execute(select(events.c.data)).scalar_one(), byte_count=99)
+            c.execute(update(events).values(data=anchor))
+        if case == "duplicate-anchor":
+            anchor = c.execute(select(events)).mappings().one()
+            c.execute(events.insert().values(**dict(anchor, id="duplicate")))
+        if case == "no-anchor":
+            c.execute(delete(events))
+&gt;       old = observe(c, legacy_metadata, run, kind=kind)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_journal_metadata_projection.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_journal_metadata_projection.py:84: in observe
+    result = ("OK", exact(implementation(c, run, aid, kind, _guard=guard)))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd957c50&gt;
+run = {'id': 'run', 'principal_id': 'user', 'project_id': 'project', 'runtime_id': 'runtime'}
+aid = 'attempt', kind = 'pa_trial_response_body.v1'
+
+    def legacy_metadata(c, run, aid, kind, *, _guard=None):
+        """Late failure accounting reads digest/identity projections, never body_b64."""
+        selected = gate._trial_result(c.execute(select(rows.c.kind, rows.c.snapshot['request']['trial']['contract_fingerprint'].as_string().label('trial_fp'), rows.c.snapshot['request']['attempt_id'].as_string().label('key_attempt'), rows.c.snapshot['request']['family'].as_string().label('key_family'), rows.c.snapshot['request']['wire_sha256'].as_string().label('wire_sha256'), *[rows.c.snapshot['response'][k].as_string().label(k) for k in ('run_id', 'attempt_id', 'principal_id', 'project_id', 'runtime_id', 'phase', 'sha256', 'canonical_sha256', 'omission')], rows.c.snapshot['response']['byte_count'].as_integer().label('byte_count'), rows.c.snapshot['response']['received_complete'].as_boolean().label('complete')).where(rows.c.principal_id == run['principal_id'], rows.c.app_id == run['id'], rows.c.request_key == aid, rows.c.kind.in_([kind, kind + '_seal']))), _guard)
+        values = gate._trial_result([dict(r) for r in gate._trial_result(selected.mappings(), _guard)], _guard)
+        if not values:
+            return None
+        gate.require(len(values) == 2 and {r.pop('kind') for r in values} == {kind, kind + '_seal'})
+        gate.require(values[0] == values[1])
+        value = values[0]
+&gt;       gate.require(value['phase'] == ('RESERVED_REQUEST' if kind == REQUEST else 'RECEIVED_DECODED_BODY'))
+                                                                      ^^^^^^^
+E       NameError: name 'REQUEST' is not defined
+
+tests/test_journal_metadata_projection.py:25: NameError</failure></testcase><testcase classname="tests.test_journal_metadata_projection" name="test_original_metadata_results_sql_and_guards[empty]" time="0.034" /><testcase classname="tests.test_journal_metadata_projection" name="test_original_metadata_results_sql_and_guards[single]" time="0.004" /><testcase classname="tests.test_journal_metadata_projection" name="test_original_metadata_results_sql_and_guards[seal-drift]" time="0.004" /><testcase classname="tests.test_journal_metadata_projection" name="test_original_metadata_results_sql_and_guards[wrong-phase]" time="0.003"><failure message="NameError: name 'REQUEST' is not defined">connection = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bddaa480&gt;
+case = 'wrong-phase'
+
+    @pytest.mark.parametrize("case", ["request", "response", "empty", "single", "seal-drift",
+        "wrong-phase", "wrong-owner", "wrong-anchor", "duplicate-anchor", "no-anchor"])
+    def test_original_metadata_results_sql_and_guards(connection, case):
+        c = connection
+        kind = trial.REQUEST if case == "request" else trial.RESPONSE
+        run = seed(c, kind=kind)
+        if case in ("empty", "single"):
+            statement = delete(rows)
+            if case == "single":
+                statement = statement.where(rows.c.kind == kind + "_seal")
+            c.execute(statement)
+        if case in ("seal-drift", "wrong-phase", "wrong-owner"):
+            for row in c.execute(select(rows)).mappings():
+                data = copy.deepcopy(row["snapshot"])
+                if case == "seal-drift" and row["kind"] == kind + "_seal":
+                    data["response"]["byte_count"] += 1
+                if case == "wrong-phase":
+                    data["response"]["phase"] = "UNKNOWN"
+                if case == "wrong-owner":
+                    data["response"]["principal_id"] = "another-user"
+                c.execute(update(rows).where(rows.c.kind == row["kind"]).values(snapshot=data))
+        if case == "wrong-anchor":
+            anchor = dict(c.execute(select(events.c.data)).scalar_one(), byte_count=99)
+            c.execute(update(events).values(data=anchor))
+        if case == "duplicate-anchor":
+            anchor = c.execute(select(events)).mappings().one()
+            c.execute(events.insert().values(**dict(anchor, id="duplicate")))
+        if case == "no-anchor":
+            c.execute(delete(events))
+&gt;       old = observe(c, legacy_metadata, run, kind=kind)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_journal_metadata_projection.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_journal_metadata_projection.py:84: in observe
+    result = ("OK", exact(implementation(c, run, aid, kind, _guard=guard)))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bddaa480&gt;
+run = {'id': 'run', 'principal_id': 'user', 'project_id': 'project', 'runtime_id': 'runtime'}
+aid = 'attempt', kind = 'pa_trial_response_body.v1'
+
+    def legacy_metadata(c, run, aid, kind, *, _guard=None):
+        """Late failure accounting reads digest/identity projections, never body_b64."""
+        selected = gate._trial_result(c.execute(select(rows.c.kind, rows.c.snapshot['request']['trial']['contract_fingerprint'].as_string().label('trial_fp'), rows.c.snapshot['request']['attempt_id'].as_string().label('key_attempt'), rows.c.snapshot['request']['family'].as_string().label('key_family'), rows.c.snapshot['request']['wire_sha256'].as_string().label('wire_sha256'), *[rows.c.snapshot['response'][k].as_string().label(k) for k in ('run_id', 'attempt_id', 'principal_id', 'project_id', 'runtime_id', 'phase', 'sha256', 'canonical_sha256', 'omission')], rows.c.snapshot['response']['byte_count'].as_integer().label('byte_count'), rows.c.snapshot['response']['received_complete'].as_boolean().label('complete')).where(rows.c.principal_id == run['principal_id'], rows.c.app_id == run['id'], rows.c.request_key == aid, rows.c.kind.in_([kind, kind + '_seal']))), _guard)
+        values = gate._trial_result([dict(r) for r in gate._trial_result(selected.mappings(), _guard)], _guard)
+        if not values:
+            return None
+        gate.require(len(values) == 2 and {r.pop('kind') for r in values} == {kind, kind + '_seal'})
+        gate.require(values[0] == values[1])
+        value = values[0]
+&gt;       gate.require(value['phase'] == ('RESERVED_REQUEST' if kind == REQUEST else 'RECEIVED_DECODED_BODY'))
+                                                                      ^^^^^^^
+E       NameError: name 'REQUEST' is not defined
+
+tests/test_journal_metadata_projection.py:25: NameError</failure></testcase><testcase classname="tests.test_journal_metadata_projection" name="test_original_metadata_results_sql_and_guards[wrong-owner]" time="0.004"><failure message="NameError: name 'REQUEST' is not defined">connection = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd9edac0&gt;
+case = 'wrong-owner'
+
+    @pytest.mark.parametrize("case", ["request", "response", "empty", "single", "seal-drift",
+        "wrong-phase", "wrong-owner", "wrong-anchor", "duplicate-anchor", "no-anchor"])
+    def test_original_metadata_results_sql_and_guards(connection, case):
+        c = connection
+        kind = trial.REQUEST if case == "request" else trial.RESPONSE
+        run = seed(c, kind=kind)
+        if case in ("empty", "single"):
+            statement = delete(rows)
+            if case == "single":
+                statement = statement.where(rows.c.kind == kind + "_seal")
+            c.execute(statement)
+        if case in ("seal-drift", "wrong-phase", "wrong-owner"):
+            for row in c.execute(select(rows)).mappings():
+                data = copy.deepcopy(row["snapshot"])
+                if case == "seal-drift" and row["kind"] == kind + "_seal":
+                    data["response"]["byte_count"] += 1
+                if case == "wrong-phase":
+                    data["response"]["phase"] = "UNKNOWN"
+                if case == "wrong-owner":
+                    data["response"]["principal_id"] = "another-user"
+                c.execute(update(rows).where(rows.c.kind == row["kind"]).values(snapshot=data))
+        if case == "wrong-anchor":
+            anchor = dict(c.execute(select(events.c.data)).scalar_one(), byte_count=99)
+            c.execute(update(events).values(data=anchor))
+        if case == "duplicate-anchor":
+            anchor = c.execute(select(events)).mappings().one()
+            c.execute(events.insert().values(**dict(anchor, id="duplicate")))
+        if case == "no-anchor":
+            c.execute(delete(events))
+&gt;       old = observe(c, legacy_metadata, run, kind=kind)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_journal_metadata_projection.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_journal_metadata_projection.py:84: in observe
+    result = ("OK", exact(implementation(c, run, aid, kind, _guard=guard)))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd9edac0&gt;
+run = {'id': 'run', 'principal_id': 'user', 'project_id': 'project', 'runtime_id': 'runtime'}
+aid = 'attempt', kind = 'pa_trial_response_body.v1'
+
+    def legacy_metadata(c, run, aid, kind, *, _guard=None):
+        """Late failure accounting reads digest/identity projections, never body_b64."""
+        selected = gate._trial_result(c.execute(select(rows.c.kind, rows.c.snapshot['request']['trial']['contract_fingerprint'].as_string().label('trial_fp'), rows.c.snapshot['request']['attempt_id'].as_string().label('key_attempt'), rows.c.snapshot['request']['family'].as_string().label('key_family'), rows.c.snapshot['request']['wire_sha256'].as_string().label('wire_sha256'), *[rows.c.snapshot['response'][k].as_string().label(k) for k in ('run_id', 'attempt_id', 'principal_id', 'project_id', 'runtime_id', 'phase', 'sha256', 'canonical_sha256', 'omission')], rows.c.snapshot['response']['byte_count'].as_integer().label('byte_count'), rows.c.snapshot['response']['received_complete'].as_boolean().label('complete')).where(rows.c.principal_id == run['principal_id'], rows.c.app_id == run['id'], rows.c.request_key == aid, rows.c.kind.in_([kind, kind + '_seal']))), _guard)
+        values = gate._trial_result([dict(r) for r in gate._trial_result(selected.mappings(), _guard)], _guard)
+        if not values:
+            return None
+        gate.require(len(values) == 2 and {r.pop('kind') for r in values} == {kind, kind + '_seal'})
+        gate.require(values[0] == values[1])
+        value = values[0]
+&gt;       gate.require(value['phase'] == ('RESERVED_REQUEST' if kind == REQUEST else 'RECEIVED_DECODED_BODY'))
+                                                                      ^^^^^^^
+E       NameError: name 'REQUEST' is not defined
+
+tests/test_journal_metadata_projection.py:25: NameError</failure></testcase><testcase classname="tests.test_journal_metadata_projection" name="test_original_metadata_results_sql_and_guards[wrong-anchor]" time="0.003"><failure message="NameError: name 'REQUEST' is not defined">connection = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd9eb7a0&gt;
+case = 'wrong-anchor'
+
+    @pytest.mark.parametrize("case", ["request", "response", "empty", "single", "seal-drift",
+        "wrong-phase", "wrong-owner", "wrong-anchor", "duplicate-anchor", "no-anchor"])
+    def test_original_metadata_results_sql_and_guards(connection, case):
+        c = connection
+        kind = trial.REQUEST if case == "request" else trial.RESPONSE
+        run = seed(c, kind=kind)
+        if case in ("empty", "single"):
+            statement = delete(rows)
+            if case == "single":
+                statement = statement.where(rows.c.kind == kind + "_seal")
+            c.execute(statement)
+        if case in ("seal-drift", "wrong-phase", "wrong-owner"):
+            for row in c.execute(select(rows)).mappings():
+                data = copy.deepcopy(row["snapshot"])
+                if case == "seal-drift" and row["kind"] == kind + "_seal":
+                    data["response"]["byte_count"] += 1
+                if case == "wrong-phase":
+                    data["response"]["phase"] = "UNKNOWN"
+                if case == "wrong-owner":
+                    data["response"]["principal_id"] = "another-user"
+                c.execute(update(rows).where(rows.c.kind == row["kind"]).values(snapshot=data))
+        if case == "wrong-anchor":
+            anchor = dict(c.execute(select(events.c.data)).scalar_one(), byte_count=99)
+            c.execute(update(events).values(data=anchor))
+        if case == "duplicate-anchor":
+            anchor = c.execute(select(events)).mappings().one()
+            c.execute(events.insert().values(**dict(anchor, id="duplicate")))
+        if case == "no-anchor":
+            c.execute(delete(events))
+&gt;       old = observe(c, legacy_metadata, run, kind=kind)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_journal_metadata_projection.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_journal_metadata_projection.py:84: in observe
+    result = ("OK", exact(implementation(c, run, aid, kind, _guard=guard)))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd9eb7a0&gt;
+run = {'id': 'run', 'principal_id': 'user', 'project_id': 'project', 'runtime_id': 'runtime'}
+aid = 'attempt', kind = 'pa_trial_response_body.v1'
+
+    def legacy_metadata(c, run, aid, kind, *, _guard=None):
+        """Late failure accounting reads digest/identity projections, never body_b64."""
+        selected = gate._trial_result(c.execute(select(rows.c.kind, rows.c.snapshot['request']['trial']['contract_fingerprint'].as_string().label('trial_fp'), rows.c.snapshot['request']['attempt_id'].as_string().label('key_attempt'), rows.c.snapshot['request']['family'].as_string().label('key_family'), rows.c.snapshot['request']['wire_sha256'].as_string().label('wire_sha256'), *[rows.c.snapshot['response'][k].as_string().label(k) for k in ('run_id', 'attempt_id', 'principal_id', 'project_id', 'runtime_id', 'phase', 'sha256', 'canonical_sha256', 'omission')], rows.c.snapshot['response']['byte_count'].as_integer().label('byte_count'), rows.c.snapshot['response']['received_complete'].as_boolean().label('complete')).where(rows.c.principal_id == run['principal_id'], rows.c.app_id == run['id'], rows.c.request_key == aid, rows.c.kind.in_([kind, kind + '_seal']))), _guard)
+        values = gate._trial_result([dict(r) for r in gate._trial_result(selected.mappings(), _guard)], _guard)
+        if not values:
+            return None
+        gate.require(len(values) == 2 and {r.pop('kind') for r in values} == {kind, kind + '_seal'})
+        gate.require(values[0] == values[1])
+        value = values[0]
+&gt;       gate.require(value['phase'] == ('RESERVED_REQUEST' if kind == REQUEST else 'RECEIVED_DECODED_BODY'))
+                                                                      ^^^^^^^
+E       NameError: name 'REQUEST' is not defined
+
+tests/test_journal_metadata_projection.py:25: NameError</failure></testcase><testcase classname="tests.test_journal_metadata_projection" name="test_original_metadata_results_sql_and_guards[duplicate-anchor]" time="0.003"><failure message="NameError: name 'REQUEST' is not defined">connection = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd94ef60&gt;
+case = 'duplicate-anchor'
+
+    @pytest.mark.parametrize("case", ["request", "response", "empty", "single", "seal-drift",
+        "wrong-phase", "wrong-owner", "wrong-anchor", "duplicate-anchor", "no-anchor"])
+    def test_original_metadata_results_sql_and_guards(connection, case):
+        c = connection
+        kind = trial.REQUEST if case == "request" else trial.RESPONSE
+        run = seed(c, kind=kind)
+        if case in ("empty", "single"):
+            statement = delete(rows)
+            if case == "single":
+                statement = statement.where(rows.c.kind == kind + "_seal")
+            c.execute(statement)
+        if case in ("seal-drift", "wrong-phase", "wrong-owner"):
+            for row in c.execute(select(rows)).mappings():
+                data = copy.deepcopy(row["snapshot"])
+                if case == "seal-drift" and row["kind"] == kind + "_seal":
+                    data["response"]["byte_count"] += 1
+                if case == "wrong-phase":
+                    data["response"]["phase"] = "UNKNOWN"
+                if case == "wrong-owner":
+                    data["response"]["principal_id"] = "another-user"
+                c.execute(update(rows).where(rows.c.kind == row["kind"]).values(snapshot=data))
+        if case == "wrong-anchor":
+            anchor = dict(c.execute(select(events.c.data)).scalar_one(), byte_count=99)
+            c.execute(update(events).values(data=anchor))
+        if case == "duplicate-anchor":
+            anchor = c.execute(select(events)).mappings().one()
+            c.execute(events.insert().values(**dict(anchor, id="duplicate")))
+        if case == "no-anchor":
+            c.execute(delete(events))
+&gt;       old = observe(c, legacy_metadata, run, kind=kind)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_journal_metadata_projection.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_journal_metadata_projection.py:84: in observe
+    result = ("OK", exact(implementation(c, run, aid, kind, _guard=guard)))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd94ef60&gt;
+run = {'id': 'run', 'principal_id': 'user', 'project_id': 'project', 'runtime_id': 'runtime'}
+aid = 'attempt', kind = 'pa_trial_response_body.v1'
+
+    def legacy_metadata(c, run, aid, kind, *, _guard=None):
+        """Late failure accounting reads digest/identity projections, never body_b64."""
+        selected = gate._trial_result(c.execute(select(rows.c.kind, rows.c.snapshot['request']['trial']['contract_fingerprint'].as_string().label('trial_fp'), rows.c.snapshot['request']['attempt_id'].as_string().label('key_attempt'), rows.c.snapshot['request']['family'].as_string().label('key_family'), rows.c.snapshot['request']['wire_sha256'].as_string().label('wire_sha256'), *[rows.c.snapshot['response'][k].as_string().label(k) for k in ('run_id', 'attempt_id', 'principal_id', 'project_id', 'runtime_id', 'phase', 'sha256', 'canonical_sha256', 'omission')], rows.c.snapshot['response']['byte_count'].as_integer().label('byte_count'), rows.c.snapshot['response']['received_complete'].as_boolean().label('complete')).where(rows.c.principal_id == run['principal_id'], rows.c.app_id == run['id'], rows.c.request_key == aid, rows.c.kind.in_([kind, kind + '_seal']))), _guard)
+        values = gate._trial_result([dict(r) for r in gate._trial_result(selected.mappings(), _guard)], _guard)
+        if not values:
+            return None
+        gate.require(len(values) == 2 and {r.pop('kind') for r in values} == {kind, kind + '_seal'})
+        gate.require(values[0] == values[1])
+        value = values[0]
+&gt;       gate.require(value['phase'] == ('RESERVED_REQUEST' if kind == REQUEST else 'RECEIVED_DECODED_BODY'))
+                                                                      ^^^^^^^
+E       NameError: name 'REQUEST' is not defined
+
+tests/test_journal_metadata_projection.py:25: NameError</failure></testcase><testcase classname="tests.test_journal_metadata_projection" name="test_original_metadata_results_sql_and_guards[no-anchor]" time="0.003"><failure message="NameError: name 'REQUEST' is not defined">connection = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bdda89b0&gt;
+case = 'no-anchor'
+
+    @pytest.mark.parametrize("case", ["request", "response", "empty", "single", "seal-drift",
+        "wrong-phase", "wrong-owner", "wrong-anchor", "duplicate-anchor", "no-anchor"])
+    def test_original_metadata_results_sql_and_guards(connection, case):
+        c = connection
+        kind = trial.REQUEST if case == "request" else trial.RESPONSE
+        run = seed(c, kind=kind)
+        if case in ("empty", "single"):
+            statement = delete(rows)
+            if case == "single":
+                statement = statement.where(rows.c.kind == kind + "_seal")
+            c.execute(statement)
+        if case in ("seal-drift", "wrong-phase", "wrong-owner"):
+            for row in c.execute(select(rows)).mappings():
+                data = copy.deepcopy(row["snapshot"])
+                if case == "seal-drift" and row["kind"] == kind + "_seal":
+                    data["response"]["byte_count"] += 1
+                if case == "wrong-phase":
+                    data["response"]["phase"] = "UNKNOWN"
+                if case == "wrong-owner":
+                    data["response"]["principal_id"] = "another-user"
+                c.execute(update(rows).where(rows.c.kind == row["kind"]).values(snapshot=data))
+        if case == "wrong-anchor":
+            anchor = dict(c.execute(select(events.c.data)).scalar_one(), byte_count=99)
+            c.execute(update(events).values(data=anchor))
+        if case == "duplicate-anchor":
+            anchor = c.execute(select(events)).mappings().one()
+            c.execute(events.insert().values(**dict(anchor, id="duplicate")))
+        if case == "no-anchor":
+            c.execute(delete(events))
+&gt;       old = observe(c, legacy_metadata, run, kind=kind)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_journal_metadata_projection.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_journal_metadata_projection.py:84: in observe
+    result = ("OK", exact(implementation(c, run, aid, kind, _guard=guard)))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bdda89b0&gt;
+run = {'id': 'run', 'principal_id': 'user', 'project_id': 'project', 'runtime_id': 'runtime'}
+aid = 'attempt', kind = 'pa_trial_response_body.v1'
+
+    def legacy_metadata(c, run, aid, kind, *, _guard=None):
+        """Late failure accounting reads digest/identity projections, never body_b64."""
+        selected = gate._trial_result(c.execute(select(rows.c.kind, rows.c.snapshot['request']['trial']['contract_fingerprint'].as_string().label('trial_fp'), rows.c.snapshot['request']['attempt_id'].as_string().label('key_attempt'), rows.c.snapshot['request']['family'].as_string().label('key_family'), rows.c.snapshot['request']['wire_sha256'].as_string().label('wire_sha256'), *[rows.c.snapshot['response'][k].as_string().label(k) for k in ('run_id', 'attempt_id', 'principal_id', 'project_id', 'runtime_id', 'phase', 'sha256', 'canonical_sha256', 'omission')], rows.c.snapshot['response']['byte_count'].as_integer().label('byte_count'), rows.c.snapshot['response']['received_complete'].as_boolean().label('complete')).where(rows.c.principal_id == run['principal_id'], rows.c.app_id == run['id'], rows.c.request_key == aid, rows.c.kind.in_([kind, kind + '_seal']))), _guard)
+        values = gate._trial_result([dict(r) for r in gate._trial_result(selected.mappings(), _guard)], _guard)
+        if not values:
+            return None
+        gate.require(len(values) == 2 and {r.pop('kind') for r in values} == {kind, kind + '_seal'})
+        gate.require(values[0] == values[1])
+        value = values[0]
+&gt;       gate.require(value['phase'] == ('RESERVED_REQUEST' if kind == REQUEST else 'RECEIVED_DECODED_BODY'))
+                                                                      ^^^^^^^
+E       NameError: name 'REQUEST' is not defined
+
+tests/test_journal_metadata_projection.py:25: NameError</failure></testcase><testcase classname="tests.test_journal_metadata_projection" name="test_identity_isolation_and_original_nonexact_input_semantics" time="0.011"><failure message="NameError: name 'REQUEST' is not defined">connection = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd718560&gt;
+
+    def test_identity_isolation_and_original_nonexact_input_semantics(connection):
+        c = connection
+        run = seed(c)
+        for field in ("principal_id", "id"):
+            other = dict(run, **{field: "other"})
+            seed(c, other, aid=field)
+            for values in (other, dict(run, **{field: None})):
+                assert observe(c, legacy_metadata, values) == observe(c, trial._metadata, values)
+        class Text(str):
+            pass
+        for aid, kind in [(None, trial.RESPONSE), (Text("attempt"), Text(trial.RESPONSE)),
+                          ("' OR 1=1 --", trial.RESPONSE), ("attempt", None)]:
+&gt;           assert observe(c, legacy_metadata, run, aid=aid, kind=kind) == observe(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                c, trial._metadata, run, aid=aid, kind=kind)
+
+tests/test_journal_metadata_projection.py:143: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_journal_metadata_projection.py:84: in observe
+    result = ("OK", exact(implementation(c, run, aid, kind, _guard=guard)))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd718560&gt;
+run = {'id': 'run', 'principal_id': 'user', 'project_id': 'project', 'runtime_id': 'runtime'}
+aid = 'attempt', kind = 'pa_trial_response_body.v1'
+
+    def legacy_metadata(c, run, aid, kind, *, _guard=None):
+        """Late failure accounting reads digest/identity projections, never body_b64."""
+        selected = gate._trial_result(c.execute(select(rows.c.kind, rows.c.snapshot['request']['trial']['contract_fingerprint'].as_string().label('trial_fp'), rows.c.snapshot['request']['attempt_id'].as_string().label('key_attempt'), rows.c.snapshot['request']['family'].as_string().label('key_family'), rows.c.snapshot['request']['wire_sha256'].as_string().label('wire_sha256'), *[rows.c.snapshot['response'][k].as_string().label(k) for k in ('run_id', 'attempt_id', 'principal_id', 'project_id', 'runtime_id', 'phase', 'sha256', 'canonical_sha256', 'omission')], rows.c.snapshot['response']['byte_count'].as_integer().label('byte_count'), rows.c.snapshot['response']['received_complete'].as_boolean().label('complete')).where(rows.c.principal_id == run['principal_id'], rows.c.app_id == run['id'], rows.c.request_key == aid, rows.c.kind.in_([kind, kind + '_seal']))), _guard)
+        values = gate._trial_result([dict(r) for r in gate._trial_result(selected.mappings(), _guard)], _guard)
+        if not values:
+            return None
+        gate.require(len(values) == 2 and {r.pop('kind') for r in values} == {kind, kind + '_seal'})
+        gate.require(values[0] == values[1])
+        value = values[0]
+&gt;       gate.require(value['phase'] == ('RESERVED_REQUEST' if kind == REQUEST else 'RECEIVED_DECODED_BODY'))
+                                                                      ^^^^^^^
+E       NameError: name 'REQUEST' is not defined
+
+tests/test_journal_metadata_projection.py:25: NameError</failure></testcase><testcase classname="tests.test_journal_metadata_projection" name="test_midread_mutation_original_rejection_and_exception[run]" time="0.003"><failure message="NameError: name 'REQUEST' is not defined">connection = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd9e6de0&gt;
+mutation = 'run'
+
+    @pytest.mark.parametrize("mutation", ["run", "anchor", "delete", "guard-error"])
+    def test_midread_mutation_original_rejection_and_exception(connection, mutation):
+        c = connection
+        run = seed(c)
+        outcomes = []
+        for implementation in (legacy_metadata, trial._metadata):
+            local = dict(run)
+            with c.begin_nested() as savepoint:
+                def change(index):
+                    if index != 3:
+                        return
+                    if mutation == "run":
+                        local["project_id"] = "mutated"
+                    elif mutation == "anchor":
+                        c.execute(update(events).values(data=dict(attempt_id="attempt", family=trial.RESPONSE)))
+                    elif mutation == "delete":
+                        c.execute(delete(events))
+                    else:
+                        raise RuntimeError("original-guard-error")
+&gt;               outcomes.append(observe(c, implementation, local, hook=change))
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_journal_metadata_projection.py:168: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_journal_metadata_projection.py:84: in observe
+    result = ("OK", exact(implementation(c, run, aid, kind, _guard=guard)))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd9e6de0&gt;
+run = {'id': 'run', 'principal_id': 'user', 'project_id': 'mutated', 'runtime_id': 'runtime'}
+aid = 'attempt', kind = 'pa_trial_response_body.v1'
+
+    def legacy_metadata(c, run, aid, kind, *, _guard=None):
+        """Late failure accounting reads digest/identity projections, never body_b64."""
+        selected = gate._trial_result(c.execute(select(rows.c.kind, rows.c.snapshot['request']['trial']['contract_fingerprint'].as_string().label('trial_fp'), rows.c.snapshot['request']['attempt_id'].as_string().label('key_attempt'), rows.c.snapshot['request']['family'].as_string().label('key_family'), rows.c.snapshot['request']['wire_sha256'].as_string().label('wire_sha256'), *[rows.c.snapshot['response'][k].as_string().label(k) for k in ('run_id', 'attempt_id', 'principal_id', 'project_id', 'runtime_id', 'phase', 'sha256', 'canonical_sha256', 'omission')], rows.c.snapshot['response']['byte_count'].as_integer().label('byte_count'), rows.c.snapshot['response']['received_complete'].as_boolean().label('complete')).where(rows.c.principal_id == run['principal_id'], rows.c.app_id == run['id'], rows.c.request_key == aid, rows.c.kind.in_([kind, kind + '_seal']))), _guard)
+        values = gate._trial_result([dict(r) for r in gate._trial_result(selected.mappings(), _guard)], _guard)
+        if not values:
+            return None
+        gate.require(len(values) == 2 and {r.pop('kind') for r in values} == {kind, kind + '_seal'})
+        gate.require(values[0] == values[1])
+        value = values[0]
+&gt;       gate.require(value['phase'] == ('RESERVED_REQUEST' if kind == REQUEST else 'RECEIVED_DECODED_BODY'))
+                                                                      ^^^^^^^
+E       NameError: name 'REQUEST' is not defined
+
+tests/test_journal_metadata_projection.py:25: NameError</failure></testcase><testcase classname="tests.test_journal_metadata_projection" name="test_midread_mutation_original_rejection_and_exception[anchor]" time="0.003"><failure message="NameError: name 'REQUEST' is not defined">connection = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd7d1fa0&gt;
+mutation = 'anchor'
+
+    @pytest.mark.parametrize("mutation", ["run", "anchor", "delete", "guard-error"])
+    def test_midread_mutation_original_rejection_and_exception(connection, mutation):
+        c = connection
+        run = seed(c)
+        outcomes = []
+        for implementation in (legacy_metadata, trial._metadata):
+            local = dict(run)
+            with c.begin_nested() as savepoint:
+                def change(index):
+                    if index != 3:
+                        return
+                    if mutation == "run":
+                        local["project_id"] = "mutated"
+                    elif mutation == "anchor":
+                        c.execute(update(events).values(data=dict(attempt_id="attempt", family=trial.RESPONSE)))
+                    elif mutation == "delete":
+                        c.execute(delete(events))
+                    else:
+                        raise RuntimeError("original-guard-error")
+&gt;               outcomes.append(observe(c, implementation, local, hook=change))
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_journal_metadata_projection.py:168: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_journal_metadata_projection.py:84: in observe
+    result = ("OK", exact(implementation(c, run, aid, kind, _guard=guard)))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd7d1fa0&gt;
+run = {'id': 'run', 'principal_id': 'user', 'project_id': 'project', 'runtime_id': 'runtime'}
+aid = 'attempt', kind = 'pa_trial_response_body.v1'
+
+    def legacy_metadata(c, run, aid, kind, *, _guard=None):
+        """Late failure accounting reads digest/identity projections, never body_b64."""
+        selected = gate._trial_result(c.execute(select(rows.c.kind, rows.c.snapshot['request']['trial']['contract_fingerprint'].as_string().label('trial_fp'), rows.c.snapshot['request']['attempt_id'].as_string().label('key_attempt'), rows.c.snapshot['request']['family'].as_string().label('key_family'), rows.c.snapshot['request']['wire_sha256'].as_string().label('wire_sha256'), *[rows.c.snapshot['response'][k].as_string().label(k) for k in ('run_id', 'attempt_id', 'principal_id', 'project_id', 'runtime_id', 'phase', 'sha256', 'canonical_sha256', 'omission')], rows.c.snapshot['response']['byte_count'].as_integer().label('byte_count'), rows.c.snapshot['response']['received_complete'].as_boolean().label('complete')).where(rows.c.principal_id == run['principal_id'], rows.c.app_id == run['id'], rows.c.request_key == aid, rows.c.kind.in_([kind, kind + '_seal']))), _guard)
+        values = gate._trial_result([dict(r) for r in gate._trial_result(selected.mappings(), _guard)], _guard)
+        if not values:
+            return None
+        gate.require(len(values) == 2 and {r.pop('kind') for r in values} == {kind, kind + '_seal'})
+        gate.require(values[0] == values[1])
+        value = values[0]
+&gt;       gate.require(value['phase'] == ('RESERVED_REQUEST' if kind == REQUEST else 'RECEIVED_DECODED_BODY'))
+                                                                      ^^^^^^^
+E       NameError: name 'REQUEST' is not defined
+
+tests/test_journal_metadata_projection.py:25: NameError</failure></testcase><testcase classname="tests.test_journal_metadata_projection" name="test_midread_mutation_original_rejection_and_exception[delete]" time="0.003"><failure message="NameError: name 'REQUEST' is not defined">connection = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd7d0a40&gt;
+mutation = 'delete'
+
+    @pytest.mark.parametrize("mutation", ["run", "anchor", "delete", "guard-error"])
+    def test_midread_mutation_original_rejection_and_exception(connection, mutation):
+        c = connection
+        run = seed(c)
+        outcomes = []
+        for implementation in (legacy_metadata, trial._metadata):
+            local = dict(run)
+            with c.begin_nested() as savepoint:
+                def change(index):
+                    if index != 3:
+                        return
+                    if mutation == "run":
+                        local["project_id"] = "mutated"
+                    elif mutation == "anchor":
+                        c.execute(update(events).values(data=dict(attempt_id="attempt", family=trial.RESPONSE)))
+                    elif mutation == "delete":
+                        c.execute(delete(events))
+                    else:
+                        raise RuntimeError("original-guard-error")
+&gt;               outcomes.append(observe(c, implementation, local, hook=change))
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_journal_metadata_projection.py:168: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_journal_metadata_projection.py:84: in observe
+    result = ("OK", exact(implementation(c, run, aid, kind, _guard=guard)))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd7d0a40&gt;
+run = {'id': 'run', 'principal_id': 'user', 'project_id': 'project', 'runtime_id': 'runtime'}
+aid = 'attempt', kind = 'pa_trial_response_body.v1'
+
+    def legacy_metadata(c, run, aid, kind, *, _guard=None):
+        """Late failure accounting reads digest/identity projections, never body_b64."""
+        selected = gate._trial_result(c.execute(select(rows.c.kind, rows.c.snapshot['request']['trial']['contract_fingerprint'].as_string().label('trial_fp'), rows.c.snapshot['request']['attempt_id'].as_string().label('key_attempt'), rows.c.snapshot['request']['family'].as_string().label('key_family'), rows.c.snapshot['request']['wire_sha256'].as_string().label('wire_sha256'), *[rows.c.snapshot['response'][k].as_string().label(k) for k in ('run_id', 'attempt_id', 'principal_id', 'project_id', 'runtime_id', 'phase', 'sha256', 'canonical_sha256', 'omission')], rows.c.snapshot['response']['byte_count'].as_integer().label('byte_count'), rows.c.snapshot['response']['received_complete'].as_boolean().label('complete')).where(rows.c.principal_id == run['principal_id'], rows.c.app_id == run['id'], rows.c.request_key == aid, rows.c.kind.in_([kind, kind + '_seal']))), _guard)
+        values = gate._trial_result([dict(r) for r in gate._trial_result(selected.mappings(), _guard)], _guard)
+        if not values:
+            return None
+        gate.require(len(values) == 2 and {r.pop('kind') for r in values} == {kind, kind + '_seal'})
+        gate.require(values[0] == values[1])
+        value = values[0]
+&gt;       gate.require(value['phase'] == ('RESERVED_REQUEST' if kind == REQUEST else 'RECEIVED_DECODED_BODY'))
+                                                                      ^^^^^^^
+E       NameError: name 'REQUEST' is not defined
+
+tests/test_journal_metadata_projection.py:25: NameError</failure></testcase><testcase classname="tests.test_journal_metadata_projection" name="test_midread_mutation_original_rejection_and_exception[guard-error]" time="0.003" /><testcase classname="tests.test_journal_metadata_projection" name="test_fresh_projection_after_writes_and_rollback" time="0.005"><failure message="NameError: name 'REQUEST' is not defined">connection = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd8c70b0&gt;
+
+    def test_fresh_projection_after_writes_and_rollback(connection):
+        c = connection
+        run = seed(c)
+        original = trial._metadata(c, run, "attempt", trial.RESPONSE)
+        with c.begin_nested() as savepoint:
+            for row in c.execute(select(rows)).mappings():
+                snapshot = copy.deepcopy(row["snapshot"])
+                snapshot["response"]["byte_count"] = 19
+                c.execute(update(rows).where(rows.c.kind == row["kind"]).values(snapshot=snapshot))
+            anchor = dict(c.execute(select(events.c.data)).scalar_one(), byte_count=19)
+            c.execute(update(events).values(data=anchor))
+            current = trial._metadata(c, run, "attempt", trial.RESPONSE)
+&gt;           assert current == legacy_metadata(c, run, "attempt", trial.RESPONSE)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_journal_metadata_projection.py:186: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd8c70b0&gt;
+run = {'id': 'run', 'principal_id': 'user', 'project_id': 'project', 'runtime_id': 'runtime'}
+aid = 'attempt', kind = 'pa_trial_response_body.v1'
+
+    def legacy_metadata(c, run, aid, kind, *, _guard=None):
+        """Late failure accounting reads digest/identity projections, never body_b64."""
+        selected = gate._trial_result(c.execute(select(rows.c.kind, rows.c.snapshot['request']['trial']['contract_fingerprint'].as_string().label('trial_fp'), rows.c.snapshot['request']['attempt_id'].as_string().label('key_attempt'), rows.c.snapshot['request']['family'].as_string().label('key_family'), rows.c.snapshot['request']['wire_sha256'].as_string().label('wire_sha256'), *[rows.c.snapshot['response'][k].as_string().label(k) for k in ('run_id', 'attempt_id', 'principal_id', 'project_id', 'runtime_id', 'phase', 'sha256', 'canonical_sha256', 'omission')], rows.c.snapshot['response']['byte_count'].as_integer().label('byte_count'), rows.c.snapshot['response']['received_complete'].as_boolean().label('complete')).where(rows.c.principal_id == run['principal_id'], rows.c.app_id == run['id'], rows.c.request_key == aid, rows.c.kind.in_([kind, kind + '_seal']))), _guard)
+        values = gate._trial_result([dict(r) for r in gate._trial_result(selected.mappings(), _guard)], _guard)
+        if not values:
+            return None
+        gate.require(len(values) == 2 and {r.pop('kind') for r in values} == {kind, kind + '_seal'})
+        gate.require(values[0] == values[1])
+        value = values[0]
+&gt;       gate.require(value['phase'] == ('RESERVED_REQUEST' if kind == REQUEST else 'RECEIVED_DECODED_BODY'))
+                                                                      ^^^^^^^
+E       NameError: name 'REQUEST' is not defined
+
+tests/test_journal_metadata_projection.py:25: NameError</failure></testcase><testcase classname="tests.test_journal_metadata_projection" name="test_sqlite_and_postgres_projection_structure_and_parameters" time="0.003"><failure message="NameError: name 'REQUEST' is not defined">connection = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd8737a0&gt;
+
+    def test_sqlite_and_postgres_projection_structure_and_parameters(connection):
+        run = seed(connection)
+        statements = []
+        def capture(_c, clause, _many, _params, _options):
+            statements.append(clause)
+        event.listen(connection, "before_execute", capture)
+        try:
+&gt;           legacy_metadata(connection, run, "attempt", trial.RESPONSE)
+
+tests/test_journal_metadata_projection.py:200: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f01bd8737a0&gt;
+run = {'id': 'run', 'principal_id': 'user', 'project_id': 'project', 'runtime_id': 'runtime'}
+aid = 'attempt', kind = 'pa_trial_response_body.v1'
+
+    def legacy_metadata(c, run, aid, kind, *, _guard=None):
+        """Late failure accounting reads digest/identity projections, never body_b64."""
+        selected = gate._trial_result(c.execute(select(rows.c.kind, rows.c.snapshot['request']['trial']['contract_fingerprint'].as_string().label('trial_fp'), rows.c.snapshot['request']['attempt_id'].as_string().label('key_attempt'), rows.c.snapshot['request']['family'].as_string().label('key_family'), rows.c.snapshot['request']['wire_sha256'].as_string().label('wire_sha256'), *[rows.c.snapshot['response'][k].as_string().label(k) for k in ('run_id', 'attempt_id', 'principal_id', 'project_id', 'runtime_id', 'phase', 'sha256', 'canonical_sha256', 'omission')], rows.c.snapshot['response']['byte_count'].as_integer().label('byte_count'), rows.c.snapshot['response']['received_complete'].as_boolean().label('complete')).where(rows.c.principal_id == run['principal_id'], rows.c.app_id == run['id'], rows.c.request_key == aid, rows.c.kind.in_([kind, kind + '_seal']))), _guard)
+        values = gate._trial_result([dict(r) for r in gate._trial_result(selected.mappings(), _guard)], _guard)
+        if not values:
+            return None
+        gate.require(len(values) == 2 and {r.pop('kind') for r in values} == {kind, kind + '_seal'})
+        gate.require(values[0] == values[1])
+        value = values[0]
+&gt;       gate.require(value['phase'] == ('RESERVED_REQUEST' if kind == REQUEST else 'RECEIVED_DECODED_BODY'))
+                                                                      ^^^^^^^
+E       NameError: name 'REQUEST' is not defined
+
+tests/test_journal_metadata_projection.py:25: NameError</failure></testcase></testsuite></testsuites>
