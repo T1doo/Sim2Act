@@ -8,7 +8,7 @@ from typing import NoReturn
 
 from fastapi import Depends
 from pydantic import Field, ValidationError
-from sqlalchemy import insert, select, true, update
+from sqlalchemy import bindparam, insert, select, true, update
 
 from . import apps
 from . import delivery_graph as core
@@ -24,6 +24,14 @@ from .errors import DomainError
 
 NAMESPACE = "delivery-graph-apps.v1"
 HASH = r"^[a-f0-9]{64}$"
+
+# Share SQL structure only; every lookup binds current values and reads all columns.
+_REQUEST_LOOKUP_QUERY = select(requests).where(
+    requests.c.app_id == bindparam("lookup_app_id", type_=requests.c.app_id.type),
+    requests.c.principal_id == bindparam("lookup_principal_id", type_=requests.c.principal_id.type),
+    requests.c.kind == bindparam("lookup_kind", type_=requests.c.kind.type),
+    requests.c.request_key == bindparam("lookup_request_key", type_=requests.c.request_key.type),
+)
 
 
 class DeriveInput(Strict):
@@ -510,6 +518,11 @@ def current(store, c, user, pid, aid, limits, *, _family=None):
 
 
 def lookup(c, user, aid, kind, key):
+    if type(user) is str and type(aid) is str and type(kind) is str and type(key) is str:
+        return c.execute(_REQUEST_LOOKUP_QUERY, dict(
+            lookup_app_id=aid, lookup_principal_id=user,
+            lookup_kind=kind, lookup_request_key=key,
+        )).mappings().first()
     row = (
         c.execute(
             select(requests).where(
