@@ -18,6 +18,23 @@ def test_saved_goal_execution_ui(tmp_path):
     assert receipt["source_sha256"] == hashlib.sha256(source.read_bytes()).hexdigest()
 
 
+def test_goal_history_keeps_current_saved_binding(tmp_path):
+    result = subprocess.run(
+        ["node", "tests/goal_card_run_ui.cjs", str(tmp_path), "HISTORY"],
+        capture_output=True, text=True, timeout=30,
+    )
+    (tmp_path / "driver.log").write_text(result.stdout + result.stderr)
+    assert result.returncode == 0, result.stdout + result.stderr
+    receipt = json.loads((tmp_path / "results.json").read_text())
+    assert receipt["status"] == "PASS"
+    assert receipt["versions_viewed"] == [1, 2, 3]
+    assert receipt["selected_version"] == 3
+    assert receipt["history_requests"] == receipt["posts"] == 0
+    assert all(row["method"] == "GET" for row in receipt["requests"])
+    source = Path(__file__).parents[1] / "src/sim2act/web/app.js"
+    assert receipt["source_sha256"] == hashlib.sha256(source.read_bytes()).hexdigest()
+
+
 def test_saved_goal_execution_actual_http_ui(env, tmp_path):
     import socket
     import threading
