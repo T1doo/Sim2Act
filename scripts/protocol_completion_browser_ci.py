@@ -34,7 +34,7 @@ def write(root, name, value):
 def collect(root):
     outputs = {}
     total = 0
-    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "read-failed.png", "cold.png", "source-failed.png", "source-refreshed.png", "extract-failed.png", "extract-refreshed.png", "store-content-hashes.json", "failure.png", "before-projects-wide.png", "before-projects-narrow.png", "after-projects-wide.png", "after-projects-narrow.png", "after-apps-wide.png", "after-apps-narrow.png", "after-resources-wide.png", "after-resources-narrow.png", "after-source-receipt-wide.png", "after-source-error-narrow.png", "maintenance-expanded-wide.png", "project-create-narrow.png", "app-result-wide.png", "app-result-narrow.png", "app-read-error-narrow.png", "content-result.json", "app-loading-wide.png", "app-empty-narrow.png", "app-read-error-wide.png", "before-tasks-wide.png", "before-tasks-narrow.png", "after-tasks-wide.png", "after-tasks-narrow.png", "task-focus-wide.png", "task-reduced-narrow.png", "before-goals-wide.png", "before-goals-narrow.png", "before-editor-wide.png", "before-editor-narrow.png", "after-goals-wide.png", "after-goals-narrow.png", "after-editor-wide.png", "after-editor-narrow.png", "goal-focus-wide.png", "goal-trial-narrow.png"):
+    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "read-failed.png", "cold.png", "source-failed.png", "source-refreshed.png", "extract-failed.png", "extract-refreshed.png", "store-content-hashes.json", "failure.png", "before-projects-wide.png", "before-projects-narrow.png", "after-projects-wide.png", "after-projects-narrow.png", "after-apps-wide.png", "after-apps-narrow.png", "after-resources-wide.png", "after-resources-narrow.png", "after-source-receipt-wide.png", "after-source-error-narrow.png", "maintenance-expanded-wide.png", "project-create-narrow.png", "app-result-wide.png", "app-result-narrow.png", "app-read-error-narrow.png", "content-result.json", "app-loading-wide.png", "app-empty-narrow.png", "app-read-error-wide.png", "before-tasks-wide.png", "before-tasks-narrow.png", "after-tasks-wide.png", "after-tasks-narrow.png", "task-focus-wide.png", "task-reduced-narrow.png", "before-goals-wide.png", "before-goals-narrow.png", "before-editor-wide.png", "before-editor-narrow.png", "after-goals-wide.png", "after-goals-narrow.png", "after-editor-wide.png", "after-editor-narrow.png", "goal-focus-wide.png", "goal-trial-narrow.png", "goal-history-1366.png", "goal-history-390.png", "goal-unknown-1366.png", "goal-unknown-390.png"):
         file = root / name
         if not file.exists():
             continue
@@ -108,7 +108,7 @@ def launch_paths(root, deadline, phase="extract", review=False, readback=False, 
     else:
         required += [str((evidence / name).relative_to(REPO)) for name in ("original.json", "after.sqlite.gz" if review else "before.sqlite.gz", "original-received-sidecar.json")]
     if workspace_visual:
-        required += ["scripts/browser-ci/workspace-visual.cjs", "scripts/readonly_content_fixture.py", "src/sim2act/web/use.js", "src/sim2act/web/csv-owner.js", "src/sim2act/web/csv-goal-revision.js", "docs/evidence/research-desk-content-20261023/saved-csv.json", "docs/evidence/research-desk-content-20261023/saved-csv.sqlite.gz", "docs/evidence/goal-card-native-20261025/before-assets/index.html", "docs/evidence/goal-card-native-20261025/before-assets/app.css", "docs/evidence/goal-card-native-20261025/before-assets/app.js", "docs/evidence/goal-card-native-20261025/before-assets/protocol.js", "docs/evidence/goal-card-native-20261025/before-assets/manifest.json"]
+        required += ["scripts/browser-ci/workspace-visual.cjs", "scripts/browser-ci/goal-history-state.cjs", "docs/evidence/goal-history-visual-candidate-20261025/fixture.json", "src/sim2act/web/natural-goal.js", "scripts/readonly_content_fixture.py", "src/sim2act/web/use.js", "src/sim2act/web/csv-owner.js", "src/sim2act/web/csv-goal-revision.js", "docs/evidence/research-desk-content-20261023/saved-csv.json", "docs/evidence/research-desk-content-20261023/saved-csv.sqlite.gz"]
     required += [f"docs/evidence/protocol-store-loop-20261006/evaluation/{name}.json" for name in ("a-source", "a-cold", "b-source", "b-cold")]
     for name in required:
         file(name, REPO / name)
@@ -164,7 +164,7 @@ def main():
     until = time.monotonic() + (absolute - REAL_TIME())
     root = Path(os.environ["RUNNER_TEMP"]) / (f"sim2act-{action if readback else phase + ('-review' if review else '')}-ui-" + os.environ["GITHUB_RUN_ID"] + "-1")
     root.mkdir()  # New window only; never reuse a consumed directory.
-    result = dict(status="UNKNOWN", phase=phase, action=action, scope="SYNTHETIC SQLite / real Windows Edge DOM; not G0 or production source", limits=dict(work_seconds=180, cleanup_seconds=10, business_get=get_limit, static_get=static_limit, screenshots=10 if workspace_visual else 4, **{"business_post" if readback else "review_post" if review else "completion_post": 0 if readback else 3}), model_calls=0, new_worker=0, new_source=0, new_extract=0)
+    result = dict(status="UNKNOWN", phase=phase, action=action, scope="SYNTHETIC SQLite / real Windows Edge DOM; not G0 or production source", limits=dict(work_seconds=180, cleanup_seconds=10, business_get=get_limit, static_get=static_limit, screenshots=4, **{"business_post" if readback else "review_post" if review else "completion_post": 0 if readback else 3}), model_calls=0, new_worker=0, new_source=0, new_extract=0)
     if readback:
         result["phases"] = ["source", "extract"] if completion_readback else ["source", "cold"]
     node = server = thread = store = counts = None
@@ -353,14 +353,14 @@ def main():
         commit = subprocess.check_output([paths["git"], "rev-parse", "HEAD"], cwd=REPO, timeout=remaining(), text=True).strip()
         hashes = {name: hashlib.sha256((REPO / name).read_bytes()).hexdigest() for name in ("src/sim2act/web/app.js", "src/sim2act/web/app.css", "src/sim2act/web/protocol.js", "src/sim2act/web/index.html", "scripts/protocol_completion_browser_ci.py", "scripts/browser-ci/extract-completion.cjs", "scripts/browser-ci/package-lock.json", "scripts/OwnedBrowserSetup.ps1", "scripts/windows_browser_ci.py", "scripts/WindowsExtractCompletionUI.ps1", ".github/workflows/windows-native-mock.yml", "src/sim2act/protocol_jobs.py", "src/sim2act/protocol_reviews.py", *(["scripts/protocol_completion_readback_fixture.py", "src/sim2act/protocol_completion_readback.py", "src/sim2act/protocol_recovery.py", "src/sim2act/protocol_source_completion.py", "src/sim2act/protocol_extract_completion.py"] if completion_readback else ["scripts/protocol_review_readback_fixture.py"] if readback else []))}
         if workspace_visual:
-            for name in ("scripts/browser-ci/workspace-visual.cjs", "scripts/readonly_content_fixture.py", "src/sim2act/web/use.js", "src/sim2act/web/csv-owner.js", "src/sim2act/web/csv-goal-revision.js", "docs/evidence/research-desk-content-20261023/saved-csv.json", "docs/evidence/research-desk-content-20261023/saved-csv.sqlite.gz", "docs/evidence/goal-card-native-20261025/before-assets/index.html", "docs/evidence/goal-card-native-20261025/before-assets/app.css", "docs/evidence/goal-card-native-20261025/before-assets/app.js", "docs/evidence/goal-card-native-20261025/before-assets/protocol.js", "docs/evidence/goal-card-native-20261025/before-assets/manifest.json"):
+            for name in ("scripts/browser-ci/workspace-visual.cjs", "scripts/browser-ci/goal-history-state.cjs", "docs/evidence/goal-history-visual-candidate-20261025/fixture.json", "src/sim2act/web/natural-goal.js", "scripts/readonly_content_fixture.py", "src/sim2act/web/use.js", "src/sim2act/web/csv-owner.js", "src/sim2act/web/csv-goal-revision.js", "docs/evidence/research-desk-content-20261023/saved-csv.json", "docs/evidence/research-desk-content-20261023/saved-csv.sqlite.gz"):
                 hashes[name] = hashlib.sha256((REPO / name).read_bytes()).hexdigest()
         lf_hashes = {name: hashlib.sha256((REPO / name).read_bytes().replace(b"\r\n", b"\n")).hexdigest() for name in hashes}
         write(root, "inventory.json", dict(commit=commit, source_sha256=hashes, source_lf_sha256=lf_hashes, synthetic_clock=business_at, browser_install=False, added_sdk=False))
         info = dict(phase=phase, action=action, base=f"http://127.0.0.1:{port}", project=original["project"], run=original["run"], captured=original["captured"], until_ms=absolute * 1000,
                     expected_version=before_run["version"], expected_fence=before_run["fence"])
         if workspace_visual:
-            info["visual_source"] = dict(commit=commit, asset_lf_sha256={name: lf_hashes[name] for name in ("src/sim2act/web/app.js", "src/sim2act/web/app.css", "src/sim2act/web/protocol.js", "src/sim2act/web/index.html", "src/sim2act/web/use.js", "src/sim2act/web/csv-owner.js", "src/sim2act/web/csv-goal-revision.js")})
+            info["visual_source"] = dict(commit=commit, asset_lf_sha256={name: lf_hashes[name] for name in ("src/sim2act/web/app.js", "src/sim2act/web/app.css", "src/sim2act/web/protocol.js", "src/sim2act/web/index.html", "src/sim2act/web/use.js", "src/sim2act/web/csv-owner.js", "src/sim2act/web/csv-goal-revision.js", "src/sim2act/web/natural-goal.js")})
         if completion_readback:
             original_cases = cases([store, extra_store], [settings, extra_settings], originals)
             info["cases"] = [dict(item, base=base) for item, base in zip(original_cases, [info["base"], f"http://127.0.0.1:{extra_port}"], strict=True)]
@@ -417,7 +417,7 @@ def main():
             output.close()
         assert node.returncode == 0, "Native DOM driver failed; no rerun"
         browser = json.loads((root / "browser.json").read_text(encoding="utf-8"))
-        assert browser["status"] == "PASS" and browser["screenshots"] <= (10 if workspace_visual else 4)
+        assert browser["status"] == "PASS" and browser["screenshots"] <= 4
         assert counts["blocked"] == 0 and not forbidden_calls and "monitor_error" not in result
         after = snapshot()
         if completion_readback:
@@ -425,12 +425,9 @@ def main():
             assert fingerprint(cases([store, extra_store], [settings, extra_settings], originals)) == fingerprint(original_cases)
             if workspace_visual:
                 assert not browser["located"]  # This content window makes no locator request.
-                assert [x["name"] for x in browser["visual"]["layouts"]] == [
-                    f"{version}-{area}-{width}.png"
-                    for version in ("before", "after") for area in ("goals", "editor")
-                    for width in ("wide", "narrow")
-                ] + ["goal-focus-wide.png", "goal-trial-narrow.png"]
-                assert browser["screenshots"] == 10
+                expected_names = ["goal-history-1366.png", "goal-history-390.png", "goal-unknown-1366.png", "goal-unknown-390.png"]
+                assert [x["name"] for x in browser["screenshotFiles"]] == expected_names
+                assert browser["screenshots"] == 4 and browser["goalHistory"]["colocationStatus"] == "PROVED"
             else:
                 assert fingerprint(browser["located"]) == fingerprint([original_cases[0]["locator"]]*2 + [original_cases[1]["locator"]]*2)
                 assert all(x["hard_refresh"] and x["cold_page"] for x in browser["phase_results"])

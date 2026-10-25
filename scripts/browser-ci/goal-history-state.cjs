@@ -1,11 +1,11 @@
 'use strict';
-// Preparation only: no launcher import, route registration, browser or sender.
+// Explicit synthetic presentation; no route registration or sender.
 const assert=require('node:assert/strict');
 function responseFor(fixture,method,pathname){
  assert.equal(method,'GET','Synthetic presentation forbids writes');
  if(pathname===`/api/projects/${fixture.project}/goal-cards`)return {items:[{id:fixture.card.id,title:fixture.card.content.title,version:3}]};
  if(pathname===`/api/goal-cards/${fixture.card.id}`)return structuredClone(fixture.card);
- if(pathname===`/api/goal-cards/${fixture.card.id}/candidate-options`)return {options:[]};
+ if(pathname===`/api/goal-cards/${fixture.card.id}/candidate-options`)return {items:[],goal_version:fixture.card.version,materials:[],capabilities:[]};
  return undefined; // Original closed handler still governs every other request.
 }
 async function capture({page,fixture,shot,check,until,result}){
@@ -13,7 +13,7 @@ async function capture({page,fixture,shot,check,until,result}){
  // handler AFTER original origin/method/budget gates. This helper sets no routes.
  await page.locator('.section-links a[href="#goal-cards-panel"]').click();
  await page.locator('#goal-card-list').getByRole('button',{name:'打开目标卡',exact:true}).click();
- await until(()=>activeGoalCard?.version===3&&!goalCardLoading);
+ await until(()=>activeGoalCard?.version===3&&!goalCardLoading&&document.getElementById('goal-candidate-status').textContent.startsWith('本切片'));
  for(const [name,value] of Object.entries(fixture.unsaved))await page.locator('#goal-card-'+name).fill(value);
  const state=()=>page.evaluate(()=>({fields:Object.fromEntries(goalCardFields.map(k=>[k,document.getElementById('goal-card-'+k).value])),selected:activeGoalCard,key:goalRunKey(),label:document.getElementById('goal-card-run').textContent,disabled:document.getElementById('goal-card-run').disabled}));
  const current=await state();await page.locator('#goal-card-history').getByRole('button',{name:'回看版本',exact:true}).nth(0).click();assert.deepEqual(await state(),current);
