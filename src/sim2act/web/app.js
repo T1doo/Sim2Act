@@ -18,6 +18,7 @@ let goalSelectionGeneration = 0, goalCardLoading = false, goalCardSaving = false
 let goalCardDirectoryGeneration = 0;
 let candidateSelectionGeneration = 0, candidateBusy = false, candidatePanelReady = false;
 let appSelectionGeneration = 0, activeAppProject = null;
+let appDirectoryGeneration = 0;
 let workspaceSelectionGeneration = 0;
 const candidateRequestKeys = new Map();
 const extractionRequestKeys = new Map();
@@ -202,6 +203,7 @@ function resourceDirectoryUnavailable(message, retry=false) {
 }
 $("project-select").addEventListener("change", () => {
   invalidateGoalCardDirectory();
+  invalidateAppDirectory();
   resourceDirectoryUnavailable($("project-select").value?"当前项目材料列表未确认，正在读取；上一项目目录已失效。":"先选择项目，再读取材料列表。");
 });
 async function refresh() {
@@ -708,18 +710,37 @@ function clearApp(preserveFirstGuide=null) {
   activeApp=null;$("app-title").textContent="选择草案";$("app-preview-form").hidden=true;
   $("app-output").replaceChildren();$("app-output").dataset.state="";$("app-history").replaceChildren();$("app-manifest").textContent="";
 }
+function invalidateAppDirectory() {
+  appDirectoryGeneration++;
+  $("app-list").textContent=$("project-select").value?"当前项目应用草案目录未确认；上一项目目录已失效。":"先选择项目，再读取应用草案目录。";
+}
 async function refreshApps() {
   const pid=$("project-select").value,identity=token,generation=appSelectionGeneration;
-  const list=await api("/api/apps?metadata_only=true");
-  if(pid!==$("project-select").value || identity!==token || generation!==appSelectionGeneration)return;
+  if(!pid || !identity)return;
+  const connection=identityConnectionGeneration,projectGeneration=projectSelectionGeneration,read=++appDirectoryGeneration;
+  const scopeCurrent=()=>pid===$("project-select").value && identity===token && connection===identityConnectionGeneration && projectGeneration===projectSelectionGeneration && read===appDirectoryGeneration;
+  const current=()=>scopeCurrent() && generation===appSelectionGeneration;
+  $("app-list").textContent="正在读取当前项目应用草案目录，尚未确认…";
+  let list;
+  try {list=await api("/api/apps?metadata_only=true");}
+  catch(error){
+    if(!current())return;
+    const note=row("当前项目应用草案目录读取失败，尚未确认；旧目录已失效。可以只读重试，不会创建或运行应用。",async()=>{
+      if(!scopeCurrent() || !note.isConnected)return;
+      const button=note.querySelector("button");if(button.disabled)return;button.disabled=true;
+      await refreshApps();
+    },"重新读取应用草案目录（只读）");
+    note.setAttribute("role","status");note.setAttribute("aria-live","polite");note.dataset.state="error";
+    $("app-list").replaceChildren(note);throw error;
+  }
+  if(!current())return;
   const items=list.items.filter(x=>x.project_id === $("project-select").value);
-  const connection=identityConnectionGeneration;
   $("app-list").replaceChildren(...items.map(x=>{
     const natural=["NATURAL_PA","NATURAL_PB"].includes(x.use_family);
     const literal=x.use_family==="LITERAL_TEXT";
     const family=x.use_family==="LOCAL_RECORDS"?"本地记录与状态 · 固定类型表单 · 明确确认写入、版本与历史":x.use_family==="CSV_FULL_REPORT"?"完整CSV报告流程 · 版本1 · 逐次CSV + 列 → 独立合同与Run":natural?`自然规范 ${x.use_family==="NATURAL_PA"?"P-A":"P-B"} · 定义 ${x.definition_version} · 逐次材料 + Goal`:(literal?"文本字面检索 · 固定 TXT/MD，检索词可变":x.use_family==="CLOSED_TEXT_WORKFLOW"?"四步文本流程 · 固定 TXT/MD，两检索词 + 报告开关":(x.use_family==="CSV"?"CSV 固定材料":"其他应用"));
     return row(`${x.name} · ${family} · 未发布草案；当前授权需打开核查`,()=>{
-      if(identity===token&&connection===identityConnectionGeneration&&pid===$("project-select").value)return showApp(x.id,pid);
+      if(scopeCurrent())return showApp(x.id,pid);
     },natural||literal?"查看应用与保存实例":"打开预览");
   }));
   if(!items.length)$("app-list").textContent="先保存 CSV 材料，再创建一个草案。";
