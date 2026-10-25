@@ -15,6 +15,7 @@ let projectListGeneration = 0, projectSelectionGeneration = 0;
 let projectSelectionRefresh = Promise.resolve(), projectCreatePending = null;
 let activeApp = null, activeGoalCard = null;
 let goalSelectionGeneration = 0, goalCardLoading = false, goalCardSaving = false;
+let goalCardDirectoryGeneration = 0;
 let candidateSelectionGeneration = 0, candidateBusy = false, candidatePanelReady = false;
 let appSelectionGeneration = 0, activeAppProject = null;
 let workspaceSelectionGeneration = 0;
@@ -200,6 +201,7 @@ function resourceDirectoryUnavailable(message, retry=false) {
   $("materials").replaceChildren(note);
 }
 $("project-select").addEventListener("change", () => {
+  invalidateGoalCardDirectory();
   resourceDirectoryUnavailable($("project-select").value?"当前项目材料列表未确认，正在读取；上一项目目录已失效。":"先选择项目，再读取材料列表。");
 });
 async function refresh() {
@@ -1017,11 +1019,31 @@ function clearGoalCard(preserveApp=false) {
   activeGoalCard=null;renderGoalRun();if(typeof renderNaturalGoalControls === "function")renderNaturalGoalControls();if(typeof renderGoalApplicationControls === "function")renderGoalApplicationControls();$("goal-card-form").reset();$("goal-card-status").textContent="新建草案";
   $("goal-card-history").replaceChildren();$("goal-card-history-detail").textContent="";
 }
+function invalidateGoalCardDirectory() {
+  goalCardDirectoryGeneration++;
+  $("goal-card-list").textContent=$("project-select").value?"当前项目目标卡目录未确认；上一项目目录已失效。":"先选择项目，再读取目标卡目录。";
+}
 async function refreshGoalCards(pid) {
-  const identity=token,generation=goalSelectionGeneration;
-  const cards=await api(`/api/projects/${pid}/goal-cards`);
-  if(pid !== $("project-select").value || identity!==token || generation!==goalSelectionGeneration)return;
-  $("goal-card-list").replaceChildren(...cards.items.map(c=>row(`${c.title} · 草案 v${c.version}`,()=>showGoalCard(c.id,pid),"打开目标卡")));
+  if(pid !== $("project-select").value || !token)return;
+  const identity=token,connection=identityConnectionGeneration,projectGeneration=projectSelectionGeneration;
+  const generation=goalSelectionGeneration,read=++goalCardDirectoryGeneration;
+  const scopeCurrent=()=>pid===$("project-select").value && identity===token && connection===identityConnectionGeneration && projectGeneration===projectSelectionGeneration && read===goalCardDirectoryGeneration;
+  const current=()=>scopeCurrent() && generation===goalSelectionGeneration;
+  $("goal-card-list").textContent="正在读取当前项目目标卡目录，尚未确认…";
+  let cards;
+  try {cards=await api(`/api/projects/${pid}/goal-cards`);}
+  catch(error){
+    if(!current())return;
+    const note=row("当前项目目标卡目录读取失败，尚未确认；旧目录已失效。可以只读重试，不会提交任务。",async()=>{
+      if(!scopeCurrent() || !note.isConnected)return;
+      const button=note.querySelector("button");if(button.disabled)return;button.disabled=true;
+      await refreshGoalCards(pid);
+    },"重新读取目标卡目录（只读）");
+    note.setAttribute("role","status");note.setAttribute("aria-live","polite");note.dataset.state="error";
+    $("goal-card-list").replaceChildren(note);throw error;
+  }
+  if(!current())return;
+  $("goal-card-list").replaceChildren(...cards.items.map(c=>row(`${c.title} · 草案 v${c.version}`,()=>{if(scopeCurrent())return showGoalCard(c.id,pid);},"打开目标卡")));
   if(!cards.items.length)$("goal-card-list").textContent="尚无目标卡。可先整理任意目标及其检查要求。";
 }
 async function showGoalCard(id, pid=$("project-select").value) {
