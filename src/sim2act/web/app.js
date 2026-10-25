@@ -72,6 +72,29 @@ function row(text, action, label) {
   return div;
 }
 
+// History is a reading surface. Status labels are persisted technical facts,
+// never an inferred semantic acceptance or permission to repeat a command.
+function runHistoryRow(run, open) {
+  const item = document.createElement("article"); item.className = "row task-history-item";
+  const text = (tag, value, cls) => {const node=document.createElement(tag);node.textContent=value;if(cls)node.className=cls;return node;};
+  const title = text("h3", run.goal_summary || "目标摘要不可用", "task-history-title");
+  const facts = text("div", "", "task-history-facts");
+  const execution = run.status || "UNKNOWN";
+  const status = text("span", `执行 · ${execution}`, "task-status");
+  const tones = {RUNNING:"active",QUEUED:"waiting",WAITING_APPROVAL:"waiting",WAITING_INPUT:"waiting",WAITING_RESOURCE:"waiting",RECONCILING:"uncertain",UNKNOWN:"uncertain",FAILED:"error",PARTIAL:"uncertain",SUCCEEDED:"complete"};
+  status.dataset.tone = Object.hasOwn(tones,execution) ? tones[execution] : "neutral";
+  const mode = ["MOCK","LIVE"].includes(run.mode) ? run.mode : "UNKNOWN";
+  facts.append(status, text("span", `提交模式 ${mode}`, "task-mode"));
+  const accepted = Number.isFinite(run.created_at) && Number.isFinite(new Date(run.created_at*1000).getTime())
+    ? new Date(run.created_at*1000).toLocaleString() : "时间未知";
+  const meta = text("p", `接受 ${accepted}`, "task-history-meta");
+  meta.append(text("span", run.id.slice(0,16), "task-history-id"));
+  if(run.execution_namespace === "local-record-private-preview.v1") item.append(text("p", "PREVIEW 私有试写", "task-preview-label"));
+  const button = text("button", "查看任务"); button.type="button";button.onclick=safe(open);
+  item.append(title,facts,meta,button);
+  return item;
+}
+
 // These are same-page section links, not alternate commands or permission modes.
 (function currentProjectSection(){
  if(typeof requestAnimationFrame!=="function")return;
@@ -209,11 +232,7 @@ async function refresh() {
   try {runs=await api(`/api/projects/${pid}/runs?metadata_only=true`);}
   catch(error){if(!current())return;$("runs").replaceChildren();$("run-history-status").textContent="历史读取失败。请重新刷新；不会提交任务。";throw error;}
   if (!current()) return;
-  $("runs").replaceChildren(...runs.map(x => {
-    const accepted=Number.isFinite(x.created_at)?new Date(x.created_at*1000).toLocaleString():"时间未知";
-    const mode=["MOCK","LIVE"].includes(x.mode)?x.mode:"UNKNOWN";
-    return row(`${x.execution_namespace==="local-record-private-preview.v1"?"PREVIEW 私有试写 · ":""}${x.goal_summary || "目标摘要不可用"} · 接受 ${accepted} · 提交模式 ${mode} · ${x.status} · ${x.id.slice(0,16)}`,()=>{if(identity===token && pid===$("project-select").value)return showRun(x.id);},"查看任务");
-  }));
+  $("runs").replaceChildren(...runs.map(x => runHistoryRow(x,()=>{if(identity===token && pid===$("project-select").value)return showRun(x.id);})));
   $("run-history-status").textContent=runs.length?`已读取 ${runs.length} 个持久任务。查看任务只读取既有状态。`:"当前项目暂无任务。";
   const grants = await api(`/api/projects/${pid}/grants`);
   if (!current()) return;

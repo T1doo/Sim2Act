@@ -21,6 +21,8 @@ function load(value=run){w.testRun=JSON.parse(JSON.stringify(value));w.eval(`pro
  check(!summary().hidden&&summary().textContent.includes('先取得主管批准')&&summary().textContent.includes('绝对截止时间：UNKNOWN'),'actual source output readable with UNKNOWN visible');
  check(d.getElementById('protocol-result').textContent===JSON.stringify(run.result,null,2),'complete original JSON bytes unchanged');
  check(state().querySelectorAll('.state-facts > div').length===4,'technical/semantic/owner/publication separated');
+ check(state().querySelector('[data-tone="uncertain"] dd').textContent==='UNKNOWN','unknown has its own visual warning, not a success tone');
+ check([...state().querySelectorAll('[data-tone="waiting"] dd')].map(n=>n.textContent).join('|')==='等待核查|PENDING','pending review and owner remain separately waiting');
  const identifiers=state().querySelector('details');identifiers.open=true;
  const selected=summary().querySelector('.reading-next-step'),selection=w.getSelection(),range=d.createRange();range.selectNodeContents(selected);selection.addRange(range);
  w.eval('protocolContext.run=JSON.parse(JSON.stringify(protocolContext.run));renderProtocolRun(protocolContext);');await tick();
@@ -29,6 +31,8 @@ function load(value=run){w.testRun=JSON.parse(JSON.stringify(value));w.eval(`pro
  check(summary().hidden&&state().textContent.includes('不可确认')&&d.getElementById('protocol-state').dataset.readState==='error','real read invalidation clears summary and gives explicit error');
  check(w.eval('protocolContext.run.status')==='WAITING_APPROVAL'&&d.getElementById('protocol-extract').hidden&&d.getElementById('protocol-cold-form').hidden,'real Run and original next-action gates unchanged');
  check(!state().querySelector('details')&&!summary().contains(selected),'invalidation discards old disclosure and selected protected content');
+ load({...run,status:'SUCCEEDED'});await tick();
+ check(state().textContent.includes('技术执行成功')&&state().querySelector('[data-tone="uncertain"] dd').textContent==='UNKNOWN'&&state().textContent.includes('PENDING')&&state().textContent.includes('未发布'),'technical success does not promote semantic, owner or publication states');
  load();await tick();w.eval(`protocolStatus(protocolContext,'正在读取…');`);await tick();check(summary().hidden&&!d.getElementById('protocol-state').dataset.presented,'transient read status cannot retain success summary');
  load();await tick();d.getElementById('protocol-result').textContent='not matching pinned result';await tick();check(summary().hidden&&state().hidden,'raw/pinned content mismatch closes extra presentation');
  const malicious=JSON.parse(JSON.stringify(run));malicious.result.protocol_result.evidence.output.case.required_next_step='<img src=x onerror=alert(1)>';

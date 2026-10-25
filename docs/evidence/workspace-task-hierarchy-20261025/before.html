@@ -1,0 +1,1068 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sim2Act · 研究与行动工作台</title><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'"><style>/* Shared presentation only. Runtime state and action availability stay in the controllers. */
+:root {
+  font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+  color: #30271f;
+  background: #faf6f1;
+  line-height: 1.65;
+  --accent: #b84b20;
+  --accent-hover: #963916;
+  --accent-soft: #fff0e4;
+  --accent-line: #e8b99a;
+  --focus: #b84b20;
+  --ink: #30271f;
+  --muted: #706255;
+  --line: #e6d9cc;
+  --canvas: #faf6f1;
+  --surface: #fff;
+  --surface-soft: #fcf8f3;
+  --nav-surface: #34271f;
+  --nav-hover: #4b3528;
+  --nav-current: #9a3b16;
+  --nav-focus: #ffbf87;
+  --radius: 16px;
+  --shadow: 0 2px 4px rgb(24 44 62 / 2%), 0 10px 30px rgb(24 44 62 / 4%);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--canvas); }
+::selection { background: #f5d8bf; color: var(--ink); }
+.skip-link { position: absolute; z-index: 10; inset: 8px auto auto 16px; padding: 10px 16px; border-radius: 8px; background: #fff; transform: translateY(-160%); }
+.skip-link:focus { transform: translateY(0); }
+[hidden] { display: none !important; }
+button, input, select, textarea { font: inherit; }
+button, a, input, select, textarea, summary { -webkit-tap-highlight-color: transparent; }
+a { color: var(--accent); text-underline-offset: .2em; }
+button, input, select, textarea, summary { scroll-margin-block: 24px; }
+:is(button, a, input, select, textarea, summary, pre[tabindex]):focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+/* The existing three workspaces share one quiet, recognizable shell. */
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px 24px;
+  padding: 12px max(5%, calc((100% - 1224px) / 2));
+  background: linear-gradient(115deg, #143e33, #205a47);
+  color: #fff;
+  border-bottom: 1px solid #28584a;
+}
+header strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 28px;
+  font-weight: 750;
+  letter-spacing: -.7px;
+  line-height: 1.3;
+}
+header strong::before {
+  content: "";
+  width: 25px;
+  height: 25px;
+  flex: 0 0 25px;
+  border: 2px solid #a8d9c6;
+  border-radius: 7px 7px 7px 2px;
+  box-shadow: inset -7px -7px 0 #316d59;
+  transform: rotate(-6deg);
+}
+header > span { font-size: 14px; color: #d1e8dd; }
+output { color: var(--ink); font-size: 13px; overflow-wrap: anywhere; }
+header > output {
+  margin-inline-start: auto;
+  padding: 6px 11px;
+  border: 1px solid #5b8474;
+  border-radius: 20px;
+  background: rgb(255 255 255 / 6%);
+  color: #edf8f2;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+nav, main, #login, footer {
+  width: 100%;
+  max-width: 1360px;
+  margin-inline: auto;
+  padding-inline: 5%;
+}
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-block: 8px;
+  border-bottom: 1px solid var(--line);
+}
+#workspace-nav { align-items: center; gap: 6px; background: rgb(255 255 255 / 75%); }
+#workspace-nav button { min-width: 112px; border-color: transparent; border-radius: 10px; background: transparent; color: var(--muted); }
+#workspace-nav button:hover:not(:disabled):not([aria-current="true"]) { background: var(--accent-soft); color: var(--accent); }
+#workspace-nav button[aria-current="true"],
+#resource-filters button[aria-current="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 750;
+  box-shadow: 0 3px 8px rgb(22 100 83 / 12%);
+}
+main { padding-block: 12px 48px; }
+footer {
+  border-top: 1px solid var(--line);
+  padding-block: 20px 28px;
+  color: var(--muted);
+  font-size: 12px;
+}
+#login {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  padding-block: 22px;
+  border-bottom: 1px solid var(--line);
+  background: #f8faf6;
+}
+#login label { flex: 1 1 280px; max-width: 540px; margin: 0; }
+#login p { flex-basis: 100%; margin: 0; font-size: 12px; }
+#identity-switch { margin: 0; border-color: #b7cbbf; background: transparent; color: var(--accent); font-size: 12px; white-space: nowrap; }
+#identity-switch:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
+#workspace-nav > #identity-switch { flex: 0 0 auto; min-width: 72px; margin-inline-start: auto; }
+.workspace-heading { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 12px 0 12px; }
+.workspace-heading > div { min-width: 0; }
+.workspace-heading h1 { margin: 2px 0 4px; font-size: 30px; font-weight: 750; letter-spacing: -1px; }
+.workspace-heading p:not(.eyebrow) { margin: 0; font-size: 13px; }
+.eyebrow { margin: 0 0 6px; color: #49725e; font-size: 11px; font-weight: 750; line-height: 1.6; letter-spacing: .14em; }
+.workspace-label { flex-shrink: 0; padding: 7px 13px; border: 1px solid #c9d9cd; border-radius: 24px; background: #ebf1e8; color: #42634f; font-size: 12px; }
+.section-links { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.section-links a { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; font-size: 13px; text-decoration: none; }
+.section-links a:hover { border-color: var(--accent); background: #f5f8f4; }
+.section-links span { color: #62836e; }
+.workspace-subheading { margin-top: 36px; }
+.subsection-heading { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
+.project-selection { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; max-width: 620px; margin: 0; font-size: 12px; white-space: nowrap; }
+#project-context select { flex: 1; width: auto; margin: 0; min-width: 0; }
+.scope-note { position: relative; margin: 0; border: 0; background: transparent; }
+.scope-note > summary { min-height: 44px; padding: 10px 4px 10px 12px; font-size: 12px; white-space: nowrap; }
+.scope-content { position: absolute; z-index: 3; top: calc(100% + 10px); right: 0; width: min(440px, calc(100vw - 48px)); margin: 0 !important; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: var(--shadow); }
+.scope-content button { margin-top: 12px; }
+.project-create { margin: 0; border: 0; background: transparent; }
+.project-create > summary { min-height: 44px; padding: 10px 13px; border: 1px solid var(--line); border-radius: 9px; background: #fff; font-size: 13px; white-space: nowrap; list-style: none; }
+.project-create > summary::-webkit-details-marker { display: none; }
+.project-create > summary span { margin-inline-start: 10px; }
+.project-create[open] > summary { border-color: var(--accent); }
+.project-create > form { position: absolute; z-index: 3; top: 100%; right: 0; width: min(440px, calc(100vw - 32px)); margin: 8px 0 0; box-shadow: var(--shadow); }
+#task-workbench { grid-template-columns: minmax(260px, .8fr) minmax(0, 1.4fr); gap: 20px; }
+#task-list-panel { grid-column: 1; grid-row: 1; }
+#task-result-panel { grid-column: 2; grid-row: 1; }
+#task-workbench > section { padding: 20px; }
+#task-list-panel > h3 { margin-top: 20px; }
+#task-list-panel > p { font-size: 13px; }
+.task-compose { margin-block: 14px; background: #f6f9f5; }
+.task-compose > summary { min-height: 44px; padding-block: 10px; }
+.task-compose > summary span { float: right; }
+.resource-create { margin-block: 14px 20px; background: #f6f9f5; }
+.resource-create > summary { min-height: 44px; padding-block: 10px; }
+.resource-create > summary span { float: right; }
+.resource-create > form { margin-block: 16px; }
+#resource-materials > .subsection-heading { margin-top: 16px; padding-top: 0; border-top: 0; }
+.task-compose > form { margin-block: 16px; }
+#task-result-panel:has(#protocol-detail:not([hidden])) > #result { padding: 0; border: 0; background: transparent; margin-bottom: 4px; text-align: start; font-size: 12px; }
+#task-result-panel #protocol-detail { margin-top: 12px; }
+#task-result-panel #protocol-detail > h3 { margin-top: 12px; }
+#task-workbench, #protocol-panel, #goal-cards-panel, #project-tools { scroll-margin-top: 24px; }
+.workspace-tools { margin-block: 24px; background: #fff; border-radius: 14px; }
+.workspace-tools > summary { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 22px; list-style: none; }
+.workspace-tools > summary::-webkit-details-marker { display: none; }
+.workspace-tools > summary::after { content: ""; flex: 0 0 8px; width: 8px; height: 8px; margin-inline: 6px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); }
+.workspace-tools[open] > summary::after { transform: rotate(225deg); }
+.workspace-tools > summary strong { display: block; font-size: 15px; }
+.workspace-tools > summary small { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; font-weight: 400; }
+.workspace-tools > .tool-content { margin: 0; padding: 0 22px 6px; border-top: 1px solid var(--line); }
+.workspace-tools fieldset { box-shadow: none; }
+.eyebrow + h2 { margin-top: 4px; }
+
+/* Keep source order intact across wide and narrow layouts. */
+h1, h2, h3 { color: var(--ink); overflow-wrap: anywhere; }
+h1 { margin: 4px 0 24px; font-size: 30px; line-height: 1.3; letter-spacing: -.6px; }
+h2 { margin: 24px 0 14px; font-size: 21px; line-height: 1.45; letter-spacing: -.3px; }
+h3 { margin: 20px 0 10px; font-size: 16px; line-height: 1.5; }
+p { margin: 10px 0 16px; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
+section > h2:first-child, section > h3:first-child { margin-top: 0; }
+ul, ol { padding-inline-start: 24px; }
+li { margin-block: 5px; overflow-wrap: anywhere; }
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  align-items: start;
+  gap: 24px;
+}
+.grid > section {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+#project-context {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 6px 14px;
+  margin-bottom: 12px;
+  border: 1px solid #c7dcd0;
+  border-radius: 10px;
+  background: #edf5ef;
+}
+#project-context-status {
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+}
+#natural-first-guide,
+#protocol-panel,
+#goal-cards-panel,
+#application-use,
+#registered-recovery-panel,
+#report-apps,
+#conditional-panel,
+#resource-materials,
+#resource-capabilities,
+#resource-connections,
+#reconcile-panel {
+  margin-block: 24px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+#protocol-panel, #application-use { border-top: 3px solid var(--accent); }
+#protocol-detail { margin-top: 28px; padding-top: 6px; border-top: 1px solid var(--line); }
+#protocol-run-id { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12px; font-weight: 450; }
+#protocol-detail > section[aria-label] { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+#protocol-cold-form { margin-top: 24px; padding: 20px; border: 1px solid #cbdcd0; border-radius: 12px; background: var(--surface-soft); }
+#protocol-result { max-height: 280px; }
+#protocol-completion-locate-receipt, #protocol-review-locate-receipt { max-height: 240px; font-size: 12px; }
+#application-use .grid > section { box-shadow: none; background: #fafcf9; border-radius: 12px; }
+#natural-first-start { margin-inline-end: 8px; }
+#natural-first-start + #local-records-new { margin-inline-start: 0; }
+#result:not(:has(*)) { padding: 32px 24px; border: 1px dashed #c5d6c9; border-radius: 12px; background: #f5f8f3; color: var(--muted); font-size: 14px; text-align: center; }
+#run-outcome { margin-block: 24px; }
+#run-answer { font-family: inherit; font-size: 15px; line-height: 1.9; background: #fff; }
+#commands { display: flex; flex-wrap: wrap; gap: 8px; }
+#commands button { margin-inline-start: 0; }
+#resource-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 180px); column-gap: 20px; }
+#resource-form > * { grid-column: 1 / -1; }
+#resource-form > label:has(#resource-name) { grid-column: 1; }
+#resource-form > label:has(#format) { grid-column: 2; }
+#resource-form > button { justify-self: start; }
+#resource-form > label:first-child { margin-top: 0; padding: 20px; border: 1px dashed #b5cbb9; border-radius: 12px; background: #f5f8f3; }
+#resource-filters { width: 100%; padding-inline: 0; }
+#trial-status { display: block; margin-block: 12px; }
+#natural-first-guide ol { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 28px; }
+#natural-first-guide li { padding-inline-start: 4px; font-size: 14px; }
+#natural-first-guide li::marker { color: var(--accent); font-weight: 750; }
+#project-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+#project-form label { flex: 1 1 260px; margin: 0; }
+fieldset {
+  min-width: 0;
+  margin: 24px 0;
+  padding: 18px 20px 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+legend {
+  max-width: 100%;
+  padding-inline: 8px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+fieldset fieldset { background: var(--surface-soft); }
+form + form { margin-top: 24px; }
+form > p:first-child, fieldset > p:first-of-type { margin-top: 4px; }
+
+/* Explicit primary actions preserve the existing action hierarchy. */
+button {
+  min-height: 44px;
+  max-width: 100%;
+  padding: 9px 16px;
+  border: 1px solid #b7cbbf;
+  border-radius: 9px;
+  background: var(--surface);
+  color: #1f5644;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.5;
+  text-align: center;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+button:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+button:active:not(:disabled) { background: #f5ddca; }
+button:disabled { border-color: #d5dfd8; background: #edf1ee; color: #607168; cursor: not-allowed; }
+#connect,
+#project-form > button,
+#run-submit,
+#app-form > button,
+#goal-card-save,
+#goal-candidate-create,
+#extraction-create,
+#app-preview-submit,
+#protocol-source-submit,
+#protocol-cold-submit,
+#protocol-completion-submit,
+#protocol-review-submit {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+:is(#connect, #project-form > button, #run-submit, #app-form > button, #goal-card-save,
+    #goal-candidate-create, #extraction-create, #app-preview-submit,
+    #protocol-source-submit, #protocol-cold-submit, #protocol-completion-submit, #protocol-review-submit):hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+:is(#connect, #project-form > button, #run-submit, #app-form > button, #goal-card-save,
+    #goal-candidate-create, #extraction-create, #app-preview-submit,
+    #protocol-source-submit, #protocol-cold-submit, #protocol-completion-submit, #protocol-review-submit):disabled {
+  border-color: var(--line);
+  background: #eee8e0;
+  color: #75685b;
+}
+button + button { margin-inline-start: 4px; }
+label {
+  display: block;
+  margin-block: 18px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+input, select, textarea {
+  min-width: 0;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #b7cbbf;
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.5;
+}
+label input:not([type="checkbox"]):not([type="radio"]), label select, textarea {
+  display: block;
+  width: 100%;
+  margin-top: 7px;
+  font-weight: 400;
+}
+input::placeholder, textarea::placeholder { color: #63796e; opacity: 1; }
+input:disabled, select:disabled, textarea:disabled { background: #edf1ee; color: #607168; cursor: not-allowed; }
+input[type="checkbox"], input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  margin: 3px 8px 3px 0;
+  padding: 0;
+  accent-color: var(--accent);
+  vertical-align: text-top;
+}
+input[type="file"] { width: 100%; font-size: 14px; padding: 6px; }
+input[type="file"]::file-selector-button {
+  margin-inline-end: 10px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: inherit;
+}
+textarea { min-height: 118px; resize: vertical; }
+select[multiple] { padding: 6px; }
+select[multiple] option { padding: 6px 8px; }
+#goal-card-form textarea { min-height: 80px; }
+#goal-card-resources { display: block; width: 100%; min-height: 100px; }
+
+/* Empty containers do not masquerade as receipts or loading progress. */
+pre {
+  max-width: 100%;
+  max-height: 560px;
+  margin-block: 14px;
+  padding: 16px 18px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: #324d41;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+pre:empty { padding: 0; border: 0; margin: 0; }
+details { margin-block: 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-soft); }
+summary { padding: 12px 16px; color: var(--ink); cursor: pointer; font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
+details > :not(summary) { margin-inline: 16px; }
+details > pre { margin-bottom: 16px; }
+[role="status"]:not(:empty) {
+  padding: 11px 14px;
+  border-left: 3px solid #b9a794;
+  border-radius: 6px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+[data-state="loading"]:not(:empty) { border-left-color: #426c91; background: #edf4fa; color: #2f526d; }
+[data-state="error"]:not(:empty), #error:not(:empty) {
+  padding: 11px 14px;
+  border-left: 3px solid #ad3b36;
+  border-radius: 4px;
+  background: #fff2f0;
+  color: #8d302c;
+  overflow-wrap: anywhere;
+}
+#error:empty { display: none; }
+.row { padding-block: 18px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; font-size: 14px; }
+.row:last-child { border-bottom: 0; }
+.row button { margin-top: 8px; }
+#runs .row { margin-top: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: #fbfcf9; }
+#runs button { display: block; width: 100%; margin-block: 12px 0; text-align: start; }
+#materials .row, #use-list .row, #app-list .row { padding: 18px 2px; }
+#csv-report-task { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
+#resource-filters { padding: 0 0 8px; margin-block: 0 12px; }
+#resources > section { margin-top: 12px; }
+#materials .row { padding-block: 12px; }
+
+/* Internal and evidence views use the same hierarchy as the workspaces. */
+#internal-panel { margin-top: 32px; padding-top: 24px; border-top: 2px solid var(--line); }
+#internal-panel button { margin: 4px 8px 4px 0; }
+#internal-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+#internal-controls button { margin: 0; }
+#internal-approval, #internal-agent {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+#internal-instance-info, #internal-approval-label, #internal-instance-title { overflow-wrap: anywhere; }
+.agent-result { padding: 16px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.agent-result blockquote { margin: 8px 0 18px; padding-inline-start: 14px; border-left: 3px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }
+#internal-replay-file { width: 100%; }
+.manifest-views section { margin-block: 18px; }
+.manifest-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.manifest-table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+.manifest-views table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.manifest-views caption { padding: 12px; text-align: start; font-weight: 650; }
+.manifest-views th, .manifest-views td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  border-inline-end: 1px solid var(--line);
+  text-align: start;
+  vertical-align: top;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.manifest-views th { background: #edf4ef; font-weight: 650; }
+.manifest-views tr:nth-child(even) td { background: #f8faf8; }
+.manifest-views :is(th, td):last-child { border-inline-end: 0; }
+.manifest-views tbody tr:last-child td { border-bottom: 0; }
+.table-chart-controls { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.table-chart-controls label { display: inline-block; margin: 8px 16px 8px 0; }
+.table-chart-controls select { display: block; max-width: 100%; }
+.table-chart-controls figure { margin: 18px 0; overflow-x: auto; }
+.table-bar-chart { display: block; width: 100%; max-width: 900px; min-width: 400px; }
+.table-bar-chart text { fill: currentColor; font-size: 12px; }
+.table-bar-axis { stroke: currentColor; stroke-width: 1; }
+.table-bar-value { fill: var(--accent); }
+
+@media (max-width: 900px) {
+  .grid { gap: 18px; }
+  .grid > section { padding: 20px; }
+  header { gap: 12px 20px; }
+}
+@media (max-width: 750px) {
+  header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; padding: 8px 16px; }
+  header strong { grid-column: 1; grid-row: 1; font-size: 23px; gap: 8px; }
+  header > span { grid-column: 1; grid-row: 2; font-size: 11px; }
+  header > output { grid-column: 2; grid-row: 1; margin: 0; max-width: 180px; padding: 4px 8px; font-size: 10px; line-height: 1.4; }
+  #identity-switch { font-size: 11px; padding-inline: 8px; }
+  nav, main, #login, footer { padding-inline: 16px; }
+  nav { gap: 6px; padding-block: 6px; }
+  nav button { flex: 1 1 0; min-width: 0; padding-inline: 10px; }
+  #workspace-nav button { min-width: 0; }
+  main { padding-block: 12px 32px; }
+  h1 { font-size: 26px; margin-bottom: 20px; }
+  h2 { font-size: 19px; }
+  .workspace-heading { align-items: center; gap: 12px; margin-block: 10px 14px; }
+  .workspace-heading h1 { font-size: 26px; }
+  .workspace-heading .eyebrow { font-size: 9px; margin-bottom: 0; }
+  .workspace-label { flex: 0 1 110px; font-size: 10px; padding: 5px 8px; text-align: center; }
+  .section-links { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .section-links a { gap: 6px; padding-inline: 8px; font-size: 12px; }
+  .workspace-tools > summary { padding: 16px; }
+  .workspace-tools > .tool-content { padding-inline: 12px; }
+  #natural-first-guide ol { grid-template-columns: minmax(0, 1fr); }
+  #resource-form { grid-template-columns: minmax(0, 1fr); }
+  #resource-form > label:has(#format) { grid-column: 1; }
+  #resource-form > label:first-child { padding: 14px; }
+  #protocol-cold-form { padding: 14px; }
+  .grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .grid > section { padding: 16px; border-radius: 10px; }
+  #project-context { padding: 6px 10px; gap: 8px; margin-bottom: 12px; }
+  .project-selection { gap: 8px; }
+  #project-context select { padding-inline: 8px; font-size: 14px; }
+  .scope-note > summary { padding-inline: 5px; }
+  #task-workbench { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  #task-list-panel, #task-result-panel { grid-column: 1; grid-row: auto; }
+  #task-workbench > section { padding: 16px; }
+  #natural-first-guide, #protocol-panel, #goal-cards-panel, #application-use,
+  #registered-recovery-panel, #report-apps, #conditional-panel,
+  #resource-materials, #resource-capabilities, #resource-connections, #reconcile-panel {
+    padding: 16px;
+    margin-block: 20px;
+    border-radius: 10px;
+  }
+  #project-form { padding: 16px; }
+  #project-form > button { width: 100%; }
+  fieldset { padding: 14px 12px 16px; margin-block: 20px; }
+  legend { font-size: 14px; }
+  button { white-space: normal; }
+  button + button { margin-inline-start: 0; margin-top: 6px; }
+  pre { padding: 12px; max-height: 400px; }
+  #internal-panel .grid > section { padding: 12px; }
+  .manifest-views th, .manifest-views td { padding: 9px 10px; }
+}
+@media (max-width: 380px) {
+  header strong { grid-column: 1; grid-row: 1; }
+  header > span { grid-column: 1 / -1; grid-row: 2; }
+  header > output { grid-column: 1 / -1; grid-row: 3; justify-self: start; max-width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  button { transition: none; }
+}
+@media (forced-colors: active) {
+  button:disabled { color: GrayText; }
+  #workspace-nav button[aria-current="true"], #resource-filters button[aria-current="true"] { border: 2px solid Highlight; }
+  :is(button, a, input, select, textarea, summary, pre[tabindex]):focus-visible { outline-color: Highlight; }
+}
+
+
+/* Research desk refinement. Presentation only: no inferred status or action gates. */
+header {
+  min-height: 72px;
+  background: #fff;
+  color: var(--ink);
+  border-bottom-color: var(--line);
+}
+header strong { font-size: 25px; letter-spacing: -.9px; font-weight: 780; }
+header strong::before {
+  width: 29px; height: 29px; flex-basis: 29px;
+  border: 0; border-radius: 9px 9px 9px 3px;
+  background: var(--accent);
+  box-shadow: inset -9px -9px 0 #de824c, 0 3px 8px rgb(108 56 28 / 12%);
+  transform: none;
+}
+header > .brand-description { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 12px; }
+.preview-label { padding: 3px 8px; border: 1px solid #e1dccd; border-radius: 6px; background: #faf7ef; color: #6b5831; font-size: 10px; white-space: nowrap; }
+header > output { max-width: 390px; padding: 6px 10px; border-color: var(--line); background: #f6f8fa; color: #40586b; font-size: 11px; border-radius: 7px; }
+#workspace-nav { gap: 8px; padding-block: 10px; background: rgb(255 255 255 / 92%); }
+#workspace-nav button { border-radius: 8px; min-height: 44px; padding-block: 8px; font-weight: 600; }
+#workspace-nav button[aria-current="true"] { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); box-shadow: none; }
+#workspace-nav button[aria-current="true"]::before { content: ""; display: inline-block; width: 5px; height: 5px; margin-inline-end: 8px; margin-bottom: 2px; border-radius: 50%; background: currentColor; }
+#workspace-nav #identity-switch { min-height: 44px; border-color: var(--line); color: var(--muted); }
+#project-context { background: #fff; border-color: var(--line); box-shadow: 0 1px 2px rgb(24 44 62 / 2%); }
+#project-context .project-selection { color: var(--muted); font-weight: 500; }
+#project-context select { border-color: transparent; background: #f4f7f8; font-size: 14px; font-weight: 600; }
+.scope-note > summary { color: var(--muted); }
+.workspace-heading { margin-block: 20px 18px; }
+.workspace-heading h1 { font-size: 29px; letter-spacing: -1px; line-height: 1.4; }
+.workspace-heading p:not(.eyebrow) { font-size: 13px; line-height: 1.7; }
+.eyebrow { color: var(--muted); font-size: 11px; letter-spacing: .1em; font-weight: 650; }
+.workspace-label { border-color: var(--line); background: var(--surface-soft); color: var(--muted); border-radius: 7px; }
+.section-links { gap: 14px; padding: 0 2px 12px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
+.section-links a { min-height: 44px; padding: 6px 0; border: 0; border-radius: 3px; background: transparent; color: #4b6274; font-size: 12px; }
+.section-links a:hover { color: var(--accent); background: transparent; text-decoration: underline; }
+.section-links span { color: #7b929f; }
+#task-workbench { grid-template-columns: minmax(280px, .72fr) minmax(0, 1.55fr); gap: 20px; }
+#task-workbench > section { padding: 22px; }
+.panel-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-bottom: 17px; margin-bottom: 18px; border-bottom: 1px solid #e8edf2; }
+.panel-heading h2 { margin: 3px 0 0; font-size: 20px; letter-spacing: -.5px; }
+.panel-heading .eyebrow { margin: 0; font-size: 11px; color: var(--accent); }
+.panel-emblem { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border: 1px solid var(--accent-line); border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: 20px; line-height: 1; }
+#task-list-panel { background: #fdfefe; }
+#task-list-panel > h3 { font-size: 14px; }
+#task-list-panel > p { font-size: 12px; line-height: 1.8; }
+.task-compose { margin-top: 0; border-color: #d2e2dc; background: #f0f7f4; border-radius: 10px; }
+.task-compose > summary { padding: 12px 14px; color: #175f51; }
+#runs .row { padding: 16px; background: #fff; font-size: 12px; line-height: 1.9; border-color: #e0e7ec; box-shadow: 0 2px 5px rgb(24 44 62 / 2%); }
+#runs button { min-height: 44px; margin-top: 13px; border-color: #d9e4e8; background: #f8fafb; font-size: 12px; }
+#run-history-refresh { width: 100%; font-size: 12px; border-style: dashed; color: #4b6475; background: #fff; }
+#result:not(:has(*)) { padding: 48px 22px; border: 1px dashed #cfdce5; background: linear-gradient(145deg, #fafcfd, #f3f7f8); color: #536b7c; line-height: 1.9; }
+#result:not(:has(*))::before { content: ""; display: block; width: 38px; height: 44px; margin: 0 auto 18px; border: 1.5px solid #9bb6bf; border-radius: 7px; background: repeating-linear-gradient(to bottom, transparent 0, transparent 9px, #d9e5e8 9px, #d9e5e8 10px); box-shadow: 5px 5px 0 #e7eff1; }
+#task-result-panel:has(#protocol-detail:not([hidden])) > #result::before { display: none; }
+#protocol-detail > h3 { font-size: 15px; line-height: 1.8; }
+#protocol-run-id { display: block; margin-top: 3px; color: #617789; font-size: 11px; }
+#protocol-state { background: #f0f5f8; color: #3b5365; border-left-color: #799bac; font-size: 12px; line-height: 1.85; }
+#protocol-detail > section[aria-label] { padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: #fafcfd; }
+#protocol-detail > section[aria-label] button { font-size: 12px; }
+#protocol-evidence { border-color: #dce5eb; background: #f8fafc; }
+#protocol-evidence > summary { color: #3a596d; font-size: 12px; }
+pre { border-color: var(--line); background: var(--surface-soft); color: var(--ink); border-radius: 10px; font-size: 12px; line-height: 1.85; }
+#protocol-result { background: #fff; }
+#application-use, #protocol-panel { border-top-width: 1px; }
+#application-use > h2, #resource-materials > h2 { font-size: 21px; }
+#application-use .grid > section { border-color: #e0e7ec; background: #fafcfd; }
+#use-list:not(:has(*)) { min-height: 160px; padding: 32px 24px; border-style: dashed; color: var(--muted); line-height: 1.9; font-size: 13px; }
+#resource-filters { gap: 8px; padding: 4px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 11px; background: #eaf0f3; width: fit-content; max-width: 100%; }
+#resource-filters button { border-color: transparent; border-radius: 8px; background: transparent; color: #51687a; font-size: 13px; }
+#resource-filters button[aria-current="true"] { background: #fff; border-color: var(--accent-line); color: var(--accent); box-shadow: 0 2px 4px rgb(24 44 62 / 5%); }
+.resource-create { border-style: dashed; border-color: var(--line); background: var(--surface-soft); }
+#materials .row { padding: 16px; margin-block: 12px; border: 1px solid var(--line); border-radius: 11px; background: #fff; line-height: 1.9; }
+#materials .row button { font-size: 12px; background: #f7fafb; }
+#grants .row { padding: 14px 2px; font-size: 12px; line-height: 1.9; }
+#grants .row button { font-size: 12px; color: #93463e; border-color: #e7d5d0; background: #fffaf8; }
+#grants .row button:hover:not(:disabled) { background: #fff0eb; border-color: #bf8d7e; }
+.workspace-tools > summary { padding-block: 16px; }
+.workspace-tools > summary strong { font-size: 14px; }
+.workspace-tools > summary small { margin-top: 3px; font-size: 11px; }
+label { font-size: 13px; font-weight: 600; }
+input, select, textarea { border-color: #cad6df; border-radius: 9px; }
+input:hover:not(:disabled), select:hover:not(:disabled), textarea:hover:not(:disabled) { border-color: #91a9b7; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { border-color: var(--accent); outline: 2px solid var(--focus); outline-offset: 2px; box-shadow: 0 0 0 5px rgb(108 56 28 / 8%); }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+button { border-color: #c6ad98; border-radius: 9px; color: var(--accent); font-weight: 600; transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+button:disabled { color: #75685b; border-color: var(--line); background: #eee8e0; }
+[data-state="loading"]:not(:empty) { border-left-color: #527e9c; background: #edf4fa; color: #31546e; }
+[data-state="error"]:not(:empty), #error:not(:empty) { border-left-color: #ba5549; background: #fff2ef; color: #8f382d; }
+[data-state="success"]:not(:empty) { border-left-color: #408a73; background: #edf7f1; color: #255e4b; }
+footer { color: #617587; line-height: 1.8; }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  button:hover:not(:disabled) { transform: translateY(-1px); }
+  button:active:not(:disabled) { transform: translateY(0); }
+}
+@media (max-width: 1000px) and (min-width: 751px) {
+  #task-workbench { grid-template-columns: minmax(245px, .75fr) minmax(0, 1.3fr); }
+  #task-workbench > section { padding: 18px; }
+  header > .brand-description { gap: 8px; }
+  header > output { max-width: 260px; }
+}
+@media (max-width: 750px) {
+  header { min-height: 68px; padding-block: 10px; }
+  header strong { font-size: 21px; gap: 8px; }
+  header strong::before { width: 23px; height: 23px; flex-basis: 23px; border-radius: 7px 7px 7px 2px; }
+  header > .brand-description { grid-column: 1 / -1; gap: 8px; font-size: 10px; }
+  .preview-label { padding: 1px 5px; font-size: 9px; }
+  header > output { max-width: 175px; font-size: 9px; padding: 4px 6px; }
+  #workspace-nav { padding-block: 7px; gap: 5px; }
+  #workspace-nav button { font-size: 12px; min-height: 44px; padding-inline: 8px; }
+  #workspace-nav #identity-switch { min-width: 0; font-size: 10px; padding-inline: 6px; }
+  .workspace-heading { margin-block: 14px; }
+  .workspace-heading h1 { font-size: 25px; }
+  .workspace-heading p:not(.eyebrow) { font-size: 12px; }
+  .workspace-heading .eyebrow { font-size: 8px; }
+  .section-links { gap: 10px; padding-bottom: 7px; margin-bottom: 14px; }
+  .section-links a { font-size: 11px; gap: 4px; }
+  #task-workbench { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  #task-workbench > section { padding: 18px 16px; }
+  .panel-heading { margin-bottom: 16px; padding-bottom: 14px; }
+  .panel-heading h2 { font-size: 19px; }
+  #resource-filters { width: 100%; }
+  #resource-filters button { flex: 1 1 0; padding-inline: 6px; font-size: 12px; }
+  #materials .row { padding: 13px; }
+  #materials .row button { padding-inline: 12px; }
+  #protocol-detail > section[aria-label] { padding: 12px; }
+}
+@media (max-width: 380px) {
+  header > output { max-width: 100%; }
+  .section-links { column-gap: 12px; row-gap: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+
+/* A connected research work surface, rather than a dashboard of equal cards. */
+body { background: var(--canvas); }
+header { border-bottom-color: var(--line); }
+.workspace-heading h1 { font-size: 30px; font-weight: 700; letter-spacing: -.035em; }
+.workspace-heading { margin-block: 16px 14px; }
+.workspace-heading h1 { margin-block: 0 5px; }
+h1, h2, h3 { text-wrap: balance; }
+.panel-heading { padding-bottom: 15px; margin-bottom: 18px; }
+.panel-heading h2 { margin: 0; }
+#project-context { padding: 3px 0 10px; margin-bottom: 10px; border: 0; border-bottom: 1px solid #dbe4e9; border-radius: 0; background: transparent; box-shadow: none; }
+#project-context select { border: 1px solid #d5e1e6; background: #fff; }
+.section-links { padding: 0; margin-bottom: 16px; border: 0; gap: 20px; }
+.section-links span { display: none; }
+.section-links a { font-size: 13px; }
+#task-workbench { grid-template-columns: minmax(260px, .75fr) minmax(0, 1.7fr); gap: 0; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 4px 16px rgb(83 53 30 / 4%); }
+#task-workbench > section { border: 0; border-radius: 0; box-shadow: none; padding: 24px; }
+#task-workbench > #task-list-panel { background: var(--surface-soft); border-inline-end: 1px solid var(--line); border-radius: 12px 0 0 12px; }
+#task-workbench > #task-result-panel { background: #fff; border-radius: 0 12px 12px 0; }
+#task-list-panel .panel-heading { padding-bottom: 0; border: 0; }
+#task-list-panel .panel-heading h2 { font-size: 17px; }
+.task-compose { border: 1px solid var(--accent); border-radius: 8px; background: #fff; }
+.task-compose > summary { padding: 11px 14px; background: var(--accent); color: #fff; border-radius: 6px; font-size: 13px; }
+.task-compose[open] > summary { border-radius: 6px 6px 0 0; }
+#runs .row { margin-top: 0; padding: 18px 0; border: 0; border-bottom: 1px solid #dce5ea; border-radius: 0; background: transparent; box-shadow: none; font-size: 13px; line-height: 1.85; }
+#runs .row:last-child { border-bottom: 0; }
+#runs button { width: auto; min-width: 100px; margin-top: 12px; background: #fff; font-size: 12px; }
+#run-history-refresh { border-style: solid; background: #fff; font-weight: 500; }
+#task-result-panel:has(#protocol-detail:not([hidden])) > #result { margin: 0 0 8px; color: #617383; }
+#task-result-panel #protocol-detail { margin-top: 12px; padding-top: 0; border-top: 0; }
+#protocol-detail > h3 { font-size: 16px; }
+#protocol-state { padding: 12px 14px; border: 1px solid #dae6eb; background: #f3f7f9; font-size: 13px; line-height: 1.8; }
+#protocol-detail > section[aria-label] { padding: 16px 0; border: 0; border-top: 1px solid #e0e8ed; border-radius: 0; background: transparent; }
+#protocol-evidence { border: 1px solid var(--line); border-radius: 8px; background: var(--surface-soft); }
+#protocol-evidence > summary { padding: 14px; font-size: 13px; color: var(--ink); }
+#protocol-result { border: 0; background: #fff; border-radius: 4px; font-size: 12px; }
+#result:not(:has(*)) { padding: 40px 22px; border: 0; border-radius: 0; background: var(--surface-soft); }
+#result:not(:has(*))::before { width: 34px; height: 40px; border-color: #a9c0c8; background: transparent; box-shadow: none; }
+#application-use > p, #resource-connections > p, #resource-capabilities > p { max-width: 76ch; line-height: 1.85; }
+#application-use .grid > section { border-radius: 8px; background: transparent; box-shadow: none; }
+#materials .row { padding: 18px 0; margin: 0; border: 0; border-bottom: 1px solid #dfe7eb; border-radius: 0; }
+#materials .row:last-child { border-bottom: 0; }
+#resource-filters { background: #e8eef1; border-radius: 9px; }
+#resource-filters button { border-radius: 6px; }
+input, textarea { caret-color: var(--accent); }
+input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: none; }
+pre { scrollbar-width: thin; scrollbar-color: #9fb9c4 #f2f6f8; font-variant-numeric: tabular-nums; }
+#protocol-run-id, output { font-variant-numeric: tabular-nums; }
+button, a, summary { touch-action: manipulation; }
+.nav-icon { width: 19px; height: 19px; flex: 0 0 19px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+#workspace-nav [data-tab] { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+#workspace-nav button[aria-current="true"]::before { display: none; }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  button:hover:not(:disabled), button:active:not(:disabled) { transform: none; }
+}
+@media (min-width: 1100px) {
+  header { padding-inline: 24px; }
+  header > output { margin-right: 8px; }
+  body { display: grid; grid-template-columns: 184px minmax(0, 1fr); grid-template-rows: auto auto auto 1fr auto; grid-template-areas: "banner banner" "header header" "login login" "navigation content" "navigation footer"; min-height: 100vh; background: linear-gradient(to right, var(--nav-surface) 184px, var(--canvas) 184px); }
+  #synthetic-workspace-banner { grid-area: banner; margin: 0; padding: 10px 24px; background: #fff8e6; color: #66552f; font-size: 13px; }
+  header { grid-area: header; }
+  #login { grid-area: login; }
+  #workspace-nav { grid-area: navigation; position: sticky; top: 16px; align-self: start; min-height: calc(100vh - 180px); height: fit-content; width: 184px; max-width: none; margin: 0; padding: 28px 14px 20px; flex-direction: column; align-items: stretch; gap: 8px; border: 0; background: var(--nav-surface); }
+  #workspace-nav::before { content: "工作空间"; margin: 0 12px 12px; color: #dcc5b3; font-size: 11px; font-weight: 500; }
+  #workspace-nav [data-tab] { justify-content: flex-start; min-height: 48px; width: 100%; padding-inline: 14px; color: #f3e5da; border: 1px solid transparent; border-radius: 7px; text-align: start; font-weight: 500; }
+  #workspace-nav [data-tab]:hover:not(:disabled):not([aria-current="true"]) { background: var(--nav-hover); color: #fff; }
+  #workspace-nav [data-tab][aria-current="true"] { color: #fff; background: var(--nav-current); border-color: #e09866; }
+  #workspace-nav > #identity-switch { margin: auto 0 0; min-width: 0; background: transparent; color: #dcc5b3; border-color: #8f735c; }
+  #workspace-nav > #identity-switch:hover:not(:disabled) { background: var(--nav-hover); border-color: #e09866; }
+  #workspace-nav :is(button, a):focus-visible { outline-color: var(--nav-focus); }
+  main, footer { width: 100%; max-width: none; margin: 0; padding-inline: 32px; }
+  main { grid-area: content; }
+  footer { grid-area: footer; }
+  main { padding-top: 16px; }
+  #login { padding-left: 216px; }
+  #project-context { padding-bottom: 12px; margin-bottom: 16px; }
+  #task-workbench { grid-template-columns: minmax(260px, .75fr) minmax(0, 1.7fr); }
+}
+@media (max-width: 1099px) and (min-width: 751px) {
+  #task-workbench { grid-template-columns: minmax(245px, .8fr) minmax(0, 1.4fr); }
+  #task-workbench > section { padding: 20px; }
+}
+@media (max-width: 750px) {
+  #workspace-nav .nav-icon { width: 16px; height: 16px; flex-basis: 16px; }
+  #workspace-nav [data-tab] { gap: 5px; }
+  .workspace-heading { margin-block: 12px; }
+  .workspace-heading h1 { font-size: 25px; }
+  .section-links { gap: 14px; }
+  .section-links a { font-size: 11px; }
+  #task-workbench { grid-template-columns: minmax(0, 1fr); }
+  #task-workbench > section { padding: 18px 16px; }
+  #task-workbench > #task-result-panel { border-radius: 12px 12px 0 0; }
+  #task-workbench > #task-list-panel { border-inline-end: 0; border-top: 1px solid #e0e8ec; border-radius: 0 0 12px 12px; }
+  .panel-heading h2 { font-size: 19px; }
+  #protocol-state { font-size: 12px; }
+}
+@media (forced-colors: active) {
+  :root { --focus: Highlight; --nav-focus: Highlight; }
+  #workspace-nav [data-tab][aria-current="true"] { border: 2px solid Highlight; }
+}
+
+/* Readable results and progressive detail; state values remain controller-owned. */
+#protocol-state[data-presented="true"] { display: none; }
+#protocol-state-view { padding: 16px 0; }
+#protocol-state-view > h3 { margin: 0 0 16px; font-size: 18px; }
+.state-facts { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; margin: 0; }
+.state-facts > div { min-width: 0; }
+.state-facts dt { color: #536476; font-size: 12px; }
+.state-facts dd { margin: 6px 0 0; font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
+.reading-boundary { margin: 14px 0 8px; font-size: 12px; color: #536476; line-height: 1.8; }
+.reading-identifiers { margin: 8px 0 0; border: 0; border-radius: 0; background: transparent; }
+.reading-identifiers > summary { padding: 7px 0; font-size: 12px; color: #536476; }
+.reading-identifiers pre { font-family: inherit; font-size: 12px; }
+#protocol-reading-view { padding-block: 18px; margin-block: 12px 20px; border-block: 1px solid #dfe7eb; }
+#protocol-reading-view > h3 { margin: 0 0 10px; }
+.reading-next-step { max-width: 65ch; font-size: 17px; line-height: 1.85; color: #1d2d3c; font-weight: 600; }
+.reading-case { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 7px 20px; font-size: 13px; }
+.reading-case dt { color: #536476; }.reading-case dd { margin: 0; overflow-wrap: anywhere; }
+.reading-unknown { padding: 10px 12px; border: 1px solid #e5cf9d; border-radius: 7px; background: #fff8e7; color: #725113; font-size: 13px; font-weight: 600; }
+.reading-obligations { padding-inline-start: 22px; margin: 20px 0 0; }
+.reading-obligations li { padding: 10px 0 14px 5px; border-bottom: 1px solid #e3e9ed; }
+.reading-obligations li:last-child { border-bottom: 0; }
+.reading-obligations li p { margin: 5px 0; font-size: 13px; }
+.reading-obligations li small { display: block; color: #617587; font-size: 11px; }
+#protocol-state[data-read-state="error"] { border: 1px solid #dba69b; background: #fff2ed; color: #87382b; }
+#protocol-state-view .reading-error-title { padding: 0; color: #87382b; font-size: 17px; }
+#protocol-state-view .reading-error-title::before { content: "!"; display: inline-grid; place-items: center; width: 23px; height: 23px; margin-right: 8px; border: 1px solid currentColor; border-radius: 50%; font-weight: 700; }
+#protocol-detail:has(#protocol-state[data-read-state="error"]) #protocol-read { background: var(--accent); color: #fff; border-color: var(--accent); }
+.app-entry-guidance { max-width: 70ch; font-size: 14px; line-height: 1.85; }
+.app-usage-notes { margin-block: 8px 20px; border: 0; background: transparent; }
+.app-usage-notes > summary { padding: 8px 0; font-size: 13px; }
+.app-usage-notes p { max-width: 75ch; font-size: 13px; }
+.application-directory-item > strong { display: block; font-size: 15px; line-height: 1.7; }
+.application-directory-item > p { margin: 6px 0 10px; color: #536476; font-size: 12px; line-height: 1.8; }
+.application-directory-item > details { margin: 6px 0 0; border: 0; background: transparent; }
+.application-directory-item > details > summary { padding: 8px 0; color: #536476; font-size: 12px; }
+.application-directory-item > details p { font-size: 13px; line-height: 1.85; }
+#use-info[data-read-state="error"] { padding: 14px; border: 1px solid #dba69b; border-radius: 8px; background: #fff2ed; color: #87382b; }
+#use-info[data-read-state="error"]::before { content: "!  结果读取未完成"; display: block; margin-bottom: 6px; font-weight: 700; }
+#application-use:has(#use-info[data-read-state="error"]) #use-refresh { background: var(--accent); color: #fff; border-color: var(--accent); }
+.csv-result-total > span { display: block; font-size: 13px; color: #536476; }
+.csv-result-total > strong { display: block; margin-top: 5px; font-size: 36px; line-height: 1.35; color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.csv-result-total > p { margin: 12px 0 0; font-size: 13px; line-height: 1.85; }
+#use-csv-review-start > details { margin: 6px 0 12px; border: 0; background: transparent; }
+#use-csv-review-start > details > summary { padding: 8px 0; color: #536476; font-size: 12px; }
+.section-links a[aria-current="location"] { color: var(--accent); font-weight: 700; box-shadow: inset 0 -2px var(--accent); }
+#protocol-detail:has(#protocol-state[data-presented="true"]) > h3,
+#protocol-detail:has(#protocol-state[data-presented="true"]) > #protocol-run-id,
+#task-result-panel:has(#protocol-state[data-presented="true"]) > #result { display: none; }
+#use-info[data-read-state="loading"] { padding: 12px 14px; border: 1px solid #c9dce3; border-radius: 8px; background: #eff6f8; color: #345d70; }
+#use-info[data-read-state="loading"]::before { content: ""; display: inline-block; width: 12px; height: 12px; margin-inline-end: 9px; border: 2px solid #a4c5cf; border-top-color: #21665e; border-radius: 50%; vertical-align: -2px; }
+@media (prefers-reduced-motion: no-preference) {
+ #use-info[data-read-state="loading"]::before { animation: read-turn 1s linear infinite; }
+ @keyframes read-turn { to { transform: rotate(360deg); } }
+}
+@media (max-width: 750px) {
+ .workspace-heading { margin-block: 8px 12px; min-height: 44px; }
+ .workspace-heading p { display: none; }
+ .section-links { gap: 14px; margin-bottom: 12px; }
+ .section-links a { font-size: 12px; }
+ #protocol-detail { margin-top: 12px; }
+ #protocol-state-view { padding-block: 8px; }
+ #protocol-state-view > h3 { margin-bottom: 10px; font-size: 17px; }
+ .state-facts { gap: 10px; }
+ .state-facts dd { margin-top: 3px; font-size: 13px; }
+ #protocol-reading-view { margin-top: 4px; padding-top: 12px; }
+ #protocol-reading-view > h3 { margin-bottom: 8px; font-size: 15px; }
+ .reading-next-step { margin-block: 8px; font-size: 16px; line-height: 1.7; }
+}
+#materials .resource-row { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 12px; padding-block: 14px; }
+.resource-description { min-width: 0; }.resource-name { display: block; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.resource-metadata { display: block; margin-top: 4px; color: #617587; font-size: 12px; overflow-wrap: anywhere; }
+.resource-actions { display: flex; flex-wrap: wrap; gap: 6px; }.resource-actions button + button { margin-left: 0; }
+#materials .resource-actions button { margin-top: 0; font-size: 12px; }
+#resource-filters { margin-inline: 0; }
+@media (max-width: 750px) {
+  header > output { font-size: 11px; max-width: 180px; }
+  #workspace-nav [data-tab], #workspace-nav #identity-switch { font-size: 12px; }
+  .state-facts { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+  .reading-next-step { font-size: 16px; }.reading-case { column-gap: 12px; }
+  .app-entry-guidance { font-size: 13px; }
+  #materials .resource-row { gap: 10px; padding-block: 12px; }
+  #materials .resource-actions button { padding-inline: 10px; }
+}
+@media (max-width: 360px) {
+  #materials .resource-row { grid-template-columns: minmax(0,1fr); }
+  .resource-actions { justify-self: start; }
+}
+
+/* Keep the app directory within reach beside long saved results. */
+@media (min-width: 1100px) and (min-height: 700px) {
+  #application-use > .grid { grid-template-columns: minmax(240px, .65fr) minmax(0, 1.35fr); }
+  #application-use > .grid > section:first-child {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    max-height: calc(100vh - 48px);
+    overflow: auto;
+    scrollbar-gutter: stable;
+  }
+}
+</style></head>
+<body><p id="synthetic-workspace-banner">静态 DOM 对照 · 合成示例 · 非浏览器截图。按钮不连接后台，状态不代表真实任务；请调整窗口查看待验布局。</p><a class="skip-link" href="#main-content">跳到工作区</a><header><strong>Sim2Act</strong><span class="brand-description">让想法成为会行动的应用 <span class="preview-label">工程预览</span></span><output id="health" aria-live="polite" aria-atomic="true">合成状态预览 · 无后台连接</output></header>
+<section id="login" hidden=""><label>本机访问令牌 <input id="token" type="password" autocomplete="off"></label><button id="connect">连接</button><p>令牌仅保存在本页内存。当前为 F1 工程版本，MOCK 不能作为真实模型验收。</p></section>
+<nav id="workspace-nav" aria-label="工作区"><button type="button" data-tab="projects" aria-controls="projects" aria-current="true"><svg class="nav-icon" aria-hidden="true" focusable="false" viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14" rx="2"></rect><path d="M3 8h14M8 8v9"></path></svg>项目</button><button type="button" data-tab="apps" aria-controls="apps"><svg class="nav-icon" aria-hidden="true" focusable="false" viewBox="0 0 20 20"><rect x="3" y="3" width="5" height="5" rx="1"></rect><rect x="12" y="3" width="5" height="5" rx="1"></rect><rect x="3" y="12" width="5" height="5" rx="1"></rect><rect x="12" y="12" width="5" height="5" rx="1"></rect></svg>应用</button><button type="button" data-tab="resources" aria-controls="resources"><svg class="nav-icon" aria-hidden="true" focusable="false" viewBox="0 0 20 20"><path d="M4 3h8l4 4v10H4zM12 3v5h4M7 11h6M7 14h4"></path></svg>资源</button><button id="identity-switch">切换身份</button></nav>
+<main id="main-content" tabindex="-1"><p id="error" role="alert"></p><section id="project-context" aria-label="当前项目范围"><label class="project-selection">当前项目 <select id="project-select"><option value="proj_4c181381afa84d4dab3e1ce8c0a548ce">合成示例 · 材料核查</option></select></label><details class="scope-note"><summary>授权范围</summary><div class="scope-content"><p id="project-context-status" role="status" aria-live="polite" aria-atomic="true">当前所选项目：合成示例 · 材料核查。保存材料将授权给此项目；切换项目请使用此处的项目选择器。</p><button id="project-context-open" type="button" aria-describedby="project-context-status">选择或切换项目</button></div></details></section>
+<section id="natural-first-guide" hidden="" aria-labelledby="natural-first-title"><h2 id="natural-first-title">从 Goal 创建自然应用</h2><ol><li>准备并保存新 TXT/MD 材料</li><li>保存只绑定本次材料的 Goal</li><li>读取可用性后明确生成，查看精确候选</li><li>分别确认候选与本项目 JSON 保存授权</li><li>核查内部快照，另行确认保存版本</li><li>明确创建独立实例，返回应用目录</li></ol><p id="natural-first-status" role="status" aria-live="polite"></p><button id="natural-first-directory" type="button" hidden="">返回应用目录，使用此应用</button><button id="natural-first-cancel" type="button">结束向导，保留已保存内容和任务</button></section>
+<section id="projects" aria-labelledby="projects-title"><div class="workspace-heading"><div><h1 id="projects-title">研究工作台</h1><p>从一个清晰的目标开始，让每次行动与成果都有据可查。</p></div><details id="project-create" class="project-create"><summary>创建项目 <span aria-hidden="true">＋</span></summary><form id="project-form"><label>项目名称 <input id="project-name" required="" maxlength="200"></label><button>创建项目</button></form></details></div><div class="section-links" role="navigation" aria-label="项目内导航"><a href="#task-workbench">任务与成果 <span aria-hidden="true">↗</span></a><a href="#protocol-panel">协议任务 <span aria-hidden="true">↗</span></a><a href="#goal-cards-panel">目标卡 <span aria-hidden="true">↗</span></a><a href="#project-tools">项目维护 <span aria-hidden="true">↗</span></a></div><div class="grid" id="task-workbench"><section id="task-result-panel"><div class="panel-heading"><div><h2>成果画布</h2></div></div><div id="result">选择任务查看持久状态与成果。</div><section id="protocol-detail"><h3>当前协议成果 <span id="protocol-run-id">run_5062b844bf304b2490bfde023a99525e</span></h3><section id="protocol-state-view" aria-live="polite"><h3>来源成果：等待独立核查</h3><dl class="state-facts"><div><dt>语义状态</dt><dd>UNKNOWN</dd></div><div><dt>独立核查</dt><dd>等待核查</dd></div><div><dt>人工验收</dt><dd>PENDING</dd></div><div><dt>发布状态</dt><dd>未发布</dd></div></dl><details class="reading-identifiers"><summary>完整状态与标识</summary><pre>run_5062b844bf304b2490bfde023a99525e
+source · WAITING_APPROVAL · 语义 UNKNOWN · WAITING_APPROVAL · owner PENDING。注册核查不等于 owner 对真实任务签收；未发布。</pre><p class="reading-boundary">注册核查不替代人工签收；技术执行成功也不代表目标语义通过。</p></details></section><p id="protocol-state" role="status" aria-live="polite" data-presented="true">source · WAITING_APPROVAL · 语义 UNKNOWN · WAITING_APPROVAL · owner PENDING。注册核查不等于 owner 对真实任务签收；未发布。</p><section id="protocol-reading-view" aria-label="当前成果摘要（未替代独立核查）"><h3>已记录的来源结论</h3><p class="reading-next-step">先取得主管批准，再按原10自然日期限提交报销单和收据</p><p class="reading-boundary">以下仅整理原成果的可读展示，语义与人工验收状态以上方为准。</p><dl class="reading-case"><dt>原记录判断</dt><dd>CONFLICT</dd><dt>当前是否可提交</dt><dd>false</dd><dt>阻断规则</dt><dd>prior_approval</dd></dl><p class="reading-unknown">绝对截止时间：UNKNOWN</p><ol class="reading-obligations"><li><strong>提交报销单</strong><p>适用对象：海岚工作室员工</p><p>条件：行程结束后</p><p>期限数量：10</p><p>期限单位：自然日</p><p>起算事件：行程结束</p><p class="reading-unknown">绝对日期：UNKNOWN</p><small>原文行号：3</small><small>记录标识：submit_form</small></li><li><strong>提交收据</strong><p>适用对象：海岚工作室员工</p><p>条件：行程结束后</p><p>期限数量：10</p><p>期限单位：自然日</p><p>起算事件：行程结束</p><p class="reading-unknown">绝对日期：UNKNOWN</p><small>原文行号：3</small><small>记录标识：submit_proof</small></li><li><strong>取得主管批准</strong><p>适用对象：海岚工作室员工</p><p>条件：金额 &gt; 500 元</p><small>原文行号：4</small><small>记录标识：prior_approval</small></li><li><strong>不得提交</strong><p>适用对象：海岚工作室员工</p><p>条件：缺少收据</p><small>原文行号：5</small><small>记录标识：missing_proof_block</small></li><li><strong>补齐收据后仍按R1期限处理</strong><p>适用对象：海岚工作室员工</p><p>条件：之前缺少收据后补齐</p><p>期限数量：10</p><p>期限单位：自然日</p><p>起算事件：行程结束</p><p class="reading-unknown">绝对日期：UNKNOWN</p><small>原文行号：3、5</small><small>记录标识：unchanged_deadline</small></li></ol></section><details id="protocol-evidence"><summary>结果、来源、结构与已记录证据</summary><pre id="protocol-result" tabindex="0" aria-label="当前任务完整结果与来源，可滚动读取全文">{
+  "protocol_result": {
+    "kind": "model-protocol.v1",
+    "status": "AWAITING_EVALUATION",
+    "semantic_status": "UNKNOWN",
+    "evidence": {
+      "goal": "只依据本包，逐条提取义务、条件、例外与原文行号；判断案例下一步。未写明的事实标UNKNOWN，不执行动作。",
+      "inputs": {
+        "format": "JSON with line evidence and explicit UNKNOWN"
+      },
+      "resource_ids": [
+        "res_4d1d84684fd64ea38ff358c2dc418b6a"
+      ],
+      "tool_trace": [
+        {
+          "tool": "resource.read",
+          "args": {
+            "resource_id": "res_4d1d84684fd64ea38ff358c2dc418b6a"
+          },
+          "data": {
+            "resource_id": "res_4d1d84684fd64ea38ff358c2dc418b6a",
+            "content": "合成规则A-S：境内差旅报销\n适用对象：海岚工作室员工；本文件全部内容为虚构。\nR1：行程结束后，员工须在10个自然日内提交报销单和收据。\nR2：金额超过500元时，须先取得主管批准，再提交报销。\nR3：缺少收据时不得提交；收据补齐后仍按R1期限处理。\n案例：林舟行程已结束2天，金额680元，收据齐全，尚未取得主管批准。\n问题：提取规则，并判断林舟现在可否提交及尚需完成什么。\n",
+            "hash": "ec7cf7070be884d8e27cd2e107484dbebe3885bae0434107ef76fefecdb71808",
+            "format": "md"
+          }
+        }
+      ],
+      "output": {
+        "obligations": {
+          "submit_form": {
+            "actor": "海岚工作室员工",
+            "action": "提交报销单",
+            "condition": "行程结束后",
+            "lines": [
+              3
+            ],
+            "deadline": {
+              "amount": 10,
+              "unit": "自然日",
+              "start_event": "行程结束",
+              "absolute_date": "UNKNOWN"
+            }
+          },
+          "submit_proof": {
+            "actor": "海岚工作室员工",
+            "action": "提交收据",
+            "condition": "行程结束后",
+            "lines": [
+              3
+            ],
+            "deadline": {
+              "amount": 10,
+              "unit": "自然日",
+              "start_event": "行程结束",
+              "absolute_date": "UNKNOWN"
+            }
+          },
+          "prior_approval": {
+            "actor": "海岚工作室员工",
+            "action": "取得主管批准",
+            "condition": {
+              "field": "金额",
+              "operator": "&gt;",
+              "value": 500,
+              "unit": "元"
+            },
+            "lines": [
+              4
+            ],
+            "order": "before submission"
+          },
+          "missing_proof_block": {
+            "actor": "海岚工作室员工",
+            "action": "不得提交",
+            "condition": "缺少收据",
+            "lines": [
+              5
+            ],
+            "release_condition": "收据补齐"
+          },
+          "unchanged_deadline": {
+            "actor": "海岚工作室员工",
+            "action": "补齐收据后仍按R1期限处理",
+            "condition": "之前缺少收据后补齐",
+            "lines": [
+              3,
+              5
+            ],
+            "deadline": {
+              "amount": 10,
+              "unit": "自然日",
+              "start_event": "行程结束",
+              "absolute_date": "UNKNOWN"
+            },
+            "no_extension_or_restart": true
+          }
+        },
+        "case": {
+          "decision": "CONFLICT",
+          "may_submit_now": false,
+          "blocking_rule": "prior_approval",
+          "required_next_step": "先取得主管批准，再按原10自然日期限提交报销单和收据"
+        },
+        "absolute_deadline": "UNKNOWN"
+      },
+      "attempts": [
+        {
+          "identity": {
+            "requested_model": "intern-s2",
+            "raw_returned_model": "intern-s2",
+            "normalized_returned_model": "intern-s2",
+            "normalization_policy_version": "intern-s2-returned-name.v1",
+            "enforced": true,
+            "verdict": "ACCEPTED"
+          },
+          "usage": {
+            "status": "known",
+            "tokens": {
+              "prompt_tokens": 10,
+              "completion_tokens": 10,
+              "total_tokens": 20
+            }
+          }
+        },
+        {
+          "identity": {
+            "requested_model": "intern-s2",
+            "raw_returned_model": "intern-s2",
+            "normalized_returned_model": "intern-s2",
+            "normalization_policy_version": "intern-s2-returned-name.v1",
+            "enforced": true,
+            "verdict": "ACCEPTED"
+          },
+          "usage": {
+            "status": "known",
+            "tokens": {
+              "prompt_tokens": 10,
+              "completion_tokens": 10,
+              "total_tokens": 20
+            }
+          }
+        }
+      ]
+    },
+    "verification": null
+  }
+}</pre></details><button id="protocol-read" type="button">重新读取成果与核查状态</button><button id="protocol-extract" type="button" hidden="">从已核查来源提取可复用协议草案</button><form id="protocol-cold-form" hidden=""><p>协议草案尚未发布，也不是既有应用清单。请选择与来源目标匹配的冷契约；服务端逐项复核，不匹配将拒绝。冷运行读取新材料，创建新任务；owner 语义签收仍为 PENDING。</p><label>冷输入注册契约 <select id="protocol-cold-contract" required=""></select></label><div id="protocol-cold-materials"></div><div id="protocol-cold-inputs"></div><button id="protocol-cold-submit">提交新材料冷运行</button></form><section aria-label="已完成任务回执只读找回"><button id="protocol-completion-locate" type="button">找回已完成任务回执（只读）</button><p id="protocol-completion-locate-status" role="status" aria-live="polite">仅找回已持久完成命令的原键与回执；无记录不证明未执行，不恢复未持久 UNKNOWN。</p><pre id="protocol-completion-locate-receipt" tabindex="0" aria-label="原完成请求与回执，可滚动读取全文"></pre></section><fieldset id="protocol-completion" hidden=""><legend>已知响应的任务结算</legend><p>仅尝试结算已收妥完整响应和工具回执的来源任务，或候选已接受的单次提取。来源任务结算后仍待独立审核。服务端仍核对原期限、租约和授权；未满足条件会拒绝，不重新发送模型请求，也不接收补传响应。</p><label><input id="protocol-completion-confirm" type="checkbox" disabled="">我明确确认：只结算当前已接受的任务，不启动新运行或模型请求</label><button id="protocol-completion-submit" type="button" disabled="" hidden="">尝试完成当前任务</button><button id="protocol-completion-retry" type="button" hidden="">用原完成键核对回执</button><p id="protocol-completion-status" role="status" aria-live="polite">是否可完成由服务端核对；此处不表示租约已到期或证据已经齐备。</p></fieldset><fieldset id="protocol-review" hidden=""><legend>请求注册合成核查</legend><p>仅核查此任务接受时冻结的合成契约与原成果，不调用模型，不接受自填 PASS、答案或核查器。核查通过后仍需 owner 对真实任务另行签收；不会自动提取、运行或发布。</p><label><input id="protocol-review-confirm" type="checkbox" disabled="">我已核对当前成果，明确请求原契约的独立注册核查</label><button id="protocol-review-submit" type="button" disabled="" hidden="">请求已注册合成核查</button><button id="protocol-review-retry" type="button" hidden="">用原核查键核对</button><p id="protocol-review-status" role="status" aria-live="polite">冻结契约 protocol.synthetic.a-source.v1；核查不会代替真实任务签收。冷页可只读找回已接受核查；未持久化的未知请求不能据此恢复。</p></fieldset><section aria-label="已接受核查回执只读找回"><button id="protocol-review-locate" type="button">找回已接受核查回执（只读）</button><p id="protocol-review-locate-status" role="status" aria-live="polite">可只读找回当前任务的已接受核查；无记录不证明未提交，不恢复未持久化的 UNKNOWN。</p><pre id="protocol-review-locate-receipt" tabindex="0" aria-label="原核查请求与回执，可滚动读取全文"></pre></section><button id="protocol-recover" type="button">核对持久状态（不继续执行）</button><button id="protocol-recover-retry" type="button" hidden="">用原核对键重读回执</button></section><div id="commands"></div><details><summary>事件、来源与完整回执</summary><pre id="events"></pre><pre id="raw-result"></pre></details><section id="reconcile-panel" hidden=""><h2>核对未完成的模型请求</h2><p>这次请求可能已产生未知用量。记录已有完整响应后，任务会暂停，需另行点击继续；无法核对时可结束任务，保留未知成本和已有成果。</p><form id="reconcile-form"><label>待核对请求 <select id="reconcile-attempt"></select></label><label>处理方式 <select id="reconcile-decision"><option value="close_unknown">结束任务，保留未知成本</option><option value="record_response">记录已有完整响应，保持暂停</option></select></label><label>核对依据 <textarea id="reconcile-evidence" required="" maxlength="1000"></textarea></label><label>已有响应 JSON（仅记录响应时填写，不包含密钥或请求头）<textarea id="reconcile-response" maxlength="32768"></textarea></label><label><input id="reconcile-ack" type="checkbox" required="">我确认上述依据对应所选请求，并理解其用量可能仍未知。</label><button>保存核对（不会自动继续）</button></form></section></section><section id="task-list-panel"><div class="panel-heading"><div><h2>任务与行动</h2></div></div><details id="task-create" class="task-compose"><summary>新建任务 <span aria-hidden="true">＋</span></summary><form id="run-form"><label>目标 <textarea id="goal" required="" maxlength="4000" placeholder="描述本次目标，以及你希望如何核对成果…"></textarea></label><label>本次材料（可多选，最多8份）<select id="run-materials" multiple="" size="5" aria-describedby="run-materials-status"></select></label><p id="run-materials-status" role="status" aria-live="polite">已选择 0/8 份材料。本次未附加材料。</p><p>仅所选的当前项目授权材料随目标提交；也可不附加材料。尚未完成应用生成和目标语义验收。</p><button id="run-submit">提交持久任务</button><p id="run-submit-status" role="status" aria-live="polite" data-state=""></p><button id="run-submit-recover" type="button" hidden="">恢复同一提交的回执</button><button id="run-submit-read" type="button" hidden="">重新读取已接受任务</button><p>任务在后台持久执行。刷新页面后请先查任务历史，避免另建重复任务。</p></form><section id="csv-report-task"><h2>CSV精确汇总并保存完整MD报告</h2><p>明确选择这个有限任务类型：按所选列精确求和、核对记录数并保存完整报告。先冻结并展示来源版本/hash、规则和报告内容，再另行确认执行。原自然语言目标草稿不会转成此合同。0模型请求；通用语义NOT_RUN、人工PENDING。</p><form id="csv-report-form"><label>本次CSV材料<select id="csv-report-source"></select></label><label>精确求和列<select id="csv-report-column"></select></label><button id="csv-report-prepare" disabled="">准备完整事前合同（暂不执行）</button></form><p id="csv-report-status" role="status" aria-live="polite"></p><button id="csv-report-recover" type="button" hidden="">恢复同一合同准备回执</button><button id="csv-report-open" type="button" hidden="">重新读取本次合同及成果</button><button id="csv-report-new" type="button" hidden="">结束已知提交，另行准备新合同</button></section></details><h3>最近任务</h3><p>按目标摘要与接受时间定位原任务。提交模式不代表已调用模型或目标验收。</p><button id="run-history-refresh" type="button">刷新任务历史（只读）</button><p id="run-history-status" role="status" aria-live="polite">已读取 2 个持久任务。查看任务只读取既有状态。</p><div id="runs"><div class="row">核对报销材料：提交条件、所需凭证与下一步 · 接受 10/24/2026, 12:00:00 AM · 提交模式 UNKNOWN · WAITING_APPROVAL · run_5062b844bf30 <button>查看任务</button></div><div class="row">整理本次资料中的来源与引用 · 接受 10/23/2026, 11:30:00 PM · 提交模式 MOCK · RUNNING · run_synthetic_wo <button>查看任务</button></div></div></section></div><details id="project-tools" class="workspace-tools"><summary><span><strong>项目维护与复用</strong><small>影响清单、文本逻辑与 CSV 授权</small></span></summary><div class="tool-content"><fieldset id="pn-panel"><legend>项目影响清单与逐应用隔离重验</legend><p>完整项目最多两个已有自然规范应用。仅修改明确选择的一个应用，其他成员保留原定义，分别确认隔离 CHECK。局部通过不代表项目完整，依赖 UNKNOWN、人工 PENDING、发布关闭。</p><button id="pn-read" type="button">读取完整项目成员和已有账目</button><div id="pn-fields"></div><label>明确修改应用<select id="pn-modified"></select></label><label>原项目请求key<input id="pn-key" maxlength="64" autocomplete="off"></label><label><input id="pn-confirm" type="checkbox">核对完整成员、来源实例与选中修改，冻结精确项目影响清单</label><button id="pn-preview" type="button">保存项目影响预览（不运行）</button><label>已接受项目账目<select id="pn-history"></select></label><button id="pn-recover" type="button">仅GET原key账目与回执</button><div id="pn-results"></div><label><input id="pn-close-confirm" type="checkbox">明确关闭此未启动且未消费的原清单，仅解除自身来源预留，保留历史且不释放清单额度</label><button id="pn-close" type="button">关闭此未启动清单</button><button id="pn-new" type="button">显式新建另一清单（重新读取当前范围）</button><label><input id="pn-version-confirm" type="checkbox">核对全部CHECK及完整Goal、来源和精确版本，再明确批准所选应用</label><button id="pn-approval" type="button">读取所选应用精确版本批准</button><button id="pn-commit" type="button">单独确认保存所选内部版本</button><pre id="pn-proof"></pre><p id="pn-status" role="status" aria-live="polite"></p></fieldset><fieldset id="text-logic-panel"><legend>当前项目的独立文本逻辑</legend><p>冷页面从独立授权读取固定字面逻辑，不打开旧来源。选择另一份已有授权 TXT/MD，明确建立一个无令牌、仅该材料 resource.read 权限的新身份。目标用户权限或新身份权限撤销后拒绝；旧目标应用自身身份不被复制。owner PENDING，语义 UNKNOWN，未发布。</p><button id="text-logic-history" type="button">读取项目文本逻辑</button><select id="text-logic-selected" aria-label="独立文本逻辑"></select><button id="text-logic-read" type="button">读取当前逻辑状态</button><button id="text-logic-materials" type="button">预览当前授权新材料</button><label>已有文本应用<select id="text-logic-target"></select></label><label>新应用名称<input id="text-logic-name" maxlength="200" value="独立文本检索应用"></label><label><input id="text-logic-bind-confirm" type="checkbox">核对逻辑、新材料版本和期限，明确创建只读新身份并保存新应用</label><button id="text-logic-bind" type="button">绑定新材料并保存应用</button><button id="text-logic-open" type="button">打开新应用，另行核查执行</button><label>原请求key<input id="text-logic-key" maxlength="100" autocomplete="off"></label><button id="text-logic-recover" type="button">仅GET读取原请求回执</button><label><input id="text-logic-revoke-confirm" type="checkbox">明确不可逆撤销所选独立文本逻辑</label><button id="text-logic-revoke" type="button">撤销独立文本逻辑</button><pre id="text-logic-proof"></pre><p id="text-logic-status" role="status" aria-live="polite"></p></fieldset><fieldset id="text-continuation-panel"><legend>已有文本实例的软件兼容接续</legend><p>仅支持可证明兼容的固定字面检索软件。选择一个已有实例，冻结精确新旧版本、权限、预算和保留数据，先预检再手动确认。原数据与历史保留；旧人工签收失效，语义 UNKNOWN，未发布。</p><button id="text-continuation-list" type="button">读取待接续实例（元数据）</button><label>已有实例<select id="text-continuation-selected"></select></label><label>预检样例词<input id="text-continuation-term" value="Alpha" data-term-input="" pattern="[\s\S]{0,80}" title="检索词最多 80 个 Unicode 码点；不会自动截断输入。" aria-describedby="text-continuation-term-limit"><small id="text-continuation-term-limit" role="status" aria-live="polite">5/80 Unicode 码点</small></label><button id="text-continuation-preview" type="button">预检所选实例与精确软件</button><pre id="text-continuation-proof"></pre><label><input id="text-continuation-ack" type="checkbox">我已核对精确版本、保留范围、样例结果和有效期，确认只接续此实例</label><button id="text-continuation-commit" type="button" disabled="">确认此精确软件接续</button><button id="text-continuation-open" type="button" disabled="">打开所选实例，另行提交新输入</button><label>原请求 key<input id="text-continuation-key" maxlength="100" autocomplete="off"></label><button id="text-continuation-recover" type="button">仅用原 key GET 读取恢复</button><label>停止依据<input id="text-continuation-reason" maxlength="500"></label><label><input id="text-continuation-stop-ack" type="checkbox">明确取消待批准预检，或撤回所选已提交的软件执行许可</label><button id="text-continuation-stop" type="button" disabled="">停止所选预检 / 兼容执行许可</button><p id="text-continuation-status" role="status" aria-live="polite"></p></fieldset><fieldset id="csv-logic-panel"><legend>当前项目的独立 CSV 逻辑授权</legend><p>仅已实际成功的读取 → 求和（→ 报告）或同一次读取的双求和结构；双求和使用独立确认与两个节点列选择；无原材料内容、列名或结果。须在来源仍可完整核查时另行确认24小时授权，再注册新CSV；不能从失效来源补发。原材料撤权不撤销这份结构授权，目标仍需当前权限。语义 UNKNOWN，用户 PENDING，发布关闭。</p><button id="csv-logic-history" type="button">读取项目逻辑授权（只读）</button><select id="csv-logic-selected"></select><button id="csv-logic-read" type="button">读取当前授权状态</button><button id="csv-logic-options" type="button">读取当前授权目标</button><label>已有CSV草案<select id="csv-logic-target"></select></label><label><span id="csv-logic-column-label">本次新材料列</span><select id="csv-logic-column"></select></label><label id="csv-logic-second-label" hidden="">total_b 的新材料列<select id="csv-logic-column-second"></select></label><label><input id="csv-logic-confirm" type="checkbox">核对逻辑授权、新材料版本、列及冻结预算，确认保存目标计划</label><button id="csv-logic-plan" type="button">保存独立目标计划</button><button id="csv-logic-open" type="button">打开目标计划，另行确认执行</button><label><input id="csv-logic-revoke-confirm" type="checkbox">永久撤销所选逻辑授权；此授权的所有目标和实例将停止复用</label><button id="csv-logic-revoke" type="button">撤销独立逻辑授权</button><button id="csv-logic-recover" type="button" hidden="">恢复本次原键回执</button><p id="csv-logic-status" role="status"></p><pre id="csv-logic-proof"></pre></fieldset></div></details><section id="protocol-panel"><h2>注册任务与可复用协议成果</h2><p>有限只读工程入口。独立注册核查与 owner 语义签收分开；不会自动核查或发布。默认协议 provider 未配置时等待资源。</p><form id="protocol-source-form"><label>已注册任务 <select id="protocol-contract" required=""></select></label><p id="protocol-source-goal"></p><div id="protocol-source-materials"></div><div id="protocol-inputs"></div><button id="protocol-source-submit" disabled="">提交来源任务</button><p id="protocol-source-status" role="status"></p></form></section><section id="goal-cards-panel"><h2>目标卡与验收草案</h2><p>人工草案，尚未验收。保存不执行；显式执行已保存版本将提交普通持久任务。每次保存保留旧版本；旧窗口冲突时请重新打开目标卡。</p><fieldset id="trial-panel"><legend>P-A 七槽准备与同意（LIVE 关闭）</legend><p>两张完整目标卡分别绑定一份已授权 TXT。服务端冻结合同，准备和同意不会创建任务或调用模型。</p><button id="trial-refresh" type="button">读取当前目标卡</button><label>生成及 Source 目标<select id="trial-source"></select></label><label>未见输入 Cold 目标<select id="trial-cold"></select></label><button id="trial-prepare" type="button">准备精确范围</button><label>原准备键（可复制用于冷页恢复）<input id="trial-original-key" maxlength="100"></label><button id="trial-recover" type="button">只读取原键恢复</button><pre id="trial-scope"></pre><label><input id="trial-ack" type="checkbox">我已阅读上述完整材料、目标、期限和原预算，明确批准仅此精确七槽范围；理解 LIVE 仍关闭。</label><button id="trial-consent" type="button" disabled="">保存精确批准</button><label><input id="trial-withdraw-ack" type="checkbox">我明确撤回原准备键下的批准。</label><button id="trial-withdraw" type="button" disabled="">撤回原批准</button><label><input id="trial-end-ack" type="checkbox">明确永久结束此未批准准备；旧批准请求将被拒绝。</label><button id="trial-end" type="button" disabled="">永久结束旧准备</button><button id="trial-new" type="button" disabled="">明确开始另一份准备</button><output id="trial-status" aria-live="polite"></output><section aria-label="原试验跨 Run 预算"><h3>跨 Run 预算（只读，LIVE 关闭）</h3><button id="trial-budget-read" type="button" disabled="">读取本试验跨 Run 预算</button><p id="trial-budget-status" role="status" aria-live="polite"></p><div id="trial-budget-output"></div></section></fieldset><button id="goal-card-new" type="button">新建目标卡</button><div class="grid"><section><form id="goal-card-form"><label>名称 <input id="goal-card-title" required="" maxlength="200"></label><label>目标 <textarea id="goal-card-goal" required="" maxlength="4000"></textarea></label><label>已知（每行一项）<textarea id="goal-card-known"></textarea></label><label>假设（每行一项）<textarea id="goal-card-assumptions"></textarea></label><label>未决项（每行一项）<textarea id="goal-card-unresolved"></textarea></label><label>硬条件（每行一项）<textarea id="goal-card-constraints"></textarea></label><label>验收检查（每行一项）<textarea id="goal-card-acceptance_checks"></textarea></label><label>同项目授权材料（可多选，最多8份）<select id="goal-card-resources" multiple=""></select></label><p>每类最多16项，每项1000字。绑定材料版本；撤权或材料变更会阻止回读旧快照。</p><button id="goal-card-save">保存新版本</button><p id="goal-card-status" role="status">新建草案</p><section aria-label="自然语言规划"><h3>目标 → 计划 → 确认 → 回执</h3><p>使用已保存目标及其材料。生成计划后先查看校验与未决项，再显式确认只读执行。</p><p id="natural-goal-config" role="status">先保存并打开目标，再读取规划配置。</p><section aria-label="已批准的有限合成会话"><h4>已批准会话（不新增授权）</h4><p>这里只支持会话冻结的合成 CSV 预览和 quantity_z 求和。会话授权与下方计划执行确认分开；不会创建候选或发布应用。</p><button id="natural-activation-refresh" type="button">读取当前项目会话（只读）</button><label>选择已有会话 <select id="natural-activation-select"><option value="">未选择；沿用默认关闭的普通规划</option></select></label><p id="natural-activation-status" role="status">尚未读取会话。</p><div id="natural-activation-goals"></div></section><label><input id="natural-fixed-acceptance" type="checkbox">为本次新任务冻结固定合成目标整体验收（不是人工签收或发布）</label><button id="natural-goal-generate" type="button" disabled="">生成已保存目标的计划</button><button id="natural-goal-recover" type="button" hidden="">恢复同一规划请求回执</button><button id="natural-goal-read" type="button" hidden="">重新读取规划与回执</button><button id="natural-goal-new" type="button" hidden="">显式新建另一规划请求</button><button id="natural-goal-back" type="button">返回编辑（不取消后台任务）</button><p id="natural-goal-status" role="status" aria-live="polite"></p><p>刷新后从任务历史打开原任务；历史读取不提交或确认。</p></section><button id="goal-card-run" type="button" disabled="">按已保存版本执行任务</button><fieldset id="goal-application-panel"><legend>已保存目标 → 有限能力应用</legend><p>限一份 TXT/MD，使用已保存的完整 Goal。字面检索按完整行匹配；自然规范生成条件、例外和未决清单，语义完整性仍须人工检查。先查看模型读取后的精确候选、样本、来源和预算，再分别确认材料读取与项目保存权限。真实模型默认关闭；自然家族目前仅支持受限离线测试，没有 LIVE 批准路径。其他家族的已有批准需单独选择，读取不会新增授权。合成响应仅为工程证据。</p><button id="goal-provider-refresh" type="button">读取已有精确模型批准</button><label>本次已有批准<select id="goal-provider-select"><option value="">未选择；默认真实请求预算0</option></select></label><pre id="goal-provider-proof"></pre><p id="goal-provider-status" role="status">未选择模型批准。</p><label>应用名称<input id="goal-application-name" maxlength="100" value="字面引用应用"></label><button id="goal-application-start" type="button">按已保存目标生成候选</button><button id="goal-application-read" type="button">只读恢复原请求与状态</button><pre id="goal-application-proof"></pre><label>有限能力<select id="goal-application-family"><option value="">字面检索</option><option value="spec_checklist">合成标记规范 → 引用清单（真实模型关闭）</option><option value="natural_spec">未标注短规范 → 条件/例外/未决清单（真实模型关闭，语义待验）</option></select></label><label id="goal-application-write-label" hidden=""><input id="goal-application-write-ack" type="checkbox">仅授权此应用在本项目保存核验后的一个 JSON 清单；引用通过不代表语义完整</label><label><input id="goal-application-ack" type="checkbox">已核对完整目标、来源、预算和候选指纹，授权此应用只读所选材料</label><button id="goal-application-confirm" type="button">确认精确候选并创建预览</button><button id="goal-application-confirm-read" type="button" hidden="">只读恢复原确认回执</button><p id="goal-application-status" role="status"></p><section aria-label="复用已确认的模型图到新材料"><h4>已有模型图 → 明确新目标与新材料</h4><p>先打开绑定另一份TXT/MD的已保存目标，再读取已确认的模型来源。只替换明示身份、目标和材料槽；模型步骤与接口保留，源材料仍需审计读取权限。保存复用不请求模型；未标注规范实际运行需模型，默认关闭。语义 UNKNOWN，人工签收 PENDING，未发布。</p><label>模型图能力<select id="pa-binding-family"><option value="">字面检索</option><option value="spec">合成规范引用清单（本项目 JSON 保存）</option><option value="natural">未标注规范模型图（运行需模型，默认关闭）</option></select></label><button id="pa-binding-sources" type="button">读取项目已确认模型来源</button><label>模型来源<select id="pa-binding-source"></select></label><button id="pa-binding-preview" type="button">预览实际模型图与本目标新材料</button><pre id="pa-binding-proof"></pre><label>新应用名称<input id="pa-binding-name" maxlength="100" value="模型图新材料引用应用"></label><label><input id="pa-binding-ack" type="checkbox">核对完整新目标、材料指纹和模型图，只授权此新应用读取此新材料</label><button id="pa-binding-save" type="button" disabled="">确认并保存精确复用</button><button id="pa-binding-recover" type="button" disabled="">原请求key只读恢复</button><button id="pa-binding-open" type="button" disabled="">打开已保存新材料应用</button><p id="pa-binding-status" role="status"></p></section></fieldset><fieldset id="ordinary-rubric-start"><legend>普通任务：事前标准与人工签收</legend><p>使用已保存完整目标、材料和逐项标准；未保存编辑不纳入本次 Run。执行前冻结，结果返回后由你逐项选择接受或拒绝并说明理由。人工声明不会改变技术 PARTIAL 或自动验收 NOT_RUN；目标卡再编辑会使当前签收失效，历史保留。</p><pre id="ordinary-rubric-preview"></pre><label><input type="checkbox" id="ordinary-rubric-md">要求在本项目保存1份MD成果（最多8000字符），完成后可查看和下载</label><label><input type="checkbox" id="ordinary-rubric-start-ack">我已核对已保存目标与每项标准，明确冻结此版本并启动一个新普通任务</label><button id="ordinary-rubric-run" type="button" disabled="">冻结标准并执行普通任务</button></fieldset><button id="goal-card-run-recover" type="button" hidden="">恢复同一执行的回执</button><p id="goal-card-run-status" role="status"></p></form></section><section><h3>从已保存目标创建候选</h3><p>仅固定 CSV 数值列求和 · MOCK · 0 模型请求。使用已保存版本，未保存编辑不纳入候选；目标条件保留但尚未验收。</p><form id="goal-candidate-form" hidden=""><label>目标卡已绑定的 CSV <select id="goal-candidate-resource" required=""></select></label><label>可信能力 <select id="goal-candidate-capability" required=""></select></label><p>创建将授权候选应用读取和汇总所选材料24小时，不授权写入。</p><button id="goal-candidate-create">创建候选并授权预览</button><button id="goal-candidate-cancel" type="button">返回编辑 / 取消选择</button></form><p id="goal-candidate-status" role="status">先打开已保存目标卡。</p><div id="goal-candidate-list"></div><h3>目标卡</h3><div id="goal-card-list"></div><h3>版本历史（最近50版）</h3><div id="goal-card-history"></div><pre id="goal-card-history-detail"></pre></section></div></section></section>
+<section id="apps" hidden="" aria-labelledby="apps-title"><div class="workspace-heading"><div><h1 id="apps-title">应用</h1><p>把确认过的流程保存下来，在新的材料上继续使用。</p></div><span class="workspace-label">明确选择 · 单独确认</span></div><section id="application-use"><h2>使用已保存的本地应用</h2><button id="natural-first-start" type="button" disabled="">从 Goal 创建自然应用</button><button id="local-records-new" type="button">新建本地记录应用</button><section id="local-records-panel" hidden="" aria-label="本地记录应用"></section><p class="app-entry-guidance">选择已有实例查看结果，或从 Goal 创建。内部版本未发布；模型未配置即停止，每次运行需明确确认。</p><details class="app-usage-notes"><summary>使用说明与能力边界</summary><p>首次使用可从新材料和 Goal 开始，逐步确认候选、内部版本和实例。每步单独确认；没有可用的受限模型配置时停止，不自动授权或运行。</p><p>选择已保存的自然规范 P-A/P-B 或 CSV 实例。自然规范每次明确选择 TXT/MD 材料和已保存 Goal，预览后另行确认；CSV 使用固定材料与数值列。打开只读取并重新鉴权；新运行不继承历史成功或人工声明。真实模型默认关闭，内部版本未发布。</p></details><div class="grid"><section><div id="use-list"></div></section><section><p id="use-info" role="status"></p><form id="use-form" hidden=""><label>本次数值列 <select id="use-column" required=""></select></label><button id="use-submit">运行此本地应用</button></form><button id="use-recover" type="button" hidden="">恢复接受回执</button><button id="use-refresh" type="button" hidden="">刷新本次状态与历史（只读）</button><div id="use-output" role="status" aria-live="polite"></div><h3>只读验收核对</h3><div id="use-acceptance" role="status" aria-live="polite"></div><h3>运行与结果历史</h3><div id="use-history"></div><details><summary>版本、材料与来源范围</summary><pre id="use-provenance"></pre></details></section></div></section><section id="registered-recovery-panel"><h2>关闭页面后的原请求恢复</h2><p>只读发现本项目的原请求身份。正文不存入浏览器；当前权限允许时按原 key 核对，未知结果不自动重发。</p><button id="registered-recovery-refresh" type="button">读取本项目原请求索引</button><p id="registered-recovery-status" role="status" aria-live="polite"></p><div id="registered-recovery-list"></div></section><section id="report-apps"><h2>保存的条件报告草案</h2><p>仅虚构 A-S 有限规则的命名 PREVIEW_ONLY 草案；共享已有项目运行授权，不新增应用身份或授权，不是 AppManifest 发布。规则资料固定；本次只填写新假设。整体 NOT_ACCEPTED、语义 UNKNOWN、用户确认 PENDING。默认无 provider 会停在 WAITING_RESOURCE。</p><button id="report-app-list-refresh" type="button">刷新保存的条件报告草案（只读）</button><div id="report-app-list"></div><h3 id="report-app-name">选择保存的条件报告草案</h3><form id="report-app-form" hidden=""><fieldset><legend>新的显式假设事实</legend><label>行程已结束<select id="report-app-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>收据齐全<select id="report-app-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>主管已批准<select id="report-app-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="report-app-amount" type="number" min="0" max="1000000" step="1"></label><label>结束后自然日（空为未知）<input id="report-app-days" type="number" min="0" max="3650" step="1"></label></fieldset><button id="report-app-submit">创建新的条件报告运行</button></form><button id="report-app-retry" type="button" hidden="">用原键恢复本次接受回执</button><button id="report-manifest-promote" type="button" hidden="">保存为 canonical Report Manifest 预览草案</button><button id="report-manifest-promote-retry" type="button" hidden="">原键恢复 Manifest 保存回执</button><p id="report-manifest-status" role="status"></p><button id="report-app-refresh" type="button">刷新实际运行历史（只读）</button><p id="report-app-output" role="status" aria-live="polite"></p><div id="report-app-history"></div><details><summary>固定资料、来源与共享授权范围</summary><pre id="report-app-origin"></pre></details></section><section id="conditional-panel"><h2>核对条件报告与规则资料</h2><p>仅人工注册的虚构差旅规则 A-S v1；不支持任意语言规则抽取。与上方 CSV 技术验收独立，不为所选应用自动签收。当前真实模型请求0；语义 UNKNOWN、用户确认 PENDING、发布关闭。</p><button id="condition-list" type="button">刷新当前授权规则资料（清除旧证据）</button><label>选择已有资料<select id="condition-resource"><option value="">请选择</option></select></label><button id="condition-open" type="button">打开并核查此资料版本</button><p id="condition-status" role="status" aria-live="polite">先选择并打开授权资料；不会自动读取内容。</p><div id="condition-source"></div><section id="condition-run-panel"><h3>从真实任务回执绑定条件检查与有限候选</h3><p>此入口不使用下方人工报告。先显式打开上方已授权 A-S 资料，再提交假设事实。后台读取与模型结果必须有完整可信回执；有限检查 PASS 不代表真实事实、整体任务成功或用户签收。语义 UNKNOWN、整体 NOT_ACCEPTED、发布关闭。默认无已批准 provider 会停在 WAITING_RESOURCE；页面不会启用模型或准备器。</p><form id="condition-run-source-form" hidden=""><fieldset><legend>本次源任务的显式假设（不从人工报告复制）</legend><label>行程已结束<select id="condition-run-source-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>收据齐全<select id="condition-run-source-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>主管已批准<select id="condition-run-source-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="condition-run-source-amount" type="number" min="0" max="1000000" step="1"></label><label>结束后自然日（空为未知）<input id="condition-run-source-days" type="number" min="0" max="3650" step="1"></label></fieldset><button id="condition-run-start">创建来源绑定任务</button></form><button id="condition-run-refresh" type="button" hidden="">重新核查当前任务与来源（只读）</button><button id="condition-run-retry" type="button" hidden="">恢复同一提交回执（同键，不另建任务）</button><p id="condition-run-status" role="status" aria-live="polite">先显式打开已授权规则资料。</p><div id="condition-run-output" role="status" aria-live="polite"></div><button id="condition-run-check" type="button" hidden="">独立核对此 Run 的实际报告</button><div id="condition-run-check-output" role="status" aria-live="polite"></div><button id="condition-run-extract" type="button" hidden="">提取当前检查绑定的有限候选</button><div id="condition-run-extract-output" role="status" aria-live="polite"></div><details id="condition-run-plan" hidden=""><summary>受限 DAG、候选回执与来源绑定</summary><pre id="condition-run-plan-text"></pre></details><form id="report-save-form" hidden=""><h4>保存为可重开的命名条件报告草案</h4><p>服务端只保存受封闭回执绑定的固定规则包装；不运行，不新增授权，不签收。</p><label>固定已有授权规则资料<select id="report-save-resource" required=""></select></label><label>草案名称<input id="report-save-name" maxlength="200" required="" value="假设差旅条件报告"></label><button id="report-save-submit">保存条件报告草案</button><button id="report-save-retry" type="button" hidden="">原键恢复保存回执</button><p id="report-save-status" role="status"></p></form><form id="condition-run-cold-form" hidden=""><label>冷运行的当前授权规则资料<select id="condition-run-cold-resource" required=""></select></label><fieldset><legend>新 Scenario：不会复制旧结果</legend><label>行程已结束<select id="condition-run-cold-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>收据齐全<select id="condition-run-cold-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>主管已批准<select id="condition-run-cold-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="condition-run-cold-amount" type="number" min="0" max="1000000" step="1"></label><label>结束后自然日（空为未知）<input id="condition-run-cold-days" type="number" min="0" max="3650" step="1"></label></fieldset><button id="condition-run-cold-start">用有限候选创建新假设冷运行</button></form><div id="condition-run-cold-output" role="status" aria-live="polite"></div><button id="condition-run-cold-check" type="button" hidden="">独立核对此冷 Run 的新报告</button><div id="condition-run-cold-check-output" role="status" aria-live="polite"></div></section><h3>人工条件报告核对（不绑定任务来源）</h3><form id="condition-form" hidden=""><fieldset><legend>显式假设事实（不从材料案例自动填入）</legend><label>行程已结束<select id="condition-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="condition-amount" type="number" min="0" max="1000000" step="1"></label><label>收据齐全<select id="condition-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>已取得主管批准<select id="condition-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>行程结束后的自然日数（空为未知）<input id="condition-days" type="number" min="0" max="3650" step="1"></label></fieldset><fieldset><legend>人工待核对报告（不会自动生成正确答案）</legend><label>R1 是否适用<select id="condition-R1"><option value="UNKNOWN">未知</option><option value="TRUE">适用</option><option value="FALSE">不适用</option></select></label><label>R2 是否适用<select id="condition-R2"><option value="UNKNOWN">未知</option><option value="TRUE">适用</option><option value="FALSE">不适用</option></select></label><label>R3 是否适用<select id="condition-R3"><option value="UNKNOWN">未知</option><option value="TRUE">适用</option><option value="FALSE">不适用</option></select></label><p>每条引用使用上方已授权原文行；引用位置匹配不代表开放语言理解。</p><label>报告决策<select id="condition-decision"><option>UNKNOWN</option><option>BLOCK</option><option>ALLOW</option></select></label><label>报告下一步（可多选）<select id="condition-actions" multiple="" required=""><option value="wait_trip_end">等待行程结束</option><option value="obtain_receipt">补齐收据</option><option value="obtain_prior_approval">先取得批准</option><option value="clarify_facts">澄清未知事实</option><option value="clarify_late_policy">澄清逾期规则</option><option value="submit_claim_and_receipt">提交报销单与收据</option></select></label><label>报告原始期限（自然日）<input id="condition-deadline" type="number" min="1" max="3650" required=""></label><label>报告绝对日期（资料未给出时填写 UNKNOWN）<input id="condition-date" maxlength="40" required=""></label><label>报告是否认为补齐收据重启期限<select id="condition-restart"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>报告说明（自由文字不评分）<textarea id="condition-explanation" maxlength="1000" required=""></textarea></label></fieldset><button id="condition-submit">核对此报告（不启动应用任务）</button></form><button id="condition-recheck" type="button" hidden="">重新授权读取并核对此报告</button><div id="condition-results" role="status" aria-live="polite"></div></section><h2 class="workspace-subheading">应用草案预览</h2><p>内部工程草案 · CSV 可信汇总与 TXT/MD 字面证据 agent（仅离线 Replay），未发布。成功 CSV 任务可保存为可信模板草案；目标语义和真实模型自主生成尚未验收。</p><div class="grid"><section><h2>直接创建 CSV 固定模板草案</h2><form id="app-form"><label>应用名称 <input id="app-name" required="" maxlength="200" value="CSV 数值汇总"></label><label>目标说明 <textarea id="app-goal" required="" maxlength="4000">每次选择一个数值列，查看这份 CSV 的合计和记录数。</textarea></label><label>当前项目的 CSV 材料 <select id="app-resource" required=""></select></label><p>此入口不绑定目标卡版本。仅授权这个应用读取和汇总所选材料（24 小时），不授权写入。材料版本改变后需重新创建草案。</p><button id="app-create-submit">创建草案并授权读取</button><p id="app-create-status" role="status" aria-live="polite"></p></form><h2>当前项目草案</h2><div id="app-list"></div></section><section><h2 id="app-title">选择草案</h2><p id="app-origin" role="status"></p><details id="app-frozen-goal" hidden=""><summary>冻结目标条件与验收草案</summary><pre id="app-frozen-goal-text"></pre></details><button id="app-back-goal" type="button" hidden="">返回来源目标卡</button><form id="app-preview-form" hidden=""><label id="app-column-label">数值列 <select id="app-column" required=""></select></label><label id="app-agent-term-label" hidden="">样例字面检索词 <input id="app-agent-term" data-term-input="" autocomplete="off" pattern="[\s\S]{0,80}" title="检索词最多 80 个 Unicode 码点；不会自动截断输入。" aria-describedby="app-agent-term-limit"><small id="app-agent-term-limit" role="status" aria-live="polite">0/80 Unicode 码点</small></label><p id="app-input-hint" role="status"></p><button id="app-preview-submit">运行新预览</button></form><form id="manifest-report-form" hidden=""><fieldset><legend>新 Scenario：显式假设，不复制来源事实或报告</legend><label>行程已结束<select id="manifest-report-trip"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>收据齐全<select id="manifest-report-receipt"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>主管已批准<select id="manifest-report-approved"><option value="">未知</option><option value="true">是</option><option value="false">否</option></select></label><label>金额（整数元，空为未知）<input id="manifest-report-amount" type="number" min="0" max="1000000" step="1"></label><label>结束后自然日（空为未知）<input id="manifest-report-days" type="number" min="0" max="3650" step="1"></label></fieldset><button id="manifest-report-submit">创建新的 Report 预览运行</button></form><button id="manifest-report-retry" type="button" hidden="">原键恢复本次接受回执</button><button id="manifest-report-refresh" type="button" hidden="">刷新实际 Report 历史（只读）</button><div id="app-output" role="status" aria-live="polite"></div><button id="app-read-retry" type="button" hidden="">重新读取已保存记录</button><h2>预览历史</h2><div id="app-history"></div><section id="csv-extraction-panel"><h2>从已完成预览任务提取候选（P-B工程子集）</h2><p>来源限定本地合成PREVIEW成功回执，不代表F1 Run或目标语义成功；仅可信求和逻辑，不是通用应用验收。新CSV在创建时绑定，数值列为运行参数。源材料仍需可授权核查；未发布。</p><form id="extraction-form" hidden=""><label>成功源回执 <select id="extraction-preview" required=""></select></label><label>同项目的新CSV <select id="extraction-resource" required=""></select></label><label>候选名称 <input id="extraction-name" required="" maxlength="200" value="从已完成预览提取的汇总"></label><p>创建授权应用只读新材料24小时；已接受创建不能由页面导航撤销。</p><button id="extraction-create">提取并授权新材料预览</button></form><p id="extraction-status" role="status"></p></section><section id="delivery-panel" hidden=""><h2>派生图与影响规划</h2><p>保存来源绑定图锚，只规划现有节点的影响。原影响规划仍不执行；下方 CSV 列绑定入口可保存新草案并独立确认只读检查；语义 UNKNOWN，用户确认 PENDING，发布关闭。</p><button id="delivery-read" type="button">读取当前图与规划历史</button><button id="delivery-derive" type="button">保存派生图锚</button><button id="delivery-plan" type="button">规划所选原节点影响</button><button id="delivery-retry" type="button" hidden="">原键恢复未知回执</button><p id="delivery-status" role="status"></p><section id="manual-lock-panel" hidden=""><h3>单节点编辑保护</h3><p>仅保护本项目内编辑；不改变访问权限，锁或解锁后须重新派生图。</p><select id="manual-lock-node"></select><select id="manual-lock-target"><option value="true">锁定</option><option value="false">解锁</option></select><label><input id="manual-lock-confirm" type="checkbox">我已核对当前图、节点及锁修订，明确确认此编辑保护变更（不是权限授权或验收）</label><button id="manual-lock-submit" type="button">确认精确节点锁状态</button><button id="manual-lock-retry" type="button" hidden="">原键恢复未知锁回执</button><button id="manual-lock-read" type="button">读取锁状态与历史</button><p id="manual-lock-status" role="status"></p><pre id="manual-lock-history"></pre></section><div id="delivery-nodes"></div><div id="delivery-plans"></div><section id="column-patch-panel" hidden=""><h3>CSV 列绑定局部修改（离线工程病例）</h3><p>保存同一求和节点的新列绑定草案；保留原清单、输入 schema、材料、布局与历史。另行确认精确草案版本后才执行只读检查。候选未验收，语义 UNKNOWN，用户 PENDING，正式发布关闭。</p><label>原绑定列<select id="column-patch-from"></select></label><label>新定义绑定列<select id="column-patch-to"></select></label><button id="column-patch-save" type="button">提交新定义并保存草案补丁</button><label>已读回的精确草案<select id="column-patch-selected"></select></label><label><input id="column-patch-confirm" type="checkbox">我已核对下方新定义、来源和精确版本；运行有限只读检查（不是人工签收）</label><button id="column-patch-check" type="button">确认版本并执行受影响检查</button><div id="column-patch-history"></div></section><section id="csv-dag-panel" hidden=""><label>计划方式<select id="csv-dag-mode"><option value="legacy">原三节点流程</option><option value="composition">有限只读节点组合（最多四个）</option></select></label><fieldset id="csv-dag-composition" hidden=""><legend>在当前授权 CSV 上连接读取、求和和报告</legend><p>每个求和节点选择自己的列；报告连接一个求和节点。额外前驱用于顺序或条件；跳过只传递到后继。全部末端节点的新输出均保留。</p><div id="csv-dag-nodes"></div><button id="csv-dag-node-add" type="button">添加节点</button></fieldset><h3>CSV 只读 DAG 计划</h3><p>离线工程候选：同一授权来源。原模式为预览 → 求和 → 报告；组合模式可编辑一至四个节点，保留各末端的新输出。模型调用 0，业务写入 0；语义 UNKNOWN，用户验收 PENDING，正式发布关闭。</p><label>原三节点模式的求和列<select id="csv-dag-column"></select></label><button id="csv-dag-wiring-read" type="button">读取服务端允许接线</button><fieldset id="csv-dag-wiring" hidden=""><legend>仅已有三节点端口；preview → aggregate 屏障固定</legend><div id="csv-dag-wiring-ports"></div><pre id="csv-dag-wiring-proof"></pre></fieldset><fieldset id="csv-dag-branch"><legend>原三节点模式的可选条件（组合条件在各节点内选择）</legend><label>条件节点<select id="csv-dag-branch-target"><option value="">不使用条件（保留原流程）</option><option value="aggregate">aggregate</option><option value="report">report</option></select></label><label>操作符<select id="csv-dag-branch-op"><option>eq</option><option>in</option><option>exists</option></select></label><label>引用<select id="csv-dag-branch-source"><option value="input:include_report">本次输入 include_report（boolean，可缺失）</option><option value="input:column">输入 column（string）</option><option value="aggregate:count">已验证 aggregate.count（integer，仅 report）</option><option value="aggregate:sum">已验证 aggregate.sum（string，仅 report）</option></select></label><label>比较值（JSON；in 使用数组，exists 不填）<input id="csv-dag-branch-value" value="true" maxlength="1000"></label></fieldset><label>本次条件输入 include_report<select id="csv-dag-branch-input"><option value="">缺失（不自动补值）</option><option value="true">true</option><option value="false">false</option></select></label><button id="csv-dag-plan" type="button">保存所选计划草案</button><label><input id="csv-dag-confirm" type="checkbox">我已核对下方计划、来源、列及精确指纹；确认本次离线运行（不是人工签收）</label><button id="csv-dag-run" type="button">确认精确计划并排队运行</button><button id="csv-dag-retry" type="button" hidden="">原键恢复未知接受回执</button><button id="csv-dag-refresh" type="button">读回本次运行</button><button id="csv-dag-pause" type="button">暂停</button><button id="csv-dag-resume" type="button">继续</button><button id="csv-dag-cancel" type="button">取消</button><button id="csv-dag-history-read" type="button">读取已有计划与运行</button><div id="csv-dag-history"></div><p id="csv-dag-status" role="status"></p><pre id="csv-dag-definition"></pre><pre id="csv-dag-result"></pre><fieldset id="dag-reuse-panel"><legend>将已完成的读取 → 求和（→ 报告）或双求和保存为内部版本</legend><p>复用无条件的读取、求和及可选报告，或一次读取与两个求和节点。保留每步已核来源与预算；实例每次为各求和节点选择已冻结的数值列，重新执行完整流程，按节点保存完整结果。报告保留在运行回执中。语义 UNKNOWN，用户 PENDING，正式发布关闭。</p><button id="dag-reuse-prepare" type="button">从本次成功流程准备版本</button><label><input id="dag-reuse-confirm" type="checkbox">已核对下方来源、全部步骤回执、允许列与内部版本</label><button id="dag-reuse-commit" type="button">确认并保存内部版本</button><button id="dag-reuse-history" type="button">读取已有版本与实例</button><label>已核内部版本<select id="dag-reuse-release"></select></label><button id="dag-reuse-create" type="button">创建独立实例</button><label>已有实例<select id="dag-reuse-instance"></select></label><button id="dag-reuse-read" type="button">只读恢复实例与结果</button><label><span id="dag-reuse-column-label">本次数值列</span><select id="dag-reuse-column"></select></label><label id="dag-reuse-second-label" hidden=""><span id="dag-reuse-column-second-label">第二节点数值列</span><select id="dag-reuse-column-second"></select></label><label><input id="dag-reuse-run-confirm" type="checkbox">按下方精确版本和各节点所选列执行完整流程，保存本次完整结果</label><button id="dag-reuse-run" type="button">确认新列并排队</button><button id="dag-reuse-recover" type="button" hidden="">恢复原请求回执</button><button id="dag-reuse-pause" type="button">暂停实例运行</button><button id="dag-reuse-resume" type="button">继续实例运行</button><button id="dag-reuse-cancel" type="button">取消实例运行</button><p id="dag-reuse-status" role="status"></p><div id="dag-reuse-results" role="status"></div><pre id="dag-reuse-proof"></pre><fieldset><legend>升级或回退此实例的内部版本</legend><p>先完成或取消尚未结束的运行。仅切换兼容流程，原结果和结果版本保留；切换后新输入须另行确认。</p><label>目标内部版本<select id="dag-reuse-switch-target"></select></label><button id="dag-reuse-switch-prepare" type="button">核查目标版本与保留结果</button><pre id="dag-reuse-switch-proof"></pre><label><input id="dag-reuse-switch-confirm" type="checkbox">我已核对来源、目标和实例修订，确认此版本切换</label><button id="dag-reuse-switch-commit" type="button">确认升级或回退</button></fieldset><fieldset><legend>先另行授权无原内容的逻辑</legend><label><input id="csv-logic-authorize-confirm" type="checkbox"><span id="csv-logic-authorize-label">允许所选成功版本的规范化结构在本项目复用24小时，即使原材料以后撤权或不可读；不授权读材料，可单独永久撤销</span></label><button id="csv-logic-authorize" type="button">授权独立CSV逻辑（不执行）</button></fieldset><fieldset id="dag-material-panel"><legend>在另一份已有授权 CSV 上复用流程</legend><p>支持当前已注册 CSV 草案上的读取 → 求和（→ 报告）或双求和流程；双求和需分别选择两个节点的数值列。旧来源仍须可核查；新增材料可能改变授权基线，需要重新核查并保存来源版本。先选择新材料及数值列，保存独立计划；再确认实际运行，成功后另存版本与实例。旧结果保留。语义 UNKNOWN，用户 PENDING，正式发布关闭。</p><button id="dag-material-options" type="button">读取当前可用新材料</button><label>已有 CSV 草案<select id="dag-material-target"></select></label><label><span id="dag-material-column-label">本次数值列</span><select id="dag-material-column"></select></label><label id="dag-material-second-label" hidden=""><span id="dag-material-column-second-label">第二个求和节点</span><select id="dag-material-column-second"></select></label><label><input id="dag-material-confirm" type="checkbox">已核对新材料、列、权限与冻结预算；仅保存新计划</label><button id="dag-material-plan" type="button">确认并保存新材料计划</button><button id="dag-material-open" type="button">打开已核新材料计划</button><p id="dag-material-status" role="status"></p><pre id="dag-material-proof"></pre></fieldset></fieldset></section><details><summary>实际图、来源版本与当前授权绑定</summary><pre id="delivery-proof"></pre></details></section><details><summary>声明式清单、来源与权限</summary><pre id="app-manifest"></pre></details></section></div></section>
+<section id="internal-panel" hidden="" aria-labelledby="internal-title"><h2 id="internal-title">内部工程入口 · 只读运行</h2><section id="app-own-goal-panel" hidden=""><h3>本应用自己的目标与适用范围</h3><p>填写新材料的完整目标卡，逐项签收将依据自己的当前已保存版本。新卡不继承原任务或原材料应用的目标和签收。固定字面能力、语义 UNKNOWN、正式发布关闭。</p><button id="app-own-goal-read" type="button">读取自己的目标版本</button><form id="app-own-goal-form"><label>标题<input id="app-own-goal-title" maxlength="200" required=""></label><label>目标<textarea id="app-own-goal-goal" maxlength="4000" required=""></textarea></label><label>已知（每行一项）<textarea id="app-own-goal-known"></textarea></label><label>假设（每行一项）<textarea id="app-own-goal-assumptions"></textarea></label><label>未决项（每行一项）<textarea id="app-own-goal-unresolved"></textarea></label><label>约束（每行一项，至少一项）<textarea id="app-own-goal-constraints" required=""></textarea></label><label>验收条目（每行一项，至少一项）<textarea id="app-own-goal-acceptance_checks" required=""></textarea></label><label>适用范围（每行一项，至少一项）<textarea id="app-own-goal-applicability" required=""></textarea></label><label><input id="app-own-goal-ack" type="checkbox">核对本应用、新材料及完整目标和范围，明确保存自己的新版本</label><button id="app-own-goal-save" type="submit">保存自己的目标版本</button></form><label>原请求key<input id="app-own-goal-key" maxlength="100" autocomplete="off"></label><button id="app-own-goal-recover" type="button">仅GET读取原目标请求</button><pre id="app-own-goal-proof"></pre><p id="app-own-goal-status" role="status" aria-live="polite"></p></section><p>仅已认证的本机工程验证：冻结只读清单、独立实例结果和持久后台任务。正式发布与部署仍关闭，不新增授权，0 网络模型请求。agent 仅接受明确提供的离线 Replay。</p><p id="internal-status" role="status" aria-live="polite"></p><section id="internal-agent" hidden=""><h3>有界 agent · 离线 Replay</h3><p>候选与响应由离线调用者提供，尚无真实模型自主生成。仅核查字面命中和引用定位；语义 UNKNOWN。绑定 TXT/MD 及当前授权不变，仅 resource.read。</p><label>离线 Replay JSON 文件（恰好两条 wire 响应，UTF-8 不超过 32000 字节）<input id="internal-replay-file" type="file" accept=".json,application/json"></label><p id="internal-replay-status" role="status" aria-live="polite"></p></section><div class="grid"><section><h3>冻结内部 Release</h3><p id="internal-prepare-hint">使用当前选定数值列重新核查固定可信计算；先查看精确快照，再确认保存。仅内部版本，不是正式发布。</p><button id="internal-prepare" type="button">核查并准备内部快照</button><button id="internal-back" type="button">取消选择 / 返回预览</button><section id="internal-approval" hidden=""><p id="internal-approval-label"></p><details open=""><summary>待确认的冻结快照与检查证据</summary><pre id="internal-approval-detail"></pre></details><label><input id="internal-approval-ack" type="checkbox">我已检查上述精确快照；仅保存内部版本，不开通发布或授权。</label><button id="internal-commit" type="button" disabled="">确认保存此内部 Release</button></section><h3>内部 Release 历史</h3><div id="internal-releases"></div><h3>独立实例</h3><div id="internal-instances"></div><button id="internal-refresh" type="button">重新读取内部历史</button></section><section><h3 id="internal-instance-title">选择内部实例</h3><p id="internal-instance-info"></p><section id="internal-switch" hidden=""><h3>切换内部版本 / 兼容回退</h3><p>保留实例结果与历史。回退版本不撤销数据或外部动作；已接受任务不会自动取消。不新增授权。</p><label>目标 Release <select id="internal-switch-target"><option value="">请手动选择目标版本</option></select></label><button id="internal-switch-prepare" type="button">核查兼容性与精确切换快照</button><button id="internal-switch-cancel" type="button">取消本页切换选择</button><p id="internal-switch-status" role="status" aria-live="polite"></p><section id="internal-switch-approval" hidden=""><p id="internal-switch-summary"></p><details><summary>精确切换指纹、版本与权限快照</summary><pre id="internal-switch-detail"></pre></details><label><input id="internal-switch-ack" type="checkbox">我已核对目标版本及保留数据范围，确认仅切换此内部实例。</label><button id="internal-switch-commit" type="button" disabled="">确认切换到此精确版本</button></section><h4>实例版本切换历史</h4><div id="internal-switch-history"></div></section><form id="internal-run-form" hidden=""><label id="internal-column-label">冻结材料的数值列 <select id="internal-column" required=""></select></label><label id="internal-term-label" hidden="">本次字面检索词 <input id="internal-term" data-term-input="" autocomplete="off" pattern="[\s\S]{0,80}" title="检索词最多 80 个 Unicode 码点；不会自动截断输入。" aria-describedby="internal-term-limit"><small id="internal-term-limit" role="status" aria-live="polite">0/80 Unicode 码点</small></label><button id="internal-run-submit">提交新持久 AppRun</button></form><button id="internal-retry" type="button" hidden="">用原请求键恢复提交</button><button id="internal-new-intent" type="button" hidden="">读回历史后结束本页旧请求重试</button><p id="internal-run-status" role="status" aria-live="polite"></p><div id="internal-controls"></div><section id="registered-extraction" hidden=""><section id="text-logic-source" hidden=""><h3>授权无旧内容的文本逻辑</h3><p>只保留固定字面检索结构、变量和限额。旧材料撤销后仍可复用；新材料必须另行明确绑定。24小时，owner PENDING、语义 UNKNOWN，未发布。</p><button id="text-logic-source-preview" type="button">预览独立文本逻辑</button><pre id="text-logic-source-proof"></pre><label><input id="text-logic-source-confirm" type="checkbox">核对来源证明、Release指纹与固定限额，明确授权本项目的无旧内容逻辑</label><button id="text-logic-authorize" type="button">建立独立逻辑授权</button><p id="text-logic-source-status" role="status"></p></section><button id="registered-extraction-open" type="button">将这次任务保存为可复用草案</button><form id="registered-extraction-form" hidden=""><p>服务端核查成功任务，提取已登记的 CSV 求和或 TXT/MD 字面检索逻辑形成独立草案。仅沿用所选应用已有授权；撤权同时影响共享此授权域的草案。不创建授权，0 模型请求，目标语义条件未验收。</p><label>已有授权的新材料应用 <select id="registered-extraction-target" required=""></select></label><label>草案名称 <input id="registered-extraction-name" required="" maxlength="200" value="从成功任务保存的汇总"></label><pre id="registered-extraction-proof"></pre><p id="registered-extraction-target-info"></p><button id="registered-extraction-submit">保存可复用草案</button><button id="registered-extraction-retry" type="button" hidden="">用原请求键恢复生成回执</button><button id="registered-extraction-new" type="button" hidden="">核对原请求后开始另一次明确提取</button><p id="registered-extraction-request-info"></p></form><p id="registered-extraction-status" role="status" aria-live="polite"></p></section><section id="owner-panel" hidden="" aria-labelledby="owner-title"><h3 id="owner-title">精确版本 owner 逐项签收</h3><p>人工核对冻结目标、约束、未解决问题和实际新输入结果。技术 PASS 不替代语义验收；逐项明确接受或拒绝并填写依据。此声明仅属于下列版本，正式发布关闭。</p><p id="owner-status" role="status" aria-live="polite"></p><label>新输入成功任务 <select id="owner-run"><option value="">请手动选择</option></select></label><button id="owner-prepare" type="button" disabled="">冻结此版本与新输入证据</button><button id="owner-refresh" type="button">读取当前签收状态</button><details open=""><summary>精确冻结目标、来源、版本、证据与有效期</summary><pre id="owner-proof"></pre></details><div id="owner-natural-evidence"></div><form id="owner-form" hidden=""><div id="owner-criteria"></div><label><input id="owner-ack" type="checkbox">我已逐项核对上述精确版本，以下为我的人工判断。</label><button id="owner-submit" disabled="">提交此精确版本的逐项人工决定</button></form><label>取消 / 撤销依据 <input id="owner-stop-reason" maxlength="500"></label><button id="owner-cancel" type="button" disabled="">取消当前待签收预览</button><button id="owner-revoke" type="button" disabled="">撤销最新人工声明</button><label>原请求 key <input id="owner-key" maxlength="100" autocomplete="off"></label><button id="owner-recover" type="button" disabled="">仅用原 key 读取回执</button><details><summary>不可变人工记录历史；历史回执不等于当前签收</summary><pre id="owner-history"></pre></details></section><section id="correction-panel" hidden=""><h3>根据要求修正，明确创建新的受限 Run</h3><p>仅支持原始规范结果的一次修正；沿用本次材料、Goal、全部验收标准和固定流程，不改旧成果，不增加授权，不继承接受。修正后的成果仍须单独人工判定。</p><button id="correction-prepare" type="button" disabled="">预览原拒绝及本次修正限额</button><section id="correction-approval" hidden=""><pre id="correction-proof"></pre><label><input id="correction-ack" type="checkbox">已核对原Goal、全部标准、逐项理由与本次限额，明确确认创建一条新Run</label><button id="correction-submit" type="button" disabled="">确认创建新的受限修正Run</button></section><p id="correction-status" role="status" aria-live="polite"></p><button id="correction-open-run" type="button" hidden="" disabled="">打开此修正Run，完成后独立复审</button><label>原修正key<input id="correction-key" maxlength="100" autocomplete="off"></label><label>回执类型<select id="correction-recovery-stage"><option value="RUN">新Run回执</option><option value="REVIEW">冻结预览回执</option></select></label><button id="correction-recover" type="button" disabled="">仅GET读取原key</button><button id="correction-reset" type="button">结束本页已知预览，重新核对</button></section><section id="natural-logic-panel" hidden=""><h3>应用局部逻辑修改</h3><p>先在交付图入口明确派生当前图。此切片固定六节点，只修改第二模型是否消费前序实际结果与反馈；完整应用重验，人工锁冲突停止。旧Goal、标准、节点ID和历史保留，正式发布关闭。</p><label>第二模型依赖<select id="natural-logic-mode"><option value="true">消费前序结果与反馈</option><option value="false">使用独立材料输入</option></select></label><button id="natural-logic-preview" type="button">预览精确逻辑修改与依赖影响</button><pre id="natural-logic-proof"></pre><label><input id="natural-logic-check-ack" type="checkbox">已核对修改集、保留集、UNKNOWN扩验和固定限额，明确运行隔离重验</label><button id="natural-logic-check" type="button" disabled="">确认实际重验</button><label><input id="natural-logic-version-ack" type="checkbox">实际重验成功后，另行确认创建此精确新内部版本</label><button id="natural-logic-version" type="button" disabled="">核对新内部版本快照</button><button id="natural-logic-commit" type="button" disabled="">确认保存此新内部版本</button><label>原key<input id="natural-logic-key" maxlength="100" autocomplete="off"></label><label>读取阶段<select id="natural-logic-stage"><option value="previews">预览</option><option value="checks">实际重验</option><option value="version-approvals">版本快照</option><option value="commit">已保存版本</option></select></label><button id="natural-logic-recover" type="button">仅GET读取原key</button><button id="natural-logic-control-read" type="button">读取本重验停止控制元数据</button><button id="natural-logic-cancel" type="button" disabled="">取消本重验后台任务</button><p id="natural-logic-status" role="status" aria-live="polite"></p></section><h3>后台运行历史</h3><div id="internal-runs"></div><h3>实例结果版本（只读）</h3><div id="internal-data"></div><details><summary>状态、取消意图与事件</summary><pre id="internal-run-detail"></pre></details></section></div></section>
+<section id="resources" hidden="" aria-labelledby="resources-title"><div class="workspace-heading"><div><h1 id="resources-title">资源</h1><p>让材料、能力与连接各就其位，授权范围始终清晰。</p></div><span class="workspace-label">项目内管理</span></div><nav id="resource-filters" aria-label="资源类别"><button type="button" data-resource-category="materials" aria-controls="resource-materials" aria-current="true">材料</button><button type="button" data-resource-category="capabilities" aria-controls="resource-capabilities">可信能力</button><button type="button" data-resource-category="connections" aria-controls="resource-connections">连接</button></nav><section id="resource-materials"><h2>材料</h2><details id="resource-create" class="resource-create"><summary>添加材料 <span aria-hidden="true">＋</span></summary><form id="resource-form"><label>本地文本文件（可选）<input id="resource-file" type="file" accept=".txt,.md,.csv,.json,text/plain,text/markdown,text/csv,application/json"></label><p>支持 UTF-8 TXT、MD、CSV、JSON，文件为1–32768字节。CSV/JSON 不支持 BOM；TXT/MD 保留 BOM。选择只在本页读取和预览，不会自动上传或保存；核对后点击原保存按钮才授权当前项目。也可直接填写文本。</p><button id="resource-file-clear" type="button">清除选择和待保存内容</button><label>名称 <input id="resource-name" required="" maxlength="200"></label><label>类型 <select id="format"><option>txt</option><option>md</option><option>csv</option><option>json</option></select></label><label>授权给当前项目的文本 <textarea id="content" required="" maxlength="32768"></textarea></label><button id="resource-save">保存并授权项目内使用（24小时）</button><p id="resource-file-status" role="status" aria-live="polite"></p><pre id="resource-file-preview" hidden="" aria-label="本地文件预览（尚未保存）"></pre><button id="resource-save-read" type="button" hidden="">刷新材料列表核对（只读）</button><button id="resource-save-reset" type="button" hidden="">我已核对列表，重新填写材料</button></form></details><h3 class="subsection-heading">已保存材料</h3><div id="materials"></div><pre id="resource-preview" hidden=""></pre><h2 class="subsection-heading">授权</h2><div id="grants"></div></section><section id="resource-capabilities" hidden=""><h2>可信能力</h2><p>连接本机 API 后显示当前注册目录。目录不代表材料已获授权；实际使用仍须通过原授权检查。</p><pre id="capabilities"></pre></section><section id="resource-connections" hidden=""><h2>连接</h2><p>连接本机 API 后显示当前模型、模式与验收状态。MOCK 工程模拟不代表真实模型接入；LIVE_NOT_ACCEPTED 表示真实模型尚未验收。</p><pre id="connections"></pre></section></section>
+
+</main><footer>API、worker、数据库独立运行。关闭网页不取消已接受任务；停止本机后台会停止执行。</footer>
+</body></html>

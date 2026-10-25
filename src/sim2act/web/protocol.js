@@ -560,7 +560,11 @@ $("protocol-completion-locate").onclick=safe(locateProtocolCompletion);
   state.append(text("h3",`${phase}：${technical}`));
   const fields=document.createElement("dl");fields.className="state-facts";
   for(const [label,value] of [["语义状态",run.semantic_status||"UNKNOWN"],["独立核查",run.semantic_review==="WAITING_APPROVAL"?"等待核查":run.semantic_review||"UNKNOWN"],["人工验收",run.owner_semantic_acceptance||"PENDING"],["发布状态",run.formal_publication_enabled===false?"未发布":"未确认"]]){
-   const pair=document.createElement("div");pair.append(text("dt",label),text("dd",value));fields.append(pair);
+   const pair=document.createElement("div");
+   // Presentation only: retain each original value and never derive approval
+   // or publication from a successful technical run.
+   pair.dataset.tone = value==="UNKNOWN"||value==="未确认" ? "uncertain" : value==="PENDING"||value==="等待核查" ? "waiting" : "neutral";
+   pair.append(text("dt",label),text("dd",value));fields.append(pair);
   }
   state.append(fields);
   const identifiers=document.createElement("details");identifiers.className="reading-identifiers";
