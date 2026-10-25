@@ -1,92 +1,71 @@
 'use strict';
-// Exactly one final-state window. Original sealed stores and command gates remain.
-const assert=require('node:assert/strict');
-function baselineAsset(){throw Error('No runtime asset substitution');}
-async function runWorkspaceVisual({page,info,result,check,shot,until,choose,audit,wait,holdNextContentRead,setFailContent}){
- const sourceCase=info.cases[0],content=info.content;assert.equal(sourceCase.current.phase,'source');
- const source=info.visual_source;assert.match(source.commit,/^[a-f0-9]{40}$/);
- assert.deepEqual(Object.keys(source.asset_lf_sha256).sort(),['app.css','app.js','csv-goal-revision.js','csv-owner.js','index.html','protocol.js','use.js'].map(n=>'src/sim2act/web/'+n).sort());
- for(const hash of Object.values(source.asset_lf_sha256))assert.match(hash,/^[a-f0-9]{64}$/);
- result.visual={capture_revision:'saved-result-columns-v1',product_source:source.commit,product_asset_lf_sha256:{...source.asset_lf_sha256},prior_native_execution:'8670b863c33732dec2d4552bb8061cebb680ce03',prior_followup_product:'9b64790b9fc1df6db11734541ae472388c67189b',layouts:[],states:[],motion:[]};
- const view=width=>page.setViewportSize({width,height:width<500?844:900});
+// One protected native window, fixed historical assets and unchanged sealed data.
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+const base='ef678365900f079971928f1a4631da0e6256cd82',product='384e332cbdfaa12f0dc7b70c16f8db49710a67de';
+const hashes={
+ 'index.html':'34843288a1aefa8939eb6dcf67ab67dbab26444c5f67f42166a772e017fe26b6',
+ 'app.js':'114849ec122f2cd68b5b0d4c4f4b2191b46f67bb34d48c8be0eae21b6cbea467',
+ 'protocol.js':'6a6b537347b57e377f1d95d4758f4fe7a026de1ddc8aa0ff7786e89d588e60fd',
+ 'app.css':'771e555f5eb6528488b6649bd157a584ed92c9628cc21e6433d8ba1a2d3c6661'
+};
+const baselineRoot=path.resolve(__dirname,'../../docs/evidence/workspace-task-hierarchy-20261025/before-assets');
+const manifest=JSON.parse(fs.readFileSync(path.join(baselineRoot,'manifest.json'),'utf8'));
+assert.equal(manifest.commit,base);assert.deepEqual(Object.keys(manifest.assets).sort(),Object.keys(hashes).sort());
+const baseline=new Map();
+for(const name of Object.keys(hashes)){
+ const body=fs.readFileSync(path.join(baselineRoot,name),'utf8').replace(/\r\n/g,'\n'),sha256=crypto.createHash('sha256').update(body).digest('hex');
+ assert.equal(sha256,manifest.assets[name].sha256);assert.equal(Buffer.byteLength(body),manifest.assets[name].bytes);
+ baseline.set(name,{body,sha256,contentType:name.endsWith('.js')?'application/javascript':name.endsWith('.css')?'text/css':'text/html'});
+}
+// Exact allowlist, no path concatenation or alternate asset/network source.
+function baselineAsset(url){return baseline.get({'/':'index.html','/index.html':'index.html','/app.css':'app.css','/app.js':'app.js','/protocol.js':'protocol.js'}[url]);}
+async function runWorkspaceVisual({page,info,result,check,shot,until,choose,audit,setBeforeAssets}){
+ const original=info.cases[0];assert.equal(original.current.phase,'source');
+ for(const [name,hash] of Object.entries(hashes))assert.equal(info.visual_source.asset_lf_sha256['src/sim2act/web/'+name],hash);
+ result.visual={capture_revision:'task-hierarchy-before-after-v1',before_product:base,after_product:product,execution_source:info.visual_source.commit,product_asset_lf_sha256:info.visual_source.asset_lf_sha256,baseline:manifest,layouts:[],states:[],motion:[]};
  async function stable(){
-  await until(()=>document.getElementById('health').textContent.startsWith('健康检查：')&&!backgroundRefreshInFlight&&!protocolContext?.busy&&!applicationUse?.busy);
-  await page.mouse.move(1,1);await page.waitForTimeout(200);await page.evaluate(()=>document.fonts.ready);
+  await until(()=>document.getElementById('health').textContent.startsWith('健康检查：')&&!backgroundRefreshInFlight&&!protocolContext?.busy);
+  await page.mouse.move(1,1);await page.waitForTimeout(220);await page.evaluate(()=>document.fonts.ready);
   await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
  }
- async function frame(name,width,target){await view(width);if(target)await page.locator(target).scrollIntoViewIfNeeded();else await page.evaluate(()=>scrollTo(0,0));await stable();await shot(name);}
- async function geometry(workspace,width){
-  await view(width);await stable();
-  const value=await page.evaluate(id=>{const visible=e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden',nodes=[...document.getElementById(id).querySelectorAll('button,input,select,textarea,summary,pre')].filter(visible);return {workspace:id,width:innerWidth,documentWidth:document.documentElement.scrollWidth,overflow:nodes.filter(e=>{const r=e.getBoundingClientRect();return r.left<-.5||r.right>innerWidth+1;}).map(e=>e.id||e.tagName),hiddenLeaks:[...document.querySelectorAll('[hidden]')].filter(visible).map(e=>e.id)};},workspace);
-  result.visual.layouts.push(value);check(`${workspace} ${width}px no overflow or hidden leak`,value.documentWidth<=width+1&&!value.overflow.length&&!value.hiddenLeaks.length);
+ async function frame(name,width,target){
+  await page.setViewportSize({width,height:width<500?844:900});
+  if(target)await page.locator(target).scrollIntoViewIfNeeded();else await page.evaluate(()=>scrollTo(0,0));
+  await stable();await shot(name);
+  const geometry=await page.evaluate(()=>({width:innerWidth,documentWidth:document.documentElement.scrollWidth,scrollY,hiddenLeaks:[...document.querySelectorAll('[hidden]')].filter(e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden').map(e=>e.id)}));
+  result.visual.layouts.push({name,...geometry});check(name+' no horizontal document overflow or hidden leak',geometry.documentWidth<=width+1&&!geometry.hiddenLeaks.length);
  }
- await page.emulateMedia({reducedMotion:'no-preference'});await choose(info.run);await until(()=>!document.getElementById('protocol-reading-view').hidden);
- assert.deepEqual(JSON.parse(await page.locator('#protocol-result').textContent()),sourceCase.current.result);
- check('source summary retains exact output, UNKNOWN, PENDING and full identifiers',await page.locator('#protocol-state-view').textContent().then(t=>t.includes('UNKNOWN')&&t.includes('PENDING')&&t.includes(sourceCase.current.run_id)));
- await page.locator('.section-links a[href="#protocol-panel"]').click();await until(()=>document.querySelector('.section-links a[aria-current="location"]')?.hash==='#protocol-panel');
- await page.locator('.section-links a[href="#task-workbench"]').click();await until(()=>document.querySelector('.section-links a[aria-current="location"]')?.hash==='#task-workbench');
- check('real same-page navigation has one current location for keyboard/clicked section',await page.locator('.section-links [aria-current="location"]').count()===1);
- for(const width of [1366,390])await geometry('projects',width);
- await frame('after-projects-wide.png',1366);await frame('after-projects-narrow.png',390);
- const first=await page.locator('.reading-next-step').boundingBox();result.visual.states.push({name:'source narrow first viewport',box:first,viewport:{width:390,height:844},scrollY:await page.evaluate(()=>scrollY)});
- check('390px source next step is readable in actual first viewport without scrolling',await page.evaluate(()=>scrollY===0)&&first.y>=0&&first.y+first.height<=844);
- check('source uncertainty stays visible before readable next step',await page.locator('.state-facts').boundingBox().then(r=>r.y+r.height<first.y));
- await page.locator('[data-tab="resources"]').click();for(const width of [1366,390])await geometry('resources',width);
- await frame('after-resources-wide.png',1366);await frame('after-resources-narrow.png',390);
- const rows=await page.locator('#materials .resource-row').evaluateAll(nodes=>nodes.map(e=>({height:e.getBoundingClientRect().height,name:e.querySelector('.resource-name').textContent,metadata:e.querySelector('.resource-metadata').textContent,actions:[...e.querySelectorAll('button')].map(b=>b.textContent)})));result.visual.states.push({name:'material row hierarchy',rows});check('two original resource rows remain compact with name metadata and original actions',rows.length===2&&rows.every(r=>r.height<=85&&r.name&&r.metadata&&r.actions.join('|')==='查看|下载文件'));
- await page.goto(content.base,{waitUntil:'domcontentloaded'});await page.locator('#token').fill(content.token);await page.locator('#connect').click();await page.locator('#login').waitFor({state:'hidden'});await audit();
- assert.equal(await page.locator('#project-select').inputValue(),content.project_id);await page.locator('[data-tab="apps"]').click();
- const instance=page.locator(`#use-list [data-use-family="CSV"][data-instance-id="${content.instance_id}"]`);await instance.waitFor();
- const held=holdNextContentRead();await instance.getByRole('button',{name:'使用此本地实例',exact:true}).click();await wait(held.arrived);
- try{
-  await until(()=>document.getElementById('use-info').dataset.readState==='loading');
-  check('opening has immediate real read feedback and no run control before completion',await page.locator('#use-form').isHidden()&&await page.locator('#use-info').textContent().then(t=>t.includes('正在')));
-  check('native pending read keeps every original control locked after reconciliation',await page.evaluate(()=>{applicationUseButtons(applicationUse);return ['use-refresh','use-submit','use-column','use-recover'].every(id=>document.getElementById(id).disabled);}));
-  await frame('app-loading-wide.png',1366,'#use-info');
-  result.visual.motion.push(await page.locator('#use-info').evaluate(e=>({stage:'normal loading',reduce:matchMedia('(prefers-reduced-motion: reduce)').matches,animation:getComputedStyle(e,'::before').animationName,duration:getComputedStyle(e,'::before').animationDuration})));
- }finally{held.release();}
- await until(id=>applicationUse?.id===id&&!document.getElementById('use-form').hidden&&document.getElementById('use-info').dataset.readState!=='loading',content.instance_id);
- check('empty selection is explicit and does not pass off history as a new result',await page.locator('#use-output').textContent().then(t=>t.includes('本页尚未选择')&&t.includes('不是本次新结果')));
- await frame('app-empty-narrow.png',390,'#use-output');result.visual.states.push({name:'no Run selected',kind:'real empty selection with sealed history; not empty account'});
- const scope=page.locator('#use-csv-review-scope'),disclosure=scope.locator('..'),scopeValue=JSON.parse(await scope.textContent());
- const expected=await page.evaluate(()=>({scope:'SUM_ONLY_WITHOUT_MD',release_id:applicationUse.instance.release_id,release_fingerprint:applicationUse.instance.release_fingerprint,instance_id:applicationUse.id,revision:applicationUse.instance.revision,resource_id:applicationUse.app.candidate.manifest.data_bindings[0].resource_ref,source_hash:applicationUse.app.candidate.source_hash,column:document.getElementById('use-column').value}));assert.deepEqual(scopeValue,expected);
- check('scope JSON alone is collapsed with visible original unchecked opt-in',await disclosure.getAttribute('open')===null&&await page.locator('#use-csv-review-optin').isVisible()&&!await page.locator('#use-csv-review-optin').isChecked());
- await disclosure.locator('summary').focus();await page.keyboard.press('Enter');check('native keyboard opens exact complete scope JSON without checking opt-in',await scope.isVisible()&&!await page.locator('#use-csv-review-optin').isChecked());await page.keyboard.press('Enter');
- const history=page.locator('#use-history').getByRole('button',{name:'查看这次运行',exact:true});assert.equal(await history.count(),1);await history.click();await until(id=>applicationUse?.selected===id&&document.getElementById('use-output').textContent.includes('合计 30'),content.run_id);
- const saved=await page.evaluate(c=>{const run=applicationUse.instance.runs.find(r=>r.id===c.run_id);return {historical:applicationUse.historical,status:run.status,result:run.result};},content);assert.deepEqual(saved,{historical:true,status:'SUCCEEDED',result:content.result.result});
- check('completed historical result and all scope limits stay exact',await page.locator('.csv-result-total strong').textContent()==='30'&&await page.locator('#use-output').textContent().then(t=>t.includes('目标语义验收未执行')));
- for(const width of [1366,390])await geometry('apps',width);
- await frame('app-result-wide.png',1366,'#use-output');
- const directory=page.locator('#application-use > .grid > section').first();
- const columns=await page.evaluate(()=>{const grid=document.querySelector('#application-use > .grid'),left=grid.firstElementChild,right=grid.lastElementChild,a=left.getBoundingClientRect(),b=right.getBoundingClientRect(),control=left.querySelector('button').getBoundingClientRect();return {width:innerWidth,scrollY,position:getComputedStyle(left).position,alignSelf:getComputedStyle(left).alignSelf,left:{top:a.top,bottom:a.bottom,width:a.width,clientHeight:left.clientHeight,scrollHeight:left.scrollHeight},right:{width:b.width},directoryControl:{top:control.top,bottom:control.bottom},height:innerHeight};});
- result.visual.states.push({name:'wide saved result with reachable directory',...columns});
- check('wide results use the larger column while original directory action remains in view',columns.position==='sticky'&&columns.alignSelf==='start'&&columns.left.width>=240&&columns.right.width>columns.left.width&&columns.directoryControl.top>=0&&columns.directoryControl.bottom<=columns.height&&columns.left.top>=0&&columns.left.bottom<=columns.height);
- await directory.getByRole('button').first().focus();
- const focusOrder=[],limit=await directory.locator('button,input,select,textarea,summary,a[href],[tabindex]').count()+2;
- for(let i=0;i<limit;i++){await page.keyboard.press('Tab');const value=await page.evaluate(()=>{const e=document.activeElement;return {within:document.querySelector('#application-use > .grid > section').contains(e),label:e.id||e.textContent.slice(0,80)};});focusOrder.push(value);if(!value.within)break;}
- check('native Tab leaves the directory without a keyboard trap',focusOrder.length>0&&!focusOrder.at(-1).within);
- await page.keyboard.press('Shift+Tab');check('native Shift Tab returns to directory with visible focus',await page.evaluate(()=>{const e=document.activeElement;return document.querySelector('#application-use > .grid > section').contains(e)&&e.matches(':focus-visible')&&getComputedStyle(e).outlineStyle!=='none';}));
- result.visual.states.push({name:'directory keyboard navigation',focusOrder});
- await frame('app-result-narrow.png',390,'#use-output');
- const narrow=await directory.evaluate(e=>({position:getComputedStyle(e).position,overflowY:getComputedStyle(e).overflowY,maxHeight:getComputedStyle(e).maxHeight}));result.visual.states.push({name:'narrow unchanged directory flow',...narrow});
- check('narrow directory stays in normal flow without a nested height limit',narrow.position==='static'&&narrow.maxHeight==='none'&&narrow.overflowY==='visible');
- check('optional permission editing follows result history rather than preceding recovery',await page.evaluate(()=>!!(document.getElementById('use-history').compareDocumentPosition(document.getElementById('csv-material-access'))&Node.DOCUMENT_POSITION_FOLLOWING)));
- setFailContent();await page.locator('#use-refresh').click();await until(()=>document.getElementById('use-info').dataset.readState==='error');
- check('read failure removes old result and new-run form without altering persisted Run',await page.locator('#use-output').textContent()===''&&await page.locator('#use-form').isHidden());
- for(const width of [1366,390]){
-  await geometry('apps',width);await frame(`app-read-error-${width===1366?'wide':'narrow'}.png`,width,'#use-info');
-  const position=await page.evaluate(()=>{const a=document.getElementById('use-info').getBoundingClientRect(),b=document.getElementById('use-refresh').getBoundingClientRect();return {width:innerWidth,infoBottom:a.bottom,buttonTop:b.top,buttonBottom:b.bottom,height:innerHeight,enabled:!document.getElementById('use-refresh').disabled};});result.visual.states.push({name:'error recovery position',...position});check(`${width}px original read-only recovery is enabled next to error within viewport`,position.enabled&&position.buttonTop>=position.infoBottom&&position.buttonTop-position.infoBottom<50&&position.buttonBottom<=position.height);
+ const states=[];
+ for(const version of ['before','after']){
+  if(version==='after'){
+   setBeforeAssets(false);await page.goto(info.base,{waitUntil:'domcontentloaded'});await audit();
+   await page.locator('#token').fill('secret test token');await page.locator('#connect').click();await page.locator('#login').waitFor({state:'hidden'});
+  }
+  await page.emulateMedia({reducedMotion:'no-preference'});await choose(info.run);await until(()=>!document.getElementById('protocol-reading-view').hidden);await stable();
+  const observed=await page.evaluate(()=>({run:protocolContext.run,result:JSON.parse(document.getElementById('protocol-result').textContent),facts:[...document.querySelectorAll('.state-facts > div')].map(e=>({label:e.querySelector('dt').textContent,value:e.querySelector('dd').textContent})),reviewChecked:document.getElementById('protocol-review-confirm').checked,reviewDisabled:document.getElementById('protocol-review-submit').disabled,extractHidden:document.getElementById('protocol-extract').hidden,coldHidden:document.getElementById('protocol-cold-form').hidden}));
+  assert.deepEqual(observed.result,original.current.result);check(version+' original UNKNOWN/PENDING remain unapproved with both downstream routes closed',observed.facts.some(p=>p.value==='UNKNOWN')&&observed.facts.some(p=>p.value==='PENDING')&&!observed.reviewChecked&&observed.reviewDisabled&&observed.extractHidden&&observed.coldHidden);
+  states.push(observed);result.visual.states.push({version,...observed});
+  await frame(version+'-projects-wide.png',1366);await frame(version+'-projects-narrow.png',390);
+  await frame(version+'-tasks-wide.png',1366,'#task-list-panel');await frame(version+'-tasks-narrow.png',390,'#task-list-panel');
  }
- await page.emulateMedia({reducedMotion:'reduce'});const reduced=holdNextContentRead();await page.locator('#use-refresh').click();await wait(reduced.arrived);
- try{
-  const motion=await page.evaluate(()=>{const node=document.getElementById('use-info');return {stage:'reduced-motion retry',reduce:matchMedia('(prefers-reduced-motion: reduce)').matches,state:node.dataset.readState,animation:getComputedStyle(node,'::before').animationName,duration:getComputedStyle(node,'::before').animationDuration,transition:getComputedStyle(document.getElementById('use-refresh')).transitionDuration,readDisabled:document.getElementById('use-refresh').disabled,runDisabled:document.getElementById('use-submit').disabled};});result.visual.motion.push(motion);
-  check('real reduced-motion media disables loading animation and transitions while preserving immediate read feedback',motion.reduce&&motion.state==='loading'&&motion.animation==='none'&&motion.duration==='0s'&&motion.transition==='0s'&&motion.readDisabled&&motion.runDisabled);
- }finally{reduced.release();}
- await until(()=>document.getElementById('use-output').textContent.includes('合计 30')&&document.getElementById('use-info').dataset.readState!=='loading');
- check('reduced-motion recovery finishes by fresh GET of the same instance/Run only',await page.evaluate(c=>applicationUse.selected===c.run_id&&applicationUse.id===c.instance_id&&!document.getElementById('use-refresh').disabled,content));
- const refresh=page.locator('#use-refresh');await refresh.focus();await page.keyboard.press('Tab');await page.keyboard.press('Shift+Tab');check('primary read action keeps keyboard visible focus',await refresh.evaluate(e=>document.activeElement===e&&e.matches(':focus-visible')&&getComputedStyle(e).outlineStyle!=='none'));
- result.visual.states.push({name:'complete',instance:content.instance_id,run:content.run_id,result_version:content.result.result_version,sum:content.result.result.sum,owner:'not signed by test',semantic:'not promoted',business_clock:content.business_at});
- check('one final-state window is GET-only with no page errors or overrun',result.counts.business_post===0&&result.counts.blocked===0&&result.pageErrors.length===0&&result.requests.every(r=>r.method==='GET'));
+ assert.deepEqual(states[0],states[1]);check('before and after use the exact same persisted Run, output and four independent states',true);
+ check('after history retains original Run identifier and presents an independently labelled execution status',await page.locator('#runs .task-history-item').count()>0&&await page.locator('#runs .task-status').first().textContent().then(t=>t.startsWith('执行 · '))&&await page.locator('#runs').textContent().then(t=>t.includes(info.run.slice(0,16))));
+ const summary=page.locator('#task-create > summary');await summary.focus();await page.keyboard.press('Enter');
+ check('native Enter opens the original task form',await page.locator('#goal').isVisible());
+ await page.keyboard.press('Tab');check('native Tab focuses goal with visible keyboard outline',await page.locator('#goal').evaluate(e=>document.activeElement===e&&e.matches(':focus-visible')&&getComputedStyle(e).outlineStyle!=='none'));
+ await page.locator('#goal').fill('合成界面草稿：核对材料与来源（不提交）');
+ check('empty CSV selection keeps the original disabled prepare gate',await page.locator('#csv-report-prepare').isDisabled());
+ await frame('task-focus-wide.png',1366,'#goal');
+ const normal=await summary.evaluate(e=>({reduce:matchMedia('(prefers-reduced-motion: reduce)').matches,transition:getComputedStyle(e.querySelector('span')).transitionDuration,transform:getComputedStyle(e.querySelector('span')).transform}));
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await summary.focus();await page.keyboard.press('Enter');await page.keyboard.press('Enter');
+ const reduced=await summary.evaluate(e=>({reduce:matchMedia('(prefers-reduced-motion: reduce)').matches,transition:getComputedStyle(e.querySelector('span')).transitionDuration,animation:getComputedStyle(e.querySelector('span')).animationName,goalVisible:!!document.getElementById('goal').getClientRects().length}));
+ result.visual.motion.push({normal,reduced});check('real reduced-motion setting removes disclosure transition and retains native interaction',!normal.reduce&&normal.transition!=='0s'&&reduced.reduce&&reduced.transition==='0s'&&reduced.animation==='none'&&reduced.goalVisible);
+ await page.locator('#goal').focus();await frame('task-reduced-narrow.png',390,'#goal');
+ const substitutions=result.requests.filter(r=>r.baseline_asset).map(r=>new URL('http://fixture'+r.path).pathname).sort();
+ assert.deepEqual(substitutions,['/','/app.css','/app.js','/protocol.js'].sort());
+ check('only the four fixed historical assets were substituted, keeping original HTTP headers and data',true);
+ check('one protected native window stays GET-only with no page errors or overrun',result.counts.business_post===0&&result.counts.blocked===0&&result.pageErrors.length===0&&result.requests.every(r=>r.method==='GET'));
  result.receipts=[];result.status='PASS';
 }
 module.exports={baselineAsset,runWorkspaceVisual};

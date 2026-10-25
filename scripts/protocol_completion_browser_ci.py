@@ -34,7 +34,7 @@ def write(root, name, value):
 def collect(root):
     outputs = {}
     total = 0
-    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "read-failed.png", "cold.png", "source-failed.png", "source-refreshed.png", "extract-failed.png", "extract-refreshed.png", "store-content-hashes.json", "failure.png", "before-projects-wide.png", "before-projects-narrow.png", "after-projects-wide.png", "after-projects-narrow.png", "after-apps-wide.png", "after-apps-narrow.png", "after-resources-wide.png", "after-resources-narrow.png", "after-source-receipt-wide.png", "after-source-error-narrow.png", "maintenance-expanded-wide.png", "project-create-narrow.png", "app-result-wide.png", "app-result-narrow.png", "app-read-error-narrow.png", "content-result.json", "app-loading-wide.png", "app-empty-narrow.png", "app-read-error-wide.png"):
+    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "read-failed.png", "cold.png", "source-failed.png", "source-refreshed.png", "extract-failed.png", "extract-refreshed.png", "store-content-hashes.json", "failure.png", "before-projects-wide.png", "before-projects-narrow.png", "after-projects-wide.png", "after-projects-narrow.png", "after-apps-wide.png", "after-apps-narrow.png", "after-resources-wide.png", "after-resources-narrow.png", "after-source-receipt-wide.png", "after-source-error-narrow.png", "maintenance-expanded-wide.png", "project-create-narrow.png", "app-result-wide.png", "app-result-narrow.png", "app-read-error-narrow.png", "content-result.json", "app-loading-wide.png", "app-empty-narrow.png", "app-read-error-wide.png", "before-tasks-wide.png", "before-tasks-narrow.png", "after-tasks-wide.png", "after-tasks-narrow.png", "task-focus-wide.png", "task-reduced-narrow.png"):
         file = root / name
         if not file.exists():
             continue
@@ -108,7 +108,7 @@ def launch_paths(root, deadline, phase="extract", review=False, readback=False, 
     else:
         required += [str((evidence / name).relative_to(REPO)) for name in ("original.json", "after.sqlite.gz" if review else "before.sqlite.gz", "original-received-sidecar.json")]
     if workspace_visual:
-        required += ["scripts/browser-ci/workspace-visual.cjs", "scripts/readonly_content_fixture.py", "src/sim2act/web/use.js", "src/sim2act/web/csv-owner.js", "src/sim2act/web/csv-goal-revision.js", "docs/evidence/research-desk-content-20261023/saved-csv.json", "docs/evidence/research-desk-content-20261023/saved-csv.sqlite.gz", "docs/evidence/workspace-refinement-native-20261022/before/index.html", "docs/evidence/workspace-refinement-native-20261022/before/app.css"]
+        required += ["scripts/browser-ci/workspace-visual.cjs", "scripts/readonly_content_fixture.py", "src/sim2act/web/use.js", "src/sim2act/web/csv-owner.js", "src/sim2act/web/csv-goal-revision.js", "docs/evidence/research-desk-content-20261023/saved-csv.json", "docs/evidence/research-desk-content-20261023/saved-csv.sqlite.gz", "docs/evidence/workspace-task-hierarchy-20261025/before-assets/index.html", "docs/evidence/workspace-task-hierarchy-20261025/before-assets/app.css", "docs/evidence/workspace-task-hierarchy-20261025/before-assets/app.js", "docs/evidence/workspace-task-hierarchy-20261025/before-assets/protocol.js", "docs/evidence/workspace-task-hierarchy-20261025/before-assets/manifest.json"]
     required += [f"docs/evidence/protocol-store-loop-20261006/evaluation/{name}.json" for name in ("a-source", "a-cold", "b-source", "b-cold")]
     for name in required:
         file(name, REPO / name)
@@ -353,7 +353,7 @@ def main():
         commit = subprocess.check_output([paths["git"], "rev-parse", "HEAD"], cwd=REPO, timeout=remaining(), text=True).strip()
         hashes = {name: hashlib.sha256((REPO / name).read_bytes()).hexdigest() for name in ("src/sim2act/web/app.js", "src/sim2act/web/app.css", "src/sim2act/web/protocol.js", "src/sim2act/web/index.html", "scripts/protocol_completion_browser_ci.py", "scripts/browser-ci/extract-completion.cjs", "scripts/browser-ci/package-lock.json", "scripts/OwnedBrowserSetup.ps1", "scripts/windows_browser_ci.py", "scripts/WindowsExtractCompletionUI.ps1", ".github/workflows/windows-native-mock.yml", "src/sim2act/protocol_jobs.py", "src/sim2act/protocol_reviews.py", *(["scripts/protocol_completion_readback_fixture.py", "src/sim2act/protocol_completion_readback.py", "src/sim2act/protocol_recovery.py", "src/sim2act/protocol_source_completion.py", "src/sim2act/protocol_extract_completion.py"] if completion_readback else ["scripts/protocol_review_readback_fixture.py"] if readback else []))}
         if workspace_visual:
-            for name in ("scripts/browser-ci/workspace-visual.cjs", "scripts/readonly_content_fixture.py", "src/sim2act/web/use.js", "src/sim2act/web/csv-owner.js", "src/sim2act/web/csv-goal-revision.js", "docs/evidence/research-desk-content-20261023/saved-csv.json", "docs/evidence/research-desk-content-20261023/saved-csv.sqlite.gz", "docs/evidence/workspace-refinement-native-20261022/before/index.html", "docs/evidence/workspace-refinement-native-20261022/before/app.css"):
+            for name in ("scripts/browser-ci/workspace-visual.cjs", "scripts/readonly_content_fixture.py", "src/sim2act/web/use.js", "src/sim2act/web/csv-owner.js", "src/sim2act/web/csv-goal-revision.js", "docs/evidence/research-desk-content-20261023/saved-csv.json", "docs/evidence/research-desk-content-20261023/saved-csv.sqlite.gz", "docs/evidence/workspace-task-hierarchy-20261025/before-assets/index.html", "docs/evidence/workspace-task-hierarchy-20261025/before-assets/app.css", "docs/evidence/workspace-task-hierarchy-20261025/before-assets/app.js", "docs/evidence/workspace-task-hierarchy-20261025/before-assets/protocol.js", "docs/evidence/workspace-task-hierarchy-20261025/before-assets/manifest.json"):
                 hashes[name] = hashlib.sha256((REPO / name).read_bytes()).hexdigest()
         lf_hashes = {name: hashlib.sha256((REPO / name).read_bytes().replace(b"\r\n", b"\n")).hexdigest() for name in hashes}
         write(root, "inventory.json", dict(commit=commit, source_sha256=hashes, source_lf_sha256=lf_hashes, synthetic_clock=business_at, browser_install=False, added_sdk=False))
@@ -374,14 +374,7 @@ def main():
             assert before_run["status"] == "WAITING_APPROVAL" and before_run["result"] is not None
         if phase == "extract":
             info["other"] = others[0]
-        if workspace_visual:
-            content_log = (root / "content-api.log").open("wb")
-            content_child = subprocess.Popen([paths["python"], paths["scripts/readonly_content_fixture.py"], str(root), str(absolute * 1000)], cwd=REPO, env=dict(os.environ, PYTHONPATH=os.pathsep.join([str(site), str(REPO / "src")])), stdout=content_log, stderr=subprocess.STDOUT)
-            ready_until = time.monotonic() + min(8, remaining())
-            while not (root / "content-ready.json").exists():
-                assert content_child.poll() is None and time.monotonic() < ready_until, "Sealed content API failed; no retry"
-                time.sleep(.02)
-            info["content"] = json.loads((root / "content-ready.json").read_text())
+        # Task hierarchy uses only the already sealed Source case; no CSV API child.
         write(root, "info.json", info)
         env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(site), str(REPO / "src")]))
         output = (root / "driver.log").open("wb")
@@ -432,7 +425,12 @@ def main():
             assert fingerprint(cases([store, extra_store], [settings, extra_settings], originals)) == fingerprint(original_cases)
             if workspace_visual:
                 assert not browser["located"]  # This content window makes no locator request.
-                assert len(browser["visual"]["layouts"]) == 8 and browser["screenshots"] == 10
+                assert [x["name"] for x in browser["visual"]["layouts"]] == [
+                    f"{version}-{area}-{width}.png"
+                    for version in ("before", "after") for area in ("projects", "tasks")
+                    for width in ("wide", "narrow")
+                ] + ["task-focus-wide.png", "task-reduced-narrow.png"]
+                assert browser["screenshots"] == 10
             else:
                 assert fingerprint(browser["located"]) == fingerprint([original_cases[0]["locator"]]*2 + [original_cases[1]["locator"]]*2)
                 assert all(x["hard_refresh"] and x["cold_page"] for x in browser["phase_results"])

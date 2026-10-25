@@ -22,7 +22,7 @@ const root=process.argv[2],python=process.argv[3];
 const info=JSON.parse(fs.readFileSync(path.join(root,'info.json'),'utf8'));
 assert.ok(['source','extract'].includes(info.phase),'Unknown explicit completion phase');
 const workspaceVisual=info.action==='workspace-visual';
-const visual=workspaceVisual?require('./workspace-visual.cjs'):null;let beforeAssets=false,visualEmptyProjects=false,contentFailRead=false,contentHoldRead=null;
+const visual=workspaceVisual?require('./workspace-visual.cjs'):null;let beforeAssets=workspaceVisual,visualEmptyProjects=false,contentFailRead=false,contentHoldRead=null;
 const source=info.phase==='source',review=info.action==='review',completionReadback=workspaceVisual||info.action==='completion-readback',readback=completionReadback||info.action==='review-readback';
 assert.ok(info.action==='completion'||review||readback,'Unknown explicit action');
 assert.ok(!review||source,'Review fixture only supports sealed Source');
@@ -216,7 +216,7 @@ async function run(){
   try{
   const request=route.request(),url=new URL(request.url()),method=request.method();
   let allowed=completionReadback?info.cases.some(item=>url.origin===item.base):url.origin===info.base;
-  if(workspaceVisual&&url.origin===info.content.base)allowed=true;
+  if(workspaceVisual&&info.content&&url.origin===info.content.base)allowed=true;
   const business=url.pathname.startsWith('/api/')||url.pathname==='/health';
   let kind;
   if(allowed&&method==='GET')kind=business?'business_get':'static_get';
@@ -229,7 +229,7 @@ async function run(){
   if(workspaceVisual&&contentHoldRead&&method==='GET'&&url.origin===info.content.base&&url.pathname===`/api/internal/instances/${info.content.instance_id}`){const hold=contentHoldRead;contentHoldRead=null;record.test_hold='synthetic latency before original server, unchanged response';hold.reached();try{await wait(hold.gate);}finally{readbackDetailReleases.delete(hold.release);record.released_at_ms=Date.now();}}
   if(workspaceVisual&&contentFailRead&&method==='GET'&&url.origin===info.content.base&&url.pathname===`/api/internal/instances/${info.content.instance_id}`){contentFailRead=false;record.controlled_response='403 content read-failure';await route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({error:{code:'CONTROLLED_CONTENT_READ_FAILURE'}})});return;}
   if(workspaceVisual&&visualEmptyProjects&&method==='GET'&&url.pathname==='/api/projects'){const response=await route.fetch({maxRedirects:0,maxRetries:0,timeout:8000});assert.equal(response.status(),200);record.controlled_response='authenticated project list filtered to [] for empty entry only';await route.fulfill({response,json:[]});return;}
-  if(workspaceVisual&&beforeAssets&&method==='GET'&&!business){const asset=visual.baselineAsset(url.pathname);if(asset){record.baseline_asset=true;await route.fulfill(asset);return;}}
+  if(workspaceVisual&&beforeAssets&&method==='GET'&&!business){const asset=visual.baselineAsset(url.pathname);if(asset){const response=await route.fetch({maxRedirects:0,maxRetries:0,timeout:8000});assert.equal(response.status(),200);record.baseline_asset=asset.sha256;const {sha256,...served}=asset;await route.fulfill({response,...served});return;}}
   if(readback&&url.pathname===`/api/projects/${info.project}/protocol/runs/${info.run}`&&readbackHoldDetails){
    record.test_hold='detail request paused before server only for failure capture';
    let release;const delayed=new Promise(resolve=>release=resolve);readbackDetailReleases.add(release);
@@ -293,7 +293,7 @@ async function run(){
  await page.locator('#token').fill('secret test token');
  await page.locator('#connect').click();await page.locator('#login').waitFor({state:'hidden'});
  check('original project selected from real authenticated UI',await page.locator('#project-select').inputValue()===info.project);
- if(workspaceVisual){await visual.runWorkspaceVisual({page,info,result,check,shot,until,choose,audit,wait,holdNextContentRead,setFailContent:()=>{contentFailRead=true;}});return;}
+ if(workspaceVisual){await visual.runWorkspaceVisual({page,info,result,check,shot,until,choose,audit,wait,holdNextContentRead,setFailContent:()=>{contentFailRead=true;},setBeforeAssets:value=>{assert.equal(typeof value,'boolean');beforeAssets=value;}});return;}
  if(completionReadback){await runCompletionReadback();return;}
  if(readback){await runReadback();return;}
  await choose(info.run);
