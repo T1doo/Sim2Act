@@ -34,7 +34,7 @@ def write(root, name, value):
 def collect(root):
     outputs = {}
     total = 0
-    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "read-failed.png", "cold.png", "source-failed.png", "source-refreshed.png", "extract-failed.png", "extract-refreshed.png", "store-content-hashes.json", "failure.png", "before-projects-wide.png", "before-projects-narrow.png", "after-projects-wide.png", "after-projects-narrow.png", "after-apps-wide.png", "after-apps-narrow.png", "after-resources-wide.png", "after-resources-narrow.png", "after-source-receipt-wide.png", "after-source-error-narrow.png", "maintenance-expanded-wide.png", "project-create-narrow.png", "app-result-wide.png", "app-result-narrow.png", "app-read-error-narrow.png", "content-result.json", "app-loading-wide.png", "app-empty-narrow.png", "app-read-error-wide.png", "before-tasks-wide.png", "before-tasks-narrow.png", "after-tasks-wide.png", "after-tasks-narrow.png", "task-focus-wide.png", "task-reduced-narrow.png", "before-goals-wide.png", "before-goals-narrow.png", "before-editor-wide.png", "before-editor-narrow.png", "after-goals-wide.png", "after-goals-narrow.png", "after-editor-wide.png", "after-editor-narrow.png", "goal-focus-wide.png", "goal-trial-narrow.png", "goal-history-1366.png", "goal-history-390.png", "goal-unknown-1366.png", "goal-unknown-390.png"):
+    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "read-failed.png", "cold.png", "source-failed.png", "source-refreshed.png", "extract-failed.png", "extract-refreshed.png", "store-content-hashes.json", "failure.png", "before-projects-wide.png", "before-projects-narrow.png", "after-projects-wide.png", "after-projects-narrow.png", "after-apps-wide.png", "after-apps-narrow.png", "after-resources-wide.png", "after-resources-narrow.png", "after-source-receipt-wide.png", "after-source-error-narrow.png", "maintenance-expanded-wide.png", "project-create-narrow.png", "app-result-wide.png", "app-result-narrow.png", "app-read-error-narrow.png", "content-result.json", "app-loading-wide.png", "app-empty-narrow.png", "app-read-error-wide.png", "before-tasks-wide.png", "before-tasks-narrow.png", "after-tasks-wide.png", "after-tasks-narrow.png", "task-focus-wide.png", "task-reduced-narrow.png", "before-goals-wide.png", "before-goals-narrow.png", "before-editor-wide.png", "before-editor-narrow.png", "after-goals-wide.png", "after-goals-narrow.png", "after-editor-wide.png", "after-editor-narrow.png", "goal-focus-wide.png", "goal-trial-narrow.png", "goal-history-1366.png", "goal-history-390.png", "goal-unknown-1366.png", "goal-unknown-390.png", "goal-directory-failed-390.png", "goal-directory-recovered-1366.png", "app-directory-failed-390.png", "app-directory-recovered-1366.png"):
         file = root / name
         if not file.exists():
             continue
@@ -425,9 +425,9 @@ def main():
             assert fingerprint(cases([store, extra_store], [settings, extra_settings], originals)) == fingerprint(original_cases)
             if workspace_visual:
                 assert not browser["located"]  # This content window makes no locator request.
-                expected_names = ["goal-history-1366.png", "goal-history-390.png", "goal-unknown-1366.png", "goal-unknown-390.png"]
+                expected_names = ["goal-directory-failed-390.png", "goal-directory-recovered-1366.png", "app-directory-failed-390.png", "app-directory-recovered-1366.png"]
                 assert [x["name"] for x in browser["screenshotFiles"]] == expected_names
-                assert browser["screenshots"] == 4 and browser["goalHistory"]["colocationStatus"] == "PROVED"
+                assert browser["screenshots"] == 4 and browser["directoryRecovery"]["status"] == "PROVED"
             else:
                 assert fingerprint(browser["located"]) == fingerprint([original_cases[0]["locator"]]*2 + [original_cases[1]["locator"]]*2)
                 assert all(x["hard_refresh"] and x["cold_page"] for x in browser["phase_results"])
