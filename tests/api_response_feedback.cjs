@@ -27,13 +27,21 @@ const response=(status,data,broken=false)=>({status,ok:status>=200&&status<300,h
  check(data.natural_deadline===123&&(protocolMode?data.naturalServerTime===undefined:data.naturalServerTime===42),'valid result and original server clock metadata unchanged');
  if(process.argv[3]){
   const info=JSON.parse(fs.readFileSync(process.argv[3],'utf8'));const actual=[];
-  w.fetch=(path,options)=>{actual.push({path,method:options.method});return fetch(info.base+path,options);};
+  let catalogReply;w.fetch=async(path,options)=>{actual.push({path,method:options.method});const response=await fetch(info.base+path,options);if(path==='/api/capabilities')catalogReply=await response.clone().json();return response;};
   const health=await request('/health');check(health&&typeof health==='object','actual local FastAPI health JSON consumed by real controller');
   const projects=await request('/api/projects');check(projects.length===1&&projects[0].id===info.project&&projects[0].name==='API feedback fixture','actual authenticated project directory returns the seeded project');
-  if(info.catalog){const catalog=await request('/api/capabilities');w.renderResourceCatalog(catalog);check(w.document.getElementById('connection-summary').textContent.includes(catalog.connection.model)&&w.document.getElementById('connection-summary').textContent.includes(catalog.connection.status),'actual authenticated catalog populates model and exact technical status');check(JSON.stringify([...w.document.querySelectorAll('#capability-summary .catalog-tools code')].map(n=>n.textContent))===JSON.stringify(catalog.tools),'actual registered tool IDs render without filtering or invented tools');}
+  if(info.catalog){
+   w.document.getElementById('login').hidden=true;
+   await w.refreshResourceCatalog();
+   const catalog=catalogReply;
+   check(w.document.getElementById('connection-summary').textContent.includes(catalog.connection.model)&&w.document.getElementById('connection-summary').textContent.includes(catalog.connection.status),'actual authenticated catalog populates model and exact technical status');
+   check(JSON.stringify([...w.document.querySelectorAll('#capability-summary .catalog-tools code')].map(n=>n.textContent))===JSON.stringify(catalog.tools),'actual registered tool IDs render without filtering or invented tools');
+   const readCount=actual.length;await w.document.getElementById('resource-catalog-refresh').onclick();
+   check(actual.length===readCount+1&&actual.at(-1).path==='/api/capabilities'&&!w.document.getElementById('resource-catalog-refresh').disabled,'actual read-only refresh control sends one new GET and releases its busy state');
+  }
   w.eval("token='synthetic-invalid-actor'");
   await assert.rejects(request('/api/projects'),e=>e.httpStatus===403&&e.message==='PERMISSION_DENIED');check(true,'actual local backend authorization rejection preserved');
-  check(actual.length===(info.catalog?4:3)&&actual.every(x=>x.method==='GET'),'actual backend checks remain read-only GETs');
+  check(actual.length===(info.catalog?5:3)&&actual.every(x=>x.method==='GET'),'actual backend checks remain read-only GETs');
  }
  check(!errors.length,'real template/controller has no jsdom script error');
  console.log(JSON.stringify({status:'PASS',controller:protocolMode?'protocolRequest':'api',checks,synthetic_requests:requests,actual_http:!!process.argv[3],native_browser:false,models:0},null,2));

@@ -19,6 +19,7 @@ let goalCardDirectoryGeneration = 0;
 let candidateSelectionGeneration = 0, candidateBusy = false, candidatePanelReady = false;
 let appSelectionGeneration = 0, activeAppProject = null;
 let appDirectoryGeneration = 0;
+let resourceCatalogReadGeneration = 0, resourceCatalogReadPending = null;
 let workspaceSelectionGeneration = 0;
 const candidateRequestKeys = new Map();
 const extractionRequestKeys = new Map();
@@ -587,6 +588,7 @@ function clearIdentityView() {
   clearRunDetail();
   if(typeof clearProtocol === "function")clearProtocol();
   clearGoalCard();
+  resetResourceCatalogRead();
   clearResourceCatalogPresentation();
   for(const id of ["runs","materials","grants","app-list","goal-card-list","result","commands","events","raw-result","resource-preview","run-history-status","run-submit-status","project-select","app-resource","goal-card-resources","capabilities","connections"]){$(id).replaceChildren();}
   renderProjectContext();
@@ -602,7 +604,7 @@ $("connect").onclick = safe(async () => {
     await loadProjects();if(!current())return;
     $("token").value="";$("login").hidden=true;
     $("identity-switch").hidden=false;
-    const capabilities=await api("/api/capabilities");if(current())renderResourceCatalog(capabilities);
+    await refreshResourceCatalog();
   } catch(error) {if(current())throw error;}
 });
 $("identity-switch").onclick=()=>{
@@ -657,11 +659,40 @@ function selectResourceCategory(category) {
   const categories = ["materials", "capabilities", "connections"];
   if (!categories.includes(category)) return;
   categories.forEach(id => $("resource-" + id).hidden = id !== category);
+  $("resource-catalog-toolbar").hidden = category === "materials";
   document.querySelectorAll("#resource-filters [data-resource-category]").forEach(button => {
     if (button.dataset.resourceCategory === category) button.setAttribute("aria-current", "true");
     else button.removeAttribute("aria-current");
   });
 }
+function resetResourceCatalogRead() {
+  resourceCatalogReadGeneration++;resourceCatalogReadPending=null;
+  $("resource-catalog-refresh").disabled=true;$("resource-catalog-refresh").textContent="重新读取目录（只读）";
+  $("resource-catalog-status").textContent="连接本机 API 后可只读刷新目录。";
+  delete $("resource-catalog-status").dataset.state;
+}
+async function refreshResourceCatalog() {
+  if(!token || !$("login").hidden || resourceCatalogReadPending?.current())return;
+  const identity=token,connection=identityConnectionGeneration,generation=++resourceCatalogReadGeneration;
+  const current=()=>identity===token&&connection===identityConnectionGeneration&&generation===resourceCatalogReadGeneration;
+  const read={current};resourceCatalogReadPending=read;
+  clearResourceCatalogPresentation();$("capabilities").textContent="";$("connections").textContent="";
+  $("resource-catalog-refresh").disabled=true;$("resource-catalog-refresh").textContent="正在读取…";
+  $("resource-catalog-status").textContent="正在只读核对当前身份的目录…";delete $("resource-catalog-status").dataset.state;
+  try {
+    const data=await api("/api/capabilities");if(!current())return;
+    renderResourceCatalog(data);
+    $("resource-catalog-status").textContent="目录已回读；不代表材料授权、模型连通或任务验收。";
+  } catch(error) {
+    if(!current())return;
+    clearResourceCatalogPresentation();$("capabilities").textContent="";$("connections").textContent="";
+    $("resource-catalog-status").textContent="目录未确认，可以只读重试；不表示任务执行失败。";
+    $("resource-catalog-status").dataset.state="error";throw error;
+  } finally {
+    if(current()&&resourceCatalogReadPending===read){resourceCatalogReadPending=null;$("resource-catalog-refresh").disabled=false;$("resource-catalog-refresh").textContent="重新读取目录（只读）";}
+  }
+}
+$("resource-catalog-refresh").onclick=safe(refreshResourceCatalog);
 function clearResourceCatalogPresentation() {
   for(const id of ["capability-summary","connection-summary"]){$(id).replaceChildren();$(id).hidden=true;}
   for(const id of ["capabilities","connections"]){const raw=$(id).closest("details");raw.hidden=true;raw.open=false;}

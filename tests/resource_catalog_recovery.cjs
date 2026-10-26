@@ -1,0 +1,26 @@
+'use strict';
+const fs=require('node:fs'),assert=require('node:assert/strict'),{JSDOM,VirtualConsole}=require('jsdom');
+const checks=[],errors=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));
+const dom=new JSDOM(fs.readFileSync('src/sim2act/web/index.html','utf8'),{runScripts:'dangerously',virtualConsole:vc}),w=dom.window,d=w.document,$=id=>d.getElementById(id);
+w.setInterval=()=>0;w.fetch=()=>{throw Error('No actual HTTP');};
+const s=d.createElement('script');s.textContent=fs.readFileSync(process.argv[2]||'src/sim2act/web/app.js','utf8');d.body.append(s);
+const check=(v,t)=>{assert(v,t);checks.push(t);};
+const catalog={tools:['resource.read'],code_execution:'DISABLED',connection:{model:'sample',mode:'MOCK',status:'MOCK_ENGINEERING'}};
+let reads=0,mode='fail',held=[];w.loadProjects=async()=>{};
+w.api=async(path,method='GET')=>{assert.equal(path,'/api/capabilities');assert.equal(method,'GET');reads++;if(mode==='hold')return new Promise((resolve,reject)=>held.push({resolve,reject}));if(mode==='fail')throw Error('controlled read failure');return catalog;};
+(async()=>{try{
+ $('token').value='synthetic-A';await $('connect').onclick();w.selectWorkspace('resources');w.selectResourceCategory('connections');
+ const button=$('resource-catalog-refresh');
+ check(button&&!button.disabled&&!button.closest('[hidden]'),'failed catalog has an available visible read-only recovery without logging out');
+ check($('resource-catalog-status').textContent.includes('未确认')&&$('connection-summary').hidden,'failed catalog is unconfirmed, with no old model projection');
+ mode='hold';const pending=button.onclick();await Promise.resolve();const count=reads;await button.onclick();
+ check(button.disabled&&reads===count,'double click sends one read and locks its own control');held[0].resolve(catalog);await pending;
+ check(!$('connection-summary').hidden&&$('connection-summary').textContent.includes('sample')&&!button.disabled,'current explicit retry restores validated catalog');
+ const old=button.onclick();await Promise.resolve();w.clearIdentityView();w.eval("token='synthetic-B';identityConnectionGeneration++;");$('login').hidden=true;
+ const fresh=w.refreshResourceCatalog();await Promise.resolve();held[1].resolve({...catalog,connection:{...catalog.connection,model:'STALE-A'}});await old;
+ check(button.disabled&&$('connection-summary').hidden,'old identity response cannot render or release the new read lock');
+ held[2].resolve({...catalog,connection:{...catalog.connection,model:'CURRENT-B'}});await fresh;
+ check($('connection-summary').textContent.includes('CURRENT-B')&&!$('connection-summary').textContent.includes('STALE-A'),'only current identity catalog is adopted');
+ mode='fail';await button.onclick();check($('connection-summary').hidden&&!$('connections').textContent,'failed refresh invalidates prior human and raw projection');
+ check(!errors.length,'no DOM script errors');console.log(JSON.stringify({status:'PASS',checks,synthetic_get:reads,actual_http:0,model:0},null,2));
+}finally{for(const h of held)h.reject(Error('cleanup'));w.close();}})().catch(e=>{console.error(e.stack);process.exitCode=1;});
