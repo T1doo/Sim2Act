@@ -1,4 +1,4 @@
-"""Real controller + three real local backend GETs; no native browser/model."""
+"""Real controller + read-only real local backend GETs; no native browser/model."""
 
 import json
 import os
@@ -42,7 +42,7 @@ def test_api_response_feedback_actual_local_backend(tmp_path, monkeypatch):
             assert thread.is_alive() and time.monotonic() < deadline
             time.sleep(.01)
         info = tmp_path / 'info.json'
-        info.write_text(json.dumps({'base': f'http://127.0.0.1:{port}', 'project': project}))
+        info.write_text(json.dumps({'base': f'http://127.0.0.1:{port}', 'project': project, 'catalog': True}))
         result = subprocess.run(['node', 'tests/api_response_feedback.cjs',
             'src/sim2act/web/app.js', str(info)], capture_output=True, text=True,
             timeout=15, env=os.environ.copy())

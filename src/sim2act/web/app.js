@@ -587,6 +587,7 @@ function clearIdentityView() {
   clearRunDetail();
   if(typeof clearProtocol === "function")clearProtocol();
   clearGoalCard();
+  clearResourceCatalogPresentation();
   for(const id of ["runs","materials","grants","app-list","goal-card-list","result","commands","events","raw-result","resource-preview","run-history-status","run-submit-status","project-select","app-resource","goal-card-resources","capabilities","connections"]){$(id).replaceChildren();}
   renderProjectContext();
   $("reconcile-panel").hidden=true;$("resource-preview").hidden=true;
@@ -661,7 +662,40 @@ function selectResourceCategory(category) {
     else button.removeAttribute("aria-current");
   });
 }
+function clearResourceCatalogPresentation() {
+  for(const id of ["capability-summary","connection-summary"]){$(id).replaceChildren();$(id).hidden=true;}
+  for(const id of ["capabilities","connections"]){const raw=$(id).closest("details");raw.hidden=true;raw.open=false;}
+}
+function renderResourceCatalogPresentation(data) {
+  // Presentation of this exact API read only, never dispatch/entitlement.
+  const node=(tag,text,cls)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(cls)el.className=cls;return el;};
+  const connection=$("connection-summary"),capabilities=$("capability-summary");
+  const heading=node("div",undefined,"catalog-heading");
+  const title=node("div");title.append(node("p","当前模型配置","catalog-eyebrow"),node("h3",data.connection.model || "模型名称未提供","connection-model"));
+  heading.append(title,node("span",data.connection.mode==="MOCK"?"MOCK · 工程模拟":"LIVE · 尚未验收","catalog-mode"));
+  const facts=node("dl",undefined,"connection-facts");
+  for(const [label,value] of [["运行模式",data.connection.mode],["服务端状态",data.connection.status]]){
+    const item=node("div");item.append(node("dt",label),node("dd",value));facts.append(item);
+  }
+  const boundary=node("aside",undefined,"catalog-boundary");
+  boundary.append(node("strong",data.connection.mode==="MOCK"?"工程模拟，不代表真实模型接入":"真实模型尚未验收"),node("p","这里显示 API 的配置回读，不检测模型服务，也不会发起模型请求。实际任务仍须通过原授权与验收门。"));
+  connection.append(heading,facts,boundary);connection.hidden=false;
+  const tools=node("ol",undefined,"catalog-tools");
+  const labels={"resource.read":["读取已授权材料","读取项目内已授权的原材料。"],"data.aggregate_csv":["汇总 CSV 数据","按受支持的列与规则处理已授权 CSV。"],"artifact.save_text":["保存文本成果","在当前项目内保存文本文件。"]};
+  for(const [index,id] of data.tools.entries()){
+    const known=Object.hasOwn(labels,id)?labels[id]:null;
+    const item=node("li"),body=node("div");
+    body.append(node("h3",known?known[0]:"注册工具"),node("code",id),node("p",known?known[1]:"API 注册的可信工具；使用仍需任务与项目授权。"));
+    item.append(node("span",String(index+1).padStart(2,"0"),"catalog-tool-number"),body);tools.append(item);
+  }
+  const count=node("div",undefined,"catalog-heading");count.append(node("h3",`${data.tools.length} 项注册能力`),node("span","已注册 ≠ 已授权","catalog-mode"));
+  const restriction=node("aside",undefined,"catalog-boundary");restriction.append(node("strong","代码执行已关闭"),node("p","能力目录不授予材料权限，也不代表任务已执行。"));
+  capabilities.append(count,tools);
+  if(!data.tools.length)capabilities.append(node("p","当前 API 未返回注册工具；不会据此推断授权或模型状态。","catalog-empty"));
+  capabilities.append(restriction);capabilities.hidden=false;
+}
 function renderResourceCatalog(data) {
+  clearResourceCatalogPresentation();
   $("capabilities").textContent = "";
   $("connections").textContent = "";
   const connection = data?.connection;
@@ -669,6 +703,8 @@ function renderResourceCatalog(data) {
     throw new Error("能力与连接目录响应无效");
   $("capabilities").textContent = JSON.stringify({tools: data.tools, code_execution: data.code_execution}, null, 2);
   $("connections").textContent = JSON.stringify({model: connection.model, mode: connection.mode, status: connection.status}, null, 2);
+  renderResourceCatalogPresentation(data);
+  for(const id of ["capabilities","connections"])$(id).closest("details").hidden=false;
 }
 document.querySelectorAll("#resource-filters [data-resource-category]").forEach(button => button.onclick = () => selectResourceCategory(button.dataset.resourceCategory));
 selectResourceCategory("materials");

@@ -1,0 +1,31 @@
+'use strict';
+const fs=require('node:fs'),assert=require('node:assert/strict');
+const {JSDOM,VirtualConsole}=require('jsdom');
+const web=process.argv[2]||'src/sim2act/web',checks=[],errors=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));
+const dom=new JSDOM(fs.readFileSync(web+'/index.html','utf8'),{runScripts:'dangerously',virtualConsole:vc});
+const w=dom.window,d=w.document,$=id=>d.getElementById(id);w.setInterval=()=>0;w.fetch=()=>{throw Error('No HTTP in presentation test');};
+const script=d.createElement('script');script.textContent=fs.readFileSync(web+'/app.js','utf8');d.body.append(script);
+const check=(v,text)=>{assert(v,text);checks.push(text);};
+const catalog={tools:['resource.read','data.aggregate_csv','artifact.save_text'],code_execution:'DISABLED',connection:{model:'intern-s2',mode:'MOCK',status:'MOCK_ENGINEERING'}};
+try{
+ w.renderResourceCatalog(catalog);
+ check(!$('connection-summary').hidden&&$('connection-summary').querySelector('h3').textContent==='intern-s2','model identity has a readable primary heading');
+ check($('connection-summary').textContent.includes('MOCK · 工程模拟')&&$('connection-summary').textContent.includes('不代表真实模型接入')&&!$('connection-summary').textContent.includes('连接成功'),'MOCK configuration is never connectivity acceptance');
+ check($('capability-summary').querySelectorAll('li').length===3&&$('capability-summary').textContent.includes('已注册 ≠ 已授权')&&$('capability-summary').textContent.includes('代码执行已关闭'),'registered tools are readable and permission boundary remains explicit');
+ check($('connections').textContent===JSON.stringify(catalog.connection,null,2)&&!$('connections').closest('details').open&&!$('connections').closest('details').hidden,'exact original metadata remains in an initially collapsed disclosure');
+ w.renderResourceCatalog({...catalog,connection:{model:'real-config-name',mode:'LIVE',status:'LIVE_NOT_ACCEPTED'}});
+ check($('connection-summary').textContent.includes('尚未验收')&&$('connection-summary').textContent.includes('真实模型尚未验收')&&!$('connection-summary').textContent.includes('工程模拟'),'LIVE unaccepted stays distinct from MOCK and accepted');
+ const malicious='<img src=x onerror=alert(1)>';
+ w.renderResourceCatalog({...catalog,tools:[malicious],connection:{...catalog.connection,model:malicious}});
+ check(!$('connection-summary').querySelector('img')&&!$('capability-summary').querySelector('img')&&$('connection-summary').textContent.includes(malicious),'API strings are inert text, including unknown tool IDs');
+ w.renderResourceCatalog({...catalog,tools:[],connection:{...catalog.connection,model:''}});
+ check($('capability-summary').textContent.includes('未返回注册工具')&&$('connection-summary').textContent.includes('模型名称未提供'),'empty metadata has explicit neutral presentation');
+ $('connections').closest('details').open=true;
+ assert.throws(()=>w.renderResourceCatalog({...catalog,connection:{...catalog.connection,status:'CONNECTED'}}));
+ check($('connection-summary').hidden&&$('capability-summary').hidden&&!$('connections').textContent&&!$('capabilities').textContent&&$('connections').closest('details').hidden&&!$('connections').closest('details').open,'invalid catalog clears both human and raw prior projections');
+ w.renderResourceCatalog(catalog);w.clearIdentityView();
+ check($('connection-summary').hidden&&$('capability-summary').hidden&&!$('connection-summary').textContent&&!$('connections').textContent,'identity reset invalidates the presentation together with raw metadata');
+ for(const id of ['capabilities','connections'])check($(id).closest('details').querySelector('summary').textContent.includes('原始'),'original data disclosure is keyboard-native details/summary '+id);
+ check(!errors.length,'full template/controller boots with no DOM script error');
+ console.log(JSON.stringify({status:'PASS',checks,http:0,models:0,native:false},null,2));
+}finally{w.close();}
