@@ -477,3 +477,44 @@ def test_native_full_entry_exception_releases_owner(sql_facts, entry):
                 t._produced(models, gate.Approval, object())
     assert not owner.active and not graph.active
     assert owner.ledger.live == owner.ledger.resident == 0
+
+
+@pytest.mark.parametrize('exit_kind', ['normal', 'check_error', 'scope_error'])
+def test_original_cgr_scope_always_closes_registered_native_owner(sql_facts, exit_kind):
+    from contextlib import nullcontext
+
+    f = sql_facts
+    roles = dict.fromkeys(('source', 'generate', 'platform', 'trial', 'per_use'))
+    owner = None
+    error = pytest.raises(DomainError) if exit_kind != 'normal' else nullcontext()
+    with error, f.store.tx() as c, pb._source_reads(f.store, c):
+        with runtime._cold_graph_read(f.worker, c, {'isolated': True}, roles, 'pre') as graph:
+            owner = owned._NativeModels(graph, BOUNDS, LIMITS)
+            approval = gate._approved(f.store, c, f.user, f.contract, f.binding.approval_key)
+            owner.produced(gate.Approval, approval, gate.Approval.model_dump(approval))
+            assert owner.ledger.resident > 0
+            if exit_kind == 'check_error':
+                graph.inputs['isolated'] = False
+                graph.check(f.store, c)
+            elif exit_kind == 'scope_error':
+                raise DomainError('VERSION_CONFLICT', 'synthetic body failure')
+        assert not owner.active
+    assert owner is not None and not owner.active and not graph.active
+    assert graph._settlement_owned_models is None
+    assert owner.ledger.live == owner.ledger.resident == 0 and owner._owned == []
+
+
+def test_native_owner_cannot_be_replaced_on_the_same_live_graph(sql_facts):
+    f = sql_facts
+    roles = dict.fromkeys(('source', 'generate', 'platform', 'trial', 'per_use'))
+    with f.store.tx() as c, pb._source_reads(f.store, c):
+        with runtime._cold_graph_read(f.worker, c, {'isolated': True}, roles, 'pre') as graph:
+            first = owned._NativeModels(graph, BOUNDS, LIMITS)
+            with pytest.raises(DomainError, match='one native handoff owner'):
+                owned._NativeModels(graph, BOUNDS, LIMITS)
+            assert first.active and graph._settlement_owned_models is first
+            first.close()
+            with pytest.raises(DomainError, match='one native handoff owner'):
+                owned._NativeModels(graph, BOUNDS, LIMITS)
+            assert graph.active and graph._settlement_owned_models is None
+        assert not first.active

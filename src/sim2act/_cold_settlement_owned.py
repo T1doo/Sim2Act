@@ -541,9 +541,12 @@ class _NativeModels:
                 or not graph.store.sqlite):
             raise _Rejected('isolated native model handoff only')
         graph.check(graph.store, graph.connection)
+        if '_settlement_owned_models' in vars(graph):
+            raise _Rejected('one native handoff owner per exact graph')
         self.graph, self.ledger = graph, _Ledger(bounds, limits)
         self.active, self.version, self._owned = True, 0, []
         self._frame = (graph.nonce, graph.epoch, graph.phase)
+        graph._settlement_owned_models = self
 
     def current(self):
         if not self.active:
@@ -612,3 +615,5 @@ class _NativeModels:
         self.active = False
         self._owned.clear()
         self.ledger.close()
+        if getattr(self.graph, '_settlement_owned_models', None) is self:
+            self.graph._settlement_owned_models = None

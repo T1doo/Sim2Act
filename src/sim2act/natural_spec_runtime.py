@@ -1914,6 +1914,11 @@ class _ColdGraphRead:
     def invalidate(self):
         was_active = self.active
         self.active = False
+        owner = getattr(self, '_settlement_owned_models', None)
+        if owner is not None:
+            from ._cold_settlement_owned import _NativeModels
+            if type(owner) is _NativeModels and owner.graph is self:
+                owner.close()
         frontier = getattr(self, '_accounted_frontier', None)
         if was_active and frontier is not None:
             from ._cold_accounted_native import _Frontier
