@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.128" timestamp="2026-10-26T16:44:21.049637+00:00" hostname="24ce2e3069fb"><testcase classname="tests.test_api_response_feedback" name="test_api_response_feedback_actual_local_backend" time="1.045"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: The validation function is expected to return &quot;true&quot;. Received false&#10;  &#10;  Caught error:&#10;  &#10;  Error: PERMISSION_DENIED&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async /workspace/Sim2Act/tests/api_response_feedback.cjs:28:3&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'tests/api_response_feedback.cjs', 'src/sim2act/web/app.js', '/tmp/api-response-http-20...ons (node:internal/process/task_queues:104:5)\n    at async /workspace/Sim2Act/tests/api_response_feedback.cjs:28:3\n').returncode">tmp_path = PosixPath('/tmp/api-response-http-20261026/test_api_response_feedback_act0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f5e429e1550&gt;
+
+    def test_api_response_feedback_actual_local_backend(tmp_path, monkeypatch):
+        from sim2act.model import InternModel
+        from sim2act.worker import Worker
+    
+        def forbidden(*args, **kwargs):
+            raise AssertionError('API feedback test cannot run Worker or models')
+    
+        monkeypatch.setattr(Worker, '__init__', forbidden)
+        monkeypatch.setattr(InternModel, '__init__', forbidden)
+        url = 'sqlite:///' + str(tmp_path / 'feedback.db')
+        store = Store(url, test_only=True)
+        store.initialize()
+        settings = Settings(url, tmp_path, mode='mock')
+        sock = socket.socket()
+        sock.bind(('127.0.0.1', 0))
+        port = sock.getsockname()[1]
+        server = uvicorn.Server(uvicorn.Config(create_app(store, settings),
+            host='127.0.0.1', port=port, log_level='error', timeout_graceful_shutdown=2))
+        thread = threading.Thread(target=lambda: server.run(sockets=[sock]), daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 5
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() &lt; deadline
+                time.sleep(.01)
+            info = tmp_path / 'info.json'
+            info.write_text(json.dumps({'base': f'http://127.0.0.1:{port}'}))
+            result = subprocess.run(['node', 'tests/api_response_feedback.cjs',
+                'src/sim2act/web/app.js', str(info)], capture_output=True, text=True,
+                timeout=15, env=os.environ.copy())
+            (tmp_path / 'driver.log').write_text(result.stdout + result.stderr)
+&gt;           assert result.returncode == 0, result.stdout + result.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+E             
+E             Caught error:
+E             
+E             Error: PERMISSION_DENIED
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async /workspace/Sim2Act/tests/api_response_feedback.cjs:28:3
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/api_response_feedback.cjs', 'src/sim2act/web/app.js', '/tmp/api-response-http-20...ons (node:internal/process/task_queues:104:5)\n    at async /workspace/Sim2Act/tests/api_response_feedback.cjs:28:3\n').returncode
+
+tests/test_api_response_feedback.py:49: AssertionError</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,25 @@
+diff --git a/src/sim2act/web/app.js b/src/sim2act/web/app.js
+index 5c17ba93..42587a53 100644
+--- a/src/sim2act/web/app.js
++++ b/src/sim2act/web/app.js
+@@ -60,7 +60,19 @@ function textTermsReady(container,report=false){
+ document.querySelectorAll("[data-term-input]").forEach(bindTextTermInput);
+ async function api(path, method = "GET", body) {
+   const response = await fetch(path, {method, cache: "no-store", headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"}, ...(body ? {body: JSON.stringify(body)} : {})});
+-  const data = await response.json();
++  let data;
++  try {data = await response.json();}
++  catch (_) {
++    // A received status without a readable receipt does not confirm whether
++    // a command ran. Do not set httpStatus/submissionRejection: callers use
++    // those only for confirmed rejection and must retain their original key.
++    const readOnly=method === "GET" || method === "HEAD";
++    const error=new Error(`服务响应无法确认（HTTP ${response.status}）。`+
++      (readOnly?"请只读重试，当前内容尚未确认。":"请保留原请求键并读取状态，不要重新提交。"));
++    error.code="API_RESPONSE_UNCONFIRMED";
++    error.transportStatus=response.status;
++    throw error;
++  }
+   const clockHeader=response.headers?.get?.("X-Sim2Act-Server-Time");
+   if(clockHeader && data?.natural_deadline && Number.isFinite(Number(clockHeader)))
+     Object.defineProperty(data,"naturalServerTime",{value:Number(clockHeader)});
