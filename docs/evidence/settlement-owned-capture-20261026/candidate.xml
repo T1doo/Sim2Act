@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="10" time="4.635" timestamp="2026-10-26T14:43:55.510376+00:00" hostname="24ce2e3069fb"><testcase classname="tests.test_cold_settlement_owned" name="test_complete_capture_keeps_model_raw_and_nested_hidden_row_aliases" time="0.000"><failure message="pydantic_core._pydantic_core.ValidationError: 1 validation error for Limits&#10;max_tools&#10;  Input should be less than or equal to 4 [type=less_than_equal, input_value=5, input_type=int]&#10;    For further information visit https://errors.pydantic.dev/2.12/v/less_than_equal">def test_complete_capture_keeps_model_raw_and_nested_hidden_row_aliases():
+&gt;       model = Limits(max_requests=3, max_tools=5, max_repairs=1,
+                       max_total_tokens=1000, max_output_tokens=100, run_seconds=300)
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for Limits
+E       max_tools
+E         Input should be less than or equal to 4 [type=less_than_equal, input_value=5, input_type=int]
+E           For further information visit https://errors.pydantic.dev/2.12/v/less_than_equal
+
+tests/test_cold_settlement_owned.py:46: ValidationError</failure></testcase><testcase classname="tests.test_cold_settlement_owned" name="test_cycle_nonfinite_and_foreign_row_callback_are_not_hidden" time="0.001" /><testcase classname="tests.test_cold_settlement_owned" name="test_sqlite_handoff_is_private_owned_and_lifecycle_bound" time="0.568" /><testcase classname="tests.test_cold_settlement_owned" name="test_capacity_is_legacy_before_issuance_but_bad_inventory_is_not" time="0.638" /><testcase classname="tests.test_cold_settlement_owned" name="test_dynamic_frontier_still_rejects_after_handoff[stop]" time="0.581" /><testcase classname="tests.test_cold_settlement_owned" name="test_dynamic_frontier_still_rejects_after_handoff[settings]" time="0.549"><failure message="dataclasses.FrozenInstanceError: cannot assign to field 'max_output_tokens'">sql_facts = namespace(store=&lt;sim2act.db.Store object at 0x7f331a3e5340&gt;, settings=Settings(database_url='sqlite:////tmp/pytest-of-...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=&lt;sim2act.worker.Worker object at 0x7f331b99e120&gt;)
+drift = 'settings'
+
+    @pytest.mark.parametrize('drift', ['stop', 'settings', 'binding', 'write'])
+    def test_dynamic_frontier_still_rejects_after_handoff(sql_facts, drift):
+        from sqlalchemy import update
+    
+        from sim2act.db import runs
+    
+        f = sql_facts
+        selected = None
+        try:
+            with pytest.raises(DomainError), f.store.tx() as c, pb._source_reads(f.store, c):
+                roles = dict.fromkeys(('source', 'generate', 'platform', 'trial', 'per_use'))
+                with runtime._cold_graph_read(f.worker, c, {'isolated': True}, roles, 'pre') as graph:
+                    families = inventory({'value': 1})
+                    graph.add(owned._ROOT, families)
+                    selected = owned._select_complete(graph, families, [], BOUNDS, LIMITS)
+                    assert selected.route == 'OWNED'
+                    view = selected.scope.family(selected.handle, 'trial', 'base')
+                    if drift == 'stop':
+                        f.worker.stop.set()
+                    elif drift == 'settings':
+&gt;                       f.settings.max_output_tokens += 1
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cold_settlement_owned.py:177: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-1/test_dynamic_frontier_still_re1/accounted-isolated.db',...lse, natural_activation_live_id='', application_generation_activation_enabled=False, application_generation_live_id='')
+name = 'max_output_tokens', value = 1025
+
+&gt;   ???
+E   dataclasses.FrozenInstanceError: cannot assign to field 'max_output_tokens'
+
+&lt;string&gt;:4: FrozenInstanceError
+
+During handling of the above exception, another exception occurred:
+
+sql_facts = namespace(store=&lt;sim2act.db.Store object at 0x7f331a3e5340&gt;, settings=Settings(database_url='sqlite:////tmp/pytest-of-...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=&lt;sim2act.worker.Worker object at 0x7f331b99e120&gt;)
+drift = 'settings'
+
+    @pytest.mark.parametrize('drift', ['stop', 'settings', 'binding', 'write'])
+    def test_dynamic_frontier_still_rejects_after_handoff(sql_facts, drift):
+        from sqlalchemy import update
+    
+        from sim2act.db import runs
+    
+        f = sql_facts
+        selected = None
+        try:
+            with pytest.raises(DomainError), f.store.tx() as c, pb._source_reads(f.store, c):
+                roles = dict.fromkeys(('source', 'generate', 'platform', 'trial', 'per_use'))
+                with runtime._cold_graph_read(f.worker, c, {'isolated': True}, roles, 'pre') as graph:
+                    families = inventory({'value': 1})
+                    graph.add(owned._ROOT, families)
+                    selected = owned._select_complete(graph, families, [], BOUNDS, LIMITS)
+                    assert selected.route == 'OWNED'
+                    view = selected.scope.family(selected.handle, 'trial', 'base')
+                    if drift == 'stop':
+                        f.worker.stop.set()
+                    elif drift == 'settings':
+                        f.settings.max_output_tokens += 1
+                    elif drift == 'binding':
+                        object.__setattr__(f.binding, 'version', 'changed')
+                    else:
+                        c.execute(update(runs).where(runs.c.id == f.gen_id).values(error={'test': True}))
+                    view.field('value')
+        finally:
+            if drift == 'stop':
+                f.worker.stop.clear()
+            elif drift == 'settings':
+&gt;               f.settings.max_output_tokens -= 1
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cold_settlement_owned.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-1/test_dynamic_frontier_still_re1/accounted-isolated.db',...lse, natural_activation_live_id='', application_generation_activation_enabled=False, application_generation_live_id='')
+name = 'max_output_tokens', value = 1023
+
+&gt;   ???
+E   dataclasses.FrozenInstanceError: cannot assign to field 'max_output_tokens'
+
+&lt;string&gt;:4: FrozenInstanceError</failure></testcase><testcase classname="tests.test_cold_settlement_owned" name="test_dynamic_frontier_still_rejects_after_handoff[binding]" time="0.527" /><testcase classname="tests.test_cold_settlement_owned" name="test_dynamic_frontier_still_rejects_after_handoff[write]" time="0.502" /><testcase classname="tests.test_cold_settlement_owned" name="test_whole_inventory_read_set_required_and_memory_error_never_falls_back" time="0.557" /><testcase classname="tests.test_cold_settlement_owned" name="test_wide_shared_dag_resident_edges_are_prepaid" time="0.520" /></testsuite></testsuites>

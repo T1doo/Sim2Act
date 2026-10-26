@@ -1,0 +1,32 @@
+# Isolated owned settlement representation — NOT INSTALLED
+
+Base0a3b125bd60101b9c97e5696d2967f6c1667cd74. The user approved investigation/implementation of an isolated internal ownership contract: after validated handoff, pure consumers read server-owned immutable values rather than follow external mutable references. That approval did not enable a runtime replacement or authorize a G0/model/native window.
+
+## Implemented source
+
+New `_cold_settlement_owned.py` implements a bounded complete graph capture and private lifetime-bound views. There are no imports/calls from production runtime paths; original full guards, producers, SQL/authorization, clocks, lease30/fence/write-epoch and old byte/origin protocols are unchanged.
+
+The copier keeps native list/tuple and bool/int distinctions, finite floats, all model storage fields, original model-`__dict__` aliases, shared DAG references, nested RowMapping keys/full data/safe index including hidden positions and aliases. It rejects cycles and nonfinite values. Foreign row-index keys are traversed without invoking their hash/equality/serializer. Source references are retained only by the temporary capture memo, then cleared; immutable image payloads contain no borrowed model/list/dict/RowMapping. The lifecycle scope necessarily retains the original graph solely for current connection/transaction/scope/settings/binding/stop/epoch checks.
+
+The scoped experiment accepts only an entire native raw inventory that was added to the ORIGINAL full graph read set; original graph and typed cohort checks run before/after capture and before capacity fallback. Unsupported representation/capacity can choose LEGACY before issuance; mutation/original validation/MemoryError do not get swallowed into fallback. Original typed model objects remain subject to the original guards in the unchanged runtime. The standalone model/raw alias test and scoped native-raw test are DISTINCT coverage.
+
+Logical allocation reservations cover temporary copies/memos/encoder overlap, resident nodes, shared edges, model metadata, image bytes and prebuilt immutable views. These are conservative experimental accounting units, NOT exact RSS/heap/CPU or production accepted-domain bounds. Views are cached before publication, foreign handles/forged same-reference views refuse reads. Closing a scope or detecting closed/drifted graph state clears its retained ledger/image. An eventual owner must close it in `finally` (for example contextlib.closing); this component is not registered into the original CGR teardown and is not a full private producer issuer chain.
+
+## Seven-family inventory is NOT seven-family closure
+
+The explicit inventory names Trial; binding/generation/extraction/use; ledger/accounted chains; per-boundary authorities; SourceVerificationResult; context/Run/FrozenContract/Limits; settlement call/received/parsed contents. Missing named boundary slots or None placeholders reject capture. These are minimum inventory names, not an authoritative count or schema proof of all actual producer invocations.
+
+Tests deliberately place the SAME synthetic payload in several inventory slots to prove alias preservation; they do not pretend that duplicate payloads are distinct fresh producers. No actual `_prepare`, first/second commit, `_cold_receipts` or complete successful settlement was run. Fresh Approval/source/context may occur more often than the named first/second inventory slots. Scope construction and private Image validity here are not proof of the final producer-linked issuance chain.
+
+Because this component captures only after all supplied inventory exists, its boundary is LATE. It cannot optimize `_prepare` or serve as a whole-G0 performance candidate. No timing benchmark or net-benefit claim was attempted. It has no business serializer/exporter: the existing None-omission rules, original business bytes/fingerprints/receipts and origin protocol still need direct equivalence proof in migrated consumers. Private image digest/encoded bytes are never installed in those protocols.
+
+The next real implementation remains: pre-issuance compatibility/capacity proof covering actual subsequent producer multiplicities and live/temporary peaks; fresh captures at original producer positions without advancing SQL or rerunning producers; cross-root links only to completed owned immutable nodes; migration of every pure consumer across all seven families and post-write/exit states. Unknown or unbounded inputs must choose the untouched LEGACY path before issuance, without new product limits or post-issuance fallback. Dynamic authorization and full SQL/Run/clock/fence checks remain original separate boundaries. This is already within the approved candidate direction, not a request for another model/G0 window.
+
+## Actual results
+
+- initial run:1F/3P. Failure was a test Limits constructor missing five required fields.
+- candidate run:2F/8P. Test Limits max_tools5 violated the existing <=4 schema; Settings is frozen and the controlled mutation fixture used ordinary assignment. Tests were corrected to valid Limits and an explicit same-object mutation with restoration. No production constraint changed.
+- FINAL:12PASS/0FAIL/0SKIP, JUnit4.709s, outer5.430639s, exit0. Six source digests match before/after/current. Final tests cover native/model/raw/hidden-row aliases, strict tags, foreign callbacks, cycles/nonfinite, actual isolated SQLite/CGR/typed handoff, external content mutation isolation, original byte pin unchanged by capture, forged handle/view, scope closure, pre-issue capacity LEGACY, missing/unpinned inventory, stop/settings/binding/real SQL write invalidation, partial-constructor/finish MemoryError and wide shared DAG resident edges.
+- Ruff two files PASS, Python compile and git whitespace PASS. One existing Starlette/httpx deprecation warning retained, no dependency changed.
+
+Synthetic SQLite fixture seeding uses the existing local ASGI/TestClient path; no TCP server, Worker execution, transport/model constructor or real/mock model request, G0/Cold2/W5, browser/device/CI window was run. The fixture closes clients and disposes engines; process completion is recorded. Pytest owns its retained temporary SQLite files, not a claimed deleted production database. This is NOT full seven-family runtime closure, production capacity qualification, business encoding compatibility, net performance or G0 acceptance. Earlier frontend pixels still bind their own source, not this candidate.
