@@ -1,0 +1,35 @@
+diff --git a/src/sim2act/web/natural-goal.js b/src/sim2act/web/natural-goal.js
+index 7fc0a3c9..caf48424 100644
+--- a/src/sim2act/web/natural-goal.js
++++ b/src/sim2act/web/natural-goal.js
+@@ -540,14 +540,7 @@ async function readTrialBudget() {
+ async function refreshTrialCards() {
+   clearTrialConsent();
+   const ctx = trialContext(); if (!ctx.identity || !ctx.project) return;
+-  const result = await api(`/api/projects/${ctx.project}/goal-cards`);
+-  if (!trialCurrent(ctx)) return;
+-  trialCards = result.items;
+-  for (const [id, offset] of [["trial-source", 0], ["trial-cold", 1]]) {
+-    $(id).replaceChildren(...trialCards.map(c => new Option(`${c.title} · v${c.version}`, c.id)));
+-    if (trialCards[offset]) $(id).value = trialCards[offset].id;
+-  }
+-  $("trial-scope").textContent = ""; $("trial-ack").checked = false; $("trial-withdraw-ack").checked = false; $("trial-end-ack").checked = false;
++  // The original-key recovery intent must not depend on directory READ access.
+   const stored = trialEntry();
+   if (stored) { $("trial-original-key").value = stored.key; stored.message = "已保留原键。重新读取范围和同意状态后再操作。"; stored.receipt = null; }
+   else {
+@@ -559,6 +552,14 @@ async function refreshTrialCards() {
+     }
+   }
+   renderTrialConsent();
++  const result = await api(`/api/projects/${ctx.project}/goal-cards`);
++  if (!trialCurrent(ctx)) return;
++  trialCards = result.items;
++  for (const [id, offset] of [["trial-source", 0], ["trial-cold", 1]]) {
++    $(id).replaceChildren(...trialCards.map(c => new Option(`${c.title} · v${c.version}`, c.id)));
++    if (trialCards[offset]) $(id).value = trialCards[offset].id;
++  }
++  renderTrialConsent();
+ }
+ function trialMetadata(r) {
+   if (!["PREPARATION_CLOSED_NO_APPROVAL", "PREPARED_NOT_APPROVED", "CONSENT_METADATA_ONLY_LIVE_BLOCKED"].includes(r?.status) || r.live_allowed !== false || r.new_runs !== 0 || r.new_slots !== 0 || r.actual_model_requests !== 0) throw Error("未知状态回执");

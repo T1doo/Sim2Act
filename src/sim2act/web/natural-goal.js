@@ -540,14 +540,7 @@ async function readTrialBudget() {
 async function refreshTrialCards() {
   clearTrialConsent();
   const ctx = trialContext(); if (!ctx.identity || !ctx.project) return;
-  const result = await api(`/api/projects/${ctx.project}/goal-cards`);
-  if (!trialCurrent(ctx)) return;
-  trialCards = result.items;
-  for (const [id, offset] of [["trial-source", 0], ["trial-cold", 1]]) {
-    $(id).replaceChildren(...trialCards.map(c => new Option(`${c.title} · v${c.version}`, c.id)));
-    if (trialCards[offset]) $(id).value = trialCards[offset].id;
-  }
-  $("trial-scope").textContent = ""; $("trial-ack").checked = false; $("trial-withdraw-ack").checked = false; $("trial-end-ack").checked = false;
+  // The original-key recovery intent must not depend on directory READ access.
   const stored = trialEntry();
   if (stored) { $("trial-original-key").value = stored.key; stored.message = "已保留原键。重新读取范围和同意状态后再操作。"; stored.receipt = null; }
   else {
@@ -557,6 +550,14 @@ async function refreshTrialCards() {
       $("trial-original-key").value = key;
       trialEntries.set(trialIndex(ctx), {key, base: `/api/projects/${ctx.project}/natural-trials/${key}`, operation: 0, state: "unknown", receipt: null, message: "冷页保留原准备键；先只读取原键恢复，不能另建准备。"});
     }
+  }
+  renderTrialConsent();
+  const result = await api(`/api/projects/${ctx.project}/goal-cards`);
+  if (!trialCurrent(ctx)) return;
+  trialCards = result.items;
+  for (const [id, offset] of [["trial-source", 0], ["trial-cold", 1]]) {
+    $(id).replaceChildren(...trialCards.map(c => new Option(`${c.title} · v${c.version}`, c.id)));
+    if (trialCards[offset]) $(id).value = trialCards[offset].id;
   }
   renderTrialConsent();
 }
