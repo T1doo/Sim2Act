@@ -4,7 +4,21 @@ let protocolGeneration=0,protocolContext=null,protocolCatalog=[],protocolMateria
 const protocolIntents=new Map();
 function protocolCurrent(ctx){return protocolContext===ctx&&ctx.generation===protocolGeneration&&ctx.token===token&&ctx.project===$("project-select").value;}
 function clearProtocol(){clearProtocolCompletionReadback();clearProtocolCompletion();protocolGeneration++;protocolContext=null;protocolCatalog=[];protocolMaterials=[];$("protocol-detail").hidden=true;$("protocol-result").textContent="";$("protocol-state").textContent="";$("protocol-cold-form").hidden=true;$("protocol-extract").hidden=true;$("protocol-recover-retry").hidden=true;$("protocol-source-submit").disabled=true;$("protocol-contract").replaceChildren();$("protocol-source-materials").replaceChildren();$("protocol-inputs").replaceChildren();$("protocol-source-goal").textContent="";$("protocol-source-status").textContent="";$("protocol-run-id").textContent="";$("protocol-cold-inputs").replaceChildren();$("protocol-cold-materials").replaceChildren();$("protocol-cold-contract").replaceChildren();}
-async function protocolRequest(ctx,path,method="GET",body){const r=await fetch(path,{method,headers:{Authorization:`Bearer ${ctx.token}`,"Content-Type":"application/json"},...(body?{body:JSON.stringify(body)}:{})});const data=await r.json();if(!r.ok){const error=new Error(data.error?.code||"请求失败");error.detail=data.error?.message;error.httpStatus=r.status;throw error;}return data;}
+async function protocolRequest(ctx,path,method="GET",body){
+ const r=await fetch(path,{method,headers:{Authorization:`Bearer ${ctx.token}`,"Content-Type":"application/json"},...(body?{body:JSON.stringify(body)}:{})});
+ let data;
+ try{data=await r.json();}
+ catch(_){
+  // Missing receipt body is not a confirmed rejection, including for a 4xx.
+  // Keep protocol command keys/UNKNOWN recovery exactly as before.
+  const readOnly=method==="GET"||method==="HEAD";
+  const error=new Error(`服务响应无法确认（HTTP ${r.status}）。`+
+   (readOnly?"请只读重试，当前内容尚未确认。":"请保留原请求键并读取状态，不要重新提交。"));
+  error.code="API_RESPONSE_UNCONFIRMED";error.transportStatus=r.status;throw error;
+ }
+ if(!r.ok){const error=new Error(data.error?.code||"请求失败");error.detail=data.error?.message;error.httpStatus=r.status;throw error;}
+ return data;
+}
 function protocolStatus(ctx,text){if(protocolCurrent(ctx))$("protocol-state").textContent=text;}
 function protocolContract(id){return protocolCatalog.find(item=>item.contract_id===id);}
 function protocolInputFields(container,value,preserve=false){const previous=preserve?Object.fromEntries([...container.querySelectorAll("[data-protocol-input]")].map(field=>[field.dataset.protocolInput,field.value])):{};container.replaceChildren(...Object.entries(value||{}).map(([name,input])=>{const label=document.createElement("label");label.textContent=name;const field=document.createElement("input");field.dataset.protocolInput=name;field.value=previous[name]??(typeof input==="string"?input:JSON.stringify(input));field.dataset.valueType=typeof input;field.required=true;label.append(field);return label;}));}

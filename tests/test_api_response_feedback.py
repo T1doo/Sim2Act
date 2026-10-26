@@ -66,3 +66,14 @@ def test_goal_execution_unreadable_receipt_keeps_original_key(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     report = json.loads((tmp_path / 'results.json').read_text())
     assert report['status'] == 'PASS' and len(report['checks']) == 32
+
+
+def test_protocol_api_unreadable_response_feedback(tmp_path):
+    result = subprocess.run(['node', 'tests/api_response_feedback.cjs',
+        'src/sim2act/web/app.js', '', 'protocol'], capture_output=True, text=True,
+        timeout=15, env=os.environ.copy())
+    (tmp_path / 'driver.log').write_text(result.stdout + result.stderr)
+    assert result.returncode == 0, result.stdout + result.stderr
+    report = json.loads(result.stdout)
+    assert report['controller'] == 'protocolRequest' and report['actual_http'] is False
+    assert len(report['checks']) == 10
