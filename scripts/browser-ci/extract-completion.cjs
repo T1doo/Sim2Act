@@ -17,12 +17,13 @@ if(require.main===module){
 // Real DOM and production scripts, actual sealed SQLite API. No VM adapter.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {execFileSync}=require('node:child_process');
-const {chromium}=require('playwright-core');
 const root=process.argv[2],python=process.argv[3];
 const info=JSON.parse(fs.readFileSync(path.join(root,'info.json'),'utf8'));
 assert.ok(['source','extract'].includes(info.phase),'Unknown explicit completion phase');
-const workspaceVisual=info.action==='workspace-visual';
-const visual=workspaceVisual?require('./workspace-visual.cjs'):null;let beforeAssets=false,visualEmptyProjects=false,contentFailRead=false,contentHoldRead=null;
+const catalogVisual=info.action==='catalog-visual';
+const {chromium}=catalogVisual?require(path.join(root,'browser-tools/node_modules/playwright-core')):require('playwright-core');
+const workspaceVisual=catalogVisual||info.action==='workspace-visual';
+const visual=workspaceVisual?require(catalogVisual?'./catalog-visual.cjs':'./workspace-visual.cjs'):null;let beforeAssets=catalogVisual,visualEmptyProjects=false,contentFailRead=false,contentHoldRead=null;
 const source=info.phase==='source',review=info.action==='review',completionReadback=workspaceVisual||info.action==='completion-readback',readback=completionReadback||info.action==='review-readback';
 assert.ok(info.action==='completion'||review||readback,'Unknown explicit action');
 assert.ok(!review||source,'Review fixture only supports sealed Source');
@@ -57,7 +58,7 @@ function check(name,condition){assert.ok(condition,name);result.checks.push(name
 function write(){fs.writeFileSync(path.join(root,'browser.json'),JSON.stringify(result,null,2));}
 function failWindow(error){cancelled=true;cancellation.abort(error);fail(error);}
 async function cleanupWait(promise,until){let clock;try{return await Promise.race([promise,new Promise((_,reject)=>{clock=setTimeout(()=>reject(Error('Shared cleanup deadline')),Math.max(1,until-Date.now()));})]);}finally{clearTimeout(clock);}}
-async function shot(name){assert.ok(result.screenshots<4);result.screenshots++;await page.screenshot({path:path.join(root,name),fullPage:false,timeout:3000});const data=fs.readFileSync(path.join(root,name));result.screenshotFiles.push({name,bytes:data.length,sha256:require('node:crypto').createHash('sha256').update(data).digest('hex'),visualReview:'PENDING_PIXEL_REVIEW'});}
+async function shot(name){assert.ok(result.screenshots<4);result.screenshots++;await page.screenshot({path:path.join(root,name),fullPage:false,timeout:3000});const data=fs.readFileSync(path.join(root,name));const dimensions=catalogVisual?{width:data.readUInt32BE(16),height:data.readUInt32BE(20)}:{};if(catalogVisual){assert.equal(data.subarray(0,8).toString('hex'),'89504e470d0a1a0a');assert.equal(data.subarray(12,16).toString('ascii'),'IHDR');assert.deepEqual(dimensions,page.viewportSize());}result.screenshotFiles.push({name,bytes:data.length,sha256:require('node:crypto').createHash('sha256').update(data).digest('hex'),...dimensions,visualReview:'PENDING_PIXEL_REVIEW'});}
 async function until(fn,arg){await page.waitForFunction(fn,arg,{timeout:8000});}
 function row(id){return page.locator('#runs > .row').filter({hasText:id.slice(0,16)}).getByRole('button',{name:'查看任务',exact:true});}
 async function choose(id){await row(id).click();await until(id=>protocolContext?.run?.run_id===id&&document.getElementById('protocol-run-id').textContent===id,id);}

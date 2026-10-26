@@ -34,7 +34,7 @@ def write(root, name, value):
 def collect(root):
     outputs = {}
     total = 0
-    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "read-failed.png", "cold.png", "source-failed.png", "source-refreshed.png", "extract-failed.png", "extract-refreshed.png", "store-content-hashes.json", "failure.png", "before-projects-wide.png", "before-projects-narrow.png", "after-projects-wide.png", "after-projects-narrow.png", "after-apps-wide.png", "after-apps-narrow.png", "after-resources-wide.png", "after-resources-narrow.png", "after-source-receipt-wide.png", "after-source-error-narrow.png", "maintenance-expanded-wide.png", "project-create-narrow.png", "app-result-wide.png", "app-result-narrow.png", "app-read-error-narrow.png", "content-result.json", "app-loading-wide.png", "app-empty-narrow.png", "app-read-error-wide.png", "before-tasks-wide.png", "before-tasks-narrow.png", "after-tasks-wide.png", "after-tasks-narrow.png", "task-focus-wide.png", "task-reduced-narrow.png", "before-goals-wide.png", "before-goals-narrow.png", "before-editor-wide.png", "before-editor-narrow.png", "after-goals-wide.png", "after-goals-narrow.png", "after-editor-wide.png", "after-editor-narrow.png", "goal-focus-wide.png", "goal-trial-narrow.png", "goal-history-1366.png", "goal-history-390.png", "goal-unknown-1366.png", "goal-unknown-390.png", "goal-directory-failed-390.png", "goal-directory-recovered-1366.png", "app-directory-failed-390.png", "app-directory-recovered-1366.png"):
+    for name in ("launch-contract.json", "inventory.json", "result.json", "browser.json", "initial.png", "unknown.png", "completed.png", "read-failed.png", "cold.png", "source-failed.png", "source-refreshed.png", "extract-failed.png", "extract-refreshed.png", "store-content-hashes.json", "failure.png", "before-projects-wide.png", "before-projects-narrow.png", "after-projects-wide.png", "after-projects-narrow.png", "after-apps-wide.png", "after-apps-narrow.png", "after-resources-wide.png", "after-resources-narrow.png", "after-source-receipt-wide.png", "after-source-error-narrow.png", "maintenance-expanded-wide.png", "project-create-narrow.png", "app-result-wide.png", "app-result-narrow.png", "app-read-error-narrow.png", "content-result.json", "app-loading-wide.png", "app-empty-narrow.png", "app-read-error-wide.png", "before-tasks-wide.png", "before-tasks-narrow.png", "after-tasks-wide.png", "after-tasks-narrow.png", "task-focus-wide.png", "task-reduced-narrow.png", "before-goals-wide.png", "before-goals-narrow.png", "before-editor-wide.png", "before-editor-narrow.png", "after-goals-wide.png", "after-goals-narrow.png", "after-editor-wide.png", "after-editor-narrow.png", "goal-focus-wide.png", "goal-trial-narrow.png", "goal-history-1366.png", "goal-history-390.png", "goal-unknown-1366.png", "goal-unknown-390.png", "goal-directory-failed-390.png", "goal-directory-recovered-1366.png", "app-directory-failed-390.png", "app-directory-recovered-1366.png", "before-connections-1366.png", "before-connections-390.png", "after-connections-1366.png", "after-connections-390.png", "catalog-contract.json"):
         file = root / name
         if not file.exists():
             continue
@@ -109,6 +109,11 @@ def launch_paths(root, deadline, phase="extract", review=False, readback=False, 
         required += [str((evidence / name).relative_to(REPO)) for name in ("original.json", "after.sqlite.gz" if review else "before.sqlite.gz", "original-received-sidecar.json")]
     if workspace_visual:
         required += ["scripts/browser-ci/workspace-visual.cjs", "scripts/browser-ci/goal-history-state.cjs", "docs/evidence/goal-history-visual-candidate-20261025/fixture.json", "src/sim2act/web/natural-goal.js", "scripts/readonly_content_fixture.py", "src/sim2act/web/use.js", "src/sim2act/web/csv-owner.js", "src/sim2act/web/csv-goal-revision.js", "docs/evidence/research-desk-content-20261023/saved-csv.json", "docs/evidence/research-desk-content-20261023/saved-csv.sqlite.gz"]
+    if sys.argv[1:] == ["--catalog-visual"]:
+        required += ["scripts/catalog_visual_contract.py", "scripts/browser-ci/catalog-visual.cjs",
+                     *["docs/evidence/catalog-four-frame-plan-20261026/before-assets/" + n for n in ("index.html", "app.css", "app.js")],
+                     "docs/evidence/catalog-four-frame-wiring-20261026/execution.json",
+                     "docs/evidence/catalog-four-frame-wiring-20261026/runtime-manifest.json"]
     required += [f"docs/evidence/protocol-store-loop-20261006/evaluation/{name}.json" for name in ("a-source", "a-cold", "b-source", "b-cold")]
     for name in required:
         file(name, REPO / name)
@@ -147,13 +152,14 @@ def close_content_child(child, cleanup_until, attempt):
 
 
 def main():
-    assert sys.argv[1:] in ([], ["--source"], ["--source-review"], ["--review-readback"], ["--completion-readback"], ["--workspace-visual"]), "Unknown phase arguments; no fallback"
+    assert sys.argv[1:] in ([], ["--source"], ["--source-review"], ["--review-readback"], ["--completion-readback"], ["--workspace-visual"], ["--catalog-visual"]), "Unknown phase arguments; no fallback"
     phase = "source" if sys.argv[1:] else "extract"
     review = sys.argv[1:] == ["--source-review"]
-    workspace_visual = sys.argv[1:] == ["--workspace-visual"]
+    catalog_visual = sys.argv[1:] == ["--catalog-visual"]
+    workspace_visual = catalog_visual or sys.argv[1:] == ["--workspace-visual"]
     completion_readback = workspace_visual or sys.argv[1:] == ["--completion-readback"]
     readback = completion_readback or sys.argv[1:] == ["--review-readback"]
-    action = "workspace-visual" if workspace_visual else "completion-readback" if completion_readback else "review-readback" if readback else "review" if review else "completion"
+    action = "catalog-visual" if catalog_visual else "workspace-visual" if workspace_visual else "completion-readback" if completion_readback else "review-readback" if readback else "review" if review else "completion"
     get_limit = 100 if completion_readback else 60 if readback else 30
     static_limit = 120 if completion_readback else 60 if readback else 40
     evidence = evidence_for(phase)
@@ -199,7 +205,7 @@ def main():
             # The original deadline belongs to the supervisor too. The extra
             # two seconds allow its exact-handle tree termination, not work.
             wait = remaining()
-            supervisor = subprocess.Popen([paths["pwsh"], "-NoProfile", "-NonInteractive", "-File", paths["scripts/OwnedBrowserSetup.ps1"], "-Config", str(config)], cwd=REPO, stdout=output, stderr=subprocess.STDOUT)
+            supervisor = subprocess.Popen([paths["pwsh"], "-NoProfile", "-NonInteractive", "-File", paths["scripts/OwnedBrowserSetup.ps1"], "-Config", str(config)], cwd=REPO, env=child_env, stdout=output, stderr=subprocess.STDOUT)
             setup.append(supervisor)
             supervisor.wait(timeout=wait + 2)
             assert supervisor.returncode == 0, "Owned setup failed; no retry"
@@ -208,12 +214,21 @@ def main():
         remaining()
         paths = launch_paths(root, until, phase, review, readback, completion_readback, workspace_visual)
         remaining()
+        child_env = dict(os.environ)
+        if catalog_visual:
+            from catalog_visual_contract import prepare_tools, verify_contract
+            catalog_contract = verify_contract(REPO)
+            npm_root, local_temp = prepare_tools(REPO, root)
+            child_env.update(TEMP=str(local_temp), TMP=str(local_temp), NODE_PATH=str(npm_root / "node_modules"))
+            write(root, "catalog-contract.json", catalog_contract)
+        else:
+            npm_root = REPO / "scripts/browser-ci"
         # Existing project lock/SDK/license, official registries, no lifecycle
         # scripts, new SDK, browser installation, Actions cache or artifact.
         site = root / "site"
         command([paths["python"], "-m", "pip", "--isolated", "install", "--target", str(site), "--only-binary=:all:", "--no-input", "--no-cache-dir", "--disable-pip-version-check", "--keyring-provider", "disabled", "--retries", "0", "--timeout", "20", "--index-url", "https://pypi.org/simple", "-r", paths["requirements-windows.lock"]], "pip.log")
         sys.path[:0] = [str(site), str(REPO / "src"), str(REPO / "scripts")]
-        command([paths["node"], paths["npm_cli"], "ci", "--prefix", str(REPO / "scripts/browser-ci"), "--ignore-scripts", "--no-audit", "--no-fund", "--registry=https://registry.npmjs.org", "--cache", str(root / "npm-cache"), "--fetch-retries=0", "--fetch-timeout=30000"], "npm.log")
+        command([paths["node"], paths["npm_cli"], "ci", "--prefix", str(npm_root), "--ignore-scripts", "--no-audit", "--no-fund", "--registry=https://registry.npmjs.org", "--cache", str(root / "npm-cache"), "--fetch-retries=0", "--fetch-timeout=30000"], "npm.log")
         import psutil
         import uvicorn
         from sqlalchemy import select, event
@@ -361,6 +376,8 @@ def main():
                     expected_version=before_run["version"], expected_fence=before_run["fence"])
         if workspace_visual:
             info["visual_source"] = dict(commit=commit, asset_lf_sha256={name: lf_hashes[name] for name in ("src/sim2act/web/app.js", "src/sim2act/web/app.css", "src/sim2act/web/protocol.js", "src/sim2act/web/index.html", "src/sim2act/web/use.js", "src/sim2act/web/csv-owner.js", "src/sim2act/web/csv-goal-revision.js", "src/sim2act/web/natural-goal.js")})
+        if catalog_visual:
+            info["catalog_comparison"] = catalog_contract
         if completion_readback:
             original_cases = cases([store, extra_store], [settings, extra_settings], originals)
             info["cases"] = [dict(item, base=base) for item, base in zip(original_cases, [info["base"], f"http://127.0.0.1:{extra_port}"], strict=True)]
@@ -376,7 +393,7 @@ def main():
             info["other"] = others[0]
         # Task hierarchy uses only the already sealed Source case; no CSV API child.
         write(root, "info.json", info)
-        env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(site), str(REPO / "src")]))
+        env = dict(child_env, PYTHONPATH=os.pathsep.join([str(site), str(REPO / "src")]))
         output = (root / "driver.log").open("wb")
         node = subprocess.Popen([paths["node"], paths["scripts/browser-ci/extract-completion.cjs"], str(root), paths["python"]], cwd=REPO, env=env, stdout=output, stderr=subprocess.STDOUT)
         node_process = psutil.Process(node.pid)
@@ -418,6 +435,9 @@ def main():
         assert node.returncode == 0, "Native DOM driver failed; no rerun"
         browser = json.loads((root / "browser.json").read_text(encoding="utf-8"))
         assert browser["status"] == "PASS" and browser["screenshots"] <= 4
+        if catalog_visual:
+            assert verify_contract(REPO) == catalog_contract
+            result["source_after_matches"] = True
         assert counts["blocked"] == 0 and not forbidden_calls and "monitor_error" not in result
         after = snapshot()
         if completion_readback:
@@ -425,9 +445,16 @@ def main():
             assert fingerprint(cases([store, extra_store], [settings, extra_settings], originals)) == fingerprint(original_cases)
             if workspace_visual:
                 assert not browser["located"]  # This content window makes no locator request.
-                expected_names = ["goal-directory-failed-390.png", "goal-directory-recovered-1366.png", "app-directory-failed-390.png", "app-directory-recovered-1366.png"]
+                expected_names = (["before-connections-1366.png", "before-connections-390.png", "after-connections-1366.png", "after-connections-390.png"] if catalog_visual else
+                                  ["goal-directory-failed-390.png", "goal-directory-recovered-1366.png", "app-directory-failed-390.png", "app-directory-recovered-1366.png"])
                 assert [x["name"] for x in browser["screenshotFiles"]] == expected_names
-                assert browser["screenshots"] == 4 and browser["directoryRecovery"]["status"] == "PROVED"
+                assert browser["screenshots"] == 4
+                if catalog_visual:
+                    assert browser["catalogComparison"]["before"] == catalog_contract["before_product"]
+                    assert browser["catalogComparison"]["after"] == catalog_contract["after_product"]
+                    assert len(browser["catalogComparison"]["frames"]) == 4
+                else:
+                    assert browser["directoryRecovery"]["status"] == "PROVED"
             else:
                 assert fingerprint(browser["located"]) == fingerprint([original_cases[0]["locator"]]*2 + [original_cases[1]["locator"]]*2)
                 assert all(x["hard_refresh"] and x["cold_page"] for x in browser["phase_results"])

@@ -77,7 +77,8 @@ jobs:
        contains(github.event.head_commit.message, '[review-readback-ui-once-20261022]') ||
        contains(github.event.head_commit.message, '[completion-readback-ui-once-20261022]') ||
        contains(github.event.head_commit.message, '[workspace-visual-once-20261022]') ||
-       contains(github.event.head_commit.message, '[workspace-density-once-20261022]'))
+       contains(github.event.head_commit.message, '[workspace-density-once-20261022]') ||
+       contains(github.event.head_commit.message, '[catalog-visual-once-20261026]'))
     runs-on: windows-2025
     timeout-minutes: 4
     defaults:
@@ -116,6 +117,11 @@ jobs:
             /scripts/browser-ci/package.json
             /scripts/browser-ci/package-lock.json
             /scripts/browser-ci/extract-completion.cjs
+            /scripts/catalog_visual_contract.py
+            /scripts/browser-ci/catalog-visual.cjs
+            /docs/evidence/catalog-four-frame-plan-20261026/before-assets/
+            /docs/evidence/catalog-four-frame-wiring-20261026/execution.json
+            /docs/evidence/catalog-four-frame-wiring-20261026/runtime-manifest.json
             /scripts/browser-ci/workspace-visual.cjs
             /scripts/readonly_content_fixture.py
             /docs/evidence/research-desk-content-20261023/saved-csv.json
@@ -149,7 +155,9 @@ jobs:
           $WorkspaceVisual = '${{ contains(github.event.head_commit.message, '[workspace-visual-once-20261022]') || contains(github.event.head_commit.message, '[workspace-density-once-20261022]') }}' -eq 'true'
           $Readback = '${{ contains(github.event.head_commit.message, '[review-readback-ui-once-20261022]') }}' -eq 'true'
           $CompletionReadback = '${{ contains(github.event.head_commit.message, '[completion-readback-ui-once-20261022]') }}' -eq 'true'
-          if ($WorkspaceVisual) { ./scripts/WindowsExtractCompletionUI.ps1 -WorkspaceVisual }
+          $CatalogVisual = '${{ contains(github.event.head_commit.message, '[catalog-visual-once-20261026]') }}' -eq 'true'
+          if ($CatalogVisual) { ./scripts/WindowsExtractCompletionUI.ps1 -CatalogVisual }
+          elseif ($WorkspaceVisual) { ./scripts/WindowsExtractCompletionUI.ps1 -WorkspaceVisual }
           elseif ($CompletionReadback) { ./scripts/WindowsExtractCompletionUI.ps1 -CompletionReadback }
           elseif ($Readback) { ./scripts/WindowsExtractCompletionUI.ps1 -ReviewReadback }
           else { ./scripts/WindowsExtractCompletionUI.ps1 -SourceReview }
