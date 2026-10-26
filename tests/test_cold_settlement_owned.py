@@ -254,3 +254,226 @@ def test_model_schema_keys_are_gated_before_foreign_equality(monkeypatch):
     monkeypatch.setattr(Limits, '__pydantic_fields__', fields)
     with pytest.raises(_Rejected, match='complete fixed settlement model'), capture(model):
         pass
+
+
+@contextmanager
+def native_copy(value):
+    ledger = _Ledger(BOUNDS, LIMITS)
+    copier = owned._NativeCopy(ledger)
+    try:
+        yield copier.copy(value)
+    finally:
+        copier.close()
+        ledger.close()
+        assert ledger.live == ledger.resident == 0
+
+
+def test_direct_native_copy_preserves_exact_old_bytes_and_cross_root_aliases():
+    model = Limits(max_requests=3, max_tools=4, max_repairs=1,
+                   max_total_tokens=1000, max_output_tokens=100, run_seconds=300)
+    hidden = {'value': [True, 1, (1,), [1]]}
+    meta = SimpleResultMetaData(['visible'])
+    keys = object.__getattribute__(meta, '_keys')
+    row = RowMapping(meta, None, {'visible': 0, 'hidden': 1}, ('ok', hidden, hidden))
+    source = (model, model.__dict__, row, keys, hidden)
+    before = runtime._cold_graph_bytes(source)
+    with native_copy(source) as copied:
+        assert runtime._cold_graph_bytes(copied) == before
+        assert type(copied[0]) is Limits and copied[0].__dict__ is copied[1]
+        assert copied[1] is not model.__dict__
+        rowkeys, data, _ = runtime._cold_graph_row_storage(copied[2])
+        assert rowkeys is copied[3] and data[1] is data[2] is copied[4]
+        assert copied[4] is not hidden
+        hidden['value'].append('changed')
+        model.max_requests = 99
+        assert runtime._cold_graph_bytes(copied) == before
+
+
+@pytest.mark.parametrize('bad', ['cycle', 'nan', 'unknown'])
+def test_direct_native_copy_rejects_without_retry_or_live_tickets(bad):
+    value = []
+    if bad == 'cycle':
+        value.append(value)
+    elif bad == 'nan':
+        value = float('nan')
+    else:
+        value = object()
+    with pytest.raises(DomainError), native_copy(value):
+        pass
+
+
+def test_real_approval_producer_rebinds_model_and_raw_but_default_stays_original(sql_facts):
+    f = sql_facts
+    roles = dict.fromkeys(('source', 'generate', 'platform', 'trial', 'per_use'))
+    with f.store.tx() as c, pb._source_reads(f.store, c):
+        with runtime._cold_graph_read(f.worker, c, {'isolated': True}, roles, 'pre') as graph:
+            # Exercise the real original SQL producer and the real CTR method;
+            # do not run _prepare/commit, Worker or any model transport.
+            trial = object.__new__(runtime._ColdTrialGraph)
+            trial.worker, trial.c, trial.guard = f.worker, c, graph
+            approval = gate._approved(f.store, c, f.user, f.contract, f.binding.approval_key)
+            cohort = []
+            assert trial._produced(cohort, gate.Approval, approval) is approval
+            owner = owned._NativeModels(graph, BOUNDS, LIMITS)
+            trial._owned_models = owner
+            try:
+                owned_cohort = []
+                copied = trial._produced(owned_cohort, gate.Approval, approval)
+                kind, actual, raw = owned_cohort[0]
+                assert kind is gate.Approval and actual is copied and copied is not approval
+                assert gate.Approval.model_dump(copied) == gate.Approval.model_dump(approval)
+                gate._trial_typed_values(owned_cohort)
+                old = approval.approved_at
+                approval.approved_at = old - 1
+                assert copied.approved_at == old
+                gate._trial_typed_values(owned_cohort)
+                fresh_cohort = []
+                newer = trial._produced(fresh_cohort, gate.Approval, approval)
+                assert newer.approved_at == old - 1 and copied.approved_at == old
+                assert newer is not copied and owner.version == 2
+                approval.approved_at = old
+            finally:
+                owner.close()
+            assert not owner.active and owner.ledger.live == owner.ledger.resident == 0
+
+
+@pytest.mark.parametrize('fault', ['capacity', 'partial_constructor', 'write'])
+def test_native_issued_failure_closes_no_fallback(sql_facts, monkeypatch, fault):
+    f = sql_facts
+    roles = dict.fromkeys(('source', 'generate', 'platform', 'trial', 'per_use'))
+    owner = None
+    with pytest.raises((DomainError, MemoryError)), f.store.tx() as c, pb._source_reads(f.store, c):
+        with runtime._cold_graph_read(f.worker, c, {'isolated': True}, roles, 'pre') as graph:
+            owner = owned._NativeModels(graph, BOUNDS, LIMITS)
+            approval = gate._approved(f.store, c, f.user, f.contract, f.binding.approval_key)
+            raw = gate.Approval.model_dump(approval)
+            owner.produced(gate.Approval, approval, raw)
+            if fault == 'capacity':
+                owner.ledger.limits = LIMITS._replace(work=owner.ledger.work + 1)
+            elif fault == 'partial_constructor':
+                def fail(self, ledger):
+                    ledger.reserve(units=10)
+                    raise MemoryError('partial native constructor')
+                monkeypatch.setattr(owned._NativeCopy, '__init__', fail)
+            else:
+                from sqlalchemy import update
+
+                from sim2act.db import runs
+                c.execute(update(runs).where(runs.c.id == f.gen_id).values(error={'native': True}))
+            owner.produced(gate.Approval, approval, raw)
+    assert owner is not None and not owner.active
+    assert owner.ledger.live == owner.ledger.resident == 0
+
+
+def test_native_serializer_change_closes_before_owned_model_can_escape(sql_facts, monkeypatch):
+    f = sql_facts
+    roles = dict.fromkeys(('source', 'generate', 'platform', 'trial', 'per_use'))
+    owner = None
+    calls = []
+    with pytest.raises(DomainError, match='native_fixed_serializers'), \
+            f.store.tx() as c, pb._source_reads(f.store, c):
+        with runtime._cold_graph_read(f.worker, c, {'isolated': True}, roles, 'pre') as graph:
+            owner = owned._NativeModels(graph, BOUNDS, LIMITS)
+            approval = gate._approved(f.store, c, f.user, f.contract, f.binding.approval_key)
+            raw = gate.Approval.model_dump(approval)
+            owner.produced(gate.Approval, approval, raw)
+            def unknown(self, **kwargs):
+                calls.append(self)
+                return raw
+            monkeypatch.setattr(gate.Approval, 'model_dump', unknown)
+            owner.produced(gate.Approval, approval, raw)
+    assert not calls and not owner.active and owner.ledger.live == 0
+
+
+def test_native_quote_cannot_keep_a_mutable_external_attribute():
+    from sqlalchemy.sql.elements import quoted_name
+
+    value = quoted_name('column', None)
+    value.quote = []
+    with pytest.raises(DomainError, match='native_quote_layout'), native_copy(value):
+        pass
+
+
+def test_real_accounted_batch_keeps_aliases_and_original_pure_archive_consumer(sql_facts):
+    from accounted_sqlite_fixture import segment
+    from test_cold_accounted_sqlite import resolve
+
+    from sim2act import pa_trial_dispatch as dispatch
+
+    f = sql_facts
+    with f.store.tx() as c, segment(f, c) as s:
+        # The actual SQL-backed producers ran once in segment. Only their
+        # content is copied; dynamic readers/authority/SQL gates stay original.
+        result = resolve(s)
+        original = (s.state, s.source, s.generated, s.stage, f.extraction)
+        with native_copy(original) as copied:
+            state, source, generated, stage, extraction = copied
+            dispatch._archive_chain_from_facts(f.binding, state, result, source)
+            assert source[0] is stage[0] and generated is stage[6]
+            assert type(state) is type(s.state) and state is not s.state
+            assert source[2][0][0] is next(slot for slot in state.slots
+                if slot.identity.attempt_id == source[2][0][0].identity.attempt_id)
+            # Original raw protocol bytes, including all nested row storage.
+            assert runtime._cold_graph_bytes((source[0], generated[0])) == \
+                runtime._cold_graph_bytes((s.source[0], s.generated[0]))
+            assert type(extraction) is type(f.extraction)
+
+
+def test_real_base_source_and_context_adopt_one_pair_without_second_source_copy(sql_facts):
+    from accounted_sqlite_fixture import seed_cold
+    from test_cold_accounted_native import native_segment
+    from test_cold_base_cohort import trial
+
+    from sim2act import production_trial_policy as policy
+
+    f = sql_facts
+    seed_cold(f)
+    with f.store.tx() as c, native_segment(f, c) as s:
+        t = trial(s)
+        t._owned_models = owner = owned._NativeModels(s.graph, BOUNDS, LIMITS)
+        t.current_boundary = 'commit:first'
+        # Synthetic producer result interface only, not provider attestation.
+        source = policy.SourceVerificationResult(
+            requirements_fingerprint='a' * 64, account_id='isolated-account',
+            quota_subject='isolated-subject', provider='synthetic', model='synthetic',
+            endpoint='https://synthetic.invalid', evidence_fingerprint='b' * 64,
+            decision='UNKNOWN', legal_free_entitlement=None, enforced_non_chargeable=None,
+            revoked=None, observed_at=1, expires_at=2)
+        try:
+            cohort = []
+            copied = t._produced(cohort, policy.SourceVerificationResult, source)
+            assert t._source_value(copied) is copied is t.live_source
+            assert t.source_record is cohort[0][2] and owner.version == 1
+            check = policy.RunCheck(requirements_fingerprint='a' * 64,
+                approval_fingerprint='b' * 64, stage='cold', run_id=f.cold_job['id'],
+                runtime_id=f.contract.runtime_id, version=1, fence=1,
+                worker_id=f.worker.id, checked_at=1, deadline=2)
+            t._context('commit:first', check)
+            assert owner.version == 2 and t.context is not check
+            assert t.context_record is s.graph.inputs['commit:first:context']
+            t._base()
+        finally:
+            owner.close()
+        assert not owner.active and owner.ledger.live == 0
+
+
+@pytest.mark.parametrize('entry', ['issued_pair', 'original_producer'])
+def test_native_full_entry_exception_releases_owner(sql_facts, entry):
+    f = sql_facts
+    roles = dict.fromkeys(('source', 'generate', 'platform', 'trial', 'per_use'))
+    owner = None
+    with pytest.raises(DomainError), f.store.tx() as c, pb._source_reads(f.store, c):
+        with runtime._cold_graph_read(f.worker, c, {'isolated': True}, roles, 'pre') as graph:
+            t = object.__new__(runtime._ColdTrialGraph)
+            t.worker, t.c, t.guard = f.worker, c, graph
+            t._owned_models = owner = owned._NativeModels(graph, BOUNDS, LIMITS)
+            value = gate._approved(f.store, c, f.user, f.contract, f.binding.approval_key)
+            models = []
+            copied = t._produced(models, gate.Approval, value)
+            if entry == 'issued_pair':
+                models[0][2]['approved_at'] -= 1
+                owner.issued_pair(gate.Approval, copied)
+            else:
+                t._produced(models, gate.Approval, object())
+    assert not owner.active and not graph.active
+    assert owner.ledger.live == owner.ledger.resident == 0

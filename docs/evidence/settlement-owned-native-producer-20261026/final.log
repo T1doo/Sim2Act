@@ -1,0 +1,59 @@
+.......................F...............................                  [100%]
+=================================== FAILURES ===================================
+_ test_real_base_source_and_context_adopt_one_pair_without_second_source_copy __
+
+sql_facts = namespace(store=<sim2act.db.Store object at 0x7fa58981aea0>, settings=Settings(database_url='sqlite:////tmp/pytest-of-...key='offline-cold-phase', consent='BIND_ONLY_THIS_ACCEPTED_STAGE_RUN_APP_RELEASE_AND_COMPLETE_GOAL_TO_ORIGINAL_TRIAL'))
+
+    def test_real_base_source_and_context_adopt_one_pair_without_second_source_copy(sql_facts):
+        from accounted_sqlite_fixture import seed_cold
+        from test_cold_accounted_native import native_segment
+        from test_cold_base_cohort import trial
+    
+        from sim2act import production_trial_policy as policy
+    
+        f = sql_facts
+        seed_cold(f)
+        with f.store.tx() as c, native_segment(f, c) as s:
+            t = trial(s)
+            t._owned_models = owner = owned._NativeModels(s.graph, BOUNDS, LIMITS)
+            t.current_boundary = 'isolated-source'
+            # Synthetic producer result interface only, not provider attestation.
+            source = policy.SourceVerificationResult(
+                requirements_fingerprint='a' * 64, account_id='isolated-account',
+                quota_subject='isolated-subject', provider='synthetic', model='synthetic',
+                endpoint='https://synthetic.invalid', evidence_fingerprint='b' * 64,
+                decision='UNKNOWN', legal_free_entitlement=None, enforced_non_chargeable=None,
+                revoked=None, observed_at=1, expires_at=2)
+            try:
+                cohort = []
+                copied = t._produced(cohort, policy.SourceVerificationResult, source)
+>               assert t._source_value(copied) is copied is t.live_source
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cold_settlement_owned.py:445: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/natural_spec_runtime.py:2764: in _source_value
+    self.guard.add(key, raw)
+src/sim2act/natural_spec_runtime.py:1909: in add
+    self._accounted_frontier.added(name, run_facts=_run_facts)
+src/sim2act/_cold_accounted_native.py:384: in added
+    gate.require(name in self.mode._native.future_roots and name not in self.projected,
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+ok = False, message = 'Unexpected native continuation root'
+
+    def require(ok, message="Exact natural trial changed"):
+        if not ok:
+>           raise DomainError("VERSION_CONFLICT", message)
+E           sim2act.errors.DomainError: Unexpected native continuation root
+
+src/sim2act/natural_live_admission.py:47: DomainError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cold_settlement_owned.py::test_real_base_source_and_context_adopt_one_pair_without_second_source_copy
+1 failed, 54 passed, 1 warning in 60.40s (0:01:00)

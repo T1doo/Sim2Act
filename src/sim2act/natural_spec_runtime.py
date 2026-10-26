@@ -2476,7 +2476,7 @@ class _ColdTrialGraph:
     context_record_key: Any
     admission: Any
 
-    def __init__(self, worker, c, guard, *, completed=None, audit_seed=None, _accounted_prewrite=None, _accounted_candidate=None):
+    def __init__(self, worker, c, guard, *, completed=None, audit_seed=None, _accounted_prewrite=None, _accounted_candidate=None, _owned_models=None):
         try:
             require(type(guard) is _ColdGraphRead)
             _ColdGraphRead.check(guard, worker.store, c)
@@ -2491,6 +2491,13 @@ class _ColdTrialGraph:
             self.worker, self.c, self.guard = (worker, c, guard)
             self.accounted_prewrite = _accounted_prewrite
             self.accounted_candidate = _accounted_candidate
+            self._owned_models = _owned_models
+            if _owned_models is not None:
+                from ._cold_settlement_owned import _NativeModels
+                require(type(_owned_models) is _NativeModels and _owned_models.graph is guard
+                    and guard.store.test_only and guard.store.sqlite,
+                    'Owned model handoff is explicit isolated SQLite only')
+                _owned_models.current()
             if _accounted_candidate is not None:
                 from ._cold_accounted_native import _NativeCandidate
                 require(type(_accounted_candidate) is _NativeCandidate
@@ -2525,6 +2532,8 @@ class _ColdTrialGraph:
     def _base(self):
         try:
             require(type(self.guard) is _ColdGraphRead)
+            if getattr(self, '_owned_models', None) is not None:
+                self._owned_models.current()
             if (getattr(self, 'accounted_prewrite', None) is None
                     or not _base_segments.eligible(self)):
                 _ColdGraphRead.check(self.guard, self.worker.store, self.c)
@@ -2566,6 +2575,9 @@ class _ColdTrialGraph:
             # No model/raw/result escapes this invocation before this full pin.
             _ColdGraphRead.check(self.guard, self.worker.store, self.c)
         except BaseException:
+            owner = getattr(self, '_owned_models', None)
+            if owner is not None:
+                owner.close()
             if type(self.guard) is _ColdGraphRead:
                 _ColdGraphRead.invalidate(self.guard)
             self.phase = 'INVALID'
@@ -2713,20 +2725,66 @@ class _ColdTrialGraph:
             gate._trial_typed_hold(models, policy.RunCheck, self.context, self.context_record)
         return models
 
+    def _produced(self, models, expected, value):
+        from . import natural_live_admission as gate
+        owner = getattr(self, '_owned_models', None)
+        try:
+            if owner is not None:
+                owner.current()
+            raw = gate._graph_trial_produced(self.guard, self.worker.store, self.c,
+                                             models, expected, value)
+            if owner is None:
+                return value
+            copied, saved = owner.produced(expected, value, raw)
+            # Rewire both sides of the same cohort, never just its saved raw.
+            for index, (kind, actual, previous) in enumerate(models):
+                if kind is expected and actual is value and previous is raw:
+                    models[index] = (expected, copied, saved)
+                    return copied
+            require(False, 'Original produced pair missing from cohort')
+        except BaseException:
+            if owner is not None:
+                owner.close()
+                self.guard.invalidate()
+            raise
+
     def _source_value(self, value):
-        from . import production_trial_policy as policy
-        require(type(value) is policy.SourceVerificationResult)
-        raw = policy.SourceVerificationResult.model_dump(value)
-        self._base()
-        key = self.current_boundary + ':source-observation'
-        self.guard.add(key, raw)
-        self.live_source, self.source_record, self.source_record_key = (value, raw, key)
-        self._base()
+        try:
+            from . import production_trial_policy as policy
+            require(type(value) is policy.SourceVerificationResult)
+            if getattr(self, '_owned_models', None) is not None:
+                self._owned_models.current()
+            raw = policy.SourceVerificationResult.model_dump(value)
+            self._base()
+            if getattr(self, '_owned_models', None) is not None:
+                pair = self._owned_models.issued_pair(policy.SourceVerificationResult, value)
+                value, raw = (pair if pair is not None else
+                    self._owned_models.produced(policy.SourceVerificationResult, value, raw))
+            key = self.current_boundary + ':source-observation'
+            self.guard.add(key, raw)
+            self.live_source, self.source_record, self.source_record_key = (value, raw, key)
+            self._base()
+            return value
+        except BaseException:
+            owner = getattr(self, '_owned_models', None)
+            if owner is not None:
+                owner.close()
+                self.guard.invalidate()
+            raise
 
     def _dump(self, model):
-        value = model.model_dump()
-        self._base()
-        return value
+        try:
+            if getattr(self, '_owned_models', None) is not None:
+                self._owned_models.current()
+            value = model.model_dump()
+            self._base()
+            return value
+        except BaseException:
+            owner = getattr(self, '_owned_models', None)
+            if owner is not None:
+                owner.close()
+                self.guard.invalidate()
+            raise
 
     def _read_fields(self, facts):
         value = facts.fields()
@@ -2827,12 +2885,12 @@ class _ColdTrialGraph:
         pin = gate._trial_typed_guard(self._base, _models)
         self.phase = 'BUILDING'
         original, expected = self._requirements_value(user, contract, key, pin)
-        gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, gate.PBTrialContract, original)
-        gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, policy.evidence.EvidenceRequirements, expected)
+        original = self._produced(_models, gate.PBTrialContract, original)
+        expected = self._produced(_models, policy.evidence.EvidenceRequirements, expected)
         pin()
         self.original, self.expected = (original, expected)
         inner = gate._approved(store, c, user, contract, key, _guard=pin)
-        gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, gate.Approval, inner)
+        inner = self._produced(_models, gate.Approval, inner)
         pin()
         eid = gate.entity(contract, _guard=pin)
         pin()
@@ -2840,7 +2898,7 @@ class _ColdTrialGraph:
         pin()
         require(phase_keys <= {'source', 'cold'})
         accepted = gate._saved(c, user, eid, gate.PHASE, 'cold', gate.StageApproveInput, _guard=pin)
-        gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, gate.StageApproveInput, accepted)
+        accepted = self._produced(_models, gate.StageApproveInput, accepted)
         pin()
         require(accepted.approval_key == key)
         g.add('cold-trial:admission-prefix', dict(original=self._dump(original), expected=self._dump(expected), approval=self._dump(inner), phase=self._dump(accepted)))
@@ -2879,7 +2937,7 @@ class _ColdTrialGraph:
         pin()
         require(all((m['account_id'] == b.account_id for m in markers)))
         entitlement = dispatch._journal_source(store, c, b, _guard=pin)
-        gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, policy.SourceVerificationResult, entitlement)
+        entitlement = self._produced(_models, policy.SourceVerificationResult, entitlement)
         pin()
         g.add('cold-trial:pb-before-journal', dict(generation_id=gen_id, markers=tuple((dict(m) for m in markers)), source=self._dump(entitlement)))
         self.journal = dispatch._graph_journal_state(g, store, c, b)
@@ -2942,10 +3000,20 @@ class _ColdTrialGraph:
         self.check()
 
     def _context(self, key, value):
-        fields = self._dump(value)
-        self.guard.add(key + ':context', fields)
-        self.context, self.context_record = (value, fields)
-        self.context_record_key = key + ':context'
+        try:
+            fields = self._dump(value)
+            if getattr(self, '_owned_models', None) is not None:
+                from .production_trial_policy import RunCheck
+                value, fields = self._owned_models.produced(RunCheck, value, fields)
+            self.guard.add(key + ':context', fields)
+            self.context, self.context_record = (value, fields)
+            self.context_record_key = key + ':context'
+        except BaseException:
+            owner = getattr(self, '_owned_models', None)
+            if owner is not None:
+                owner.close()
+                self.guard.invalidate()
+            raise
 
     def _recheck(self, job):
         """Fresh fixed scalar/authority continuation; no semantic-node replay."""
@@ -2961,11 +3029,11 @@ class _ColdTrialGraph:
         _models: list[tuple[type, object, dict]] = []
         pin = gate._trial_typed_guard(self.check, _models)
         original, expected = self._requirements_value(user, b.contract, b.approval_key, pin)
-        gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, gate.PBTrialContract, original)
-        gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, policy.evidence.EvidenceRequirements, expected)
+        original = self._produced(_models, gate.PBTrialContract, original)
+        expected = self._produced(_models, policy.evidence.EvidenceRequirements, expected)
         pin()
         approval = gate._approved(store, c, user, b.contract, b.approval_key, _guard=pin)
-        gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, gate.Approval, approval)
+        approval = self._produced(_models, gate.Approval, approval)
         pin()
         eid = gate.entity(b.contract, _guard=pin)
         pin()
@@ -2973,18 +3041,18 @@ class _ColdTrialGraph:
         pin()
         require(phase_keys <= {'source', 'cold'})
         accepted = gate._saved(c, user, eid, gate.PHASE, 'cold', gate.StageApproveInput, _guard=pin)
-        gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, gate.StageApproveInput, accepted)
+        accepted = self._produced(_models, gate.StageApproveInput, accepted)
         pin()
         require(accepted.approval_key == b.approval_key and accepted.authority.run_id == job['id'] and (accepted.authority.stage == 'cold') and (self._dump(accepted.authority) == self.cold_authority) and (self._fingerprint(self.cold_authority) == accepted.expected_authority_fingerprint))
         pin()
         source_phase = gate._saved(c, user, eid, gate.PHASE, 'source', gate.StageApproveInput, _guard=pin)
-        gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, gate.StageApproveInput, source_phase)
+        source_phase = self._produced(_models, gate.StageApproveInput, source_phase)
         pin()
         require(source_phase.approval_key == b.approval_key and self._dump(source_phase.authority) == self.source_authority and (self._fingerprint(self.source_authority) == source_phase.expected_authority_fingerprint))
         pin()
         source = dispatch._journal_source(store, c, b, _guard=pin)
-        gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, policy.SourceVerificationResult, source)
-        self._source_value(source)
+        source = self._produced(_models, policy.SourceVerificationResult, source)
+        source = self._source_value(source)
         pin()
         for authority in sorted(self.authorities):
             store.authorize(c, *authority)
@@ -3010,10 +3078,10 @@ class _ColdTrialGraph:
             if limits is not None:
                 deadlines.append(actual['created_at'] + limits.run_seconds)
         frozen = store._frozen_contract_after_scope(c, actual)
-        gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, FrozenRunContract, frozen)
+        frozen = self._produced(_models, FrozenRunContract, frozen)
         pin()
         declared = Limits(**self.trial.binding['draft']['candidate']['manifest']['runtime_limits'])
-        gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, Limits, declared)
+        declared = self._produced(_models, Limits, declared)
         pin()
         deadlines.extend((actual['created_at'] + frozen.limits.run_seconds, actual['created_at'] + declared.run_seconds))
         end = time.time()
@@ -3067,8 +3135,8 @@ class _ColdTrialGraph:
                     self.phase = 'BUSY'
                     with diagnostic.stage('_graph_run_context'):
                         approval, phase, actual, at = gate._graph_run_context(g, store, c, user, b.contract, b.approval_key, 'cold', job['id'], job['version'], job['fence'], self.cold_stage_facts, **{'_owned': self.accounted_prewrite} if self.accounted_prewrite is not None else {})
-                    gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, gate.Approval, approval)
-                    gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, gate.StageAuthority, phase)
+                    approval = self._produced(_models, gate.Approval, approval)
+                    phase = self._produced(_models, gate.StageAuthority, phase)
                     pin()
                     require(actual['worker_id'] == self.worker.id)
                     context = self._run_check_value(self.original, self.expected, approval, phase, actual, at, 'cold', actual['id'], actual['version'], actual['fence'], self.worker.id, pin=pin)
@@ -3081,7 +3149,7 @@ class _ColdTrialGraph:
                     require(source_id == (self.source_accounted.run.id if self.accounted_prewrite is not None else self.source_accounted[0]['id']))
                     source_bound = self.trial.source_binding
                     manifest, _, _ = codec.compile_candidate(source_bound['draft']['candidate'], g.role_limits['trial'])
-                    gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, AppManifest, manifest)
+                    manifest = self._produced(_models, AppManifest, manifest)
                     pin()
                     validate_value(manifest.input_schema, source_bound['snapshot']['input'])
                     pin()
@@ -3094,7 +3162,7 @@ class _ColdTrialGraph:
                     source_entity = gate.entity(b.contract, _guard=pin)
                     pin()
                     source_phase = gate._saved(c, user, source_entity, gate.PHASE, 'source', gate.StageApproveInput, _guard=pin)
-                    gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, gate.StageApproveInput, source_phase)
+                    source_phase = self._produced(_models, gate.StageApproveInput, source_phase)
                     pin()
                     raw_authorities = dict(cold=self._dump(phase), source=self._dump(source_phase.authority))
                     g.add('cold-trial:semantic-authorities', raw_authorities)
@@ -3102,7 +3170,7 @@ class _ColdTrialGraph:
                     self.cold_authority, self.source_authority = (raw_authorities['cold'], raw_authorities['source'])
                     self.sealed_fields = self.accounted_prewrite.complete if self.accounted_prewrite is not None else g.inputs['cold-trial:complete']
                     source = dispatch._journal_source(store, c, b, _guard=pin)
-                    self._source_value(source)
+                    source = self._source_value(source)
                     pin()
                 else:
                     self.phase = 'BUSY'
@@ -3117,7 +3185,7 @@ class _ColdTrialGraph:
                         finite.append(job['created_at'] + role_limits.run_seconds)
                         finite_names.append('role.' + role + '.run_seconds')
                 final_frozen = store._frozen_contract_after_scope(c, job)
-                gate._graph_trial_produced(self.guard, self.worker.store, self.c, _models, FrozenRunContract, final_frozen)
+                final_frozen = self._produced(_models, FrozenRunContract, final_frozen)
                 pin()
                 finite.append(job['created_at'] + final_frozen.limits.run_seconds)
                 finite.append(job['created_at'] + self.trial.binding['draft']['candidate']['manifest']['runtime_limits']['run_seconds'])

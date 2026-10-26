@@ -2,7 +2,7 @@
 
 One complete capture preserves model storage / raw-dict / hidden-row aliases.
 It intentionally does NOT claim producer timing, all-consumer migration or a
-production capacity proof. No runtime imports this module. Dynamic SQL and
+production capacity proof. Runtime imports are explicit isolated opt-in only. Dynamic SQL and
 business authority remain the original caller's job; no PASS is cached here.
 """
 
@@ -376,3 +376,239 @@ def _select_complete(graph, families, models, bounds, limits):
         if type(graph) is runtime._ColdGraphRead:
             graph.invalidate()
         raise
+
+
+class _NativeCopy:
+    """Direct unique native graph, not _Image thaw; one handoff-version memo.
+
+    No dynamic reader/connection is copied. Exact model/native types let fixed
+    existing pure consumers use the transferred values. Read-only/no-escape
+    qualification of the entire consumer closure is STILL required before any
+    content guard exemption; this bridge itself exempts none.
+    """
+
+    def __init__(self, ledger):
+        self.b = ledger
+        self.ticket = ledger.reserve()
+        self.done, self.active = {}, set()
+        self.allowed = gate._trial_typed_nested_classes()
+        self.nodes = self.edges = self.leaf = 0
+        frame, level = sys._getframe(), 0
+        while frame is not None:
+            level += 1
+            frame = frame.f_back
+        self.depth = min(ledger.bounds.depth, max(0, (sys.getrecursionlimit() - level - 100) // 6))
+
+    def allocate(self, units):
+        self.b.spend(units)
+        self.ticket.grow(units)
+
+    def copy(self, value, depth=0):
+        self.b.spend()
+        kind, ident = type(value), id(value)
+        if depth > self.depth:
+            raise _Capacity('native_depth')
+        if ident in self.active:
+            raise _Rejected('cycle in native handoff')
+        if ident in self.done:
+            old, result, height = self.done[ident]
+            assert old is value
+            if depth + height > self.depth:
+                raise _Capacity('native_depth')
+            return result
+        if self.nodes >= self.b.bounds.nodes:
+            raise _Capacity('native_nodes')
+        model = any(kind is t for t in self.allowed)
+        if not (model or _is(kind, (dict, list, tuple, bytes, str, int, float, bool,
+                                    type(None), RowMapping, quoted_name))):
+            raise _Unsupported('native_type')
+        self.nodes += 1
+        self.allocate(512)
+        self.active.add(ident)
+        height = 0
+
+        def child(item):
+            nonlocal height
+            if self.edges >= self.b.bounds.edges:
+                raise _Capacity('native_edges')
+            self.edges += 1
+            self.allocate(128)
+            result = self.copy(item, depth + 1)
+            height = max(height, self.done[id(item)][2] + 1)
+            return result
+
+        if model:
+            raw = object.__getattribute__(value, '__dict__')
+            fields = type.__getattribute__(kind, '__pydantic_fields__')
+            selected = object.__getattribute__(value, '__pydantic_fields_set__')
+            if (type(raw) is not dict or type(fields) is not dict or type(selected) is not set
+                    or not all(type(k) is str for k in raw)
+                    or not all(type(k) is str for k in fields)
+                    or not all(type(k) is str for k in selected)
+                    or raw.keys() != fields.keys() or not selected <= fields.keys()
+                    or object.__getattribute__(value, '__pydantic_extra__') is not None
+                    or object.__getattribute__(value, '__pydantic_private__') is not None):
+                raise _Rejected('exact native model storage required')
+            self.allocate(256 + 128 * len(selected))
+            result = object.__new__(kind)
+            object.__setattr__(result, '__dict__', child(raw))
+            object.__setattr__(result, '__pydantic_fields_set__', set(selected))
+            object.__setattr__(result, '__pydantic_extra__', None)
+            object.__setattr__(result, '__pydantic_private__', None)
+        elif kind is RowMapping:
+            parent = object.__getattribute__(value, '_parent')
+            data = object.__getattribute__(value, '_data')
+            index = object.__getattribute__(value, '_key_to_index')
+            if (not _is(type(parent), (runtime._ColdGraphCursorMeta, runtime._ColdGraphSimpleMeta))
+                    or type(data) is not tuple or type(index) is not dict):
+                raise _Rejected('exact native row storage required')
+            keys = object.__getattribute__(parent, '_keys')
+            if type(keys) is not list:
+                raise _Rejected('exact native row keys required')
+            self.allocate(512 * (len(index) + len(keys) + 1))
+            self.b.spend(8 * sum(len(k) for k in dict.keys(index)
+                                if _is(type(k), (str, quoted_name)))
+                         * (len(index) + len(keys) + 1))
+            lookup = {}
+            for key, position in dict.items(index):
+                if _is(type(key), (str, quoted_name)):
+                    if type(position) is not int or not 0 <= position < len(data):
+                        raise _Rejected('exact native row position required')
+                    lookup[str(key)] = position
+            if any(not _is(type(k), (str, quoted_name)) or str(k) not in lookup for k in keys):
+                raise _Rejected('complete native row keys required')
+            copied_keys, copied_data = child(keys), child(data)
+            from sqlalchemy.engine.result import SimpleResultMetaData
+            meta = SimpleResultMetaData(copied_keys)
+            # Keep the copied keys node itself, including an alias to another
+            # root; the constructor's separate list is not the owned node.
+            object.__setattr__(meta, '_keys', copied_keys)
+            result = RowMapping(meta, None, lookup, copied_data)
+        elif kind is dict:
+            if not all(_is(type(k), (str, quoted_name)) for k in dict.keys(value)):
+                raise _Unsupported('native_key')
+            self.allocate(128 * len(value))
+            result = {child(k): child(v) for k, v in dict.items(value)}
+        elif kind is list or kind is tuple:
+            self.allocate(128 * len(value))
+            items = [child(v) for v in value]
+            result = items if kind is list else tuple(items)
+        elif kind is quoted_name:
+            quote = object.__getattribute__(value, 'quote')
+            if type(quote) is not bool and quote is not None:
+                raise _Unsupported('native_quote_layout')
+            self.leaf += 4 * len(value)
+            self.allocate(128 + 32 * len(value))
+            result = quoted_name(str(value), quote)
+        elif kind is str or kind is bytes:
+            self.leaf += 4 * len(value) if kind is str else len(value)
+            result = value  # actually immutable native leaves may be shared
+        elif kind is float:
+            if not math.isfinite(value):
+                raise _Rejected('nonfinite native handoff')
+            self.leaf += 8
+            result = value
+        elif kind is int:
+            if value.bit_length() > self.b.limits.integer_bits:
+                raise _Capacity('native_integer_bits')
+            self.leaf += max(1, (value.bit_length() + 7) // 8)
+            result = value
+        else:
+            self.leaf += 1
+            result = value
+        if self.leaf > self.b.bounds.leaf_bytes:
+            raise _Capacity('native_leaf_bytes')
+        self.active.remove(ident)
+        self.done[ident] = value, result, height
+        return result
+
+    def close(self):
+        self.done.clear()
+        self.active.clear()
+        self.ticket.close()
+
+
+class _NativeModels:
+    """Explicit test-only paired handoff; NO guard or runtime eligibility waiver.
+
+    The private native copies are the only copies retained by this bridge.
+    Source inputs/memo are dropped per version. Old full typed and content guards
+    remain installed until all seven-family consumer closure is proved.
+    """
+
+    def __init__(self, graph, bounds, limits):
+        if (type(graph) is not runtime._ColdGraphRead or not graph.store.test_only
+                or not graph.store.sqlite):
+            raise _Rejected('isolated native model handoff only')
+        graph.check(graph.store, graph.connection)
+        self.graph, self.ledger = graph, _Ledger(bounds, limits)
+        self.active, self.version, self._owned = True, 0, []
+        self._frame = (graph.nonce, graph.epoch, graph.phase)
+
+    def current(self):
+        if not self.active:
+            raise _Rejected('closed native model handoff')
+        try:
+            runtime._ColdGraphRead._check_dynamic(self.graph, self.graph.store, self.graph.connection)
+            if (not segments.serializers_current()
+                    or not segments.fixed_serializers([
+                        (type(pair[0]), pair[0], pair[1]) for _, pair, _ in self._owned])):
+                raise _Unsupported('native_fixed_serializers')
+            if (self.graph.nonce is not self._frame[0] or self.graph.epoch != self._frame[1]
+                    or self.graph.phase != self._frame[2] or self.graph.worker.stop.is_set()):
+                raise _Rejected('native model handoff scope changed')
+        except BaseException:
+            self.close()
+            self.graph.invalidate()
+            raise
+
+    def issued_pair(self, expected, model):
+        """Only explicit transferred objects; never lookup an old source id/PASS."""
+        try:
+            self.current()
+            for _, pair, _ in self._owned:
+                if pair[0] is model:
+                    if type(model) is not expected:
+                        raise _Rejected('native issued model kind changed')
+                    gate._trial_typed_values([(expected, model, pair[1])])
+                    return pair
+            return None
+        except BaseException:
+            self.close()
+            self.graph.invalidate()
+            raise
+
+    def produced(self, expected, model, raw):
+        copy = None
+        try:
+            self.current()
+            if type(model) is not expected or type(raw) is not dict:
+                raise _Rejected('exact paired native producer required')
+            if not segments.fixed_serializers([(expected, model, raw)]):
+                raise _Unsupported('native_fixed_model_schema')
+            gate._trial_typed_values([(expected, model, raw)])
+            copy = _NativeCopy(self.ledger)
+            pair = copy.copy((model, raw))
+            # Retain private objects, including nodes with wide shared edges;
+            # pay before adding them to the long-lived owner registry.
+            lease = self.ledger.reserve('resident', copy.ticket.units + 8 * copy.leaf)
+            self.current()
+            if not segments.fixed_serializers([(expected, pair[0], pair[1])]):
+                raise _Unsupported('native_fixed_model_schema')
+            gate._trial_typed_values([(expected, pair[0], pair[1])])
+            self.graph.check(self.graph.store, self.graph.connection)
+            self.version += 1
+            self._owned.append((self.version, pair, lease))
+            return pair
+        except BaseException:
+            self.close()
+            self.graph.invalidate()
+            raise
+        finally:
+            if copy is not None:
+                copy.close()
+
+    def close(self):
+        self.active = False
+        self._owned.clear()
+        self.ledger.close()
