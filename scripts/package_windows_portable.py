@@ -7,6 +7,7 @@ never downloads, compiles, executes Windows code or loads private settings.
 import argparse
 import hashlib
 import json
+import re
 import zipfile
 from pathlib import Path, PurePosixPath
 
@@ -39,10 +40,62 @@ def merge_archive(files, data, prefix):
             files[target] = archive.read(member)
 
 
-def build(inputs, assets, app_wheel, output):
+def checked_app(app_wheel, specification, candidate_manifest=None):
+    """Bind a new application to its exact source candidate, never a relabel.
+
+    This is a local assembly integrity check, not software/production authority.
+    Keep the historical fixed-wheel route for the original frozen package.
+    """
+    if candidate_manifest is None:
+        data = app_wheel.read_bytes()
+        if (specification["product_commit"] != "7794748c78041682c82f0e7fda239d2601dc91b5"
+                or digest(data) != "29c344e4d5931a2b8c9a97fb1d1ae222356bbbd6a2b58a928f960fb443f0aad5"):
+            raise ValueError("Unreviewed app wheel; exact candidate manifest required")
+        return data, None
+    record_bytes = candidate_manifest.read_bytes()
+    candidate = json.loads(record_bytes)
+    commit = candidate.get("source_commit")
+    if (candidate.get("format") != "sim2act-local-candidate.v1"
+            or type(commit) is not str or re.fullmatch(r"[0-9a-f]{40}", commit) is None
+            or commit != specification["product_commit"]
+            or candidate.get("mode") != "SYNTHETIC_MOCK_DEMO"
+            or candidate.get("python") != "3.12"
+            or type(candidate.get("files")) is not dict):
+        raise ValueError("App candidate source binding mismatch")
+    records = candidate["files"]
+    wheel_record = records.get("wheels/" + app_wheel.name)
+    if type(wheel_record) is not dict:
+        raise ValueError("App candidate wheel record missing")
+    data = read_asset(app_wheel, wheel_record)
+    # These are the only source files intentionally omitted by the existing
+    # pyproject package-data contract. Neither native experiment is enabled.
+    omitted = {"src/sim2act/_cold_row_native_impl.c",
+               "src/sim2act/_cold_typed_native_impl.c"}
+    source = {name[4:]: record for name, record in records.items()
+              if name.startswith("src/sim2act/") and name not in omitted}
+    metadata = {"sim2act-0.1.0.dist-info/" + name for name in
+                ("METADATA", "RECORD", "WHEEL", "entry_points.txt", "top_level.txt")}
+    import io
+
+    with zipfile.ZipFile(io.BytesIO(data)) as wheel:
+        names = [item.filename for item in wheel.infolist() if not item.is_dir()]
+        if (not source or "sim2act/__init__.py" not in source
+                or len(names) != len(set(names)) or set(names) != set(source) | metadata):
+            raise ValueError("App wheel source inventory mismatch")
+        for name, record in source.items():
+            value = wheel.read(name)
+            if len(value) != record["bytes"] or digest(value) != record["sha256"]:
+                raise ValueError("App wheel source bytes mismatch: " + name)
+    return data, digest(record_bytes)
+
+
+def build(inputs, assets, app_wheel, output, *, candidate_manifest=None):
     if output.exists():
         raise ValueError("Output already exists; do not overwrite a candidate")
     specification = json.loads(inputs.read_text(encoding="utf-8"))
+    # Complete app/version qualification before reading or assembling runtime
+    # archives. A mismatch cannot produce a partially relabelled output.
+    app, candidate_digest = checked_app(app_wheel, specification, candidate_manifest)
     files = {}
     runtime = specification["python"]
     merge_archive(files, read_asset(assets / runtime["filename"], runtime), "runtime/")
@@ -57,9 +110,6 @@ def build(inputs, assets, app_wheel, output):
                       "runtime/Lib/site-packages/")
         selected.append({key: wheel[key] for key in ("name", "version", "url", "sha256",
                                                     "license", "license_expression", "source_distribution_urls")})
-    app = app_wheel.read_bytes()
-    if digest(app) != "29c344e4d5931a2b8c9a97fb1d1ae222356bbbd6a2b58a928f960fb443f0aad5":
-        raise ValueError("Unreviewed app wheel")
     merge_archive(files, app, "runtime/Lib/site-packages/")
     files["runtime/python312._pth"] = b"python312.zip\n.\nLib\\site-packages\nimport site\n"
     files["runtime/LOCAL-CHANGES.txt"] = (
@@ -102,6 +152,8 @@ def build(inputs, assets, app_wheel, output):
                     omitted=["psycopg", "psycopg-binary"],
                     app_wheel_sha256=digest(app),
                     files={name: dict(bytes=len(data), sha256=digest(data)) for name, data in sorted(files.items())})
+    if candidate_digest is not None:
+        manifest["app_candidate_manifest_sha256"] = candidate_digest
     manifest_bytes = (json.dumps(manifest, indent=2) + "\n").encode()
     files["portable-manifest.json"] = manifest_bytes
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -122,6 +174,9 @@ if __name__ == "__main__":
     parser.add_argument("--inputs", type=Path, required=True)
     parser.add_argument("--assets", type=Path, required=True)
     parser.add_argument("--app-wheel", type=Path, required=True)
+    parser.add_argument("--candidate-manifest", type=Path,
+                        help="Exact package_local_candidate manifest for a new app revision")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    print(json.dumps(build(args.inputs, args.assets, args.app_wheel, args.output), indent=2))
+    print(json.dumps(build(args.inputs, args.assets, args.app_wheel, args.output,
+                           candidate_manifest=args.candidate_manifest), indent=2))

@@ -47,3 +47,19 @@ Windows 将 Python 路径改为 `.venv\Scripts\python.exe`，依赖文件用 `re
 此前 `986799d` 的锁验证保持原分期：安全批次 45 PASS / 1 FAIL，随后定向 2 PASS（含重叠）及独立新增模块 9 PASS；不能称一次整批全绿。自然双 Run 成功但没有触发新恢复分支，旧 F9 具体失败时序没有复现。本候选不重跑或扩展该故障矩阵，也不补称旧满盘环境未落盘的独审报告。
 
 维护者可在干净固定提交上用现有 setuptools wheel 构建流程制作同类包：`python scripts/package_local_candidate.py --output ./dist/candidate-new`。该命令只读取 Git 明确白名单，不收集本机配置/数据；只构建，不安装、启动或部署。
+
+### 新开发版本的 Windows 预览装配
+
+现有 `package_windows_portable.py` 可将上述精确候选装入此前已下载、已锁定的 Windows 运行库。新版本必须显式提供同一次构建的 `--candidate-manifest`，并在本次独立 inputs 文件中将 `product_commit` 设为该清单的完整 `source_commit`；保留原 Python、依赖及其摘要，不修改旧输入或旧成品。示例：
+
+```sh
+python scripts/package_windows_portable.py \
+  --inputs ./current-portable-inputs.json --assets /path/to/existing-frozen-assets \
+  --app-wheel ./dist/candidate-new/sim2act-0.1.0-py3-none-any.whl \
+  --candidate-manifest ./dist/candidate-new/candidate-manifest.json \
+  --output ./dist/new-preview.zip
+```
+
+装配前核对完整提交、wheel 摘要、全部已打包 Python/网页/数据文件字节及文件集合，拒绝混入、遗漏和重复项；两份原本不随 wheel 分发的实验 C 源码仍不分发。新版清单摘要写入包内 manifest。候选清单须来自已核实的精确 Git 构建：这些校验只证明包与清单一致，不会把任意手写清单认证成可信源码。未传清单只允许原固定旧提交及旧 wheel，不能借旧 wheel 改标新版本。
+
+这一步只装配、不下载、不安装、不执行 Windows，也不授予正式软件、账户或模型资格。现有运行库仍是已标记 superseded 的 Python 3.12.10；只能保留其原隔离合成预览边界，不能据此称长期正式交付。实际 Windows 启动/退出、像素、真实账户、G0及人工语义仍须各自有效证据，装配状态始终为 `BUILT_NOT_WINDOWS_EXECUTED`。
