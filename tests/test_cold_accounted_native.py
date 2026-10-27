@@ -34,12 +34,12 @@ NATIVE_LIMITS = LIMITS._replace(resident=10**30, peak=10**32, work=10**40)
 
 
 @contextmanager
-def native_segment(f, c, *, limits=NATIVE_LIMITS, middle=None, before_choose=None, receipt_setup=None):
+def native_segment(f, c, *, limits=NATIVE_LIMITS, middle=None, before_choose=None, receipt_setup=None, joint=False):
     inputs = {'synthetic-native-candidate': True}
     roles = dict.fromkeys(('source', 'generate', 'platform', 'trial', 'per_use'))
     with pb._source_reads(f.store, c), runtime._cold_graph_read(
         f.worker, c, inputs, roles, 'pre'
-    ) as graph, native._native_candidate(graph, native._NativeConfig(BOUNDS, limits)) as candidate:
+    ) as graph, native._native_candidate(graph, native._NativeConfig(BOUNDS, limits, joint_handoff=joint)) as candidate:
         state, cursor, revision = dispatch._graph_journal_state(graph, f.store, c, f.binding)
         graph.add('trial-generated-model-facet', dict(frozen=f.frozen.model_dump()))
         graph.add('cold-trial:bound', dict(binding=getattr(f, 'cold_bound', f.bound), source_binding=f.bound))

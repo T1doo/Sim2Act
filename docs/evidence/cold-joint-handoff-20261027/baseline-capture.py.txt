@@ -1,0 +1,37 @@
+def _capture_bounded(facts, role, context, ledger):
+    """Copy directly from raw storage; all new allocations have prior reservations."""
+    gate.require(type(facts) is tuple and len(facts) == 4)
+    run, actual, chains, reads = facts
+    count = 2 if role == 'source' else 3
+    gate.require(type(actual) is tuple and type(chains) is tuple and type(reads) is tuple
+                 and len(actual) == len(chains) == count
+                 and len(reads) == (2 if role == 'source' else 0))
+    with ledger.projection() as p:
+        # Fixed 3/2-chain envelope, labels, sidecar wrappers and list/tuple overlap.
+        # This reservation precedes even the small generated wrapper allocations.
+        p.alloc(65536)
+        copied_run = p.row(run, ('run',), _FIELDS['run'])
+        copied_actual = tuple(p.row(row, ('actual', i), _FIELDS['attempt'])
+                              for i, row in enumerate(actual))
+        copied_chains = []
+        for i, chain in enumerate(chains):
+            gate.require(type(chain) is tuple and len(chain) == 6)
+            slot, capture, parsed, checked, wire, body = chain
+            gate.require(type(slot) is policy.Slot and type(capture) is sender.Capture
+                         and type(wire) is bytes and type(body) is bytes)
+            copied_chains.append((p.copy(slot, typed=True), p.copy(capture, typed=True), p.copy(parsed),
+                                  p.row(checked, ('checked', i), _FIELDS['attempt']),
+                                  p.copy(wire), p.copy(body)))
+        copied_reads = []
+        for read in reads:
+            gate.require(type(read) is tuple and len(read) == 5)
+            aid, request, wire, response, body = read
+            gate.require(type(request) is archive.BodyArchive and type(response) is archive.BodyArchive
+                         and type(aid) is str and type(wire) is bytes and type(body) is bytes)
+            copied_reads.append(tuple(p.copy(v, typed=type(v) is archive.BodyArchive) for v in read))
+        prepared = dict(schema='accounted-family.pre.bounded.v2', role=role,
+                        phase='pre', mode=context.mode,
+                        value=dict(run=copied_run, actual=copied_actual,
+                                   chains=tuple(copied_chains), ns_reads=tuple(copied_reads)),
+                        row_storage=tuple(p.sidecars))
+        return ledger.encode(prepared, p, resident=True)

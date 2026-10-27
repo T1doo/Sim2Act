@@ -86,7 +86,7 @@ class _Arena:
     Node/children/value/record views are built eagerly, not by first-use growth.
     """
 
-    def __init__(self, ledger, packets):
+    def __init__(self, ledger, packets, *, joint=False):
         n = sum(len(p.nodes) for p in packets.values())
         e = sum(p.edges for p in packets.values())
         # Node and native scalar, two child tables, all fixed-schema Records,
@@ -95,13 +95,39 @@ class _Arena:
         self.nodes, self.items, self.sequences, self.scalars = {}, {}, {}, {}
         self.values, self.records, self.families, self.canonicals = {}, {}, {}, {}
         self.classes = {}
+        self.reachable = {}
+        if joint:
+            ledger.reserve('resident', 512 * n)
+            ledger.spend(8 * (n + e + 1))
         self.usage: Any = set()
         self.ledger = ledger
         for packet in packets.values():
             ident = id(packet)
-            nodes = tuple(_Node(packet, ref, ledger) for ref in range(len(packet.nodes)))
+            if joint:
+                reached, pending = set(), [packet.root]
+                while pending:
+                    ref = pending.pop()
+                    gate.require(type(ref) is int and 0 <= ref < len(packet.nodes))
+                    if ref in reached:
+                        continue
+                    reached.add(ref)
+                    tag, body = packet.nodes[ref]
+                    if tag == 'dict':
+                        pending.extend(r for pair in body for r in pair)
+                    elif tag in ('list', 'tuple'):
+                        pending.extend(body)
+                    elif tag == 'row':
+                        pending.append(body)
+                refs = frozenset(reached)
+                nodes = tuple(_Node(packet, ref, ledger) if ref in refs else None
+                              for ref in range(len(packet.nodes)))
+            else:
+                refs = range(len(packet.nodes))
+                nodes = tuple(_Node(packet, ref, ledger) for ref in refs)
+            self.reachable[ident] = refs
             self.nodes[ident] = nodes
-            for ref, (tag, body) in enumerate(packet.nodes):
+            for ref in refs:
+                tag, body = packet.nodes[ref]
                 key = ident, ref
                 if tag == 'dict':
                     self.items[key] = tuple((packet.nodes[k][1], nodes[v]) for k, v in body)
@@ -116,13 +142,13 @@ class _Arena:
         object.__setattr__(self, name, value)
 
     def seal(self):
-        for name in ('nodes', 'items', 'sequences', 'scalars', 'values', 'records', 'families', 'canonicals', 'classes'):
+        for name in ('nodes', 'items', 'sequences', 'scalars', 'values', 'records', 'families', 'canonicals', 'classes', 'reachable'):
             setattr(self, name, MappingProxyType(getattr(self, name)))
         self.usage = frozenset(self.usage)
         self._sealed = True
 
     def release(self):
-        for name in ('nodes', 'items', 'sequences', 'scalars', 'values', 'records', 'families', 'canonicals', 'classes'):
+        for name in ('nodes', 'items', 'sequences', 'scalars', 'values', 'records', 'families', 'canonicals', 'classes', 'reachable'):
             object.__setattr__(self, name, MappingProxyType({}))
         object.__setattr__(self, 'usage', frozenset())
 
@@ -157,7 +183,7 @@ class _Arena:
                         intern[key] = len(intern)
                     classes[ref] = intern[key]
                     return classes[ref]
-                for ref in range(len(packet.nodes)):
+                for ref in self.reachable[id(packet)]:
                     visit(ref)
                 self.classes[id(packet)] = tuple(classes)
         finally:
@@ -177,12 +203,15 @@ class _Arena:
                      and 0 <= ref < len(packet.nodes), 'Exact arena reference required')
         gate.require(id(packet) in self.nodes, 'Foreign packet')
         nodes = self.nodes[id(packet)]
-        gate.require(nodes[ref].packet is packet)
+        gate.require(type(nodes[ref]) is _Node and nodes[ref].packet is packet,
+                     'Node is outside this issued role root')
         return nodes[ref]
 
     def bind(self, family):
         packet = family.scope._issued[family.handle][1]
         for node in self.nodes[id(packet)]:
+            if node is None:
+                continue
             key = id(packet), node.ref
             if node.tag in ('dict', 'list', 'tuple'):
                 self.values[key] = o._Value(family, node)
@@ -404,6 +433,7 @@ class _Frontier:
 class _NativeConfig:
     bounds: object
     limits: object
+    joint_handoff: bool = False
 
 
 class _NativeCandidate:
@@ -411,10 +441,13 @@ class _NativeCandidate:
 
     def __init__(self, graph, config):
         gate.require(type(graph) is rt._ColdGraphRead and type(config) is _NativeConfig and graph.phase == 'pre'
-                     and graph.store.test_only and graph.store.sqlite)
+                     and graph.store.test_only and graph.store.sqlite
+                     and type(config.joint_handoff) is bool)
         graph.check(graph.store, graph.connection)
         self.graph, self.config = graph, config
         self.completed, self.mode, self.result = {}, None, None
+        self.joint_packet = self._joint_packet_initial = None
+        self.joint_views = ()
         self.upstreams = None
         self.owned_ready = False
         self.receipt = None
@@ -482,7 +515,30 @@ class _NativeCandidate:
                     ledger.close()
             raise
 
+    def assert_joint(self, packets):
+        """Bind role, root and exact immutable joint storage before issuance."""
+        from ._cold_accounted_values import _Packet
+        joint = self.joint_packet
+        gate.require(self.config.joint_handoff and type(joint) is _Packet
+            and type(joint.root) is int and type(joint.nodes) is tuple
+            and type(joint.encoded) is bytes and type(joint.digest) is str
+            and type(joint.edges) is int
+            and type(packets) is dict and tuple(packets) == ('source', 'generate'))
+        gate.require(o._node(joint).get('schema').scalar() == 'accounted-family-pair.pre.bounded.v1')
+        for role in ('source', 'generate'):
+            packet = packets[role]
+            gate.require(type(packet) is _Packet and type(packet.root) is int
+                and type(packet.edges) is int and packet.edges == joint.edges
+                and packet.nodes is joint.nodes
+                and packet.encoded is joint.encoded and packet.digest is joint.digest
+                and packet.root == o._node(joint).get(role).ref
+                and o._node(packet).get('role').scalar() == role
+                and o._node(packet).get('schema').scalar() == 'accounted-family.pre.bounded.v2',
+                'Joint accounted role/root changed')
+
     def qualify(self, mode, packets, ledger):
+        if self.config.joint_handoff:
+            self.assert_joint(packets)
         self.observe(phase='native:representation')
         if (not all(type(k) is str for k in self.graph.inputs)
                 or 'cold-trial:complete' in self.graph.inputs):
@@ -548,7 +604,7 @@ class _NativeCandidate:
             sizing = copied = header = bound = release = None
             ticket.close()
         self.observe(phase='native:arena')
-        self.arena = _Arena(ledger, packets)
+        self.arena = _Arena(ledger, packets, joint=self.config.joint_handoff)
         # A Slot contains only fixed models and scalar leaves. The conservative
         # full key/value tree is 1+2*5 + (1+2*15) + (1+2*6) = 55 nodes.
         # First boundary: SourceBodies 2 + Archive 2 Slot comparisons, and the
@@ -607,6 +663,22 @@ class _NativeCandidate:
                 self.receipt.release()
         self.receipt = self.receipt_platform = None
         self.completed.clear()
+        self.joint_packet = self._joint_packet_initial = None
+        self.joint_views = ()
+
+    def discard_unissued(self):
+        """Release copied representations before a common LEGACY fallback."""
+        gate.require(not self.owned_ready and self.mode is not None
+                     and not self.mode.scope._issued, 'No fallback after joint issuance')
+        arena = getattr(self, 'arena', None)
+        if arena is not None:
+            gate.require(type(arena) is _Arena)
+            arena.release()
+        if self.receipt is not None:
+            self.receipt.release()
+        self.receipt = self.receipt_platform = None
+        self.joint_packet = self._joint_packet_initial = None
+        self.joint_views = ()
 
     def close(self):
         if self.mode is not None:

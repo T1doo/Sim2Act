@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.809" timestamp="2026-10-27T08:36:22.378671+00:00" hostname="6963bf8b5a14"><testcase classname="tests.test_cold_accounted_joint_handoff" name="test_joint_real_producers_consumers_and_closed_scope" time="1.531"><failure message="sim2act.errors.DomainError: Exact complete trial raw mapping required">sql_facts = namespace(store=&lt;sim2act.db.Store object at 0x7f3037703bf0&gt;, settings=Settings(database_url='sqlite:////tmp/pytest-of-...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=&lt;sim2act.worker.Worker object at 0x7f3037003650&gt;)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f30377035c0&gt;
+
+    def test_joint_real_producers_consumers_and_closed_scope(sql_facts, monkeypatch):
+        f, events, results = sql_facts, [], []
+        producer = dispatch._graph_stage_accounted
+        def observed(*args, **kwargs):
+            events.append(args[7])
+            return producer(*args, **kwargs)
+        monkeypatch.setattr(dispatch, '_graph_stage_accounted', observed)
+        for joint in (False, True):
+            with f.store.tx() as c, native_segment(f, c, joint=joint,
+                    middle=lambda *args: events.append('recipe')) as s:
+                assert s.cohort.route == 'OWNED'
+                packets = {role: s.mode.scope._issued[family.handle][1]
+                           for role, family in (('source', s.source), ('generate', s.generated))}
+                assert (packets['source'].nodes is packets['generate'].nodes) is joint
+                if joint:
+                    s.candidate.assert_joint(packets)
+&gt;               resolved = resolve(s)
+                           ^^^^^^^^^^
+
+tests/test_cold_accounted_joint_handoff.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cold_accounted_sqlite.py:65: in resolve
+    return archive._graph_resolve_trial_source(
+src/sim2act/natural_source_archives.py:471: in _graph_resolve_trial_source
+    _guard()
+src/sim2act/natural_live_admission.py:1378: in checked
+    parent()
+src/sim2act/natural_source_archives.py:463: in _parent_pin
+    gate._graph_trial_stage_parent_pin(graph, store, c, source_stage_facts, **{'_owned': _owned} if _owned is not None else {})
+src/sim2act/natural_live_admission.py:938: in _graph_trial_stage_parent_pin
+    _graph_trial_stage_raw(graph, stage_facts, **{'_owned': _owned} if _owned is not None else {})
+src/sim2act/natural_live_admission.py:1628: in _graph_trial_stage_raw
+    _graph_trial_stage_raw_from_raw(stage_facts, inputs['cold-trial:complete'])
+src/sim2act/natural_live_admission.py:1542: in _graph_trial_stage_raw_from_raw
+    and _trial_typed_equal(_trial_pure_data(_trial_pure_mapping(job)),
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_live_admission.py:1251: in _trial_pure_mapping
+    require(type(value) is dict, 'Exact complete trial raw mapping required')
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+ok = False, message = 'Exact complete trial raw mapping required'
+
+    def require(ok, message="Exact natural trial changed"):
+        if not ok:
+&gt;           raise DomainError("VERSION_CONFLICT", message)
+E           sim2act.errors.DomainError: Exact complete trial raw mapping required
+
+src/sim2act/natural_live_admission.py:47: DomainError</failure></testcase></testsuite></testsuites>

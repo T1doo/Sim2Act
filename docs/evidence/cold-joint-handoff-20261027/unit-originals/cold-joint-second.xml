@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="2" time="5.255" timestamp="2026-10-27T08:36:52.197677+00:00" hostname="6963bf8b5a14"><testcase classname="tests.test_cold_accounted_joint_handoff" name="test_joint_real_producers_consumers_and_closed_scope" time="3.692" /><testcase classname="tests.test_cold_accounted_joint_handoff" name="test_joint_capture_common_raw_and_hidden_aliases" time="1.372"><failure message="TypeError: 'RowMapping' object does not support item assignment">sql_facts = namespace(store=&lt;sim2act.db.Store object at 0x7f46e5792db0&gt;, settings=Settings(database_url='sqlite:////tmp/pytest-of-...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=&lt;sim2act.worker.Worker object at 0x7f46e567b350&gt;)
+
+    def test_joint_capture_common_raw_and_hidden_aliases(sql_facts):
+        originals = {}
+        def remember(graph, source, generated, candidate):
+            originals.update(copy.deepcopy(dict(source=source, generate=generated)))
+        with sql_facts.store.tx() as c, native_segment(sql_facts, c, before_choose=remember):
+            # Component-only copies: the synthetic aliases below are never issued
+            # as original producer facts. Real issuance is checked in the first test.
+            shared = {'hidden': ['complete']}
+            source, generated = originals['source'], originals['generate']
+&gt;           source[0]['error'] = generated[0]['error'] = shared
+            ^^^^^^^^^^^^^^^^^^
+E           TypeError: 'RowMapping' object does not support item assignment
+
+tests/test_cold_accounted_joint_handoff.py:67: TypeError</failure></testcase></testsuite></testsuites>

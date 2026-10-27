@@ -500,6 +500,17 @@ class _OwnedPrewriteMode:
                 gate.require(type(self._native.arena) is _Arena)
                 gate.require(self.scope._allocation is self._native.arena.ledger
                              and self.scope._allocation._native_arena is self._native.arena)
+                if self._native.config.joint_handoff:
+                    views = self._native.joint_views
+                    gate.require(self._native.joint_packet is self._native._joint_packet_initial
+                        and type(views) is tuple and len(views) == 2,
+                        'Issued joint capture cannot be rebound')
+                    for i, role in enumerate(('source', 'generate')):
+                        family = self.__families[role]
+                        issued = self.scope._issued.get(family.handle)
+                        gate.require(type(issued) is tuple and len(issued) == 2
+                            and issued[0] == role and issued[1] is views[i],
+                            'Issued joint role view cannot be rebound')
             frontier = getattr(self._native, 'frontier', None)
             gate.require(frontier is None or g._accounted_frontier is frontier)
         gate.require(self.active and self.scope._active and self.scope._prewrite_mode is self)
@@ -947,10 +958,20 @@ class _OwnedPrewriteMode:
             if native is not None:
                 native.observe(phase='capture:scaffolding')
             budget.reserve('resident', 65536)
+            joint = native is not None and native.config.joint_handoff
+            if joint:
+                native.observe(phase='capture:joint')
+                packets, native.joint_packet = _capture_pair_bounded(completed, self.scope._context, budget)
+                native._joint_packet_initial = native.joint_packet
+                native.joint_views = tuple(packets[role] for role in ('source', 'generate'))
+                native.assert_joint(packets)
             for role, facts in completed.items():
-                if native is not None:
-                    native.observe(phase='capture:', role=role)
-                packet, _ = _capture_bounded(facts, role, self.scope._context, budget)
+                if not joint:
+                    if native is not None:
+                        native.observe(phase='capture:', role=role)
+                    packet, _ = _capture_bounded(facts, role, self.scope._context, budget)
+                else:
+                    packet = packets[role]
                 if native is not None:
                     native.observe(phase='compare:', role=role)
                 with budget.snapshot(graph.inputs['cold-trial:accounted-' + role]) as expected:
@@ -967,7 +988,10 @@ class _OwnedPrewriteMode:
             self.assert_current()
             if native is not None:
                 native.observe(route='LEGACY', error=error, ledger=budget)
+                native.discard_unissued()
             packets.clear()
+            packet = expected = None
+            del packet, expected
             budget.close()
             result = _Cohort('LEGACY', source, generated, None, budget, self)
         else:
@@ -1013,43 +1037,96 @@ def _owned_prewrite(graph, bounds):
         mode.close()
 
 
-def _capture_bounded(facts, role, context, ledger):
-    """Copy directly from raw storage; all new allocations have prior reservations."""
+def _family_parts(facts, role):
+    """Original immutable tuple/arity gates before independent allocation."""
     gate.require(type(facts) is tuple and len(facts) == 4)
     run, actual, chains, reads = facts
     count = 2 if role == 'source' else 3
     gate.require(type(actual) is tuple and type(chains) is tuple and type(reads) is tuple
                  and len(actual) == len(chains) == count
                  and len(reads) == (2 if role == 'source' else 0))
+    return facts
+
+
+def _prepare_family_bounded(parts, role, context, p, *, prefix=()):
+    """Already-gated family under the caller-owned bounded projection."""
+    run, actual, chains, reads = parts
+    sidecar_start = len(p.sidecars)
+    # Fixed 3/2-chain envelope, labels, sidecar wrappers and list/tuple overlap.
+    # This reservation precedes even the small generated wrapper allocations.
+    p.alloc(65536)
+    copied_run = p.row(run, prefix + ('run',), _FIELDS['run'])
+    copied_actual = tuple(p.row(row, prefix + ('actual', i), _FIELDS['attempt'])
+                          for i, row in enumerate(actual))
+    copied_chains = []
+    for i, chain in enumerate(chains):
+        gate.require(type(chain) is tuple and len(chain) == 6)
+        slot, capture, parsed, checked, wire, body = chain
+        gate.require(type(slot) is policy.Slot and type(capture) is sender.Capture
+                     and type(wire) is bytes and type(body) is bytes)
+        copied_chains.append((p.copy(slot, typed=True), p.copy(capture, typed=True), p.copy(parsed),
+                              p.row(checked, prefix + ('checked', i), _FIELDS['attempt']),
+                              p.copy(wire), p.copy(body)))
+    copied_reads = []
+    for read in reads:
+        gate.require(type(read) is tuple and len(read) == 5)
+        aid, request, wire, response, body = read
+        gate.require(type(request) is archive.BodyArchive and type(response) is archive.BodyArchive
+                     and type(aid) is str and type(wire) is bytes and type(body) is bytes)
+        copied_reads.append(tuple(p.copy(v, typed=type(v) is archive.BodyArchive) for v in read))
+    prepared = dict(schema='accounted-family.pre.bounded.v2', role=role,
+                    phase='pre', mode=context.mode,
+                    value=dict(run=copied_run, actual=copied_actual,
+                               chains=tuple(copied_chains), ns_reads=tuple(copied_reads)),
+                    row_storage=tuple(p.sidecars[sidecar_start:]))
+    return prepared
+
+
+def _capture_bounded(facts, role, context, ledger):
+    """Original independent family capture, unchanged default route."""
+    parts = _family_parts(facts, role)
     with ledger.projection() as p:
-        # Fixed 3/2-chain envelope, labels, sidecar wrappers and list/tuple overlap.
-        # This reservation precedes even the small generated wrapper allocations.
-        p.alloc(65536)
-        copied_run = p.row(run, ('run',), _FIELDS['run'])
-        copied_actual = tuple(p.row(row, ('actual', i), _FIELDS['attempt'])
-                              for i, row in enumerate(actual))
-        copied_chains = []
-        for i, chain in enumerate(chains):
-            gate.require(type(chain) is tuple and len(chain) == 6)
-            slot, capture, parsed, checked, wire, body = chain
-            gate.require(type(slot) is policy.Slot and type(capture) is sender.Capture
-                         and type(wire) is bytes and type(body) is bytes)
-            copied_chains.append((p.copy(slot, typed=True), p.copy(capture, typed=True), p.copy(parsed),
-                                  p.row(checked, ('checked', i), _FIELDS['attempt']),
-                                  p.copy(wire), p.copy(body)))
-        copied_reads = []
-        for read in reads:
-            gate.require(type(read) is tuple and len(read) == 5)
-            aid, request, wire, response, body = read
-            gate.require(type(request) is archive.BodyArchive and type(response) is archive.BodyArchive
-                         and type(aid) is str and type(wire) is bytes and type(body) is bytes)
-            copied_reads.append(tuple(p.copy(v, typed=type(v) is archive.BodyArchive) for v in read))
-        prepared = dict(schema='accounted-family.pre.bounded.v2', role=role,
-                        phase='pre', mode=context.mode,
-                        value=dict(run=copied_run, actual=copied_actual,
-                                   chains=tuple(copied_chains), ns_reads=tuple(copied_reads)),
-                        row_storage=tuple(p.sidecars))
+        prepared = _prepare_family_bounded(parts, role, context, p)
         return ledger.encode(prepared, p, resident=True)
+
+
+def _capture_pair_bounded(completed, context, ledger):
+    """One private source/generate graph, one memo and one bounded encoding.
+
+    Role views keep separate packet identities for scoped Record accessors,
+    but share the immutable nodes/encoded object and joint topology witness.
+    No mutable source reference escapes the projection context.
+    """
+    gate.require(type(completed) is dict and tuple(completed) == ('source', 'generate'))
+    with ledger.projection() as p:
+        p.alloc(8192)  # fixed joint envelope before wrapper allocation
+        prepared = dict(schema='accounted-family-pair.pre.bounded.v1')
+        for role in ('source', 'generate'):
+            prepared[role] = _prepare_family_bounded(_family_parts(completed[role], role), role, context, p, prefix=(role,))
+        # Common raw/model interpretations may share immutable leaves, but a
+        # mutable node normalized under two projection modes is not proven to
+        # preserve its alias. Stay LEGACY before issuing either role.
+        from ._cold_accounted_budget import _Capacity
+        p.alloc(256 * len(p.done))
+        ledger.spend(len(p.done) * (len(p.allowed) + 8))
+        # IDs avoid foreign metaclass hash/equality; this call retains classes.
+        model_ids = {id(cls) for cls in p.allowed}
+        for (identity, typed), (original, copied, _) in p.done.items():
+            kind = type(original)
+            if typed and id(kind) in model_ids:
+                storage = object.__getattribute__(original, '__dict__')
+                if ((id(storage), False) in p.done or (id(storage), True) in p.done):
+                    raise _Capacity('joint_model_storage_alias')
+            elif kind is dict or kind is list or kind is tuple or kind is RowMapping:
+                other = p.done.get((identity, not typed))
+                if other is not None and copied is not other[1]:
+                    raise _Capacity('joint_projection_alias')
+        joint, _ = ledger.encode(prepared, p, resident=True)
+        ledger.reserve('resident', 4096)  # both views and registry, before allocation
+        ledger.spend(4096)
+        packets = {role: _Packet(_node(joint).get(role).ref, joint.nodes,
+                    joint.encoded, joint.digest, joint.edges) for role in ('source', 'generate')}
+        return packets, joint
 
 
 @dataclass(frozen=True, slots=True)
