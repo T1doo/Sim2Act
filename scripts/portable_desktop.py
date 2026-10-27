@@ -6,10 +6,14 @@ production account or database. No installers, network downloads or fallback.
 
 import json
 import os
+import queue
 import re
+import signal
 import struct
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 
@@ -38,6 +42,109 @@ def browser_path():
     raise RuntimeError("Google Chrome was not found in Program Files. Install Chrome separately before starting this preview; no browser was installed or changed.")
 
 
+
+def monitor_server(child, open_browser, *, stop_timeout=20, output_timeout=5):
+    """Drain the owned stdout pipe while the main thread services console signals.
+
+    Windows console input and a blocking TextIO read must not compete with final
+    worker output. The server has its own group; a requested stop sends one
+    CTRL_BREAK only to that freshly created, still-held child. Uvicorn handles
+    SIGBREAK through its normal shutdown path. No tree kill or PID discovery.
+    """
+    messages = queue.Queue()
+    requested = threading.Event()
+    eof = False
+    stop_sent = False
+    stop_deadline = None
+    exit_deadline = None
+    eof_deadline = None
+    ready_worker = None
+    receipt = None
+    opened = False
+
+    def drain():
+        try:
+            for line in child.stdout:
+                messages.put(("line", line))
+        except Exception as error:
+            messages.put(("error", type(error).__name__))
+        finally:
+            messages.put(("eof", None))
+
+    def request_stop(signum, frame):
+        requested.set()
+
+    previous = {}
+    reader = threading.Thread(target=drain, name="preview-server-output", daemon=True)
+    try:
+        for name in ("SIGINT", "SIGBREAK"):
+            number = getattr(signal, name, None)
+            if number is not None:
+                previous[number] = signal.signal(number, request_stop)
+        reader.start()
+        while True:
+            if requested.is_set() and not stop_sent:
+                stop_sent = True
+                stop_deadline = time.monotonic() + stop_timeout
+                if child.poll() is None:
+                    child.send_signal(signal.CTRL_BREAK_EVENT)
+                print("Stopping the owned server; waiting for its real worker receipt.", flush=True)
+            code = child.poll()
+            if code is not None and exit_deadline is None:
+                exit_deadline = time.monotonic() + output_timeout
+            if code is not None and eof:
+                break
+            if eof and code is None and eof_deadline is None:
+                eof_deadline = time.monotonic() + output_timeout
+            if eof_deadline is not None and time.monotonic() >= eof_deadline:
+                raise TimeoutError("Owned server stdout closed but process exit is unknown; preserve the running claim.")
+            if stop_deadline is not None and time.monotonic() >= stop_deadline:
+                raise TimeoutError("Owned server stop was not confirmed; preserve the running claim.")
+            if exit_deadline is not None and time.monotonic() >= exit_deadline:
+                raise TimeoutError("Owned server output EOF was not confirmed; preserve the running claim.")
+            try:
+                kind, value = messages.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            if kind == "error":
+                raise RuntimeError("Owned server output read failed: " + value)
+            if kind == "eof":
+                eof = True
+                continue
+            print(value, end="", flush=True)
+            try:
+                event = json.loads(value)
+            except (TypeError, ValueError):
+                continue
+            if type(event) is not dict:
+                continue
+            url = ready_url(value)
+            worker = event.get("worker_id")
+            if url and type(worker) is str and re.fullmatch(r"worker_[0-9a-f]{32}", worker):
+                if ready_worker is not None and worker != ready_worker:
+                    raise RuntimeError("Owned server changed its worker identity.")
+                ready_worker = worker
+                if not opened and not requested.is_set():
+                    open_browser(url)
+                    opened = True
+            if (event.get("event") == "SYNTHETIC_WORKSPACE_STOPPED"
+                    and ready_worker is not None and event.get("worker_id") == ready_worker):
+                receipt = event
+        reader.join(timeout=1)
+        if reader.is_alive():
+            raise RuntimeError("Owned output reader has not stopped; preserve the running claim.")
+        code = child.wait(timeout=1)
+        verified = (receipt is not None and receipt.get("worker_stopped") is True
+                    and receipt.get("clean") is True and receipt.get("data_preserved") is True)
+        print(json.dumps(dict(event="PREVIEW_SERVER_EXIT", child_returncode=code,
+                              stop_requested=requested.is_set(), receipt_verified=verified,
+                              worker_id=ready_worker)), flush=True)
+        # A zero exit is not a worker-clean receipt. Never synthesize one.
+        return code if code != 0 else (0 if verified else 1)
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+
 def main():
     if sys.platform != "win32" or sys.version_info[:2] != (3, 12) or struct.calcsize("P") != 8:
         raise RuntimeError("Use Start-Sim2Act.cmd and its bundled Windows x64 runtime.")
@@ -60,7 +167,7 @@ def main():
     lock = root / "preview-running.lock"
     claim = lock.open("x", encoding="ascii")
     child = None
-    clean = False
+    confirmed_exit = False
     try:
         claim.write(str(os.getpid()))
         claim.flush()
@@ -72,32 +179,24 @@ def main():
         print("Sim2Act synthetic preview: no model provider or formal publication.", flush=True)
         print("Public synthetic login: public-synthetic-blank-workspace", flush=True)
         print("Keep this window open. Press Ctrl+C once to stop; close the test Chrome window afterwards.", flush=True)
-        # Same console/process group: original Uvicorn receives the real Ctrl+C.
-        # Never kill a process tree, inject an API command or reset an old DB.
+        # The exact child created here owns a distinct console group. Stopping
+        # it is explicit and graceful; a browser is not part of that group.
         child = subprocess.Popen(command, cwd=root, env=environment, stdout=subprocess.PIPE,
-                                 stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
-        opened = False
-        try:
-            for line in child.stdout:
-                print(line, end="", flush=True)
-                url = ready_url(line)
-                if url and not opened:
-                    subprocess.Popen([str(chrome), "--user-data-dir=" + str(root / "chrome-profile"),
-                                      "--disk-cache-dir=" + str(root / "chrome-cache"),
-                                      "--no-first-run", "--no-default-browser-check", url], cwd=root,
-                                     env=environment)
-                    opened = True
-            code = child.wait()
-        except KeyboardInterrupt:
-            # The child shares this console, so it receives Ctrl+C too.
-            code = child.wait(timeout=20)
-            for line in child.stdout:
-                print(line, end="", flush=True)
-        clean = True  # Child termination, not a claim about server/browser cleanup.
+                                 stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
+                                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+
+        def open_browser(url):
+            subprocess.Popen([str(chrome), "--user-data-dir=" + str(root / "chrome-profile"),
+                              "--disk-cache-dir=" + str(root / "chrome-cache"),
+                              "--no-first-run", "--no-default-browser-check", url], cwd=root,
+                             env=environment)
+
+        code = monitor_server(child, open_browser)
+        confirmed_exit = True  # Actual child exit plus output EOF; receipt checked separately.
         return code
     finally:
         claim.close()
-        if child is None or clean or child.poll() is not None:
+        if child is None or confirmed_exit:
             if child is not None and child.stdout is not None:
                 child.stdout.close()
             lock.unlink()

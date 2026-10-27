@@ -9,9 +9,11 @@ import hashlib
 import json
 import os
 import re
+import signal
 import socket
 import threading
 import traceback
+from contextlib import contextmanager
 from pathlib import Path
 
 import uvicorn
@@ -160,6 +162,22 @@ def workspace_app(store, settings, gate=None, worker_turn=None):
     return app
 
 
+
+@contextmanager
+def _console_break_as_interrupt():
+    # Windows starts a new process group with Ctrl+C disabled. The portable
+    # launcher sends only that owned group Ctrl+Break. Uvicorn handles it, then
+    # re-raises the previous handler; translate that into KeyboardInterrupt so
+    # the original worker/store finally block runs instead of default process exit.
+    managed = (os.name == "nt" and hasattr(signal, "SIGBREAK")
+               and threading.current_thread() is threading.main_thread())
+    previous = signal.signal(signal.SIGBREAK, signal.default_int_handler) if managed else None
+    try:
+        yield
+    finally:
+        if managed:
+            signal.signal(signal.SIGBREAK, previous)
+
 def serve(path, *, new=False, port=0):
     require(type(port) is int and 0 <= port <= 65535, "INVALID_PORT")
     # Reserve the actual socket before touching a data directory; no port scan.
@@ -221,7 +239,8 @@ def serve(path, *, new=False, port=0):
         thread = threading.Thread(target=work, daemon=True)
         thread.start()
         try:
-            server.run(sockets=[listener])
+            with _console_break_as_interrupt():
+                server.run(sockets=[listener])
         except KeyboardInterrupt:
             pass  # Uvicorn may re-raise its handled, owned Ctrl+C.
         finally:
