@@ -587,7 +587,11 @@ async function readRunDetail(id, userSelection, selectionGuard, validateReceipt)
 }
 async function loadProjects(preferred=null) {
   const identity=token,connection=identityConnectionGeneration,list=++projectListGeneration;
-  const ps = await api("/api/projects"); if(identity!==token || connection!==identityConnectionGeneration || list!==projectListGeneration)return; const old = $("project-select").value;
+  const current=()=>identity===token&&connection===identityConnectionGeneration&&list===projectListGeneration;
+  let ps;
+  try{ps=await api("/api/projects");}catch(error){if(!current())return;throw error;}
+  if(!current())return;
+  const old = $("project-select").value;
   const adopt=preferred && preferred.selection===projectSelectionGeneration;
   if(adopt && !ps.some(p=>p.id===preferred.id))throw Error("新项目已创建，列表尚未包含其回执；请重新读取项目列表。");
   const selected=adopt?preferred.id:old;
@@ -874,7 +878,9 @@ async function showApp(id,pid=$("project-select").value,onSelectionStart=null,se
   clearApp(preserveFirstGuide);const generation=appSelectionGeneration;
   onSelectionStart?.(generation);
   const identity=token;
-  const a=await api(`/api/apps/${id}`);
+  let a;
+  try{a=await api(`/api/apps/${id}`);}
+  catch(error){if(generation !== appSelectionGeneration || pid !== $("project-select").value || identity !== token || !selectionCurrent())return false;throw error;}
   if(generation !== appSelectionGeneration || pid !== $("project-select").value || identity !== token || !selectionCurrent())return false;
   if(a.id !== id || a.project_id !== pid)throw Error("候选不属于当前选择，请重新选择");
   if(validateSelected)await validateSelected(a);

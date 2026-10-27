@@ -1,0 +1,95 @@
+diff --git a/src/sim2act/web/internal.js b/src/sim2act/web/internal.js
+index cb2dcc32..eec09a60 100644
+--- a/src/sim2act/web/internal.js
++++ b/src/sim2act/web/internal.js
+@@ -257,15 +257,18 @@ async function refreshInternal(view=engineering) {
+   clearInternalRunReread(view);
+   const workspace=workspaceSelectionGeneration,connection=identityConnectionGeneration,generation=(view.historyGeneration||0)+1;
+   view.historyGeneration=generation;
+-  view.historyReady=false;
++  view.historyReady=false;view.releases=[];
++  $("internal-releases").textContent="内部版本列表未确认，正在只读核对…";$("internal-instances").textContent="实例列表未确认，正在只读核对…";
++  engineeringButtons(view);engineeringStatus(view,"正在只读核对内部历史…","loading");
+   const current=()=>engineeringCurrent(view)&&workspace===workspaceSelectionGeneration&&connection===identityConnectionGeneration&&generation===view.historyGeneration;
++  try {
+   const latest=await api(`/api/apps/${view.app}`);
+   if(!current())return;
+   if(latest.project_id!==view.project || latest.fingerprint!==view.draft.fingerprint)throw Error("VERSION_CONFLICT");
+   const [releases,instances]=await Promise.all([api(`/api/internal/apps/${view.app}/releases`),api(`/api/internal/apps/${view.app}/instances`)]);
+   if(!current())return;
+   view.releases=releases.items;
+-  $("internal-releases").replaceChildren(...releases.items.map(release=>row(`内部 Release ${release.id} · 指纹 ${release.fingerprint.slice(0,16)} · 正式发布关闭`,()=>engineeringAction(view,async()=>{
++  $("internal-releases").replaceChildren(...releases.items.map(release=>row(`内部 Release ${release.id} · 指纹 ${release.fingerprint.slice(0,16)} · 正式发布关闭`,()=>{if(!current()||!view.historyReady)return;return engineeringAction(view,async()=>{
+     const selection=view.instanceGeneration;
+     let key=engineeringInstanceKeys.get(release.id);if(!key){key=crypto.randomUUID();engineeringInstanceKeys.set(release.id,key);}
+     engineeringStatus(view,"正在创建独立内部实例…","loading");
+@@ -276,12 +279,19 @@ async function refreshInternal(view=engineering) {
+     if(!engineeringCurrent(view) || selection!==view.instanceGeneration)return;
+     await showInternalInstance(created.id,view);
+     if(engineeringCurrent(view) && view.instance?.id===created.id){engineeringInstanceKeys.delete(release.id);naturalFirstInstanceCreated(view,created);engineeringStatus(view,"已创建独立内部实例；结果和后台状态可重新读取。");}
+-  }),"创建独立实例")));
+-  $("internal-instances").replaceChildren(...instances.items.map(instance=>row(`${instance.id} · 版本 ${instance.revision} · 结果版本 ${instance.data_version}`,()=>showInternalInstance(instance.id,view),"打开 / 重开")));
++  });},"创建独立实例")));
++  $("internal-instances").replaceChildren(...instances.items.map(instance=>row(`${instance.id} · 版本 ${instance.revision} · 结果版本 ${instance.data_version}`,()=>{if(current()&&view.historyReady)return showInternalInstance(instance.id,view);},"打开 / 重开")));
+   if(!releases.items.length)$("internal-releases").textContent="尚无内部 Release。先核查并查看精确快照。";
+   if(!instances.items.length)$("internal-instances").textContent="尚无实例。内部 Release 已保存后可创建。";
+   view.historyReady=true;
+   engineeringStatus(view,"内部历史已读回；正式发布与部署仍关闭。");
++  } catch(error){
++    if(!current())return;
++    view.historyReady=false;view.releases=[];
++    $("internal-releases").textContent="内部版本列表尚未确认；请使用只读刷新重新核对。";
++    $("internal-instances").textContent="实例列表尚未确认；旧列表入口已失效，不代表实例或任务执行失败。";
++    engineeringStatus(view,"内部历史读取失败，当前列表尚未确认。","error");throw error;
++  }
+ }
+ async function showInternalInstance(id,view=engineering) {
+   if(naturalUsePreparation && (!naturalUsePreparation.returning || !naturalUsePreparation.instance || naturalUsePreparation.instance.id!==id || naturalUsePreparation.view!==view))clearNaturalUsePreparation();
+@@ -371,18 +381,22 @@ async function showKnownInternalRunStop(scope){
+   });
+   await read.onclick();
+ }
+-async function showInternalRun(id,view=engineering,instance=view?.instance) {
++async function showInternalRun(id,view=engineering,instance=view?.instance,acceptedCommandStatus=null) {
+   if(!instance || !engineeringCurrent(view) || view.instance?.id!==instance.id)return;
++  if(view.runRead?.id===id&&view.runRead.current())return view.runRead.done;
+   clearNaturalTaskExtraction();
+   clearInternalRunReread(view);
+   const previousStatus=view.run?.status;
+   const selection=++view.runGeneration,iSelection=view.instanceGeneration,connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;
+   $("internal-controls").replaceChildren();$("internal-run-detail").textContent="";view.run=null;
++  $("internal-run-status").textContent=acceptedCommandStatus?`${acceptedCommandStatus} · 正在只读复核当前详情…`:"正在读取所选运行；上一运行摘要已清除。";
+   const selectedCurrent=()=>engineeringCurrent(view) && selection===view.runGeneration && iSelection===view.instanceGeneration && view.instance?.id===instance.id && connection===identityConnectionGeneration;
+   const current=()=>selectedCurrent() && workspace===workspaceSelectionGeneration;
+-  if((view.spec||view.workflow)&&typeof selectOwnerRun==="function"&&ownerView?.rid!==id)await selectOwnerRun("",view);
+-  if(!current())return;
++  let finishRead;const done=new Promise(resolve=>{finishRead=resolve;});
++  const read={id,current,done};view.runRead=read;
+   try {
++    if((view.spec||view.workflow)&&typeof selectOwnerRun==="function"&&ownerView?.rid!==id)await selectOwnerRun("",view);
++    if(!current())return;
+     let run;
+     try {run=await api(`/api/internal/instances/${instance.id}/runs/${id}`);}
+     catch(error){
+@@ -418,8 +432,9 @@ async function showInternalRun(id,view=engineering,instance=view?.instance) {
+         }
+         if(!actionCurrent())return;
+         // The accepted stop receipt remains visible even if current grants prevent GET afterward.
+-        $("internal-run-status").textContent=`已接受${button.textContent}：${response.status}`;$("internal-controls").replaceChildren();view.run=null;
+-        try {await showInternalRun(id,view,instance);}catch(error){engineeringStatus(view,error.message,"error");}
++        const acceptedStatus=`已接受${button.textContent}：${response.status}`;
++        $("internal-run-status").textContent=acceptedStatus;$("internal-controls").replaceChildren();view.run=null;
++        try {await showInternalRun(id,view,instance,acceptedStatus);}catch(error){engineeringStatus(view,error.message,"error");}
+       });return button;
+     }));
+     if(run.content_access!==false && previousStatus && previousStatus!==run.status && ["SUCCEEDED","PARTIAL","FAILED","CANCELLED"].includes(run.status)){
+@@ -428,7 +443,8 @@ async function showInternalRun(id,view=engineering,instance=view?.instance) {
+       return;
+     }
+     if(current()&&(view.spec||view.workflow)&&typeof selectOwnerRun==="function")await selectOwnerRun(run.status==="SUCCEEDED"&&(view.workflow||run.content_access!==false)?id:"",view);
+-  } catch(error){if(current()){if(["PERMISSION_DENIED","GRANT_REVOKED","VERSION_CONFLICT"].includes(error.message))invalidateInternalContent(view);engineeringStatus(view,error.message,"error");$("internal-run-status").textContent+=" · 无法读取当前详情";}}
++  } catch(error){if(current()){if(["PERMISSION_DENIED","GRANT_REVOKED","VERSION_CONFLICT"].includes(error.message))invalidateInternalContent(view);engineeringStatus(view,error.message,"error");view.run=null;$("internal-controls").replaceChildren();$("internal-run-detail").textContent="";$("internal-run-status").textContent=(acceptedCommandStatus?acceptedCommandStatus+" · ":"")+"当前运行详情尚未确认；请只读重新读取，不表示运行执行失败。";}}
++  finally {if(view.runRead===read)view.runRead=null;finishRead();}
+ }
+ async function submitInternal(view,retry=false) {
+   const instance=view.instance;if(!instance)return;

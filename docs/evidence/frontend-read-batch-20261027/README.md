@@ -1,0 +1,52 @@
+# Bounded frontend/API read-lifecycle closeout
+
+Base: `0dfcbad00b9df78cc1f19ff5b8df299aea075fa9`. This is one combined audit/fix of existing workspace read paths under V5 product §2 (truthful project/resource/instance views), §5.5 (identity/project authority) and the existing error/UNKNOWN recovery contract. It does not add a feature, authority, business command, provider, deployment or ownership optimization.
+
+## Explicit audit boundary and coverage
+
+The boundary is the primary workspace shell in app.js and the shared internal/application/protocol read controllers in internal.js, protocol.js and use.js. All25 script tags in the current real HTML are loaded by the synthetic harness, but loading a script is **not** a per-function acceptance of every specialized feature controller. No whole-platform/frontend completion is claimed.
+
+| Existing read entrance | Review/result in this batch |
+| --- | --- |
+| Project list / creation list readback | Identity/connection/list generation already guarded successful adoption. Reproduced stale rejection reaching global safe() after identity switch; fixed error branch only. Current errors still propagate. No create POST exercised. |
+| Material directory / text preview / saved-file read | Project/identity/read-generation fences, initial preview invalidation, current failure clear and old-row gates inspected; no new concrete counterexample. Existing download protocol unchanged; no Blob/native save test. |
+| Grant directory | Previous scoped recovery retained; related14-check GET-only regression passed. No new Grant or revoke behavior. |
+| Connection/capability catalog | Existing identity/read-generation and retry ownership retained; related8-check recovery regression passed. Old actual native four frames remain bound to their original source, not this patch. |
+| Goal directory/detail/candidates/version history | Scope/read-selection fencing, clear-at-selection, current-error handling and saved-version isolation inspected. No new asynchronous counterexample; no goal execute/create POST or old model suite repeated. |
+| App directory/detail/preview history | Existing directory scope and clear-at-open retained. Reproduced stale initial detail rejection overwriting new identity feedback; fixed error branch only. Current rejection still propagates. |
+| Ordinary task history/detail/unresolved receipts | Existing selected/current/read-connection checks, failure clear and stop-auto-read/retry gates inspected. Existing submit UNKNOWN maps untouched. No task submit/Worker suite rerun. |
+| Task-bound saved artifacts | Current run binding, fresh Run+resource read, full hash check, per-binding pending and failure clear inspected. No new defect; file delivery semantics unchanged. |
+| Protocol completion/review locator and readback | Independent reviewer inspected context/generation/run/workspace/selection/read fences, busy dedupe, failure projection closure and original-key checks; no new defect. Existing two readback suites reviewed, not rerun. |
+| Application-use discovery/saved instance/CSV history | Independent reviewer inspected connection/workspace/read generations, instance/Release/App bindings, error clearing and original pending-key retention; no new defect. Existing use tests inspected, not rerun. |
+| Internal selected run detail | Reproduced old successful A summary remaining after B read500/network failure; fixed neutral-at-read and current-error replacement, clearing detail/controls. |
+| Internal release/instance history | Reproduced old actionable rows remaining after refresh failure; fixed initial invalidation, current-error neutral state, history-generation+ready row gates and stale-error suppression. |
+| Same internal Run double click | Reproduced two pending GETs; same live read now shares a completion Promise. ABA/new scope still reads fresh; finally clears only its own pending record. No result/PASS cache. |
+| Command-accepted follow-up read | Independent review found dedupe must not inherit a command-before GET. Added explicit exclusion for the original accepted-command call; fresh GET after receipt is mandatory. No POST/body/version/key changed. |
+
+Five actual issue classes were reproduced and fixed together: run summary, stale history actions, duplicate selected-Run reads, stale project-list error and stale App error. The command-after-read edge was caught and corrected during independent review; it is not counted as a new business execution.
+
+## Exact changes and retained contracts
+
+Only product files **app.js and internal.js** changed. Initial project/App GET catches discard obsolete errors using their existing scope and continue throwing current errors. They do not change success adoption, API paths or payloads.
+
+Internal history clears only release/instance lists and release cache while reading. Current failure shows unconfirmed state; selected instance/run and both UNKNOWN pending/key Maps remain. Old row closures must satisfy the exact history current predicate and historyReady before using their unchanged original actions. Current independent reads still go through the original API and backend authority.
+
+Internal run selection neutralizes the old business summary. Current failure clears summary/detail/controls and says the current detail is unconfirmed, not that execution failed. The original successful command caller passes only its existing accepted-status text after the original POST+actionCurrent gate; a failed following GET preserves that acknowledgement while clearing business output. This parameter bypasses GET dedupe so a command-before pending response cannot attest command-after state. Same live, non-command Run reads share pending completion only; stale/current-changing requests cannot erase newer ownership. Original command URL/body/version, instance-create key, recovery Maps, SQL/lease/fence/clock/epoch/receipt contracts are unchanged.
+
+## Counterexamples and actual verification (do not sum overlapping runs)
+
+Original full-template/controllers harness first reproduced two failures; the expanded baseline reproduced all three internal read issues. Original logs remain baseline-red*. Independent review then identified the command-after-pending boundary: command-boundary-red.log and its exact intermediate source patch are preserved, followed by corrected green. Later shell-boundary-red.log reproduces just the two obsolete-error cases against unchanged base app.js. Intermediate successes remain separate from the final combined run.
+
+- **Final synthetic DOM/protocol:** `NODE_PATH=... node tests/frontend_read_audit.cjs`: PASS,20 assertions/30 synthetic GETs, no HTTP/model/browser. It loads all25 original scripts. Covers current failure, old actions, duplicate wait semantics, ABA/pending ownership, identity/workspace changes, late history error, original UNKNOWN keys, stale shell errors and current errors still throwing. Command acknowledgement is explicitly simulated without sending POST; it is not an actual command receipt test.
+- **Affected local regressions:** grant_directory_scope14 checks/32 synthetic GETs and resource_catalog_recovery8 checks/5 synthetic GETs passed. These are separate local synthetic cases, not extra native or actual HTTP evidence.
+- **Final actual local API:** `NODE_PATH=... .venv/bin/python -m pytest -q tests/test_frontend_read_http.py --basetemp=/tmp/frontend-read-http-final-20261027 --junitxml=/tmp/frontend-read-http-final.xml`: **1PASS,1.74s**. Reuses the existing readonly_content_fixture helper and sealed completed CSV SQLite facts. No new Run, acceptance, Source/extract or Worker/model execution. Original APIs perform7 real200 GETs (App, instance, history metadata/release/instance, saved Run and retry); one additional fetch is an explicitly labelled transport rejection **before the server**, not an actual server500. No static assets are fetched over HTTP: actual scripts are loaded locally by JSDOM. The original saved sum30 is restored after explicit read-only retry.
+- Existing helper uses the original explicit historical **test-only business clock**, with a fresh copied fixture and30s ordinary local work bound plus its existing cleanup grace. This is not production time/G0/lease evidence and not a new native/device window. Final helper reports55 tables before==after, original DB bytes unchanged, only SELECT2199/BEGIN17, businessGET7/static0/POST0/blocked0, model/Worker0. API stopped, AnyIO/errors empty, fixture deleted and cleanup deadline passed; exact child exited0, no force/unknown process action. The earlier1.94s local run before final review corrections is preserved as intermediate, not added as another independent success scenario.
+- Source-before.json freezes33 source/test/fixture files; source-after.json confirms every byte unchanged across the final actual run. No source edits occurred during that run. Syntax checks for the two product/two CJS files, Ruff new Python wrapper and git diff --check passed. One existing Starlette/httpx deprecation warning is preserved; no broad suite/mypy/native claim.
+
+## Independent review, cleanup and untested boundaries
+
+catalog_native_review independently read the combined code and tests, reviewed all20 assertions and checked final HTTP/JUnit/fixture/source records: limited final ACK, no blocker. Reviewer did not test, write, network, launch browser or triggerCI. The reviewer specifically required command-accepted calls to force a fresh GET, which the final code and negative/positive case now prove at the synthetic protocol level.
+
+No new native window/pixel/FPS/keyboard/real-model/PG/production/G0 acceptance. Actual successful command POST and instance-create POST paths are statically preserved only, not dynamically re-executed. The original actual catalog window is consumed and cannot be reused as this source's pixel proof. Dedicated specialized feature controllers were not all individually reaccepted; no unsupported assertion that every frontend edge is complete.
+
+Owned JSDOM windows close and short local drivers exit; the reused API fixture reports normal owned process/thread/socket/engine cleanup and copied DB deletion. Pytest's evidence directories/logs remain for preservation; there is no whole-host cleanup claim. No credentials/permissions/services/fees/SDKs or user-computer action was added. The immutable settlement candidate stays disabled and its seven-family/capacity/net-benefit work remains separate; no G0 success follows from this read-lifecycle batch.
