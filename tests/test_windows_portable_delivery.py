@@ -42,18 +42,18 @@ def configured(tmp_path, monkeypatch):
     runtime.mkdir()
     interpreter = runtime / "python.exe"
     interpreter.touch()
-    edge = tmp_path / "edge.exe"
-    edge.touch()
+    chrome = tmp_path / "chrome.exe"
+    chrome.touch()
     monkeypatch.setattr(module, "__file__", str(tmp_path / "desktop.py"))
     monkeypatch.setattr(module.sys, "platform", "win32")
     monkeypatch.setattr(module.sys, "version_info", (3, 12, 10))
     monkeypatch.setattr(module.sys, "executable", str(interpreter))
-    monkeypatch.setattr(module, "browser_path", lambda: edge)
-    return module, interpreter, edge
+    monkeypatch.setattr(module, "browser_path", lambda: chrome)
+    return module, interpreter, chrome
 
 
 def test_private_launch_ready_then_browser_and_same_data_reopen(tmp_path, monkeypatch):
-    module, interpreter, edge = configured(tmp_path, monkeypatch)
+    module, interpreter, chrome = configured(tmp_path, monkeypatch)
     commands = []
     event = json.dumps(dict(event="SYNTHETIC_WORKSPACE_READY", mode="SYNTHETIC_TEST_ONLY",
                             url="http://127.0.0.1:12345"))
@@ -70,8 +70,8 @@ def test_private_launch_ready_then_browser_and_same_data_reopen(tmp_path, monkey
     assert command[0] == str(interpreter) and command[-1] == "--new"
     assert "shell" not in options and "creationflags" not in options
     assert options["env"]["TEMP"] == str(tmp_path / "temp")
-    assert commands[1][0] == [str(edge), "--user-data-dir=" + str(tmp_path / "edge-profile"),
-        "--disk-cache-dir=" + str(tmp_path / "edge-cache"), "--no-first-run",
+    assert commands[1][0] == [str(chrome), "--user-data-dir=" + str(tmp_path / "chrome-profile"),
+        "--disk-cache-dir=" + str(tmp_path / "chrome-cache"), "--no-first-run",
         "--no-default-browser-check", "http://127.0.0.1:12345"]
     assert not (tmp_path / "preview-running.lock").exists()
     (tmp_path / "workspace data").mkdir()
@@ -167,3 +167,31 @@ def test_exact_assembled_archive_all_bytes_and_notices():
         assert any("pydantic_core/" in name and name.endswith(".pyd") for name in names)
         assert not any(name.endswith((".db", ".sqlite", ".env")) for name in names)
         assert archive.read(prefix + "desktop.py") == (ROOT / "scripts/portable_desktop.py").read_bytes()
+
+def test_chrome_detection_uses_existing_program_files_only(tmp_path, monkeypatch):
+    module = load("portable_desktop")
+    standard = tmp_path / "standard"
+    x86 = tmp_path / "x86"
+    for root in (standard, x86):
+        chrome = root / "Google/Chrome/Application/chrome.exe"
+        chrome.parent.mkdir(parents=True)
+        chrome.touch()
+    monkeypatch.setenv("ProgramFiles", str(standard))
+    monkeypatch.setenv("ProgramFiles(x86)", str(x86))
+    assert module.browser_path() == standard / "Google/Chrome/Application/chrome.exe"
+
+
+def test_edge_is_never_a_fallback_and_missing_chrome_precedes_data(tmp_path, monkeypatch):
+    module, _, _ = configured(tmp_path, monkeypatch)
+    program_files = tmp_path / "program-files"
+    edge = program_files / "Microsoft/Edge/Application/msedge.exe"
+    edge.parent.mkdir(parents=True)
+    edge.touch()
+    monkeypatch.setenv("ProgramFiles", str(program_files))
+    monkeypatch.setenv("ProgramFiles(x86)", str(program_files))
+    monkeypatch.setattr(module, "browser_path", load("portable_desktop").browser_path)
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *a, **kw: pytest.fail("must not launch"))
+    with pytest.raises(RuntimeError, match="Google Chrome was not found"):
+        module.main()
+    assert not (tmp_path / "workspace data").exists()
+    assert not (tmp_path / "preview-running.lock").exists()

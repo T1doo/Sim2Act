@@ -124,19 +124,19 @@ def build(inputs, assets, app_wheel, output, *, candidate_manifest=None):
         'if not exist "%~dp0temp" mkdir "%~dp0temp"\r\n'
         '"%~dp0runtime\\python.exe" -I -B -X utf8 "%~dp0desktop.py"\r\n'
         'set "SIM2ACT_PREVIEW_EXIT=%ERRORLEVEL%"\r\n'
-        'echo.\r\necho Preview stopped. Close the test Edge window before deleting this folder.\r\n'
+        'echo.\r\necho Preview stopped. Close the test Chrome window before deleting this folder.\r\n'
         'pause\r\nexit /b %SIM2ACT_PREVIEW_EXIT%\r\n').encode("ascii")
     files["READ-ME-FIRST.txt"] = (
         "Sim2Act Windows x64 - OFFLINE SYNTHETIC PREVIEW\n\n"
         "Unzip to a new ordinary folder. Double-click Start-Sim2Act.cmd.\n"
         "No Python, SDK, compiler, Node, pip or database install is needed.\n"
-        "An existing Microsoft Edge and the Windows Universal C Runtime are required.\n"
+        "An existing Google Chrome and the Windows Universal C Runtime are required.\n"
         "Do not bypass SmartScreen/signature/security refusals or install missing system components.\n"
         "The browser opens only after the local API and Worker are ready.\n"
         "Synthetic login: public-synthetic-blank-workspace\n"
         "Use non-sensitive synthetic data only. No real model, production account, PostgreSQL or formal publication.\n"
         "Keep the console open; Ctrl+C once stops the server. Wait for clean:true.\n"
-        "Close the separate test Edge window. Start again to reopen the same local data.\n"
+        "Close the separate test Chrome window. Start again to reopen the same local data.\n"
         "Delete this folder only after its own server and browser have exited.\n"
         "If startup fails, preserve the error; do not reset the database or delete a running claim.\n"
         "Application data, temp and browser profile/cache stay in this folder.\n"
