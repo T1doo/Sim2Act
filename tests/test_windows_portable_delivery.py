@@ -346,3 +346,226 @@ def test_stop_timeout_preserves_running_claim(tmp_path, monkeypatch):
         module.main()
     assert sent == [module.signal.CTRL_BREAK_EVENT]
     assert (tmp_path / "preview-running.lock").read_text(encoding="ascii")
+
+
+@pytest.mark.parametrize("line", [
+    None,
+    json.dumps(dict(event="SYNTHETIC_WORKSPACE_READY", mode="SYNTHETIC_TEST_ONLY",
+                    url="http://127.0.0.1:12345", worker_id="invalid")),
+    "still starting",
+])
+def test_startup_deadline_stops_once_and_preserves_unknown_claim(tmp_path, monkeypatch, capsys, line):
+    module, _, _ = configured(tmp_path, monkeypatch)
+    release, done = module.threading.Event(), module.threading.Event()
+    clock, sent, queue_gets = [0], [], [0]
+
+    class HeldOutput:
+        def __iter__(self):
+            try:
+                release.wait(2)
+                return iter(())
+            finally:
+                done.set()
+
+        def close(self):
+            pytest.fail("unconfirmed output must remain owned by its reader")
+
+    class TimedQueue:
+        def put(self, value):
+            pass  # The output is held open until test cleanup.
+
+        def get(self, **kwargs):
+            clock[0] += 1
+            queue_gets[0] += 1
+            assert queue_gets[0] < 10, "startup or stop deadline was renewed/missing"
+            if line is None:
+                raise module.queue.Empty
+            return "line", line + "\n"
+
+    monitor = module.monitor_server
+    monkeypatch.setattr(module.queue, "Queue", TimedQueue)
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(module, "monitor_server", lambda child, browser:
+                        monitor(child, browser, startup_timeout=3, stop_timeout=2))
+    child = SimpleNamespace(stdout=HeldOutput(), poll=lambda: None, pid=999,
+                            send_signal=lambda number: sent.append(number))
+    calls = []
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *a, **kw: calls.append(a) or child)
+    try:
+        with pytest.raises(TimeoutError, match="stop was not confirmed"):
+            module.main()
+        assert sent == [module.signal.CTRL_BREAK_EVENT]
+        assert len(calls) == 1  # No browser or replacement server.
+        assert (tmp_path / "preview-running.lock").read_text(encoding="ascii")
+        output = capsys.readouterr().out
+        assert output.count("startup timed out") == 1
+        assert "PREVIEW_SERVER_EXIT" not in output
+    finally:
+        release.set()
+        assert done.wait(2)
+
+
+def test_startup_timeout_with_confirmed_exit_releases_only_own_claim(tmp_path, monkeypatch, capsys):
+    module, _, _ = configured(tmp_path, monkeypatch)
+    release, done = module.threading.Event(), module.threading.Event()
+    real_queue = module.queue.Queue
+    sent = []
+    clock = [0]
+
+    class HeldOutput:
+        def __iter__(self):
+            try:
+                release.wait(2)
+                return iter(())
+            finally:
+                done.set()
+
+        def close(self):
+            assert done.is_set()
+
+    class TimedQueue:
+        def __init__(self):
+            self.delegate = real_queue()
+
+        def put(self, value):
+            self.delegate.put(value)
+
+        def get(self, **kwargs):
+            if not sent:
+                clock[0] = 3
+                raise module.queue.Empty
+            return self.delegate.get(**kwargs)
+
+    def stop(number):
+        sent.append(number)
+        release.set()
+
+    monitor = module.monitor_server
+    monkeypatch.setattr(module.queue, "Queue", TimedQueue)
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(module, "monitor_server", lambda child, browser:
+                        monitor(child, browser, startup_timeout=3))
+    child = SimpleNamespace(stdout=HeldOutput(), poll=lambda: 0 if done.is_set() else None,
+                            wait=lambda **kw: 0, pid=999, send_signal=stop)
+    calls = []
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *a, **kw: calls.append(a) or child)
+    try:
+        assert module.main() == 1
+        assert sent == [module.signal.CTRL_BREAK_EVENT]
+        assert len(calls) == 1
+        assert not (tmp_path / "preview-running.lock").exists()
+        events = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith("{")]
+        assert events[-1]["startup_timed_out"] is True
+        assert events[-1]["receipt_verified"] is False
+    finally:
+        release.set()
+        assert done.wait(2)
+
+
+def test_late_ready_and_clean_receipt_cannot_turn_startup_timeout_into_success(monkeypatch, capsys):
+    module = load("portable_desktop")
+    monkeypatch.setattr(module.signal, "CTRL_BREAK_EVENT", 1, raising=False)
+    worker = "worker_" + "a" * 32
+    ready = json.dumps(dict(event="SYNTHETIC_WORKSPACE_READY", mode="SYNTHETIC_TEST_ONLY",
+                            url="http://127.0.0.1:12345", worker_id=worker))
+    stopped = json.dumps(dict(event="SYNTHETIC_WORKSPACE_STOPPED", worker_id=worker,
+                              worker_stopped=True, clean=True, data_preserved=True))
+    release, done = module.threading.Event(), module.threading.Event()
+    real_queue = module.queue.Queue
+    sent, clock = [], [0]
+
+    class LateOutput:
+        def __iter__(self):
+            try:
+                release.wait(2)
+                yield ready + "\n"
+                yield stopped + "\n"
+            finally:
+                done.set()
+
+    class TimedQueue:
+        def __init__(self):
+            self.delegate = real_queue()
+
+        def put(self, value):
+            self.delegate.put(value)
+
+        def get(self, **kwargs):
+            if not sent:
+                clock[0] = 3
+                raise module.queue.Empty
+            return self.delegate.get(**kwargs)
+
+    def stop(number):
+        sent.append(number)
+        release.set()
+
+    monkeypatch.setattr(module.queue, "Queue", TimedQueue)
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+    child = SimpleNamespace(stdout=LateOutput(), poll=lambda: 0 if done.is_set() else None,
+                            wait=lambda **kw: 0, send_signal=stop)
+    try:
+        assert module.monitor_server(child, lambda url: pytest.fail("late browser"),
+                                     startup_timeout=3) == 1
+        assert sent == [module.signal.CTRL_BREAK_EVENT]
+        events = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith("{")]
+        assert events[-1]["receipt_verified"] is True  # Real late cleanup, not startup success.
+        assert events[-1]["startup_timed_out"] is True
+    finally:
+        release.set()
+        assert done.wait(2)
+
+
+def test_first_ready_returned_across_queue_deadline_is_too_late(monkeypatch, capsys):
+    module = load("portable_desktop")
+    monkeypatch.setattr(module.signal, "CTRL_BREAK_EVENT", 1, raising=False)
+    worker = "worker_" + "a" * 32
+    ready = json.dumps(dict(event="SYNTHETIC_WORKSPACE_READY", mode="SYNTHETIC_TEST_ONLY",
+                            url="http://127.0.0.1:12345", worker_id=worker))
+    stopped = json.dumps(dict(event="SYNTHETIC_WORKSPACE_STOPPED", worker_id=worker,
+                              worker_stopped=True, clean=True, data_preserved=True))
+    release, done = module.threading.Event(), module.threading.Event()
+    real_queue = module.queue.Queue
+    sent, clock = [], [0]
+
+    class LateOutput:
+        def __iter__(self):
+            try:
+                release.wait(2)
+                yield stopped + "\n"
+            finally:
+                done.set()
+
+    class CrossingQueue:
+        def __init__(self):
+            self.delegate = real_queue()
+            self.first = True
+
+        def put(self, value):
+            self.delegate.put(value)
+
+        def get(self, **kwargs):
+            if self.first:
+                self.first = False
+                clock[0] = 3.01  # First get began before deadline, directly returns READY after it.
+                return "line", ready + "\n"
+            return self.delegate.get(**kwargs)
+
+    def stop(number):
+        sent.append(number)
+        release.set()
+
+    monkeypatch.setattr(module.queue, "Queue", CrossingQueue)
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+    child = SimpleNamespace(stdout=LateOutput(), poll=lambda: 0 if done.is_set() else None,
+                            wait=lambda **kw: 0, send_signal=stop)
+    try:
+        assert module.monitor_server(child, lambda url: pytest.fail("late browser"),
+                                     startup_timeout=3) == 1
+        assert sent == [module.signal.CTRL_BREAK_EVENT]
+        events = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith("{")]
+        assert events[-1]["receipt_verified"] is True
+        assert events[-1]["startup_timed_out"] is True
+    finally:
+        release.set()
+        assert done.wait(2)
