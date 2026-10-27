@@ -1,0 +1,36 @@
+# Project grant directory scope and read-only recovery
+
+Base: `7916d816b6a6fc9680c6f79e4062d3fda16dca4b`. Original V5 product §2 requires project-scoped resource/authorization views and truthful available/revoked/missing state; §5.5 separates identities/projects and requires original backend authorization. This patch fixes an existing frontend API path, not a new Grant capability or an ownership/G0 workaround.
+
+## Reproduced defect and product change
+
+Project A's authorization rows remained under project B when B's earlier material/goal/app/history read failed before the final grants GET. Even a current grants GET failure retained prior rows. The old revoke closure already checked its current project/token/connection/history generation, so this was misleading stale display, **not demonstrated backend cross-project access or unauthorized POST**.
+
+Actual original-template/controller baseline failed `project switch immediately removes A grant even before B material response`. An initial test setup had omitted the existing UNKNOWN body's required resource_refs; its separate TypeError is preserved in fixture-error.log. After correcting only that fixture, baseline-red.log reproduced the real assertion failure. Intermediate and final green logs are preserved separately, not combined as one test run.
+
+Only product file app.js changed. Project change and refresh entry now synchronously remove old grant rows/actions and show unconfirmed state. Independent explicit recovery reads only `/api/projects/<current>/grants`; it does not depend on material/goal/app/history success, restart tasks, submit commands or change permissions. Actual grants GET is labelled loading; pending batch preparation remains neutral, not an indefinite false loading claim. Current read/error/empty states have truthful feedback. A retry invalidates its old control before the first await, preventing duplicate/stale clicks.
+
+Grant view scope binds actor token, identity connection generation, project ID, project-selection generation and its own read generation. Identity clear invalidates the latter. Same-project older responses, A→B→A and old-identity failure cannot paint or unlock the latest view. Existing full refresh supplies its original batch-current predicate as an additional gate. Original revoke URL, `{command:"revoke",version:g.revision}`, checks before/after POST and subsequent cleanup are moved unchanged into the helper. No backend, authorization semantics, request keys, UNKNOWN states, worker/model, lease/fence/epoch or immutable candidate behavior changed.
+
+## Actual bounded verification
+
+Commands used installed local Node/JSDOM (`NODE_PATH=/workspace/sim2act-research-desk-node-tools-20261023/node_modules`); no dependency install, browser launch or native window.
+
+- `node tests/grant_directory_scope.cjs`: final **14 assertions /32 synthetic GETs**. Covers switch+upstream failure, independent grants-only recovery even while material reads fail, current failure/retry busy, detached old revoke callback sends nothing, late A/identity, same-project read order, A→B→A and original UNKNOWN body/key unchanged. This is a DOM protocol harness, **not actual HTTP or pixels**.
+- `node tests/resource_directory_scope.cjs`: affected existing refresh-path regression **15 assertions /22 synthetic GETs**, PASS. Not a broad old suite or new visual result.
+- `.venv/bin/python -m pytest -q tests/test_grant_directory_http.py --basetemp=/tmp/grant-directory-http-20261027 --junitxml=/tmp/grant-directory-http.xml`: **1PASS,1.16s**, original app.js helper through actual loopback Uvicorn/FastAPI/SQLite. Three real GETs: owned project with stored grants200, another actor's own empty project200, deliberate cross-owner read403. Four assertions in the Node driver are part of this same pytest case, not four more runs. No POST/model/Worker. Original API rejection is retained; no retry of the denied read. SQL recorded SELECT9/BEGIN3 only; grants compared identical before/after. Setup deliberately seeds a fresh synthetic DB including a resource and grants, so zero-DML is only the measured read phase, not fixture creation.
+- `node --check` for app.js/two new CJS and Ruff new Python test, plus git diff --check: PASS. The exact final app.js had already been used by the HTTP run; later edits only added the two final scope assertions. No full repository lint/mypy claim.
+
+The HTTP helper's finally block joins the owned API thread normally, closes its socket/engine, and asserts stopped; Node returns0 and DOM windows close. Pytest's temporary SQLite files remain retained, not claimed deleted. No unknown process/lock scan, test retry or device action occurred. An evidence collection command initially guessed the truncated pytest directory name incorrectly; locating the actual directory recovered the existing successful artifacts without rerunning that test.
+
+## Independent review and limits
+
+catalog_native_review independently read the final product diff, all14 scope assertions and both new HTTP helpers; limited final ACK, no blocker found. No reviewer tests, writes, network, browser or CI. Original effective revoke POST success was **not executed** in this slice: its URL/body/version/current gates were checked statically, while stale callbacks' no-send behavior was exercised. New grant controls have no native/pixel acceptance. The earlier four connection frames bind their own older source and cannot attest this patch, other pages, full frontend, real model/provider/PG, or G0. No native window was started or reused; the completed catalog window remains consumed.
+
+The identified independent frontend/API defect was the selected delivery item. The default-off immutable settlement candidate remains unenabled; this patch neither claims its seven-family closure/net benefit nor changes G0's UNKNOWN status. Source/test hashes are in sources.json; original failure/green/HTTP/JUnit/SQL artifacts remain in this directory.
+
+## Historical snapshot test isolation
+
+The existing test_catalog_visual_contract positive test had assumed that the working tree must forever match the old198-file native snapshot. That would reject ordinary subsequent product edits, even though the original window was already consumed. The test now restores the exact prepared2e00 Git blobs to a temporary tree using one readonly git cat-file batch and runs the unchanged verifier there. Missing historical Git objects produce an explicit SKIP, never fetching history or qualifying the current source. This does not update any original manifest or runtime verifier; the latest app.js is **not admitted** by the old native contract. Final related3pytest PASS0.09s, including existing private-directory reuse and source-drift rejection cases; this is a separate local historical-contract test, not additional HTTP/native coverage. Logs/JUnit and the updated test hash are preserved. Independent source review also covers this adjustment.
+
+Historical-test review correction: both Git subprocesses now explicitly set child-only GIT_NO_LAZY_FETCH=1 and GIT_TERMINAL_PROMPT=0, and object paths use as_posix for Windows. Independent final readonly review confirmed this closes the partial-clone lazy-fetch concern. The earlier0.11s logs/XML are retained separately; final0.09s is not summed with them. No runtime permission or network setting changed.

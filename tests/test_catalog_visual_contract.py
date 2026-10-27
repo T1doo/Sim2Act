@@ -1,6 +1,9 @@
 """No Windows process/browser/network: source and private dependency layout only."""
 import importlib.util
+import io
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -11,8 +14,34 @@ contract = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(contract)
 
 
-def test_frozen_runtime_and_product():
-    value = contract.verify_contract(REPO)
+def test_frozen_runtime_and_product(tmp_path):
+    # The native snapshot is historical. Normal product edits must not rewrite
+    # its witnesses or be admitted by them. Check the exact prepared Git tree.
+    prepared = '2e00d679884f195f02dc32cef9e75d95acb3de4a'
+    local_git = dict(os.environ, GIT_NO_LAZY_FETCH='1', GIT_TERMINAL_PROMPT='0')
+    available = subprocess.run(['git', 'cat-file', '-e', prepared + '^{commit}'],
+                               cwd=REPO, env=local_git, capture_output=True)
+    if available.returncode:
+        pytest.skip('historical prepared Git object unavailable; no current-source qualification')
+    manifest_path = contract.CONTRACT.parent / 'runtime-manifest.json'
+    manifest = json.loads((REPO / manifest_path).read_text())
+    names = [contract.CONTRACT.as_posix(), manifest_path.as_posix(), *manifest]
+    specs = ''.join(prepared + ':' + name + '\n' for name in names)
+    result = subprocess.run(['git', 'cat-file', '--batch'], input=specs.encode(),
+                            cwd=REPO, env=local_git, capture_output=True, check=True)
+    stream = io.BytesIO(result.stdout)
+    for name in names:
+        path = Path(name)
+        assert not path.is_absolute() and '..' not in path.parts
+        _, kind, size = stream.readline().split()
+        assert kind == b'blob'
+        data = stream.read(int(size))
+        assert len(data) == int(size) and stream.read(1) == b'\n'
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+    assert not stream.read()
+    value = contract.verify_contract(tmp_path)
     assert not value['run_created'] and not value['execution_authorized']
 
 

@@ -20,6 +20,7 @@ let candidateSelectionGeneration = 0, candidateBusy = false, candidatePanelReady
 let appSelectionGeneration = 0, activeAppProject = null;
 let appDirectoryGeneration = 0;
 let resourceCatalogReadGeneration = 0, resourceCatalogReadPending = null;
+let grantDirectoryGeneration = 0;
 let workspaceSelectionGeneration = 0;
 const candidateRequestKeys = new Map();
 const extractionRequestKeys = new Map();
@@ -217,10 +218,43 @@ function resourceDirectoryUnavailable(message, retry=false) {
 $("project-select").addEventListener("change", () => {
   invalidateGoalCardDirectory();
   invalidateAppDirectory();
+  grantDirectoryUnavailable($("project-select").value?"当前项目授权列表未确认；上一项目记录已失效。":"先选择项目，再读取授权列表。");
   resourceDirectoryUnavailable($("project-select").value?"当前项目材料列表未确认，正在读取；上一项目目录已失效。":"先选择项目，再读取材料列表。");
 });
+function grantDirectoryScope() {
+  return {identity:token,connection:identityConnectionGeneration,project:$("project-select").value,selection:projectSelectionGeneration};
+}
+function grantDirectoryScopeCurrent(context) {
+  return context.identity===token&&context.connection===identityConnectionGeneration&&context.project===$("project-select").value&&context.selection===projectSelectionGeneration;
+}
+function grantDirectoryUnavailable(message,retry=false,state=retry?"error":"unconfirmed") {
+  const context=grantDirectoryScope(),generation=++grantDirectoryGeneration;
+  const current=()=>generation===grantDirectoryGeneration&&grantDirectoryScopeCurrent(context);
+  const note=row(message,retry?async()=>{
+    if(!current()||!note.isConnected)return;
+    const button=note.querySelector("button");if(button.disabled)return;button.disabled=true;
+    try{await refreshGrants();}finally{if(current()&&note.isConnected)button.disabled=false;}
+  }:null,"重新读取授权列表（只读）");
+  note.className="resource-directory-status";note.setAttribute("role","status");note.setAttribute("aria-live","polite");note.dataset.state=state;
+  $("grants").replaceChildren(note);
+}
+async function refreshGrants(batchCurrent=null) {
+  const context=grantDirectoryScope(),pid=context.project;
+  grantDirectoryUnavailable(pid?"正在只读核对当前项目授权列表…":"先选择项目，再读取授权列表。",false,pid?"loading":"unconfirmed");
+  if(!pid)return;
+  const generation=grantDirectoryGeneration;
+  const current=()=>generation===grantDirectoryGeneration&&grantDirectoryScopeCurrent(context)&&(!batchCurrent||batchCurrent());
+  try {
+    const grants=await api(`/api/projects/${pid}/grants`);
+    if(!current())return;
+    $("grants").replaceChildren(...grants.map(g => row(`${g.tool_ref} · ${g.principal_id.startsWith("runtime_") ? "项目运行身份" : g.principal_id.startsWith("appruntime_") ? "应用预览身份" : "当前使用者"} · ${g.revoked ? "已撤回" : "有效至 " + new Date(g.expires_at * 1000).toLocaleString()}`, g.revoked ? null : async () => {if(!current())return;await api(`/api/grants/${g.id}/revoke`, "POST", {command:"revoke",version:g.revision});if(!current())return;activeRun=null;clearApp();$("result").replaceChildren();$("events").textContent="";$("raw-result").textContent="";invalidateResourcePreview();await refresh();}, "撤回")));
+    if(!grants.length){const note=row("当前项目未返回授权记录；这不是任务结果或权限判定。");note.setAttribute("role","status");$("grants").replaceChildren(note);}
+  } catch(error){if(!current())return;grantDirectoryUnavailable("当前项目授权列表读取失败，尚未确认；不会据此判断权限或任务状态。",true);throw error;}
+}
 async function refresh() {
-  const pid = $("project-select").value; if (!pid) return;
+  const pid = $("project-select").value;
+  grantDirectoryUnavailable(pid?"当前项目授权列表未确认；可单独只读核对。":"先选择项目，再读取授权列表。",!!pid,"unconfirmed");
+  if (!pid) return;
   const identity=token,connection=identityConnectionGeneration,generation=++runHistoryGeneration;
   const current=()=>pid===$("project-select").value && identity===token && connection===identityConnectionGeneration && generation===runHistoryGeneration;
   let materials;
@@ -251,9 +285,7 @@ async function refresh() {
   if (!current()) return;
   $("runs").replaceChildren(...runs.map(x => runHistoryRow(x,()=>{if(identity===token && pid===$("project-select").value)return showRun(x.id);})));
   $("run-history-status").textContent=runs.length?`已读取 ${runs.length} 个持久任务。查看任务只读取既有状态。`:"当前项目暂无任务。";
-  const grants = await api(`/api/projects/${pid}/grants`);
-  if (!current()) return;
-  $("grants").replaceChildren(...grants.map(g => row(`${g.tool_ref} · ${g.principal_id.startsWith("runtime_") ? "项目运行身份" : g.principal_id.startsWith("appruntime_") ? "应用预览身份" : "当前使用者"} · ${g.revoked ? "已撤回" : "有效至 " + new Date(g.expires_at * 1000).toLocaleString()}`, g.revoked ? null : async () => {if(!current())return;await api(`/api/grants/${g.id}/revoke`, "POST", {command:"revoke",version:g.revision});if(!current())return;activeRun=null;clearApp();$("result").replaceChildren();$("events").textContent="";$("raw-result").textContent="";invalidateResourcePreview();await refresh();}, "撤回")));
+  await refreshGrants(current);
 }
 function fixedGoalAcceptancePassed(r) {
   // Projection of the existing server-verified prospective contract, not a new checker.
@@ -570,6 +602,7 @@ async function loadProjects(preferred=null) {
   await refresh();
 }
 function clearIdentityView() {
+  grantDirectoryGeneration++;
   projectCreatePending=null;$("project-form").querySelector("button").disabled=false;
   clearOrdinaryRunMaterials();
   clearNaturalFirstGuide();
