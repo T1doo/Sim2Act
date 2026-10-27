@@ -43,7 +43,7 @@ def browser_path():
 
 
 
-def monitor_server(child, open_browser, *, stop_timeout=20, output_timeout=5):
+def monitor_server(child, open_browser, *, startup_timeout=30, stop_timeout=20, output_timeout=5):
     """Drain the owned stdout pipe while the main thread services console signals.
 
     Windows console input and a blocking TextIO read must not compete with final
@@ -61,6 +61,8 @@ def monitor_server(child, open_browser, *, stop_timeout=20, output_timeout=5):
     ready_worker = None
     receipt = None
     opened = False
+    startup_deadline = time.monotonic() + startup_timeout
+    startup_timed_out = False
 
     def drain():
         try:
@@ -74,6 +76,15 @@ def monitor_server(child, open_browser, *, stop_timeout=20, output_timeout=5):
     def request_stop(signum, frame):
         requested.set()
 
+    def check_startup_deadline():
+        nonlocal startup_timed_out
+        # One deadline, never renewed by noise, malformed or duplicate READY.
+        if (ready_worker is None and not requested.is_set()
+                and time.monotonic() >= startup_deadline):
+            startup_timed_out = True
+            requested.set()
+            print("Server startup timed out before a valid READY; requesting normal stop.", flush=True)
+
     previous = {}
     reader = threading.Thread(target=drain, name="preview-server-output", daemon=True)
     try:
@@ -83,6 +94,7 @@ def monitor_server(child, open_browser, *, stop_timeout=20, output_timeout=5):
                 previous[number] = signal.signal(number, request_stop)
         reader.start()
         while True:
+            check_startup_deadline()
             if requested.is_set() and not stop_sent:
                 stop_sent = True
                 stop_deadline = time.monotonic() + stop_timeout
@@ -118,6 +130,8 @@ def monitor_server(child, open_browser, *, stop_timeout=20, output_timeout=5):
                 continue
             if type(event) is not dict:
                 continue
+            # get() may span the deadline; a first READY must still be timely.
+            check_startup_deadline()
             url = ready_url(value)
             worker = event.get("worker_id")
             if url and type(worker) is str and re.fullmatch(r"worker_[0-9a-f]{32}", worker):
@@ -138,9 +152,9 @@ def monitor_server(child, open_browser, *, stop_timeout=20, output_timeout=5):
                     and receipt.get("clean") is True and receipt.get("data_preserved") is True)
         print(json.dumps(dict(event="PREVIEW_SERVER_EXIT", child_returncode=code,
                               stop_requested=requested.is_set(), receipt_verified=verified,
-                              worker_id=ready_worker)), flush=True)
+                              worker_id=ready_worker, startup_timed_out=startup_timed_out)), flush=True)
         # A zero exit is not a worker-clean receipt. Never synthesize one.
-        return code if code != 0 else (0 if verified else 1)
+        return code if code != 0 else (0 if verified and not startup_timed_out else 1)
     finally:
         for number, handler in previous.items():
             signal.signal(number, handler)
