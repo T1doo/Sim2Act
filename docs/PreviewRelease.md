@@ -7,12 +7,12 @@
 普通体验请选择 `Sim2Act-preview-win64-*.zip`，不要把 local-candidate 源码包当免环境成品。
 
 1. 在 Windows x64 将 ZIP **完整解压到一个新的普通目录**，保留全部文件；不要覆盖旧数据目录。
-2. 双击 `Start-Sim2Act.cmd`。包内已有私有 Python 及运行依赖，无需手工安装 Python、SDK、编译器、Node 或 PostgreSQL。需要电脑原有 Microsoft Edge 和 Windows UCRT；缺少时停止，不绕过系统安全提示。
-3. 等待本机服务与 Worker 就绪后自动打开单独的 Edge 测试窗口。页面明确标为合成工程，连接身份为 `public-synthetic-blank-workspace`。只能输入无隐私的合成练习材料。
+2. 双击 `Start-Sim2Act.cmd`。包内已有私有 Python 及运行依赖，无需手工安装 Python、SDK、编译器、Node 或 PostgreSQL。需要电脑原有 Google Chrome 和 Windows UCRT；缺少时停止，不绕过系统安全提示。
+3. 等待本机服务与 Worker 就绪后自动打开单独的 Chrome 测试窗口。页面明确标为合成工程，连接身份为 `public-synthetic-blank-workspace`。只能输入无隐私的合成练习材料。
 4. 创建项目，保存并明确授权 CSV 等资源，建立目标卡，再使用界面内支持的固定工具、应用和实例流程。每项审批、授权和版本确认仍须明确操作；未连接的自然模型能力不会变成可用状态。
-5. 控制台保持打开。结束时按一次 Ctrl+C，等服务清理报告，再关闭单独的测试 Edge。数据留在同目录，下次启动可重新打开。仅在自有服务与浏览器退出后删除解压目录；异常时保留原错误、数据和运行声明，不删锁或清库来重试。
+5. 控制台保持打开。结束时按一次 Ctrl+C，等服务清理报告，再关闭单独的测试 Chrome。数据留在同目录，下次启动可重新打开。仅在自有服务与浏览器退出后删除解压目录；异常时保留原错误、数据和运行声明，不删锁或清库来重试。
 
-`workspace data`、`temp`、`edge-profile`、`edge-cache` 位于解压目录。不能承诺操作系统、Defender 或浏览器产生的系统记录绝不出现在目录外。不要放入私人材料或复用公开合成身份处理真实项目。
+`workspace data`、`temp`、`chrome-profile`、`chrome-cache` 位于解压目录。不能承诺操作系统、Defender 或浏览器产生的系统记录绝不出现在目录外。不要放入私人材料或复用公开合成身份处理真实项目。
 
 ## 包与当前证据
 

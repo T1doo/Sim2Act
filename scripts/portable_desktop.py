@@ -28,14 +28,14 @@ def ready_url(line):
 
 
 def browser_path():
-    # Existing Microsoft Edge only; no downloader, default-profile or registry.
-    for variable in ("ProgramFiles(x86)", "ProgramFiles"):
+    # Existing Google Chrome only; never change the default browser or fall back.
+    for variable in ("ProgramFiles", "ProgramFiles(x86)"):
         base = os.environ.get(variable)
         if base and Path(base).is_absolute():
-            candidate = Path(base) / "Microsoft/Edge/Application/msedge.exe"
+            candidate = Path(base) / "Google/Chrome/Application/chrome.exe"
             if candidate.is_file():
                 return candidate
-    raise RuntimeError("Microsoft Edge is required; no browser was installed or changed.")
+    raise RuntimeError("Google Chrome was not found in Program Files. Install Chrome separately before starting this preview; no browser was installed or changed.")
 
 
 def main():
@@ -47,8 +47,8 @@ def main():
     expected = root / "runtime/python.exe"
     if Path(sys.executable).resolve() != expected.resolve():
         raise RuntimeError("Only the bundled interpreter can start this preview.")
-    edge = browser_path()  # Before database creation; no default browser fallback.
-    for name in ("temp", "edge-profile", "edge-cache"):
+    chrome = browser_path()  # Before database creation; no default browser fallback.
+    for name in ("temp", "chrome-profile", "chrome-cache"):
         target = root / name
         if target.is_symlink() or target.is_junction():
             raise RuntimeError("Linked writable directories are not supported.")
@@ -71,7 +71,7 @@ def main():
             command.append("--new")
         print("Sim2Act synthetic preview: no model provider or formal publication.", flush=True)
         print("Public synthetic login: public-synthetic-blank-workspace", flush=True)
-        print("Keep this window open. Press Ctrl+C once to stop; close the test Edge window afterwards.", flush=True)
+        print("Keep this window open. Press Ctrl+C once to stop; close the test Chrome window afterwards.", flush=True)
         # Same console/process group: original Uvicorn receives the real Ctrl+C.
         # Never kill a process tree, inject an API command or reset an old DB.
         child = subprocess.Popen(command, cwd=root, env=environment, stdout=subprocess.PIPE,
@@ -82,8 +82,8 @@ def main():
                 print(line, end="", flush=True)
                 url = ready_url(line)
                 if url and not opened:
-                    subprocess.Popen([str(edge), "--user-data-dir=" + str(root / "edge-profile"),
-                                      "--disk-cache-dir=" + str(root / "edge-cache"),
+                    subprocess.Popen([str(chrome), "--user-data-dir=" + str(root / "chrome-profile"),
+                                      "--disk-cache-dir=" + str(root / "chrome-cache"),
                                       "--no-first-run", "--no-default-browser-check", url], cwd=root,
                                      env=environment)
                     opened = True
