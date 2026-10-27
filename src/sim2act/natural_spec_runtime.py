@@ -2855,27 +2855,37 @@ class _ColdTrialGraph:
         draft, body, target, goal = self.extraction
         return dict(binding=b.binding, source_binding=b.source_binding, source_facts=self._read_fields(b.source_facts), source_audit=self._read_fields(b.source_audit), native_audit=b.native_audit, source_outputs=b.source_outputs, source_proved=b.source_proved, generation=dict(run=(self.generate_accounted.run if getattr(self, 'accounted_prewrite', None) is not None else dict(b.generation_reader.run)), frozen=self._dump(b.generation_contract), material=b.generation_material, history=b.generation_history, raw=self.raw, metadata=self.metadata, marker=dict(b.generation_marker)), extraction=dict(draft=draft, request=self._dump(body), target=target, goal=goal, prefix=self._read_fields(b.extraction_prefix), review=self._read_fields(b.extraction_review), audit=self._read_fields(b.extraction_audit_prefix), audit_digest=b.extraction_audit), use=dict(prefix=self._read_fields(b.use_prefix), review=self._read_fields(b.use_review), value=dict(draft=b.use_value[0], manifest=self._dump(b.use_value[1]), report=b.use_value[2], material=b.use_value[3], goal=b.use_value[4]), audit=self._read_fields(b.use_audit_prefix)), journal=dict(ledger=self._dump(ledger), cursor=self._dump(cursor), revision=revision), generated=self._accounted_fields(self.generate_accounted), source=self._accounted_fields(self.source_accounted), source_proof=self.source_proof, roles=self.guard.role_limits, cold_job=self.cold_stage_facts[0])
 
+    def _check_links(self):
+        """Fixed control/context checks; standalone entry is still check()."""
+        require(self.platform is None or (type(self.platform) is _ColdBindingGraph and self.platform.guard is self.guard))
+        require(self.trial is None or (type(self.trial) is _ColdBindingGraph and self.trial.guard is self.guard))
+        require(self.audit_seed is None or (type(self.audit_seed) is _ColdAuditSeed and self.audit_seed.guard is self.guard))
+        require(self.phase in {'EMPTY', 'BUILDING', 'COMPLETE', 'BUSY'})
+        if self.trial is not None and self.phase in {'COMPLETE', 'BUSY'}:
+            owned = getattr(self, 'accounted_prewrite', None)
+            require(self.sealed_fields is (owned.complete if owned is not None else self.guard.inputs['cold-trial:complete']))
+            if self.authority_fields is not None:
+                require(self.authority_fields is self.guard.inputs['cold-trial:semantic-authorities'] and self.cold_authority is self.authority_fields['cold'] and (self.source_authority is self.authority_fields['source']))
+        if self.context_record is not None:
+            from . import natural_live_admission as gate
+            from . import production_trial_policy as policy
+
+            require(type(self.context_record_key) is str
+                and self.context_record is self.guard.inputs[self.context_record_key])
+            gate._trial_typed_values([(policy.RunCheck, self.context, self.context_record)])
+        if self.authority_record is not None:
+            require(self.authority_record is self.guard.inputs[self.authority_record_key] and tuple(sorted(self.authorities)) == self.authority_record['authorities'])
+
     def check(self):
         try:
+            candidate = (vars(self.guard).get('_producer_segment_candidate')
+                         if type(self.guard) is _ColdGraphRead else None)
+            if candidate is not None:
+                from ._cold_producer_segment import _ProducerSegment
+                if type(candidate) is _ProducerSegment and candidate.check_trial(self):
+                    return
             self._base()
-            require(self.platform is None or (type(self.platform) is _ColdBindingGraph and self.platform.guard is self.guard))
-            require(self.trial is None or (type(self.trial) is _ColdBindingGraph and self.trial.guard is self.guard))
-            require(self.audit_seed is None or (type(self.audit_seed) is _ColdAuditSeed and self.audit_seed.guard is self.guard))
-            require(self.phase in {'EMPTY', 'BUILDING', 'COMPLETE', 'BUSY'})
-            if self.trial is not None and self.phase in {'COMPLETE', 'BUSY'}:
-                owned = getattr(self, 'accounted_prewrite', None)
-                require(self.sealed_fields is (owned.complete if owned is not None else self.guard.inputs['cold-trial:complete']))
-                if self.authority_fields is not None:
-                    require(self.authority_fields is self.guard.inputs['cold-trial:semantic-authorities'] and self.cold_authority is self.authority_fields['cold'] and (self.source_authority is self.authority_fields['source']))
-            if self.context_record is not None:
-                from . import natural_live_admission as gate
-                from . import production_trial_policy as policy
-
-                require(type(self.context_record_key) is str
-                    and self.context_record is self.guard.inputs[self.context_record_key])
-                gate._trial_typed_values([(policy.RunCheck, self.context, self.context_record)])
-            if self.authority_record is not None:
-                require(self.authority_record is self.guard.inputs[self.authority_record_key] and tuple(sorted(self.authorities)) == self.authority_record['authorities'])
+            self._check_links()
             if self.audit_seed is not None:
                 self.audit_seed.check(self.worker.store, self.c, self.guard)
         except BaseException:
@@ -3318,6 +3328,9 @@ def _model_source_key(source):
 # Code configuration witness, never an input result or a permission.
 _COLD_BASE_CORE = (_ColdTrialGraph._typed_parameter_models,
     _ColdTrialGraph._typed_values_from_models, _ColdTrialGraph._native_base_mode)
+_COLD_PUBLIC_BASE = _ColdTrialGraph._base
+_COLD_AUDIT_SEED_CHECK = _ColdAuditSeed.check
+_COLD_CHECK_LINKS = _ColdTrialGraph._check_links
 _COLD_BASE_ROW_CODE = (('_cold_graph_row_storage', _cold_graph_row_storage),
     ('_cold_graph_row_values', _cold_graph_row_values))
 

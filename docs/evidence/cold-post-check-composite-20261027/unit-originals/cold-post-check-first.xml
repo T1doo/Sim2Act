@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.639" timestamp="2026-10-27T06:05:52.446725+00:00" hostname="6963bf8b5a14"><testcase classname="tests.test_cold_post_check_segment" name="test_post_check_keeps_dynamic_predicates_and_late_full" time="1.441"><failure message="assert [2, 2] == [2, 1]&#10;  &#10;  At index 1 diff: 2 != 1&#10;  Use -v to get more diff">sql_facts = namespace(store=&lt;sim2act.db.Store object at 0x7fea60155f10&gt;, settings=Settings(database_url='sqlite:////tmp/pytest-of-...key='offline-cold-phase', consent='BIND_ONLY_THIS_ACCEPTED_STAGE_RUN_APP_RELEASE_AND_COMPLETE_GOAL_TO_ORIGINAL_TRIAL'))
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fea60155df0&gt;
+
+    def test_post_check_keeps_dynamic_predicates_and_late_full(sql_facts, monkeypatch):
+        with legacy(sql_facts, True) as (t, s):
+            prepare(t, s, monkeypatch)
+            selector = s.graph._producer_segment_candidate
+            original = rt._cold_graph_bytes
+            encodes, traces = [], []
+            def encode(value):
+                encodes.append(1)
+                return original(value)
+            monkeypatch.setattr(rt, '_cold_graph_bytes', encode)
+            watched = {rt._ColdGraphRead._check_dynamic.__code__: 'dynamic',
+                       rt._ColdTrialGraph._check_links.__code__: 'links',
+                       rt._ColdAuditSeed.check.__code__: 'seed'}
+            def profile(frame, event, arg):
+                if event == 'call' and frame.f_code in watched:
+                    traces.append(watched[frame.f_code])
+            results = []
+            for enabled in (False, True):
+                selector.post_check = enabled
+                encodes.clear()
+                traces.clear()
+                sys.setprofile(profile)
+                try:
+                    t.check()
+                finally:
+                    sys.setprofile(None)
+                results.append((len(encodes), tuple(traces)))
+&gt;           assert [x[0] for x in results] == [2, 1]
+E           assert [2, 2] == [2, 1]
+E             
+E             At index 1 diff: 2 != 1
+E             Use -v to get more diff
+
+tests/test_cold_post_check_segment.py:52: AssertionError</failure></testcase></testsuite></testsuites>

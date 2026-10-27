@@ -5,6 +5,8 @@ operations share two full content pins. Every invocation starts fresh. Original
 SQL, authorization, business-clock and producer callers are untouched.
 """
 
+from inspect import getattr_static
+
 from pydantic_core import SchemaSerializer
 
 from . import _cold_base_segment as code
@@ -14,13 +16,13 @@ from ._cold_typed_stream import _Comparison
 
 class _ProducerSegment:
     __slots__ = ('graph', 'nonce', 'epoch', 'phase', 'qualified', 'fallback',
-                 'legacy_base', 'base_qualified', 'stage_qualified')
+                 'legacy_base', 'base_qualified', 'stage_qualified', 'post_check', 'post_qualified')
 
-    def __init__(self, graph, *, legacy_base=False):
+    def __init__(self, graph, *, legacy_base=False, post_check=False):
         from . import natural_spec_runtime as runtime
 
         gate.require(type(graph) is runtime._ColdGraphRead and graph.store.test_only
-                     and graph.store.sqlite and type(legacy_base) is bool,
+                     and graph.store.sqlite and type(legacy_base) is bool and type(post_check) is bool,
                      'Isolated SQLite producer segment required')
         graph.check(graph.store, graph.connection)
         gate.require('_producer_segment_candidate' not in vars(graph),
@@ -31,6 +33,7 @@ class _ProducerSegment:
         self.legacy_base = legacy_base
         self.base_qualified = 0  # diagnostic only, never queried for admission
         self.stage_qualified = 0
+        self.post_check, self.post_qualified = post_check, 0
         graph._producer_segment_candidate = self
 
     def current(self, graph, store, c):
@@ -116,4 +119,76 @@ class _ProducerSegment:
             return raw
         except BaseException:
             runtime._ColdGraphRead.invalidate(graph)
+            raise
+
+    def check_trial(self, trial):
+        """One fixed post check, retaining the LATE complete content boundary.
+
+        Never replace a late pin with an earlier PASS. Original independent
+        base/seed entries remain self-pinning. Seed fields/dumps follow their
+        original late full check and are not assumed callback-free.
+        """
+        from . import natural_spec_runtime as rt
+        from .production_trial_policy import RunCheck
+
+        def authority(value):
+            return (type(value) is tuple and len(value) == 5
+                    and all(type(item) is str for item in value))
+
+        try:
+            if (not self.post_check or not self.legacy_base
+                    or type(trial) is not rt._ColdTrialGraph or trial.guard is not self.graph
+                    or self.phase != 'post' or trial.accounted_prewrite is not None
+                    or trial._owned_models is not None or not code.eligible(trial)
+                    or getattr_static(trial, '_base') is not rt._COLD_PUBLIC_BASE
+                    or getattr_static(trial, '_check_links') is not rt._COLD_CHECK_LINKS
+                    or any(getattr_static(trial, name) is not function for name, function in zip(
+                        ('_typed_parameter_models', '_typed_values_from_models', '_native_base_mode'),
+                        rt._COLD_BASE_CORE, strict=True))
+                    or rt._ColdTrialGraph._check_links is not rt._COLD_CHECK_LINKS
+                    or rt._ColdAuditSeed.check is not rt._COLD_AUDIT_SEED_CHECK
+                    or type(trial.audit_seed) is not rt._ColdAuditSeed
+                    or getattr_static(trial.audit_seed, 'check') is not rt._COLD_AUDIT_SEED_CHECK
+                    or trial.audit_seed.guard is not self.graph
+                    or type(trial.phase) is not str
+                    or type(trial.authorities) is not set
+                    or not all(authority(item) for item in trial.authorities)):
+                return False
+            for value in (trial.authority_fields, trial.authority_record):
+                if value is not None and (type(value) is not dict
+                        or not all(type(key) is str for key in value)):
+                    return False
+            if trial.authority_record is not None:
+                values = trial.authority_record.get('authorities')
+                if (type(trial.authority_record_key) is not str or type(values) is not tuple
+                        or not all(authority(item) for item in values)):
+                    return False
+            if trial.context_record is not None:
+                if (type(trial.context_record_key) is not str
+                        or type(trial.context_record) is not dict
+                        or not code.fixed_serializers([(RunCheck, trial.context, trial.context_record)])):
+                    return False
+            # Same collector and fixed serializers as the reviewed base segment.
+            # No callback/output/SQL occurs during this conservative selection.
+            models = trial._typed_parameter_models()
+            if not code.fixed_serializers(models) or not code.serializers_current():
+                return False
+        except Exception:
+            return False
+        try:
+            self.current(self.graph, trial.worker.store, trial.c)
+            gate.require(trial.worker is self.graph.worker and trial.c is self.graph.connection)
+            trial._typed_values_from_models(models)
+            # Original base exit dynamic boundary remains at its original point.
+            self.current(self.graph, trial.worker.store, trial.c)
+            trial._check_links()
+            # Original seed entry full boundary stays LATE: mutations anywhere
+            # in the complete frontier during the pure middle cannot escape.
+            trial.audit_seed.check(trial.worker.store, trial.c, self.graph)
+            self.post_qualified += 1
+            return True
+        except BaseException:
+            # Preserve complete-content rejection priority on pure failures.
+            if self.graph.active:
+                self.graph.check(trial.worker.store, trial.c)
             raise

@@ -27,6 +27,8 @@ from sim2act.db import attempts, operations
 
 def test_complete_vertical_old_candidate_pair(tmp_path, monkeypatch):
     final_only = os.environ.get('SIM2ACT_PRODUCER_FINAL_ONLY') == '1'
+    post_pair = os.environ.get('SIM2ACT_POST_COMPOSITE_PAIR') == '1'
+    assert not (final_only and post_pair), 'Select one explicit complete-chain experiment'
     clock = SemanticClock(monkeypatch)
     cap = MockCap(monkeypatch)
     cap.exchange_limit, cap.method_limit = (6, 8) if final_only else (7, 9)
@@ -54,8 +56,9 @@ def test_complete_vertical_old_candidate_pair(tmp_path, monkeypatch):
             @contextmanager
             def scoped(*args, scope=scope, enabled=enabled, modes=modes, **kwargs):
                 with scope(*args, **kwargs) as graph:
-                    if enabled:
-                        modes.append(_ProducerSegment(graph, legacy_base=True))
+                    if enabled or post_pair:
+                        modes.append(_ProducerSegment(graph, legacy_base=True,
+                            post_check=enabled and post_pair))
                     yield graph
 
             @contextmanager
@@ -151,7 +154,7 @@ def test_complete_vertical_old_candidate_pair(tmp_path, monkeypatch):
                     attempts=exact_output(rows), operations=exact_output(ops),
                     scopes=[dict(phase=m.phase, qualified=m.qualified,
                                  fallback=m.fallback, base_qualified=m.base_qualified,
-                                 stage_qualified=m.stage_qualified,
+                                 stage_qualified=m.stage_qualified, post_qualified=m.post_qualified,
                                  active=m.graph.active,
                                  selector_detached='_producer_segment_candidate' not in vars(m.graph))
                             for m in modes],
@@ -176,6 +179,9 @@ def test_complete_vertical_old_candidate_pair(tmp_path, monkeypatch):
                for m in candidate['scopes'])
     assert any(m['phase'] == 'post' and m['stage_qualified'] > 0
                for m in candidate['scopes'])
+    if post_pair:
+        assert sum(m['post_qualified'] for m in candidate['scopes']) > 0
+        assert all(m['post_qualified'] == 0 for m in old['scopes'])
     assert all(not m['active'] for m in candidate['scopes'])
     assert all(m['selector_detached'] for m in candidate['scopes'])
     assert (cap.exchanges, cap.methods) == ((6, 8) if final_only else (7, 9))
