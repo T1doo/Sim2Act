@@ -38,6 +38,8 @@ def test_ready_exact_loopback():
 
 def configured(tmp_path, monkeypatch):
     module = load("portable_desktop")
+    monkeypatch.setattr(module.subprocess, "CREATE_NEW_PROCESS_GROUP", 512, raising=False)
+    monkeypatch.setattr(module.signal, "CTRL_BREAK_EVENT", 1, raising=False)
     runtime = tmp_path / "runtime"
     runtime.mkdir()
     interpreter = runtime / "python.exe"
@@ -56,11 +58,13 @@ def test_private_launch_ready_then_browser_and_same_data_reopen(tmp_path, monkey
     module, interpreter, chrome = configured(tmp_path, monkeypatch)
     commands = []
     event = json.dumps(dict(event="SYNTHETIC_WORKSPACE_READY", mode="SYNTHETIC_TEST_ONLY",
-                            url="http://127.0.0.1:12345"))
+                            url="http://127.0.0.1:12345", worker_id="worker_" + "a" * 32))
+    stopped = json.dumps(dict(event="SYNTHETIC_WORKSPACE_STOPPED", worker_id="worker_" + "a" * 32,
+                              worker_stopped=True, clean=True, data_preserved=True))
 
     def popen(command, **kwargs):
         commands.append((command, kwargs))
-        return SimpleNamespace(stdout=io.StringIO(event + "\n" + event + "\n"),
+        return SimpleNamespace(stdout=io.StringIO(event + "\n" + event + "\n" + stopped + "\n"),
                                wait=lambda **kw: 0, poll=lambda: 0, pid=999)
 
     monkeypatch.setattr(module.subprocess, "Popen", popen)
@@ -68,7 +72,8 @@ def test_private_launch_ready_then_browser_and_same_data_reopen(tmp_path, monkey
     assert len(commands) == 2  # Duplicate READY cannot open another browser.
     command, options = commands[0]
     assert command[0] == str(interpreter) and command[-1] == "--new"
-    assert "shell" not in options and "creationflags" not in options
+    assert "shell" not in options
+    assert options["creationflags"] == module.subprocess.CREATE_NEW_PROCESS_GROUP
     assert options["env"]["TEMP"] == str(tmp_path / "temp")
     assert commands[1][0] == [str(chrome), "--user-data-dir=" + str(tmp_path / "chrome-profile"),
         "--disk-cache-dir=" + str(tmp_path / "chrome-cache"), "--no-first-run",
@@ -87,7 +92,7 @@ def test_failed_child_no_browser_no_retry(tmp_path, monkeypatch):
     def popen(*args, **kwargs):
         calls.append(args)
         return SimpleNamespace(stdout=io.StringIO("failed before READY\n"),
-                               wait=lambda: 1, poll=lambda: 1, pid=999)
+                               wait=lambda **kw: 1, poll=lambda: 1, pid=999)
 
     monkeypatch.setattr(module.subprocess, "Popen", popen)
     assert module.main() == 1
@@ -195,3 +200,149 @@ def test_edge_is_never_a_fallback_and_missing_chrome_precedes_data(tmp_path, mon
         module.main()
     assert not (tmp_path / "workspace data").exists()
     assert not (tmp_path / "preview-running.lock").exists()
+
+def test_zero_child_exit_without_real_worker_receipt_is_not_clean():
+    module = load("portable_desktop")
+    child = SimpleNamespace(stdout=io.StringIO("no receipt\n"), poll=lambda: 0, wait=lambda **kw: 0)
+    assert module.monitor_server(child, lambda url: pytest.fail("no READY")) == 1
+
+
+def test_unrelated_worker_receipt_cannot_attest_owned_worker():
+    module = load("portable_desktop")
+    ready = json.dumps(dict(event="SYNTHETIC_WORKSPACE_READY", mode="SYNTHETIC_TEST_ONLY",
+                            url="http://127.0.0.1:12345", worker_id="worker_" + "a" * 32))
+    stopped = json.dumps(dict(event="SYNTHETIC_WORKSPACE_STOPPED", worker_id="worker_" + "b" * 32,
+                              worker_stopped=True, clean=True, data_preserved=True))
+    child = SimpleNamespace(stdout=io.StringIO(ready + "\n" + stopped + "\n"),
+                            poll=lambda: 0, wait=lambda **kw: 0)
+    assert module.monitor_server(child, lambda url: None) == 1
+
+
+def test_requested_stop_signals_only_owned_group_once(monkeypatch):
+    module = load("portable_desktop")
+    monkeypatch.setattr(module.signal, "CTRL_BREAK_EVENT", 1, raising=False)
+    callbacks, sent = {}, []
+    real_queue = module.queue.Queue
+
+    class RequestQueue:
+        def __init__(self):
+            self.delegate = real_queue()
+            self.requested = False
+
+        def put(self, value):
+            self.delegate.put(value)
+
+        def get(self, **kw):
+            if not self.requested:
+                self.requested = True
+                callbacks[module.signal.SIGINT](module.signal.SIGINT, None)
+                raise module.queue.Empty
+            return self.delegate.get(**kw)
+
+    def capture(number, handler):
+        previous = callbacks.get(number)
+        callbacks[number] = handler
+        return previous
+
+    monkeypatch.setattr(module.signal, "signal", capture)
+    monkeypatch.setattr(module.queue, "Queue", RequestQueue)
+    child = SimpleNamespace(stdout=io.StringIO(""), poll=lambda: 0 if sent else None,
+                            wait=lambda **kw: 0, send_signal=lambda number: sent.append(number))
+    assert module.monitor_server(child, lambda url: pytest.fail("no READY")) == 1
+    assert sent == [module.signal.CTRL_BREAK_EVENT]
+
+def test_output_eof_with_live_child_preserves_running_claim(tmp_path, monkeypatch):
+    module, _, _ = configured(tmp_path, monkeypatch)
+    monitor = module.monitor_server
+    monkeypatch.setattr(module, "monitor_server", lambda child, browser:
+                        monitor(child, browser, output_timeout=0.01))
+    child = SimpleNamespace(stdout=io.StringIO(""), poll=lambda: None, pid=999)
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *a, **kw: child)
+    with pytest.raises(TimeoutError, match="stdout closed"):
+        module.main()
+    assert (tmp_path / "preview-running.lock").read_text(encoding="ascii")
+
+
+def test_output_read_failure_preserves_running_claim(tmp_path, monkeypatch):
+    module, _, _ = configured(tmp_path, monkeypatch)
+
+    class BrokenOutput:
+        def __iter__(self):
+            raise OSError("fixture read failure")
+
+        def close(self):
+            pytest.fail("unknown output must not be closed")
+
+    child = SimpleNamespace(stdout=BrokenOutput(), poll=lambda: None, pid=999)
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *a, **kw: child)
+    with pytest.raises(RuntimeError, match="output read failed"):
+        module.main()
+    assert (tmp_path / "preview-running.lock").read_text(encoding="ascii")
+
+
+def test_missing_output_eof_preserves_running_claim(tmp_path, monkeypatch):
+    module, _, _ = configured(tmp_path, monkeypatch)
+    release, done = module.threading.Event(), module.threading.Event()
+
+    class HeldOutput:
+        def __iter__(self):
+            try:
+                release.wait(1)
+                return iter(())
+            finally:
+                done.set()
+
+        def close(self):
+            pytest.fail("reader still owns the output")
+
+    monitor = module.monitor_server
+    monkeypatch.setattr(module, "monitor_server", lambda child, browser:
+                        monitor(child, browser, output_timeout=0.01))
+    child = SimpleNamespace(stdout=HeldOutput(), poll=lambda: 0, pid=999)
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *a, **kw: child)
+    try:
+        with pytest.raises(TimeoutError, match="output EOF"):
+            module.main()
+        assert (tmp_path / "preview-running.lock").read_text(encoding="ascii")
+    finally:
+        release.set()
+        assert done.wait(1)
+
+
+def test_stop_timeout_preserves_running_claim(tmp_path, monkeypatch):
+    module, _, _ = configured(tmp_path, monkeypatch)
+    monitor = module.monitor_server
+    callbacks, sent = {}, []
+    real_queue = module.queue.Queue
+
+    class StopQueue:
+        def __init__(self):
+            self.delegate = real_queue()
+            self.requested = False
+
+        def put(self, value):
+            self.delegate.put(value)
+
+        def get(self, **kw):
+            if not self.requested:
+                self.requested = True
+                callbacks[module.signal.SIGINT](module.signal.SIGINT, None)
+                raise module.queue.Empty
+            return self.delegate.get(**kw)
+
+    def capture(number, handler):
+        old = callbacks.get(number)
+        callbacks[number] = handler
+        return old
+
+    monkeypatch.setattr(module.signal, "signal", capture)
+    monkeypatch.setattr(module.queue, "Queue", StopQueue)
+    monkeypatch.setattr(module, "monitor_server", lambda child, browser:
+                        monitor(child, browser, stop_timeout=0.01))
+    child = SimpleNamespace(stdout=io.StringIO(""), poll=lambda: None, pid=999,
+                            send_signal=lambda number: sent.append(number))
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *a, **kw: child)
+    with pytest.raises(TimeoutError, match="stop was not confirmed"):
+        module.main()
+    assert sent == [module.signal.CTRL_BREAK_EVENT]
+    assert (tmp_path / "preview-running.lock").read_text(encoding="ascii")
