@@ -1,0 +1,24 @@
+import datetime,hashlib,json,os,pathlib,signal,subprocess,time
+repo=pathlib.Path('/workspace/Sim2Act')
+out=pathlib.Path('/workspace/sim2act-post-cost-profile-20261027')
+out.mkdir(exist_ok=False)
+def manifest():
+ return {str(p.relative_to(repo)):hashlib.sha256(p.read_bytes()).hexdigest() for root in ('src','tests') for p in sorted((repo/root).rglob('*.py'))}
+def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
+argv=[str(repo/'.venv/bin/python'),'-m','pytest','-x','-q','tests/test_cold_producer_complete_tail.py','--basetemp',str(out/'cases'),'--junitxml='+str(out/'result.xml')]
+env=os.environ.copy();env['SIM2ACT_POST_COMPOSITE_PAIR']='0';env['SIM2ACT_PRODUCER_FINAL_ONLY']='1';env['SIM2ACT_PROFILE_POST']='1'
+before=manifest();meta=dict(started_at=now(),base_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=repo,text=True).strip(),argv=argv,environment=dict(SIM2ACT_POST_COMPOSITE_PAIR='0',SIM2ACT_PRODUCER_FINAL_ONLY='1',SIM2ACT_PROFILE_POST='1'),limits=dict(mock_exchanges=6,mock_entries=8,work_seconds=600,cleanup_seconds=10,semantic_clock_real_limit_seconds=300),source_manifest=before)
+(out/'before.json').write_text(json.dumps(meta,indent=2)+'\n')
+start=time.monotonic();timeout=False;kill=False
+with (out/'pytest.log').open('wb') as log:
+ child=subprocess.Popen(argv,cwd=repo,env=env,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+ (out/'child.json').write_text(json.dumps(dict(pid=child.pid,pgid=child.pid,started_at=now()),indent=2)+'\n')
+ try:code=child.wait(timeout=600)
+ except subprocess.TimeoutExpired:
+  timeout=True;os.killpg(child.pid,signal.SIGTERM)
+  try:code=child.wait(timeout=10)
+  except subprocess.TimeoutExpired:kill=True;os.killpg(child.pid,signal.SIGKILL);code=child.wait()
+after=manifest();result=dict(finished_at=now(),exit_code=code,elapsed_seconds=time.monotonic()-start,timed_out=timeout,force_kill=kill,child_exited=child.poll() is not None,sources_unchanged=before==after,source_manifest_after=after,log_bytes=(out/'pytest.log').stat().st_size,cleanup='test-owned resources asserted by test; synthetic evidence files retained')
+(out/'execution.json').write_text(json.dumps(result,indent=2)+'\n')
+print(json.dumps({k:v for k,v in result.items() if k!='source_manifest_after'}),flush=True)
+raise SystemExit(code)
