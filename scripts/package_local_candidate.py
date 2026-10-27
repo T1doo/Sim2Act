@@ -23,6 +23,7 @@ FILES = [
     "scripts/Status.ps1", "scripts/Stop.ps1", "scripts/manage.py", "scripts/install_preflight.py",
     "scripts/local_candidate_demo.py", "scripts/local-candidate/mock-fixtures.json",
     "scripts/package_local_candidate.py",
+    "scripts/package_windows_portable.py", "scripts/portable_desktop.py",
 ]
 
 
