@@ -145,3 +145,17 @@ def test_modified_serializer_keeps_original_callback_count(sql_facts, monkeypatc
             results.append((raw, len(calls)))
             assert mode is None or mode.fallback == 1
     assert results[0] == results[1] and results[0][1] == 2
+
+
+def test_qualification_resource_failure_uses_unchanged_original_before_hold(sql_facts, monkeypatch):
+    from sim2act import _cold_base_segment as code
+
+    with case(sql_facts, True) as (c, graph, mode, model):
+        def unavailable(*args):
+            raise MemoryError('synthetic qualification resource failure')
+
+        monkeypatch.setattr(code, 'fixed_serializers', unavailable)
+        models = []
+        raw = gate._graph_trial_produced(graph, sql_facts.store, c, models, gate.Approval, model)
+        assert len(models) == 1 and models[0] == (gate.Approval, model, raw)
+        assert mode.fallback == 1 and mode.qualified == 0 and graph.active

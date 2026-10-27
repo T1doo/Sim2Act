@@ -1914,6 +1914,10 @@ class _ColdGraphRead:
     def invalidate(self):
         was_active = self.active
         self.active = False
+        # This opt-in selector owns no data/authority. Drop the back-reference
+        # on the original scope teardown; a retained diagnostic handle stays
+        # unusable and cannot retain a graph<->selector cycle.
+        vars(self).pop('_producer_segment_candidate', None)
         owner = getattr(self, '_settlement_owned_models', None)
         if owner is not None:
             from ._cold_settlement_owned import _NativeModels
@@ -2539,8 +2543,7 @@ class _ColdTrialGraph:
             require(type(self.guard) is _ColdGraphRead)
             if getattr(self, '_owned_models', None) is not None:
                 self._owned_models.current()
-            if (getattr(self, 'accounted_prewrite', None) is None
-                    or not _base_segments.eligible(self)):
+            if not _base_segments.eligible(self):
                 _ColdGraphRead.check(self.guard, self.worker.store, self.c)
                 require(self.worker is self.guard.worker and self.c is self.guard.connection)
                 self._typed_parameters()
@@ -2550,9 +2553,10 @@ class _ColdTrialGraph:
             require(self.worker is self.guard.worker and self.c is self.guard.connection)
             mode = self._native_base_mode()
             try:
-                mode._base_parameters_current(self.guard)
+                if mode is not None:
+                    mode._base_parameters_current(self.guard)
             except BaseException:
-                if self.guard.active and mode.active:
+                if self.guard.active and (mode is None or mode.active):
                     _ColdGraphRead.check(self.guard, self.worker.store, self.c)
                 raise
             try:
@@ -2562,10 +2566,11 @@ class _ColdTrialGraph:
                 # This fixed collector/qualifier has no callbacks or effects.
                 # Preserve entry content rejection priority before propagating
                 # a pure type/join error. Never applied to dynamic/IO errors.
-                if self.guard.active and mode.active:
+                if self.guard.active and (mode is None or mode.active):
                     _ColdGraphRead.check(self.guard, self.worker.store, self.c)
                 raise
-            if not pure or not _base_segments.serializers_current():
+            single_content = pure and _base_segments.serializers_current()
+            if not single_content:
                 # Before ANY unknown serializer, retain a full entry boundary.
                 _ColdGraphRead.check(self.guard, self.worker.store, self.c)
                 self._typed_values_from_models(models)
@@ -2573,12 +2578,15 @@ class _ColdTrialGraph:
                 try:
                     self._typed_values_from_models(models)
                 except BaseException:
-                    if self.guard.active and mode.active:
+                    if self.guard.active and (mode is None or mode.active):
                         _ColdGraphRead.check(self.guard, self.worker.store, self.c)
                     raise
-            mode._base_parameters_current(self.guard)
+            if mode is not None:
+                mode._base_parameters_current(self.guard)
             # No model/raw/result escapes this invocation before this full pin.
             _ColdGraphRead.check(self.guard, self.worker.store, self.c)
+            if mode is None and single_content:
+                self.guard._producer_segment_candidate.base_qualified += 1
         except BaseException:
             owner = getattr(self, '_owned_models', None)
             if owner is not None:
@@ -3310,6 +3318,8 @@ def _model_source_key(source):
 # Code configuration witness, never an input result or a permission.
 _COLD_BASE_CORE = (_ColdTrialGraph._typed_parameter_models,
     _ColdTrialGraph._typed_values_from_models, _ColdTrialGraph._native_base_mode)
+_COLD_BASE_ROW_CODE = (('_cold_graph_row_storage', _cold_graph_row_storage),
+    ('_cold_graph_row_values', _cold_graph_row_values))
 
 
 @dataclass

@@ -929,6 +929,12 @@ def _graph_trial_stage_parent_pin(graph, store, c, stage_facts, *, _owned=None):
             _owned._pin_stage(graph, store, c, stage_facts)
             return
     _graph_trial_pin(graph, store, c)
+    if _owned is None:
+        candidate = vars(graph).get('_producer_segment_candidate')
+        if candidate is not None:
+            from ._cold_producer_segment import _ProducerSegment
+            if type(candidate) is _ProducerSegment and candidate.stage_parent(graph, store, c, stage_facts):
+                return
     _graph_trial_stage_raw(graph, stage_facts, **{'_owned': _owned} if _owned is not None else {})
 
 

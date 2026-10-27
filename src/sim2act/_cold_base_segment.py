@@ -22,6 +22,10 @@ _GATE_NAMES = ('_trial_typed_classes', '_trial_typed_nested_classes', '_trial_pu
     '_trial_typed_hold', '_trial_typed_values', '_graph_trial_journal_models_from_raw',
     '_graph_trial_frozen_models_from_raw', '_graph_trial_extraction_models_from_raw')
 _GATE_CODE = tuple((name, getattr(gate, name)) for name in _GATE_NAMES)
+_LEGACY_CODE = tuple((name, getattr(gate, name)) for name in (
+    '_graph_trial_accounted_models_from_raw', '_graph_trial_stage_raw_from_raw',
+    '_graph_trial_stage_models_from_raw'))
+_STAGE_RAW_CODE = gate._graph_trial_stage_raw
 _STREAM_CODE = tuple((name, getattr_static(_Comparison, name)) for name in (
     'validate_model', 'model_fields', 'raw_mapping', 'raw_equal', 'equal', 'standard_serializers'))
 _STREAM_VALUES = stream_code._stream_values
@@ -96,10 +100,33 @@ _SERIALIZERS_CURRENT = serializers_current
 _SCHEMA_CATALOG = schema_code._SCHEMAS
 
 
+def legacy_stage_current():
+    """Fresh code-only witness for the one fixed legacy stage composite."""
+    from . import natural_spec_runtime as rt
+
+    return (gate._graph_trial_stage_raw is _STAGE_RAW_CODE
+        and all(getattr(gate, name) is function for name, function in (*_GATE_CODE, *_LEGACY_CODE))
+        and all(getattr(rt, name) is function for name, function in rt._COLD_BASE_ROW_CODE))
+
+
 def eligible(trial):
     from . import cold_accounted as owned
     from . import natural_spec_runtime as rt
     from ._cold_accounted_native import _NativeCandidate
+
+    if type(trial) is not rt._ColdTrialGraph:
+        return False
+    mode = getattr(trial, 'accounted_prewrite', None)
+    candidate = None
+    if mode is None:
+        if type(trial) is not rt._ColdTrialGraph or type(trial.guard) is not rt._ColdGraphRead:
+            return False
+        candidate = vars(trial.guard).get('_producer_segment_candidate')
+        if candidate is None:
+            return False
+        from ._cold_producer_segment import _ProducerSegment
+        if type(candidate) is not _ProducerSegment or candidate.legacy_base is not True:
+            return False
 
     if (type(trial) is not rt._ColdTrialGraph
             or type(trial.guard) is not rt._ColdGraphRead
@@ -117,7 +144,11 @@ def eligible(trial):
                 for name, function in zip(('_typed_parameter_models',
                     '_typed_values_from_models', '_native_base_mode'), rt._COLD_BASE_CORE, strict=True))):
         return False
-    mode = getattr(trial, 'accounted_prewrite', None)
+    if mode is None:
+        return (candidate.graph is trial.guard and trial.guard.store.test_only
+            and trial.guard.store.sqlite and getattr(trial, '_owned_models', None) is None
+            and all(getattr(gate, name) is function for name, function in _LEGACY_CODE)
+            and all(getattr(rt, name) is function for name, function in rt._COLD_BASE_ROW_CODE))
     return (type(mode) is owned._OwnedPrewriteMode and mode.graph is trial.guard
         and type(mode._native) is _NativeCandidate and mode._native.owned_ready is True
         and mode._native.graph is trial.guard and mode._native.mode is mode

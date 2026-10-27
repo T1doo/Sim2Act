@@ -13,19 +13,24 @@ from ._cold_typed_stream import _Comparison
 
 
 class _ProducerSegment:
-    __slots__ = ('graph', 'nonce', 'epoch', 'phase', 'qualified', 'fallback')
+    __slots__ = ('graph', 'nonce', 'epoch', 'phase', 'qualified', 'fallback',
+                 'legacy_base', 'base_qualified', 'stage_qualified')
 
-    def __init__(self, graph):
+    def __init__(self, graph, *, legacy_base=False):
         from . import natural_spec_runtime as runtime
 
         gate.require(type(graph) is runtime._ColdGraphRead and graph.store.test_only
-                     and graph.store.sqlite, 'Isolated SQLite producer segment required')
+                     and graph.store.sqlite and type(legacy_base) is bool,
+                     'Isolated SQLite producer segment required')
         graph.check(graph.store, graph.connection)
         gate.require('_producer_segment_candidate' not in vars(graph),
                      'One producer segment per exact graph')
         self.graph, self.nonce = graph, graph.nonce
         self.epoch, self.phase = graph.epoch, graph.phase
         self.qualified = self.fallback = 0
+        self.legacy_base = legacy_base
+        self.base_qualified = 0  # diagnostic only, never queried for admission
+        self.stage_qualified = 0
         graph._producer_segment_candidate = self
 
     def current(self, graph, store, c):
@@ -35,6 +40,25 @@ class _ProducerSegment:
                      and graph.epoch == self.epoch and graph.phase == self.phase
                      and vars(graph).get('_producer_segment_candidate') is self)
         runtime._ColdGraphRead._check_dynamic(graph, store, c)
+
+    def stage_parent(self, graph, store, c, stage_facts):
+        """After caller's full pin, keep second dynamic plus identical joins."""
+        try:
+            ready = self.legacy_base is True and code.legacy_stage_current()
+        except Exception:
+            return False  # Unknown qualification retains the original entry.
+        if not ready:
+            return False
+        try:
+            self.current(graph, store, c)
+            inputs = gate._trial_pure_mapping(graph.inputs)
+            gate.require('cold-trial:complete' in inputs)
+            gate._graph_trial_stage_raw_from_raw(stage_facts, inputs['cold-trial:complete'])
+            self.stage_qualified += 1
+            return True
+        except BaseException:
+            gate._graph_trial_pin(graph, store, c)
+            raise
 
     def produced(self, graph, store, c, models, expected, model, legacy):
         """Retain full entry/exit, three typed passes and the original hold.
@@ -51,12 +75,16 @@ class _ProducerSegment:
 
         # Discovery does not invoke serializers or arbitrary descriptors. Bad
         # cohort layout and unknown code retain the original error sequence.
-        if (type(models) is not list
+        try:
+            ready = not (type(models) is not list
                 or not all(type(e) is tuple and len(e) == 3 for e in models)
                 or not any(expected is cls for cls in gate._trial_typed_classes())
                 or type(model) is not expected
                 or not code.serializers_current()
-                or not code.fixed_serializers([*models, (expected, model, {})])):
+                or not code.fixed_serializers([*models, (expected, model, {})]))
+        except Exception:
+            return old()
+        if not ready:
             return old()
         try:
             self.current(graph, store, c)

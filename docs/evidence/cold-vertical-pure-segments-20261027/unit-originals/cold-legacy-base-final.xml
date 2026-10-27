@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="8" time="11.258" timestamp="2026-10-27T04:39:44.985751+00:00" hostname="6963bf8b5a14"><testcase classname="tests.test_cold_legacy_base_segment" name="test_legacy_post_two_to_one_codec_same_complete_collector_and_no_escape" time="1.451" /><testcase classname="tests.test_cold_legacy_base_segment" name="test_legacy_inside_damage_cannot_escape[hidden]" time="1.625" /><testcase classname="tests.test_cold_legacy_base_segment" name="test_legacy_inside_damage_cannot_escape[alias]" time="1.341" /><testcase classname="tests.test_cold_legacy_base_segment" name="test_legacy_inside_damage_cannot_escape[epoch]" time="1.347" /><testcase classname="tests.test_cold_legacy_base_segment" name="test_legacy_inside_damage_cannot_escape[scope]" time="1.197" /><testcase classname="tests.test_cold_legacy_base_segment" name="test_legacy_collector_error_still_prefers_damaged_complete_input" time="1.214"><failure message="sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE constraint failed: delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_graph_requests.request_key&#10;[SQL: INSERT INTO delivery_graph_requests (app_id, principal_id, kind, request_key, request_fingerprint, snapshot, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?)]&#10;[parameters: ('naturaltrial_042557a42a8886b86ffed84c89c8563a', 'user_e17ac4b4a10241f884bb3649d7e157c3', 'natural-live-trial.v1.phase', 'cold', 'fa13ea7b4334f4870613ae2f5f77da6c0424705a266cda442d1e1413eef645d0', '{&quot;request&quot;: {&quot;authority&quot;: {&quot;contract_fingerprint&quot;: &quot;66de23a37b70f6ae9d5f707bf4cb26dc6cdfa03d9e0df0e73d94be9ef3ccf5cc&quot;, &quot;stage&quot;: &quot;cold&quot;, &quot;run_id&quot;: &quot;ru ... (2681 characters truncated) ... xact-approval&quot;, &quot;request_key&quot;: &quot;offline-cold-phase&quot;, &quot;consent&quot;: &quot;BIND_ONLY_THIS_ACCEPTED_STAGE_RUN_APP_RELEASE_AND_COMPLETE_GOAL_TO_ORIGINAL_TRIAL&quot;}}', '0cf9a4da8ed3a9248d6f63dab9136c1c471aec039c9b8ea1f710356f6a4d258d')]&#10;(Background on this error at: https://sqlalche.me/e/20/gkpj)">self = &lt;sqlalchemy.engine.base.Connection object at 0x7fb5825d48c0&gt;
+dialect = &lt;sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7fb5840ea3f0&gt;
+context = &lt;sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7fb582620b00&gt;
+statement = &lt;sqlalchemy.dialects.sqlite.base.SQLiteCompiler object at 0x7fb58288f530&gt;
+parameters = [('naturaltrial_042557a42a8886b86ffed84c89c8563a', 'user_e17ac4b4a10241f884bb3649d7e157c3', 'natural-live-trial.v1.pha...e-cold-phase", "consent": "BIND_ONLY_THIS_ACCEPTED_STAGE_RUN_APP_RELEASE_AND_COMPLETE_GOAL_TO_ORIGINAL_TRIAL"}}', ...)]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -&gt; CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+&gt;                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7fb5840ea3f0&gt;
+cursor = &lt;sqlite3.Cursor object at 0x7fb58279d540&gt;
+statement = 'INSERT INTO delivery_graph_requests (app_id, principal_id, kind, request_key, request_fingerprint, snapshot, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?)'
+parameters = ('naturaltrial_042557a42a8886b86ffed84c89c8563a', 'user_e17ac4b4a10241f884bb3649d7e157c3', 'natural-live-trial.v1.phas...ne-cold-phase", "consent": "BIND_ONLY_THIS_ACCEPTED_STAGE_RUN_APP_RELEASE_AND_COMPLETE_GOAL_TO_ORIGINAL_TRIAL"}}', ...)
+context = &lt;sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7fb582620b00&gt;
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+&gt;       cursor.execute(statement, parameters)
+E       sqlite3.IntegrityError: UNIQUE constraint failed: delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_graph_requests.request_key
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: IntegrityError
+
+The above exception was the direct cause of the following exception:
+
+sql_facts = namespace(store=&lt;sim2act.db.Store object at 0x7fb582859550&gt;, settings=Settings(database_url='sqlite:////tmp/pytest-of-...key='offline-cold-phase', consent='BIND_ONLY_THIS_ACCEPTED_STAGE_RUN_APP_RELEASE_AND_COMPLETE_GOAL_TO_ORIGINAL_TRIAL'))
+
+    def test_legacy_collector_error_still_prefers_damaged_complete_input(sql_facts):
+        errors = []
+        for enabled in (False, True):
+            with pytest.raises(DomainError):
+&gt;               with legacy(sql_facts, enabled) as (t, s):
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cold_legacy_base_segment.py:110: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/test_cold_legacy_base_segment.py:22: in legacy
+    seed_cold(f)
+tests/accounted_sqlite_fixture.py:793: in seed_cold
+    gate._save(c, f.user, gate.entity(f.contract), gate.PHASE, "cold", phase)
+src/sim2act/natural_live_admission.py:753: in _save
+    remember(c, user, eid, kind, key, body, body.model_dump())
+src/sim2act/text_logic_reuse.py:155: in remember
+    graph.remember(c, user, lid, k, key, body, value)
+src/sim2act/delivery_graph_apps.py:570: in remember
+    c.execute(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1419: in execute
+    return meth(
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:527: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1641: in _execute_clauseelement
+    ret = self._execute_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1846: in _execute_context
+    return self._exec_single_context(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1986: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2363: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1967: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x7fb5840ea3f0&gt;
+cursor = &lt;sqlite3.Cursor object at 0x7fb58279d540&gt;
+statement = 'INSERT INTO delivery_graph_requests (app_id, principal_id, kind, request_key, request_fingerprint, snapshot, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?)'
+parameters = ('naturaltrial_042557a42a8886b86ffed84c89c8563a', 'user_e17ac4b4a10241f884bb3649d7e157c3', 'natural-live-trial.v1.phas...ne-cold-phase", "consent": "BIND_ONLY_THIS_ACCEPTED_STAGE_RUN_APP_RELEASE_AND_COMPLETE_GOAL_TO_ORIGINAL_TRIAL"}}', ...)
+context = &lt;sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x7fb582620b00&gt;
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+&gt;       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE constraint failed: delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_graph_requests.request_key
+E       [SQL: INSERT INTO delivery_graph_requests (app_id, principal_id, kind, request_key, request_fingerprint, snapshot, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?)]
+E       [parameters: ('naturaltrial_042557a42a8886b86ffed84c89c8563a', 'user_e17ac4b4a10241f884bb3649d7e157c3', 'natural-live-trial.v1.phase', 'cold', 'fa13ea7b4334f4870613ae2f5f77da6c0424705a266cda442d1e1413eef645d0', '{"request": {"authority": {"contract_fingerprint": "66de23a37b70f6ae9d5f707bf4cb26dc6cdfa03d9e0df0e73d94be9ef3ccf5cc", "stage": "cold", "run_id": "ru ... (2681 characters truncated) ... xact-approval", "request_key": "offline-cold-phase", "consent": "BIND_ONLY_THIS_ACCEPTED_STAGE_RUN_APP_RELEASE_AND_COMPLETE_GOAL_TO_ORIGINAL_TRIAL"}}', '0cf9a4da8ed3a9248d6f63dab9136c1c471aec039c9b8ea1f710356f6a4d258d')]
+E       (Background on this error at: https://sqlalche.me/e/20/gkpj)
+
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: IntegrityError</failure></testcase><testcase classname="tests.test_cold_legacy_base_segment" name="test_unknown_serializer_keeps_entry_full_before_callback" time="1.185" /><testcase classname="tests.test_cold_legacy_base_segment" name="test_changed_legacy_helper_selects_original_entry" time="1.393" /></testsuite></testsuites>

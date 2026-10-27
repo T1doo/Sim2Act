@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.627" timestamp="2026-10-27T04:38:59.498072+00:00" hostname="6963bf8b5a14"><testcase classname="tests.test_cold_legacy_base_segment" name="test_legacy_post_two_to_one_codec_same_complete_collector_and_no_escape" time="1.393"><failure message="AssertionError: assert ('_check_dyna...ed_hold', ...) == ('_check_dyna...ed_hold', ...)&#10;  &#10;  Right contains one more item: '_check_dynamic'&#10;  Use -v to get more diff">sql_facts = namespace(store=&lt;sim2act.db.Store object at 0x7f49c73e2480&gt;, settings=Settings(database_url='sqlite:////tmp/pytest-of-...key='offline-cold-phase', consent='BIND_ONLY_THIS_ACCEPTED_STAGE_RUN_APP_RELEASE_AND_COMPLETE_GOAL_TO_ORIGINAL_TRIAL'))
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f49c73e2360&gt;
+
+    def test_legacy_post_two_to_one_codec_same_complete_collector_and_no_escape(sql_facts, monkeypatch):
+        # One issued scope, alternate selector only; every _base remains fresh.
+        with legacy(sql_facts, True) as (t, s):
+            assert code.eligible(t)
+            encode = rt._cold_graph_bytes
+            calls, traces, observations = [], [], []
+            targets = {fn.__code__: fn.__name__ for fn in
+                       (gate._graph_trial_accounted_models_from_raw,
+                        gate._graph_trial_stage_raw_from_raw,
+                        gate._graph_trial_stage_models_from_raw,
+                        gate._trial_typed_hold, gate._trial_typed_values,
+                        rt._ColdGraphRead._check_dynamic)}
+    
+            def encoded(value):
+                calls.append(1)
+                return encode(value)
+    
+            def profile(frame, event, arg):
+                if event == 'call' and frame.f_code in targets:
+                    traces.append(targets[frame.f_code])
+    
+            monkeypatch.setattr(rt, '_cold_graph_bytes', encoded)
+            for enabled in (False, True):
+                s.graph._producer_segment_candidate.legacy_base = enabled
+                calls.clear()
+                traces.clear()
+                before_keys = set(vars(t))
+                sys.setprofile(profile)
+                try:
+                    t._base()
+                finally:
+                    sys.setprofile(None)
+                assert set(vars(t)) == before_keys
+                observations.append((len(calls), tuple(traces)))
+            assert [o[0] for o in observations] == [2, 1]
+&gt;           assert observations[0][1] == observations[1][1]
+E           AssertionError: assert ('_check_dyna...ed_hold', ...) == ('_check_dyna...ed_hold', ...)
+E             
+E             Right contains one more item: '_check_dynamic'
+E             Use -v to get more diff
+
+tests/test_cold_legacy_base_segment.py:71: AssertionError</failure></testcase></testsuite></testsuites>
