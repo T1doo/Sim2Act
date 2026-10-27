@@ -116,6 +116,7 @@ def build(inputs, assets, app_wheel, output, *, candidate_manifest=None):
         b"Only python312._pth adds private Lib/site-packages. Binaries and packages are unchanged.\n"
         b"This isolated synthetic SQLite preview omits PostgreSQL drivers.\n")
     files["desktop.py"] = Path(__file__).with_name("portable_desktop.py").read_bytes()
+    files["使用说明.md"] = (Path(__file__).resolve().parents[1] / "docs/PreviewRelease.md").read_bytes()
     files["Start-Sim2Act.cmd"] = (
         '@echo off\r\nsetlocal\r\ncd /d "%~dp0"\r\n'
         'set "TEMP=%~dp0temp"\r\nset "TMP=%~dp0temp"\r\n'

@@ -18,7 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FILES = [
     "pyproject.toml", "requirements.lock", "requirements-windows.lock", ".env.example",
-    "docs/Installation.md", "docs/FirstUse.md", "docs/LocalCandidate.md",
+    "docs/Installation.md", "docs/FirstUse.md", "docs/LocalCandidate.md", "docs/PreviewRelease.md",
     "scripts/Common.ps1", "scripts/Setup.ps1", "scripts/Doctor.ps1", "scripts/Start.ps1",
     "scripts/Status.ps1", "scripts/Stop.ps1", "scripts/manage.py", "scripts/install_preflight.py",
     "scripts/local_candidate_demo.py", "scripts/local-candidate/mock-fixtures.json",
@@ -52,6 +52,7 @@ def main():
         contents[name] = git("show", commit + ":" + name)
     contents["README.md"] = (
         "# Sim2Act 合成 mock 本地候选\n\n"
+        "下载包范围与当前阻塞见 [候选使用说明](docs/PreviewRelease.md)。\n"
         "安装、演示命令及限制见 [本地候选说明](docs/LocalCandidate.md)。\n"
         "精确源码和文件校验值见 candidate-manifest.json。\n"
         "不含真实凭据、数据库或历史大证据；不启用真实模型。\n"

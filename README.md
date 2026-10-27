@@ -1,5 +1,7 @@
 # Sim2Act
 
+> **2026-10-27 预发布候选**：下载与免开发环境启动见[候选使用说明](docs/PreviewRelease.md)。本次仅为合成工程预览；G0 仍 UNKNOWN、生产账户可信来源仍 SOURCE_MISSING、最新 Windows 包未执行。下文与历史文档保留各自阶段记录，以本次发布说明区分当前状态。
+
 让想法成为会行动的应用。当前接续开发分支 `dev/production-trial-stages-20261018`，F1 底座之上正推进有限 F2 工程；F1/F2/R0 整体验收尚未通过。
 
 [动态计划](docs/Plan.md) · [F1 任务](docs/F1/Plan.md) · [实际日志](docs/F1/Log.md) · [V5 产品设计](docs/平台产品设计.md)
