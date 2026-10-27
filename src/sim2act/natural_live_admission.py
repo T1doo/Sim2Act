@@ -1403,6 +1403,19 @@ def _graph_trial_models_pin(graph, store, c, models):
 
 
 def _graph_trial_produced(graph, store, c, models, expected, model):
+    from .natural_spec_runtime import _ColdGraphRead
+
+    if type(graph) is _ColdGraphRead:
+        candidate = vars(graph).get('_producer_segment_candidate')
+        if candidate is not None:
+            from ._cold_producer_segment import _ProducerSegment
+            require(type(candidate) is _ProducerSegment)
+            return candidate.produced(graph, store, c, models, expected, model,
+                                      _graph_trial_produced_legacy)
+    return _graph_trial_produced_legacy(graph, store, c, models, expected, model)
+
+
+def _graph_trial_produced_legacy(graph, store, c, models, expected, model):
     """Freeze one newly returned original-verifier output before following IO."""
     def parent():
         _graph_trial_pin(graph, store, c)
