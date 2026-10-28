@@ -494,6 +494,11 @@ class _Code:
         self.writer_yields = frozenset(item.offset for item in dis.get_instructions(self.writer_code)
             if item.opname == "YIELD_VALUE")
         self.writer_table = runtime._OWNED_WRITER_LIFETIMES
+        self.scope_call_code = _Scope.call.__code__
+        self.scope_call_offsets = frozenset(
+            item.offset for item in dis.get_instructions(self.scope_call_code)
+            if item.opname == "CALL_FUNCTION_EX"
+        )
         self.serializer_slots = tuple({(kind, name): value
             for model, *_ in schema._SCHEMAS
             for kind in model.__mro__
@@ -1006,7 +1011,9 @@ class _Scope:
         self.writer_epochs = runtime._OWNED_WRITER_LIFETIMES
         self.settlement_interval = vars(worker).get("_settlement_interval")
         self.reduced = False
+        self.call_frame = None
         self.sql_calls = 0
+        self.folded_sql_checks = 0
         self.candidate, self.plan = candidate, plan
         self.owned_writer = _private_sql._ISSUED.get(id(c))
         self.worker, self.store, self.settings = worker, worker.store, worker.s
@@ -1097,21 +1104,42 @@ class _Scope:
         return all(self.current[key] == token[1][key]
             for key in ("id", "fence", "worker_id", "version"))
 
-    def check(self, *unused, full_code=True):
+    def data_current(self):
+        """Complete memory content/alias pin, never a DB or permission result."""
+        return (
+            self.encode(self.roots) == self.key
+            and self.current_key.matches(self.current)
+            and self.plan.inputs.matches(self.private)
+            and self.encode(
+                dict(
+                    original=self.roots,
+                    private=self.private,
+                    current=self.current,
+                    outputs=self.outputs,
+                )
+            ) == self.output_key
+        )
+
+    def check(self, *unused, full_code=True, full_data=True):
         if self.owned_writer is not None:
             try:
+                if _private_sql._ISSUED.get(id(self.c)) is not self.owned_writer:
+                    raise UnsupportedPlan("Private writer registry changed")
                 self.owned_writer.check()
             except UnsupportedPlan as error:
                 raise DomainError("VERSION_CONFLICT", "Owned writer provenance changed") from error
         from .model_settlement import checkpoint
 
         w, c = self.worker, self.c
-        if not (self.candidate.code.current(full=full_code)
+        reduced = (not full_code or not full_data) and self.reduced_current()
+        if not (self.candidate.code.current(full=full_code or not reduced)
                 and self.candidate.code.fixture_current(w, self.current)
                 and _execution_current(w, self.writer_epoch) and self.writer_current()):
             self.active = False
             raise DomainError("VERSION_CONFLICT", "Owned code, fixture or writer lifetime changed")
         checkpoint(w)
+        fold_data = (not full_data and reduced
+            and self.owned_writer is not None and self.writer_epoch is not None)
         valid = (
             self.active
             and _sql_current(w, c, self.own_listeners)
@@ -1140,18 +1168,13 @@ class _Scope:
             and threading.get_ident() == self.thread
             and self.epoch == c.info.get("source_proof_write_epoch", 0)
             and self.source_current(self.store, c, self.token)
-            and self.encode(self.roots) == self.key
-            and self.current_key.matches(self.current)
-            and self.plan.inputs.matches(self.private)
-            and self.encode(
-                dict(
-                    original=self.roots,
-                    private=self.private,
-                    current=self.current,
-                    outputs=self.outputs,
-                )
-            )
-            == self.output_key
+            # Only a fixed, qualified, read-only callee under the actual
+            # writer locks can fold this extra observer's memory encoding.
+            # Its private creator-owned SQL driver has no external callbacks;
+            # execution/fixture/driver/epoch/clock checks above stay per SQL.
+            # Entry, normal return, hold and final closure always pin fully.
+            # Ordinary connections and unknown callees never qualify.
+            and (fold_data or self.data_current())
             and self.encode(
                 dict(
                     contract=self.binding.contract.model_dump(),
@@ -1170,6 +1193,8 @@ class _Scope:
             raise DomainError(
                 "VERSION_CONFLICT", "Owned G0 writer inputs or dynamic interval changed"
             )
+        if fold_data:
+            self.folded_sql_checks += 1
 
     def hold(self, name, value):
         self.check(full_code=True)
@@ -1218,25 +1243,46 @@ class _Scope:
             and set(kwargs) == set(options)
             and all(kwargs[key] is value for key, value in options.items()))
 
+    def reduced_current(self):
+        """A flag alone cannot impersonate a paused original callee invocation."""
+        frame = self.call_frame
+        if (not self.reduced or type(frame) is not types.FrameType
+                or frame.f_code is not self.candidate.code.scope_call_code
+                or frame.f_globals is not globals()
+                or frame.f_lasti not in self.candidate.code.scope_call_offsets):
+            return False
+        local = frame.f_locals
+        return (local.get("self") is self
+            and self.original_call(local["fn"], local["args"], local["kwargs"]))
+
     def call(self, fn, *args, **kwargs):
         self.check(full_code=True)
         reduced = self.original_call(fn, args, kwargs)
+        folded_data = reduced and self.owned_writer is not None
         started = time.monotonic()
         start_sql = self.sql_calls
+        start_folded = self.folded_sql_checks
         prior, self.reduced = self.reduced, reduced
+        prior_frame, self.call_frame = self.call_frame, sys._getframe()
         try:
             result = fn(*args, **kwargs)
         finally:
+            self.call_frame = prior_frame
             self.reduced = prior
             self.candidate.timings.append(
-                dict(stage=fn.__name__, reduced_sql=reduced,
+                dict(stage=fn.__name__, reduced_sql=reduced, folded_data=folded_data,
+                    folded_sql_checks=self.folded_sql_checks-start_folded,
                     sql_calls=self.sql_calls-start_sql, seconds=time.monotonic() - started)
             )
         self.check(full_code=True)
         if reduced and "_model_out" in kwargs:
             out = kwargs["_model_out"]
             import math
-            if (set(out) != {"source_deadline"}
+            keys = {"approval", "phase", "requirements", "source_identity", "source_deadline"}
+            if (set(out) != keys
+                    or any(type(out[key]) is not str or len(out[key]) != 64
+                        or any(char not in "0123456789abcdef" for char in out[key])
+                        for key in keys - {"source_deadline"})
                     or type(out["source_deadline"]) not in (int, float)
                     or not math.isfinite(out["source_deadline"]) or out["source_deadline"] <= 0):
                 raise DomainError("VERSION_CONFLICT", "Unexpected fixed admission output")
@@ -1261,11 +1307,11 @@ def prewrite(candidate, plan, worker, c, current, original_call, platform, *, _w
     scope = _Scope(candidate, plan, worker, c, current, original_call, platform, _writer_epoch)
 
     def before(*args):
-        scope.check(full_code=not scope.reduced)
+        scope.check(full_code=not scope.reduced, full_data=not scope.reduced)
         scope.sql_calls += 1
 
     def after(*args):
-        scope.check(full_code=not scope.reduced)
+        scope.check(full_code=not scope.reduced, full_data=not scope.reduced)
 
     event.listen(c, "before_cursor_execute", before)
     event.listen(c, "after_cursor_execute", after)
