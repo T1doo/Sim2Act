@@ -1013,6 +1013,16 @@ def _persisted_extract_input(value):
     return _persisted_pair_input(ExtractInput, value)
 
 
+_PAIR_FINGERPRINT_FUNCTION = fingerprint
+_PAIR_FINGERPRINT_CODE = fingerprint.__code__
+_PAIR_INPUT_CODE = _persisted_pair_input.__code__
+_PAIR_EXTRACT_CODE = _persisted_extract_input.__code__
+_PAIR_INPUT_FUNCTION = _persisted_pair_input
+_PAIR_EXTRACT_FUNCTION = _persisted_extract_input
+_PAIR_REQUIRE_FUNCTION = require
+_PAIR_REQUIRE_CODE = require.__code__
+
+
 def _cold_persisted_pair(store, c, user, aid, kind, key, expected, guard):
     """Fixed existing pairs; IO/checkpoints and external callees are not mapped."""
     try:
@@ -1031,6 +1041,18 @@ def _cold_persisted_pair(store, c, user, aid, kind, key, expected, guard):
             row = graph.lookup(c, user, aid, stored_kind, key)
             _checkpoint_graph(store, c, guard)
             rows.append(row)
+        if (fingerprint is _PAIR_FINGERPRINT_FUNCTION
+                and fingerprint.__code__ is _PAIR_FINGERPRINT_CODE
+                and spec._scope_pair_code_current()
+                and require is _PAIR_REQUIRE_FUNCTION and require.__code__ is _PAIR_REQUIRE_CODE
+                and _persisted_pair_input is _PAIR_INPUT_FUNCTION
+                and _persisted_pair_input.__code__ is _PAIR_INPUT_CODE
+                and _persisted_extract_input is _PAIR_EXTRACT_FUNCTION
+                and _persisted_extract_input.__code__ is _PAIR_EXTRACT_CODE):
+            result = spec._SCOPE_PAIR_CORE(rows, expected, spec._persisted_snapshot_finite,
+                require, pin=lambda: _checkpoint_graph(store, c, guard))
+            if result is not spec._pair_segments._UNSUITABLE:
+                return result
         require(all(rows), "Independent text logic seals missing")
         values = []
         for row in rows:

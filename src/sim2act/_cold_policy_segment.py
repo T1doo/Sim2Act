@@ -6,6 +6,7 @@ Only the fixed original policy cores consume those private copies. SQL, clocks,
 source resolution, new graph roots and publication remain in the coordinator.
 """
 
+import copy as _copy
 import hashlib
 import math
 from inspect import getattr_static
@@ -13,10 +14,11 @@ from io import BytesIO
 from pickle import PickleBuffer, Pickler
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic_core import SchemaValidator
+from pydantic import BaseModel, ValidationError
+from pydantic_core import SchemaSerializer, SchemaValidator
 from sqlalchemy.engine import RowMapping
 
+from . import delivery_graph_apps as _pair_graph
 from . import production_trial_policy as policy
 from ._cold_typed_stream import _Comparison
 from .errors import DomainError
@@ -25,6 +27,8 @@ from .natural_live_admission import (
     _trial_typed_nested_classes,
     require,
 )
+from .pa_material_bindings import Metadata as _PairMetadata
+from .text_workflows import RunScopeInput as _PairRunScope
 
 _UNSUITABLE = object()
 _VALIDATE = getattr_static(BaseModel, 'model_validate')
@@ -107,11 +111,102 @@ _SCHEMA_MATCHER = _schema_matches
 # input results. All live schema, serializer and validator metadata are reread
 # for every private snapshot. This does not defend arbitrary process code edits.
 _CODE_LEAVES: list[Any] = []
+_PAIR_CHECKED = _pair_graph.checked
+_PAIR_LOOKUP = _pair_graph.lookup
+_PAIR_CHECKED_CODE = _PAIR_CHECKED.__code__
+_PAIR_CONFLICT = _pair_graph.conflict
+_PAIR_DEEPCOPY = _copy.deepcopy
+_PAIR_KEEP_ALIVE = _copy._keep_alive
+_PAIR_COPY_TYPES = (dict, list, tuple, str, int, float, bool, bytes, type(None))
+_PAIR_COPY_DISPATCH = tuple((kind, _copy._deepcopy_dispatch.get(kind)) for kind in _PAIR_COPY_TYPES)
+_PAIR_COPY_DISPATCH_TABLE = _copy._deepcopy_dispatch
+_PAIR_FINGERPRINT = _pair_graph.fingerprint
+_PAIR_STANDARD_DUMP = BaseModel.model_dump
+_PAIR_CODE = tuple((fn, getattr(fn, '__code__', None)) for fn in
+    (_PAIR_CHECKED, _PAIR_LOOKUP, _PAIR_CONFLICT, _PAIR_FINGERPRINT, _PAIR_DEEPCOPY, _PAIR_KEEP_ALIVE,
+     _PAIR_STANDARD_DUMP, *[fn for _, fn in _PAIR_COPY_DISPATCH if fn is not None]))
+
+
+def _pair_builtin_values(value):
+    """Only private builtins may reach deepcopy; no model or foreign hooks."""
+    pending, done = [value], set()
+    while pending:
+        value = pending.pop()
+        kind = type(value)
+        if any(kind is item for item in (str, int, float, bool, bytes, type(None))):
+            continue
+        if not any(kind is item for item in (dict, list, tuple)):
+            return False
+        if id(value) in done:
+            continue
+        done.add(id(value))
+        if kind is dict:
+            if not all(type(key) is str for key in value):
+                return False
+            pending.extend(dict.values(value))
+        else:
+            pending.extend(value)
+    return True
+
+
+def _persisted_pair_value(rows, expected, preflight, pair_require, *, pin):
+    """SQL is already post-pinned; run only the fixed private pair arithmetic.
+
+    Unknown metadata/code/representation returns to the original path before
+    any checked/parser core runs. No result/PASS survives this invocation.
+    """
+    if (_fixed_schema is not _PAIR_SCHEMA_QUALIFIER
+            or _fixed_schema.__code__ is not _PAIR_SCHEMA_QUALIFIER_CODE
+            or _snapshot is not _PAIR_SNAPSHOT
+            or _snapshot.__code__ is not _PAIR_SNAPSHOT_CODE
+            or not _fixed_schema(expected)
+            or any(getattr(fn, '__code__', None) is not code for fn, code in _PAIR_CODE)
+            or _PAIR_CHECKED.__globals__.get('copy') is not _copy
+            or any(getattr_static(kind, 'model_dump') is not _PAIR_STANDARD_DUMP
+                or not _fixed_schema(kind)
+                or type(type.__getattribute__(kind, '__pydantic_serializer__')) is not SchemaSerializer
+                or SchemaSerializer.__reduce__(type.__getattribute__(kind, '__pydantic_serializer__'))[1][0]
+                    is not type.__getattribute__(kind, '__pydantic_core_schema__')
+                for kind, *_ in _SCHEMAS)
+            or _pair_graph.checked is not _PAIR_CHECKED
+            or _pair_graph.lookup is not _PAIR_LOOKUP
+            or _PAIR_CHECKED.__code__ is not _PAIR_CHECKED_CODE
+            or _pair_graph.conflict is not _PAIR_CONFLICT
+            or _pair_graph.fingerprint is not _PAIR_FINGERPRINT
+            or _copy.deepcopy is not _PAIR_DEEPCOPY
+            or _copy._keep_alive is not _PAIR_KEEP_ALIVE
+            or _copy._deepcopy_dispatch is not _PAIR_COPY_DISPATCH_TABLE
+            or any(_copy._deepcopy_dispatch.get(kind) is not function
+                for kind, function in _PAIR_COPY_DISPATCH)):
+        return _UNSUITABLE
+    owned = _snapshot(rows)
+    if owned is _UNSUITABLE or not _pair_builtin_values(owned):
+        return _UNSUITABLE
+    pair_require(all(owned), 'Independent text logic seals missing')
+    values = []
+    for row in owned:
+        preflight(row['snapshot'])
+        values.append(_PAIR_CHECKED(row))
+    left, right = values
+    pair_require(set(left) == {'request', 'response'})
+    pair_require(_PAIR_FINGERPRINT(left) == _PAIR_FINGERPRINT(right))
+    try:
+        body = expected.model_validate(left['request'])
+    except (ValidationError, KeyError, TypeError, ValueError):
+        raise DomainError('VERSION_CONFLICT', 'Malformed persisted DeliveryGraph binding') from None
+    request_fp = _PAIR_FINGERPRINT(expected.model_dump(body))
+    for row in owned:
+        pair_require(row['request_fingerprint'] == request_fp)
+    # Late complete graph boundary includes all work above and precedes use.
+    pin()
+    return body, left['response']
+
+
 _SCHEMAS = tuple((kind, type.__getattribute__(kind, '__pydantic_core_schema__'),
     _schema_shape(type.__getattribute__(kind, '__pydantic_core_schema__'), _CODE_LEAVES),
     type.__getattribute__(kind, '__pydantic_validator__'),
     type.__getattribute__(kind, '__pydantic_serializer__'))
-    for kind in _trial_typed_nested_classes())
+    for kind in (*_trial_typed_nested_classes(), _PairMetadata, _PairRunScope))
 
 
 def _schema_identity_marker(*args):
@@ -188,6 +283,9 @@ def _fixed_schema(kind):
             is namespace.get('__pydantic_core_schema__'))
 
 
+_PAIR_SCHEMA_QUALIFIER = _fixed_schema
+_PAIR_SCHEMA_QUALIFIER_CODE = _fixed_schema.__code__
+
 def _snapshot(values):
     """Invocation-owned exact storage, including field sets and DAG sharing.
 
@@ -247,6 +345,9 @@ def _snapshot(values):
     except DomainError:
         return _UNSUITABLE
 
+
+_PAIR_SNAPSHOT = _snapshot
+_PAIR_SNAPSHOT_CODE = _snapshot.__code__
 
 def _requirements_value(user, contract, key, *, pin):
     """Fixed requirements projection; no source/authorization/clock is included."""

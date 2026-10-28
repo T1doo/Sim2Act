@@ -15,6 +15,7 @@ from typing import Any, Literal
 from pydantic import Field
 from sqlalchemy import bindparam, insert, select, update
 
+from . import _cold_policy_segment as _pair_segments
 from . import natural_specs as natural
 from . import spec_checklists as oracle
 from .apps import object_schema
@@ -43,6 +44,7 @@ from .delivery_graph_apps import controlled
 from .errors import DomainError
 from .pa_material_bindings import Metadata
 from .text_logic_reuse import pair, remember
+from .text_logic_reuse import require as _scope_pair_require
 from .text_workflows import RunScopeInput
 from .tools import authorized_read, write_text_artifact
 
@@ -559,6 +561,32 @@ def _persisted_snapshot_finite(snapshot):
         raise DomainError('VERSION_CONFLICT', 'Malformed persisted DeliveryGraph binding')
 
 
+_SCOPE_PAIR_PREFLIGHT = _persisted_snapshot_finite
+_SCOPE_PAIR_PREFLIGHT_CODE = _persisted_snapshot_finite.__code__
+_SCOPE_PAIR_FINGERPRINT = fingerprint
+_SCOPE_PAIR_FINGERPRINT_CODE = fingerprint.__code__
+_SCOPE_PAIR_REQUIRE_CODE = _scope_pair_require.__code__
+_SCOPE_PAIR_PARSERS = tuple((fn, fn.__code__, fn.__wrapped__, fn.__wrapped__.__code__)
+    for fn in (_persisted_scope_metadata, _persisted_run_scope))
+_SCOPE_PAIR_CORE = _pair_segments._persisted_pair_value
+_SCOPE_PAIR_CORE_CODE = _SCOPE_PAIR_CORE.__code__
+
+
+def _scope_pair_code_current():
+    parsers = (_persisted_scope_metadata, _persisted_run_scope)
+    return (fingerprint is _SCOPE_PAIR_FINGERPRINT
+        and fingerprint.__code__ is _SCOPE_PAIR_FINGERPRINT_CODE
+        and _persisted_snapshot_finite is _SCOPE_PAIR_PREFLIGHT
+        and _persisted_snapshot_finite.__code__ is _SCOPE_PAIR_PREFLIGHT_CODE
+        and _scope_pair_require.__code__ is _SCOPE_PAIR_REQUIRE_CODE
+        and all(fn is saved and fn.__code__ is code and fn.__wrapped__ is wrapped
+            and wrapped.__code__ is wrapped_code
+            for fn, (saved, code, wrapped, wrapped_code)
+            in zip(parsers, _SCOPE_PAIR_PARSERS, strict=True))
+        and _pair_segments._persisted_pair_value is _SCOPE_PAIR_CORE
+        and _SCOPE_PAIR_CORE.__code__ is _SCOPE_PAIR_CORE_CODE)
+
+
 def _cold_scope_pair(store, c, user, entity, guard, *, run_scope=False):
     """Fixed app/run scope pairs; IO and guard errors are outside parse mapping."""
     from . import delivery_graph_apps as graph
@@ -573,6 +601,12 @@ def _cold_scope_pair(store, c, user, entity, guard, *, run_scope=False):
             row = graph.lookup(c, user, entity, saved_kind, key)
             _bound_checkpoint(store, c, guard)
             rows.append(row)
+        if pair_require is _scope_pair_require and _scope_pair_code_current():
+            result = _SCOPE_PAIR_CORE(rows, RunScopeInput if run_scope else Metadata,
+                _persisted_snapshot_finite, pair_require,
+                pin=lambda: _bound_checkpoint(store, c, guard))
+            if result is not _pair_segments._UNSUITABLE:
+                return result
         pair_require(all(rows), 'Independent text logic seals missing')
         values = []
         for row in rows:
