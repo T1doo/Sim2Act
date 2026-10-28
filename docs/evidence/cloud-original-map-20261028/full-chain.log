@@ -1,0 +1,123 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____ test_pb_production_original_source_extraction_explicit_use_and_cold ______
+
+env = (<sim2act.db.Store object at 0x7fd401a22990>, Settings(database_url='sqlite:////workspace/scratch/original-map-real-cl...43f46b38e3415794f9eeee18edbdcc', 'user_67b448a2127649b7ba6328e6f39ac124', 'proj_cfb8afcac1e94ea9a675d31460faf197', ...)
+tmp_path = PosixPath('/workspace/scratch/original-map-real-clock-current/test_pb_production_original_so0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fd401a22750>
+
+    def test_pb_production_original_source_extraction_explicit_use_and_cold(env, tmp_path, monkeypatch):
+        data, binding, fixture, factory = configured(env, tmp_path, monkeypatch, prepare_case=prepare_pb)
+        generation, _, release, source_instance, generated = apps.ready(data, style="ordered")
+        assert len(generated) == 3
+        read_reports, before_sql = observe_reservation_reads(monkeypatch)
+        event.listen(data[0].engine, "before_cursor_execute", before_sql)
+        source_id = apps.enqueue(data, release, source_instance, key=binding.contract.stage_keys.source)
+        approve_stage(data, binding, "source", source_id)
+        source_bytes = []
+        normal = apps.transport([], apps.SOURCE)
+    
+        def source_response(request):
+            raw = normal.handle_request(request).json()
+            raw["archive_note"] = "合成原始正文；非真实模型"
+            payload = (json.dumps(raw, ensure_ascii=False, indent=2) + "\n").encode()
+            source_bytes.append((request.content, payload))
+            return httpx.Response(200, content=payload)
+    
+        assert factory(data[0], data[1], goal_planner_transport=httpx.MockTransport(source_response)).once()
+        source_result = apps.inspect(data, source_instance, source_id)
+        assert source_result.status_code == 200 and source_result.json()["status"] == "SUCCEEDED", source_result.text
+        assert len(source_bytes) == 2 and len(fixture["sends"]) == 5
+        route = f"/api/projects/{data[4]}/natural-spec-task-runs/{source_id}"
+        options = data[2].get(route + "/extraction-options")
+        assert options.status_code == 200, options.text
+        target = binding.contract.bindings[1]
+        review = dict(source_run_id=source_id,
+            expected_source_proof_fingerprint=options.json()["source_proof_fingerprint"],
+            expected_source_recipe_fingerprint=options.json()["recipe_fingerprint"],
+            card_id=target.card_id, expected_goal_version=target.goal_version,
+            expected_goal_fingerprint=target.goal_fingerprint, expected_source_hash=target.source_hash,
+            recipe=binding.contract.extraction_recipe.model_dump(exclude_none=True),
+            name="P-B production-shaped fixture", request_key=binding.contract.extraction_request_key)
+        preview = data[2].post(route + "/extraction-reviews", json=review)
+        assert preview.status_code == 200, preview.text
+        body = pb.ExtractInput(review=review, expected_review_fingerprint=preview.json()["review_fingerprint"],
+            consent=pb.CONSENT, artifact_write_consent=natural.CONSENT)
+        worker = factory(data[0], data[1], goal_planner_transport=httpx.MockTransport(
+            lambda request: pytest.fail("Extraction must not send")))
+        made = trial.extract_pb(worker, data[3], source_id, body)
+        assert trial.extract_pb(worker, data[3], source_id, body) == made
+        assert len(fixture["sends"]) == 5
+        resolved = archive.resolve_trial_source(data[0], data[3], binding.contract, binding.approval_key)
+        assert list(zip(resolved.request_bodies, resolved.response_bodies, strict=True)) == source_bytes
+        assert resolved.public_receipt["verification"] == "SPEC_PRODUCTION_CONTROLLER_ARCHIVE"
+        assert resolved.public_receipt["live_allowed"] is False
+        assert all(p["decoded_body_sha256"] != p["canonical_ascii_sha256"]
+                   for p in resolved.public_receipt["attempts"])
+        failures = refused_archive_copies(data, binding, tmp_path)
+        release, inst = apps.instance(data, made["id"])
+        catalog = data[2].get("/api/apps", params={"metadata_only": "true"})
+        assert catalog.status_code == 200, catalog.text
+        assert next(item for item in catalog.json()["items"] if item["id"] == made["id"])["use_family"] == "NATURAL_PB"
+    
+        # Fresh Store/client/Worker on the same durable database; no old worker result.
+        cold_store = Store(data[1].database_url, test_only=True)
+        event.listen(cold_store.engine, "before_cursor_execute", before_sql)
+        cold_client = TestClient(create_app(cold_store, data[1]))
+        cold_client.headers["Authorization"] = "Bearer synthetic-test-A"
+        cold_data = (cold_store, data[1], cold_client, *data[3:])
+        original_environment = controller.environment
+    
+        def cold_environment(store, settings, transport):
+            if store is cold_store:
+                assert settings is data[1] and transport is None and store.test_only and store.sqlite
+            else:
+                original_environment(store, settings, transport)
+    
+        monkeypatch.setattr(controller, "environment", cold_environment)
+        try:
+            current = cold_client.get("/api/internal/instances/" + inst["id"]).json()
+            current_app = cold_client.get("/api/apps/" + made["id"])
+            assert current_app.status_code == 200, current_app.text
+            app = current_app.json()
+            assert app["fingerprint"] == made["candidate_fingerprint"]
+            use_review = dict(expected_revision=current["revision"],
+                expected_release_fingerprint=release["fingerprint"], expected_app_fingerprint=app["fingerprint"],
+                expected_recipe_fingerprint=fingerprint(binding.contract.extraction_recipe.model_dump(exclude_none=True)),
+                resource_id=target.resource_id, card_id=target.card_id,
+                expected_goal_version=target.goal_version, expected_goal_fingerprint=target.goal_fingerprint,
+                expected_source_hash=target.source_hash, request_key=binding.contract.stage_keys.cold)
+            base = "/api/internal/instances/" + inst["id"]
+            checked = cold_client.post(base + "/pb-use-reviews", json=use_review)
+            assert checked.status_code == 200, checked.text
+            submitted = dict(review=use_review, expected_review_fingerprint=checked.json()["review_fingerprint"],
+                consent=use.CONSENT)
+            queued = cold_client.post(base + "/pb-use-runs", json=submitted)
+            assert queued.status_code == 202, queued.text
+            replayed = cold_client.post(base + "/pb-use-runs", json=submitted)
+            assert replayed.status_code == 202, replayed.text
+            assert queued.json()["cached"] is False and replayed.json()["cached"] is True
+            assert {k: v for k, v in replayed.json().items() if k != "cached"} == {
+                k: v for k, v in queued.json().items() if k != "cached"}
+            cold_id = queued.json()["run_id"]
+            approve_stage(cold_data, binding, "cold", cold_id)
+            assert factory(cold_store, data[1], goal_planner_transport=apps.transport([], apps.COLD)).once()
+            result = apps.inspect(cold_data, inst, cold_id)
+>           assert result.status_code == 200 and result.json()["status"] == "SUCCEEDED", result.text
+E           AssertionError: {"namespace":"INTERNAL_APPRUN","formal_publication_enabled":false,"id":"run_c9ebc00ce00947268776156f59f3999e","app_run_id":"iapprun_0e86073028ad47ec83715c8fbfb15eb2","instance_id":"iinstance_efe394310a4dbed4b9da75583fad6a3c","release_id":"irelease_c785bebbe16946be8fcd43279a3d9982","status":"RUNNING","version":1,"cancel_intent":false,"result":null,"result_version":null,"error":null,"known_effects":[],"events":[{"id":"event_890ae6ba204749e7960728408082a3a9","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192743.5932515,"kind":"ACCEPTED","data":{"namespace":"INTERNAL_APPRUN","app_run_id":"iapprun_0e86073028ad47ec83715c8fbfb15eb2","instance_id":"iinstance_efe394310a4dbed4b9da75583fad6a3c","release_id":"irelease_c785bebbe16946be8fcd43279a3d9982","input_fingerprint":"b3ec5afa91259762354b546298f5999b7d3f570a9fa52758d3b1625cc3283fbf"}},{"id":"event_49bea886cc1a415da64bf7e236208979","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192750.0458002,"kind":"CLAIMED","data":{"fence":1}},{"id":"event_8c7304abd7714ccfbb4c7713979da5d9","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192752.1530323,"kind":"SPEC_STEP_VERIFIED","data":{"step_id":"read_pick","operation_id":"op_df4c4ac3904c4e14b5cf1443f71de08b","fence":1}},{"id":"event_c18ac0b6e2ee48bd901830ff4d10c3a2","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192777.2118373,"kind":"NS_RESERVED","data":{"attempt_id":"attempt_8eceaee13a6441c3a213620bf9777e41","parameters_fingerprint":"f18959fce89ee1360dfbe958773d0b54dd7359d95b4e582a683734383c33ba88","reserved_tokens":6307,"request_model":"intern-s2","mode":"LIVE","created_at":1793192777.2093425,"operation_id":"op_a860fa516aa04b069618c7135203854a","step_id":"duties_pick","fence":1,"reservation_fingerprint":"a80b1d3e1191db135a392f3db776026bba5f7f4670534a4090db96168c392228"}},{"id":"event_bdb805720dfc482c974b45ccdc47e357","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192777.2158504,"kind":"NS_WIRE_ARCHIVED","data":{"attempt_id":"attempt_8eceaee13a6441c3a213620bf9777e41","archive_fingerprint":"93c9d73b677821af8b163788707084efffd912c8dc63ca861d3f65eba1de791c"}},{"id":"event_5b5fd356ec6d4799899ad3e0e8a03ad4","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192777.2161477,"kind":"MODEL_RESERVED","data":{"attempt_id":"attempt_8eceaee13a6441c3a213620bf9777e41","mode":"live"}},{"id":"event_58b3c0af5feb4447948e6728fbf1ccd2","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192777.2212074,"kind":"PA_TRIAL_BODY","data":{"attempt_id":"attempt_8eceaee13a6441c3a213620bf9777e41","family":"pa_trial_request_body.v1","body_fingerprint":"93c9d73b677821af8b163788707084efffd912c8dc63ca861d3f65eba1de791c","decoded_sha256":"789cbbacf038425b65e5660bff80ba986237c904e03a0a0e478ba3b602885d3a","canonical_sha256":null,"byte_count":5283,"complete":true,"omission":"NONE"}},{"id":"event_225af1b232bb47298468454b57b12ee6","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192785.780805,"kind":"PA_TRIAL_BODY","data":{"attempt_id":"attempt_8eceaee13a6441c3a213620bf9777e41","family":"pa_trial_response_body.v1","body_fingerprint":"5f265777f536c31b23587954bb2381b5a19eb57700e2323c35ab9622974fa3cf","decoded_sha256":"458107e7f73e7ae7103b9c02a2cb0fe28a0e55aad8839cd8319da9a5e0309aa4","canonical_sha256":"458107e7f73e7ae7103b9c02a2cb0fe28a0e55aad8839cd8319da9a5e0309aa4","byte_count":476,"complete":true,"omission":"NONE"}},{"id":"event_949dd4cd7d8b4bb2892ed0111fe1b1b5","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192785.7843816,"kind":"NS_BODY_ARCHIVED","data":{"attempt_id":"attempt_8eceaee13a6441c3a213620bf9777e41","archive_fingerprint":"5f265777f536c31b23587954bb2381b5a19eb57700e2323c35ab9622974fa3cf"}},{"id":"event_a9db3ce87b7a449fb973e287b921b4d1","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192785.8578086,"kind":"NS_RECEIVED","data":{"attempt_id":"attempt_8eceaee13a6441c3a213620bf9777e41","response_fingerprint":"f761425be4033844ab9cadff6db4674f4b253ac0028de8f7fdc833c4b955e02a","reception_fingerprint":"6fab225b74f8657ccfbf364d2ee8144881668ea86c5ae816ae18bfd94cbdefbb"}},{"id":"event_bc947068a87a4fa08c1ea40ea98dd246","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192785.9367495,"kind":"NS_SETTLEMENT_LEASE_RESERVED","data":{"attempt_id":"attempt_8eceaee13a6441c3a213620bf9777e41","protocol":"sqlite-exclusive-settlement.v1","seconds":120,"contract_fingerprint":"e64b83983eea7309dfa5acc52da915771c18c9682c3b94b112d3afdbca958426","worker_id":"worker_0341db8523e24dc692ec951e1864ad24","fence":1,"version":1,"previous_lease_until":1793192815.8528602,"lease_until":1793192905.935876,"deadline":1793193043.5888193}},{"id":"event_ff678f04183e4b918838ff56dc4cd304","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192818.6893044,"kind":"NS_SETTLED","data":{"attempt_id":"attempt_8eceaee13a6441c3a213620bf9777e41","attempt_fingerprint":"58a0630454209430fbc90b2d522367058db8e7c30afa6b9e07b86f92916fe32e","operation_id":"op_a860fa516aa04b069618c7135203854a"}},{"id":"event_15bea8b9844d49618157660868e34ae8","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192818.6902764,"kind":"SPEC_STEP_VERIFIED","data":{"step_id":"duties_pick","operation_id":"op_a860fa516aa04b069618c7135203854a","fence":1}},{"id":"event_ebc4aaee37974f199bc1c55255394666","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192891.950599,"kind":"NS_SETTLEMENT_LEASE_RELEASED","data":{"attempt_id":"attempt_8eceaee13a6441c3a213620bf9777e41","fence":1,"lease_until":1793192905.935876}},{"id":"event_4f820e8d5f334697aa46c285d8e9def4","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192898.6170082,"kind":"NS_RESERVED","data":{"attempt_id":"attempt_f150b60364b0478bac38f8f6bc3d4149","parameters_fingerprint":"50d2a0fa4729ee7dac6d858dc52610987ce3cb992882705e44f4f684f091b7a3","reserved_tokens":6341,"request_model":"intern-s2","mode":"LIVE","created_at":1793192898.6151302,"operation_id":"op_16a12ccd8003488eb41a2bfe42e32094","step_id":"qualifiers_pick","fence":1,"reservation_fingerprint":"bf7d1cde5eaf19f1d4152bef1f3e9b8e0293a32ede3ea799879534cbd0a0697b"}},{"id":"event_dc30f262bdf442be92c76f3dd9da0337","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192898.6195023,"kind":"NS_WIRE_ARCHIVED","data":{"attempt_id":"attempt_f150b60364b0478bac38f8f6bc3d4149","archive_fingerprint":"1401d45f97d9b2dd5cccb1195bcb8314e13f880763a7b601bbf3d5177f643d9d"}},{"id":"event_37bb16693b6746d78b43f224ce317d1c","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192898.6198018,"kind":"MODEL_RESERVED","data":{"attempt_id":"attempt_f150b60364b0478bac38f8f6bc3d4149","mode":"live"}},{"id":"event_d19815509bd54931ac02116103f4ab8b","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192898.6229982,"kind":"PA_TRIAL_BODY","data":{"attempt_id":"attempt_f150b60364b0478bac38f8f6bc3d4149","family":"pa_trial_request_body.v1","body_fingerprint":"1401d45f97d9b2dd5cccb1195bcb8314e13f880763a7b601bbf3d5177f643d9d","decoded_sha256":"43963c7886273567d6465e21708d2ca275f19191726cc68bf23e29e76c20d94e","canonical_sha256":null,"byte_count":5317,"complete":true,"omission":"NONE"}},{"id":"event_5be4d0a6ec174a9ea43209401a38544d","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192907.8288078,"kind":"PA_TRIAL_BODY","data":{"attempt_id":"attempt_f150b60364b0478bac38f8f6bc3d4149","family":"pa_trial_response_body.v1","body_fingerprint":"a506d5078ce50d0a6259a204ac14d60617eddf0403b46c10e47af39feae943de","decoded_sha256":"e86a70f515622717020b2352d8c6f9be4afde037d8306a0fee5e3227cc7d828b","canonical_sha256":"e86a70f515622717020b2352d8c6f9be4afde037d8306a0fee5e3227cc7d828b","byte_count":887,"complete":true,"omission":"NONE"}},{"id":"event_33ffa05176fb41e59443f841c7309f29","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192907.8318048,"kind":"NS_BODY_ARCHIVED","data":{"attempt_id":"attempt_f150b60364b0478bac38f8f6bc3d4149","archive_fingerprint":"a506d5078ce50d0a6259a204ac14d60617eddf0403b46c10e47af39feae943de"}},{"id":"event_569a1591d9614ae4a95f57b3a44fe868","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192907.8993528,"kind":"NS_RECEIVED","data":{"attempt_id":"attempt_f150b60364b0478bac38f8f6bc3d4149","response_fingerprint":"c3cedef04d36515b546fedae451137c2d4388d493058c4c790036ca44c9a3112","reception_fingerprint":"03b50aff5e54596c5f40233aa10d50916eafbecd8c5be58f7c63e6933ecffae7"}},{"id":"event_651c87af279941af80a675dae9212f1a","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793192907.981915,"kind":"NS_SETTLEMENT_LEASE_RESERVED","data":{"attempt_id":"attempt_f150b60364b0478bac38f8f6bc3d4149","protocol":"sqlite-exclusive-settlement.v1","seconds":120,"contract_fingerprint":"e64b83983eea7309dfa5acc52da915771c18c9682c3b94b112d3afdbca958426","worker_id":"worker_0341db8523e24dc692ec951e1864ad24","fence":1,"version":1,"previous_lease_until":1793192937.8931592,"lease_until":1793193027.9814038,"deadline":1793193043.5888193}},{"id":"event_4d672a8d7a624b86a581d3fe71f8afc5","run_id":"run_c9ebc00ce00947268776156f59f3999e","created_at":1793193027.9881263,"kind":"NS_REJECTED","data":{"attempt_id":"attempt_f150b60364b0478bac38f8f6bc3d4149","attempt_fingerprint":"09e0ae597cf2cf1b7c6cda7b32fed0632f33fc1b589fa767b2e060f42ffcdf83","operation_id":"op_16a12ccd8003488eb41a2bfe42e32094","error":"BUDGET_EXHAUSTED"}}],"steps":[{"step_id":"read_pick","status":"VERIFIED","fingerprint":"9901762b37fcf53af6b391cba489148855e8b3957d0a78584a9553f81cb2b0f6"},{"step_id":"duties_pick","status":"VERIFIED","fingerprint":"011c6dd3d9ff00a5702c102a7d98bc28c63acf80e9a43a9b1c249c83833dccde"}],"semantic_status":"UNKNOWN","owner_acceptance":"PENDING","citation_status":"NOT_RUN","semantic_goal_acceptance":"NOT_RUN","markdown_view":null}
+E           assert (200 == 200 and 'RUNNING' == 'SUCCEEDED'
+E            +  where 200 = <Response [200 OK]>.status_code
+E             
+E             - SUCCEEDED
+E             + RUNNING)
+
+tests/test_pb_spec_production_controller.py:370: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_pb_spec_production_controller.py::test_pb_production_original_source_extraction_explicit_use_and_cold
+1 failed, 1 warning in 562.00s (0:09:21)

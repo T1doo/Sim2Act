@@ -88,10 +88,9 @@ static int compare_node(Compare*c,size_t id,PyObject*v,int depth){
  if(k=='i'||k=='d'){uint64_t b;if(scalar_bits(v,k,&b)<0)return -1;return b==n->bits;}
  if(k=='n'||k=='t'||k=='f')return 1;
  if(c->actual[id])return c->actual[id]==v;
- if(v==n->original){size_t*assigned=c->assigned+id;if(*assigned&&*assigned!=id+1)return 0;*assigned=id+1;}
- else{Entry*old=find(&c->t->map,v);
-  if(old){size_t*assigned=c->assigned+old->ordinal;if(*assigned&&*assigned!=id+1)return 0;*assigned=id+1;}
-  else{Entry*seen=find(&c->changed,v);if(seen&&seen->ordinal!=id)return 0;if(!seen&&insert(&c->changed,v,id)<0)return -1;}}
+ Entry*old=find(&c->t->map,v);
+ if(old){size_t*assigned=c->assigned+old->ordinal;if(*assigned&&*assigned!=id+1)return 0;*assigned=id+1;}
+ else{Entry*seen=find(&c->changed,v);if(seen&&seen->ordinal!=id)return 0;if(!seen&&insert(&c->changed,v,id)<0)return -1;}
  c->actual[id]=Py_NewRef(v);
  if(k=='s'){if(v==n->original)return 1;int same=PyUnicode_Compare(v,n->original);if(same==-1&&PyErr_Occurred())return -1;return same==0;}
  if(k=='b')return v==n->original||(PyBytes_GET_SIZE(v)==PyBytes_GET_SIZE(n->original)&&!memcmp(PyBytes_AS_STRING(v),PyBytes_AS_STRING(n->original),PyBytes_GET_SIZE(v)));

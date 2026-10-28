@@ -1,4 +1,4 @@
-"""Original pointer shortcut preserves full alias partition and mutable checks."""
+"""Full alias partition and mutable checks remain required for every implementation."""
 
 import pytest
 from sqlalchemy.engine import RowMapping
