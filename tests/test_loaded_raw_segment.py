@@ -198,7 +198,8 @@ def test_internal_bookkeeping_cannot_run_foreign_callbacks(local_origin, monkeyp
             assert not runtime._raw_read_eligible(facts, "model-reserved")
 
 
-def seeded_reader(f, c, guard, *, job_values=None, attempt_values=None, reserved_values=None):
+def seeded_reader(f, c, guard, *, job_values=None, attempt_values=None, reserved_values=None,
+                  mapping_job=False, use_seed=True):
     from sim2act.db import runs
     from sim2act.text_workflows import RunScopeInput
 
@@ -244,7 +245,25 @@ def seeded_reader(f, c, guard, *, job_values=None, attempt_values=None, reserved
     )
     guard.add(audit.key, audit.fields())
     seed = runtime._cold_run_raw_seed(f.store, c, guard, audit)
-    facts = runtime._ColdRunFacts(f.store, c, seed.job, guard, raw_seed=seed)
+    current = seed.job
+    if mapping_job:
+        from sqlalchemy.engine import RowMapping
+        from sqlalchemy.engine.result import SimpleResultMetaData
+        keys = list(job)
+        current = RowMapping(SimpleResultMetaData(keys), None,
+            {key: i for i, key in enumerate(keys)}, tuple(job.values()))
+        if mapping_job == "cursor":
+            from sqlalchemy import bindparam, text
+            statement = text("SELECT " + ", ".join(
+                f":value_{i} AS {key}" for i, key in enumerate(job)
+            )).bindparams(*(
+                bindparam(f"value_{i}", value=value, type_=runs.c[key].type)
+                for i, (key, value) in enumerate(job.items())
+            )).columns(*runs.c)
+            current = c.execute(statement).mappings().one()
+    facts = runtime._ColdRunFacts(f.store, c, current, guard, raw_seed=seed if use_seed else None)
+    if not use_seed:
+        facts._put("attempts", [] if attempt_values is None else attempt_values)
     facts._put("model-reserved", [] if reserved_values is None else reserved_values)
     return facts, seed
 

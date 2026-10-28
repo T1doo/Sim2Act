@@ -1,0 +1,142 @@
+.....FFFF................                                                [100%]
+=================================== FAILURES ===================================
+_ test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-False-False] _
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f1ae68e0e00>, worker=<sim2act.worker.Worker object at 0x7f1ae84db170>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1ae81d2540>
+use_seed = False, marker = False, mapping_job = 'cursor'
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+            facts, _ = prepared(f, c, guard, count=2, marker=marker,
+                mapping_job=mapping_job, use_seed=use_seed)
+            queries = []
+            def sql(*args):
+                queries.append(1)
+            event.listen(f.store.engine, "before_cursor_execute", sql)
+            try:
+                start = guard._diagnostic_counts[1]
+                with observe_core() as calls:
+                    actual = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                fast = guard._diagnostic_counts[1] - start
+>               assert calls == [1] and queries == []
+E               assert ([] == [1]
+E                 
+E                 Right contains one more item: 1
+E                 Use -v to get more diff)
+
+tests/test_counter_loaded_segment.py:179: AssertionError
+_ test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-False-True] _
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f1ae6ce10a0>, worker=<sim2act.worker.Worker object at 0x7f1ae8475a60>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1ae67f8a10>
+use_seed = True, marker = False, mapping_job = 'cursor'
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+            facts, _ = prepared(f, c, guard, count=2, marker=marker,
+                mapping_job=mapping_job, use_seed=use_seed)
+            queries = []
+            def sql(*args):
+                queries.append(1)
+            event.listen(f.store.engine, "before_cursor_execute", sql)
+            try:
+                start = guard._diagnostic_counts[1]
+                with observe_core() as calls:
+                    actual = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                fast = guard._diagnostic_counts[1] - start
+>               assert calls == [1] and queries == []
+E               assert ([] == [1]
+E                 
+E                 Right contains one more item: 1
+E                 Use -v to get more diff)
+
+tests/test_counter_loaded_segment.py:179: AssertionError
+_ test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-True-False] _
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f1ae7f6c170>, worker=<sim2act.worker.Worker object at 0x7f1ae62fac00>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1ae9151910>
+use_seed = False, marker = True, mapping_job = 'cursor'
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+            facts, _ = prepared(f, c, guard, count=2, marker=marker,
+                mapping_job=mapping_job, use_seed=use_seed)
+            queries = []
+            def sql(*args):
+                queries.append(1)
+            event.listen(f.store.engine, "before_cursor_execute", sql)
+            try:
+                start = guard._diagnostic_counts[1]
+                with observe_core() as calls:
+                    actual = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                fast = guard._diagnostic_counts[1] - start
+>               assert calls == [1] and queries == []
+E               assert ([] == [1]
+E                 
+E                 Right contains one more item: 1
+E                 Use -v to get more diff)
+
+tests/test_counter_loaded_segment.py:179: AssertionError
+_ test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-True-True] _
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f1ae67adb80>, worker=<sim2act.worker.Worker object at 0x7f1ae620b740>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1ae62194f0>
+use_seed = True, marker = True, mapping_job = 'cursor'
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+            facts, _ = prepared(f, c, guard, count=2, marker=marker,
+                mapping_job=mapping_job, use_seed=use_seed)
+            queries = []
+            def sql(*args):
+                queries.append(1)
+            event.listen(f.store.engine, "before_cursor_execute", sql)
+            try:
+                start = guard._diagnostic_counts[1]
+                with observe_core() as calls:
+                    actual = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                fast = guard._diagnostic_counts[1] - start
+>               assert calls == [1] and queries == []
+E               assert ([] == [1]
+E                 
+E                 Right contains one more item: 1
+E                 Use -v to get more diff)
+
+tests/test_counter_loaded_segment.py:179: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_counter_loaded_segment.py::test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-False-False]
+FAILED tests/test_counter_loaded_segment.py::test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-False-True]
+FAILED tests/test_counter_loaded_segment.py::test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-True-False]
+FAILED tests/test_counter_loaded_segment.py::test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-True-True]
+4 failed, 21 passed, 1 warning in 11.63s

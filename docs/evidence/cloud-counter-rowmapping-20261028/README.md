@@ -1,0 +1,9 @@
+# Actual Run RowMapping coverage
+
+The preceding full real-clock controller test (source 69c44fd6ee546be762d6032b54b069464d244ba1) hit no complete counter packets. Actual Source and fresh Cold Facts retain their original Run RowMapping, whereas the selector accepted only dict jobs.
+
+The selector now also accepts exact, fully qualified RowMapping storage. Before access it checks original row methods/code, RMKeyView dependency and quoted-key schema. The complete no-hook eligibility walk includes hidden data/index positions. Context must be a visible native key; the original direct row lookup reads it. The job must remain the identical Facts.job object. Private snapshot creation, original counter predicates, every dynamic checkpoint, complete late Facts.check and original attempt object/order remain unchanged. Unknown metadata (including arbitrary Label keys) keeps the original path. No SQL is prefetched and no stored counter verdict is reused.
+
+Independent read-only review approved this minimal diff. Dict/Simple-related regression:61 passed25.85s. Final Simple and actual SQLite Cursor metadata, seed/no-seed, N2, marker/no-marker:25 passed13.44s, core exactly once, no additional SQL, same original result rows, fewer full pins. The first Cursor fixture used SQL Label objects and correctly missed qualification; its failed expectation is preserved, then the fixture was corrected to actual table column metadata without runtime relaxation. These are synthetic SQLite/Mock fixtures, zero real model requests, not a full-chain or original30s lease pass.
+
+A separate scratch-only structural comparison experiment found an alias-splitting false positive and was not integrated. Its corrected alias matrix is diagnostic only. No native runtime binary was changed by this counter fix. Actual G1 graph sampling is separately bounded and explicitly uses virtual clocks with rollback, not settlement acceptance.

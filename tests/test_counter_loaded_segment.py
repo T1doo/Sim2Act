@@ -15,7 +15,8 @@ from sim2act import pb_natural_specs as pb
 from sim2act.errors import DomainError
 
 
-def prepared(f, c, guard, omit=None, *, count=0, marker=False, job_extra=None, change=None):
+def prepared(f, c, guard, omit=None, *, count=0, marker=False, job_extra=None, change=None,
+             mapping_job=False, use_seed=True):
     from sim2act.db import attempts, reservations
 
     context = dict(
@@ -93,6 +94,8 @@ def prepared(f, c, guard, omit=None, *, count=0, marker=False, job_extra=None, c
         job_values=dict(context=context, **(job_extra or {})),
         attempt_values=list(reversed(rows)),
         reserved_values=reserved,
+        mapping_job=mapping_job,
+        use_seed=use_seed,
     )
     needed = [
         "model-operations",
@@ -152,6 +155,38 @@ def test_first_manifest_registration_hits_and_reduces_complete_pins(local_origin
             assert r._counters(c, facts.job, f.origin[0], _facts=facts) == []
             slow = guard._diagnostic_counts[1] - start
         assert fast < slow, (fast, slow)
+
+
+@pytest.mark.parametrize("use_seed", [False, True])
+@pytest.mark.parametrize("marker", [False, True])
+@pytest.mark.parametrize("mapping_job", [True, "cursor"])
+def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+    local_origin, monkeypatch, use_seed, marker, mapping_job
+):
+    f = local_origin
+    with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+        facts, _ = prepared(f, c, guard, count=2, marker=marker,
+            mapping_job=mapping_job, use_seed=use_seed)
+        queries = []
+        def sql(*args):
+            queries.append(1)
+        event.listen(f.store.engine, "before_cursor_execute", sql)
+        try:
+            start = guard._diagnostic_counts[1]
+            with observe_core() as calls:
+                actual = r._counters(c, facts.job, f.origin[0], _facts=facts)
+            fast = guard._diagnostic_counts[1] - start
+            assert calls == [1] and queries == []
+            with monkeypatch.context() as patch:
+                patch.setattr(r, "_cold_counter_loaded", lambda *args: r._RAW_READ_MISS)
+                start = guard._diagnostic_counts[1]
+                expected = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                slow = guard._diagnostic_counts[1] - start
+            assert fast < slow
+            assert len(actual) == len(expected) == 2
+            assert all(a is b for a, b in zip(actual, expected, strict=True))
+        finally:
+            event.remove(f.store.engine, "before_cursor_execute", sql)
 
 
 def test_missing_raw_key_uses_original_query_without_packet(local_origin):

@@ -3111,6 +3111,12 @@ def _cold_counter_loaded(c, job, manifest, facts):
             _counter_getattr_static(kind, name, _RAW_READ_MISS) is not original
             for kind, original, name in _RAW_SEED_SCHEMA
         )
+        or any(
+            _counter_getattr_static(owner, name, _RAW_READ_MISS) is not original
+            for owner, name, original in _RAW_SEED_ROW_METHODS
+        )
+        or any(fn.__code__ is not code for fn, code in _RAW_SEED_ROW_CODE)
+        or _RawRowMeta.keys.fget.__globals__.get("RMKeyView") is not _RawKeyView
         or _CounterPacket is not _COUNTER_PACKET_CLASS
         or type.__getattribute__(_CounterPacket, "__mro__") is not _COUNTER_PACKET_CLASS_MRO
         or len(vars(_CounterPacket)) != len(_COUNTER_PACKET_CLASS_ITEMS)
@@ -3192,9 +3198,23 @@ def _cold_counter_loaded(c, job, manifest, facts):
     if (
         type(rows) is not list
         or job is not namespace["job"]
-        or not _counter_native_keys(job)
-        or not _counter_native_keys(job.get("context"))
     ):
+        return _RAW_READ_MISS
+    if type(job) is _ColdGraphRowMapping:
+        # Source and fresh Cold keep the actual SQL Run row here. Qualify its
+        # complete storage before invoking the original visible-key lookup;
+        # hidden row data remains part of the full entry/exit graph pins.
+        if not _raw_seed_plain(job):
+            return _RAW_READ_MISS
+        keys, _, _ = _cold_graph_row_storage(job)
+        if "context" not in keys:
+            return _RAW_READ_MISS
+        context = job["context"]
+    elif _counter_native_keys(job):
+        context = job.get("context")
+    else:
+        return _RAW_READ_MISS
+    if not _counter_native_keys(context):
         return _RAW_READ_MISS
     required = [
         "attempts",
@@ -3205,7 +3225,7 @@ def _cold_counter_loaded(c, job, manifest, facts):
             for kind in ("NS_RESERVED", "NS_RECEIVED", "NS_SETTLED", "NS_REJECTED")
         ],
     ]
-    if _COUNTER_PACKET_MARKER in job["context"]:
+    if _COUNTER_PACKET_MARKER in context:
         required.append("association")
     if rows:
         required.append("mode")
