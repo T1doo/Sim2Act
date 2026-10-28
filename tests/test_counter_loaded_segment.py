@@ -146,14 +146,14 @@ def test_first_manifest_registration_hits_and_reduces_complete_pins(local_origin
         with observe_core() as calls:
             assert r._counters(c, facts.job, f.origin[0], _facts=facts) == []
         assert calls == [1] and len(facts._manifests) == 1
-        start = guard._diagnostic_counts[1]
+        start = guard._diagnostic_counts[0]
         assert r._counters(c, facts.job, f.origin[0], _facts=facts) == []
-        fast = guard._diagnostic_counts[1] - start
+        fast = guard._diagnostic_counts[0] - start
         with monkeypatch.context() as patch:
             patch.setattr(r, "_cold_counter_loaded", lambda *a: r._RAW_READ_MISS)
-            start = guard._diagnostic_counts[1]
+            start = guard._diagnostic_counts[0]
             assert r._counters(c, facts.job, f.origin[0], _facts=facts) == []
-            slow = guard._diagnostic_counts[1] - start
+            slow = guard._diagnostic_counts[0] - start
         assert fast < slow, (fast, slow)
 
 
@@ -172,16 +172,16 @@ def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
             queries.append(1)
         event.listen(f.store.engine, "before_cursor_execute", sql)
         try:
-            start = guard._diagnostic_counts[1]
+            start = guard._diagnostic_counts[0]
             with observe_core() as calls:
                 actual = r._counters(c, facts.job, f.origin[0], _facts=facts)
-            fast = guard._diagnostic_counts[1] - start
+            fast = guard._diagnostic_counts[0] - start
             assert calls == [1] and queries == []
             with monkeypatch.context() as patch:
                 patch.setattr(r, "_cold_counter_loaded", lambda *args: r._RAW_READ_MISS)
-                start = guard._diagnostic_counts[1]
+                start = guard._diagnostic_counts[0]
                 expected = r._counters(c, facts.job, f.origin[0], _facts=facts)
-                slow = guard._diagnostic_counts[1] - start
+                slow = guard._diagnostic_counts[0] - start
             assert fast < slow
             assert len(actual) == len(expected) == 2
             assert all(a is b for a, b in zip(actual, expected, strict=True))
@@ -230,14 +230,14 @@ def test_two_attempts_match_original_and_retain_rows(local_origin, monkeypatch, 
         with observe_core() as calls:
             fast_rows = r._counters(c, facts.job, f.origin[0], _facts=facts)
         assert calls == [1]
-        start = guard._diagnostic_counts[1]
+        start = guard._diagnostic_counts[0]
         fast_rows = r._counters(c, facts.job, f.origin[0], _facts=facts)
-        fast_pins = guard._diagnostic_counts[1] - start
+        fast_pins = guard._diagnostic_counts[0] - start
         with monkeypatch.context() as patch:
             patch.setattr(r, "_cold_counter_loaded", lambda *a: r._RAW_READ_MISS)
-            start = guard._diagnostic_counts[1]
+            start = guard._diagnostic_counts[0]
             old_rows = r._counters(c, facts.job, f.origin[0], _facts=facts)
-            old_pins = guard._diagnostic_counts[1] - start
+            old_pins = guard._diagnostic_counts[0] - start
         assert [x["parameters"]["natural_spec"]["ordinal"] for x in fast_rows] == [0, 1]
         assert fast_rows == old_rows
         assert all(a is b for a, b in zip(fast_rows, old_rows, strict=True))

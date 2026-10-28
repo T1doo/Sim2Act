@@ -2123,7 +2123,7 @@ class _ColdGraphRead:
         self.key = self.input_key(_validate=True)
         self.check(self.store, c)
 
-    def input_bytes(self, *, _validate=False, _frontier_inputs=None):
+    def input_bytes(self, *, _validate=False, _frontier_inputs=None, _snapshot_values=False):
         from .natural_live_admission import (
             PBTrialContract,
             _trial_typed_equal,
@@ -2164,7 +2164,7 @@ class _ColdGraphRead:
                 account=b.account_id, version=b.version, fingerprint=b.contract_fingerprint))
         if _validate:
             _cold_graph_validate_inputs(values)
-        return _cold_graph_bytes(values)
+        return values if _snapshot_values else _cold_graph_bytes(values)
 
     def _frontier_input_key(self, inputs):
         require(self.phase == 'pre' and type(inputs) is dict)
@@ -2220,8 +2220,12 @@ class _ColdGraphRead:
             pass
         try:
             _ColdGraphRead._check_dynamic(self, store, c)
-            require(self.input_key() == self.key if self._accounted_frontier is None
-                    else self._accounted_frontier.check() is None,
+            selected = None
+            if self._accounted_frontier is None and self.phase == "post":
+                from ._cold_graph_structure_guard import select
+                selected = select(self)
+            require((self.input_key() == self.key if selected is None else selected)
+                    if self._accounted_frontier is None else self._accounted_frontier.check() is None,
                 "Cold graph read segment or complete role inputs changed")
         except BaseException:
             self.invalidate()
@@ -2235,6 +2239,7 @@ class _ColdGraphRead:
             # form a new cycle: validate all incoming values and reject any
             # direct/nested path to the actual root before inserting it.
             _cold_graph_validate_inputs(value, _forbid_root=self.inputs)
+            vars(self).pop("_structure_state", None)
             self.inputs[name] = value
             # Re-pin complete current bytes, retaining every field and alias.
             if self._accounted_frontier is None:
@@ -2248,6 +2253,7 @@ class _ColdGraphRead:
     def invalidate(self):
         was_active = self.active
         self.active = False
+        vars(self).pop("_structure_state", None)
         # This opt-in selector owns no data/authority. Drop the back-reference
         # on the original scope teardown; a retained diagnostic handle stays
         # unusable and cannot retain a graph<->selector cycle.

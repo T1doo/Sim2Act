@@ -24,14 +24,14 @@ def test_hit_has_one_complete_pin_and_same_original_value(local_origin, monkeypa
     with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
         value = [{"complete": ["same"]}]
         facts = reader(f, c, guard, "model-reserved", value)
-        start = guard._diagnostic_counts[1]
+        start = guard._diagnostic_counts[0]
         assert facts.model_reserved() is value
-        assert guard._diagnostic_counts[1] - start == 1
+        assert guard._diagnostic_counts[0] - start == 1
         with monkeypatch.context() as patch:
             patch.setattr(runtime, "_raw_read_eligible", lambda *args: False)
-            start = guard._diagnostic_counts[1]
+            start = guard._diagnostic_counts[0]
             assert facts.model_reserved() is value
-            assert guard._diagnostic_counts[1] - start == 2
+            assert guard._diagnostic_counts[0] - start == 2
 
 
 @pytest.mark.parametrize("value", [None, False, []])
@@ -273,20 +273,20 @@ def test_actual_seed_shape_reduces_internal_pins_and_loaded_read(local_origin, m
     with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
         facts, seed = seeded_reader(f, c, guard)
         assert runtime._raw_read_eligible(facts, "attempts")
-        start = guard._diagnostic_counts[1]
+        start = guard._diagnostic_counts[0]
         facts.check(f.store, c, facts.job)
-        assert guard._diagnostic_counts[1] - start == 2
-        start = guard._diagnostic_counts[1]
+        assert guard._diagnostic_counts[0] - start == 2
+        start = guard._diagnostic_counts[0]
         assert facts.model_reserved() is facts._raw["model-reserved"]
-        assert guard._diagnostic_counts[1] - start == 2
+        assert guard._diagnostic_counts[0] - start == 2
         with monkeypatch.context() as patch:
             patch.setattr(runtime, "_raw_read_eligible", lambda *args: False)
-            start = guard._diagnostic_counts[1]
+            start = guard._diagnostic_counts[0]
             facts.check(f.store, c, facts.job)
-            assert guard._diagnostic_counts[1] - start == 4
-            start = guard._diagnostic_counts[1]
+            assert guard._diagnostic_counts[0] - start == 4
+            start = guard._diagnostic_counts[0]
             facts.model_reserved()
-            assert guard._diagnostic_counts[1] - start == 8
+            assert guard._diagnostic_counts[0] - start == 8
 
 
 @pytest.mark.parametrize("part", ["job", "attempts", "audit", "alias"])

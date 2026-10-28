@@ -1,0 +1,262 @@
+..........FFFFFF.F                                                       [100%]
+=================================== FAILURES ===================================
+_________ test_complete_graph_match_drops_encoding_but_dynamic_is_live _________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7ff2ba201070>, worker=<sim2act.worker.Worker object at 0x7ff2b96902c0>, ...ll original bytes'}, {'id': 'one', 'body': b'duplicate retained'}], 'structure-content': {'deep': [[1, 2]]}}, trace=[])
+
+    def test_complete_graph_match_drops_encoding_but_dynamic_is_live(local_origin):
+        f = local_origin
+>       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as graph:
+                                                              ^^^^^^^^^^^
+
+tests/test_cold_graph_structure.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/natural_spec_runtime.py:2283: in _cold_graph_read
+    guard.check(worker.store, c)
+src/sim2act/natural_spec_runtime.py:2222: in check
+    _ColdGraphRead._check_dynamic(self, store, c)
+src/sim2act/natural_spec_runtime.py:2200: in _check_dynamic
+    require(self.active and len(self.scope) == 1 and self.scope[0] is self.nonce
+src/sim2act/natural_spec_runtime.py:114: in require
+    codec.require(value, message)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+ok = False, message = 'Cold graph read segment or complete role inputs changed'
+
+    def require(ok, message="Exact natural-spec contract changed"):
+        if not ok:
+>           raise DomainError("VERSION_CONFLICT", message)
+E           sim2act.errors.DomainError: Cold graph read segment or complete role inputs changed
+
+src/sim2act/natural_specs.py:72: DomainError
+__________ test_current_dynamic_or_content_changes_still_reject[stop] __________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7ff2ba060a70>, worker=<sim2act.worker.Worker object at 0x7ff2b838f200>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+change = 'stop'
+
+    @pytest.mark.parametrize('change', ['stop', 'epoch', 'scope', 'role', 'contract'])
+    def test_current_dynamic_or_content_changes_still_reject(local_origin, change):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as graph:
+            warm(f, c, graph)
+            if change == 'stop':
+                f.worker.stop.set()
+            elif change == 'epoch':
+                c.info['source_proof_write_epoch'] = graph.epoch + 1
+            elif change == 'scope':
+                graph.scope[0] = object()
+            elif change == 'role':
+                graph.role_limits['source'].max_requests -= 1
+            else:
+                graph.binding.contract.run_seconds -= 1
+>           with pytest.raises(DomainError):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE DomainError
+
+tests/test_cold_graph_structure.py:148: Failed
+_________ test_current_dynamic_or_content_changes_still_reject[epoch] __________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7ff2b970e660>, worker=<sim2act.worker.Worker object at 0x7ff2b9f2b170>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+change = 'epoch'
+
+    @pytest.mark.parametrize('change', ['stop', 'epoch', 'scope', 'role', 'contract'])
+    def test_current_dynamic_or_content_changes_still_reject(local_origin, change):
+        f = local_origin
+>       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as graph:
+                                                              ^^^^^^^^^^^
+
+tests/test_cold_graph_structure.py:136: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/natural_spec_runtime.py:2283: in _cold_graph_read
+    guard.check(worker.store, c)
+src/sim2act/natural_spec_runtime.py:2222: in check
+    _ColdGraphRead._check_dynamic(self, store, c)
+src/sim2act/natural_spec_runtime.py:2200: in _check_dynamic
+    require(self.active and len(self.scope) == 1 and self.scope[0] is self.nonce
+src/sim2act/natural_spec_runtime.py:114: in require
+    codec.require(value, message)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+ok = False, message = 'Cold graph read segment or complete role inputs changed'
+
+    def require(ok, message="Exact natural-spec contract changed"):
+        if not ok:
+>           raise DomainError("VERSION_CONFLICT", message)
+E           sim2act.errors.DomainError: Cold graph read segment or complete role inputs changed
+
+src/sim2act/natural_specs.py:72: DomainError
+_________ test_current_dynamic_or_content_changes_still_reject[scope] __________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7ff2b3925400>, worker=<sim2act.worker.Worker object at 0x7ff2b9b518b0>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+change = 'scope'
+
+    @pytest.mark.parametrize('change', ['stop', 'epoch', 'scope', 'role', 'contract'])
+    def test_current_dynamic_or_content_changes_still_reject(local_origin, change):
+        f = local_origin
+>       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as graph:
+                                                              ^^^^^^^^^^^
+
+tests/test_cold_graph_structure.py:136: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/natural_spec_runtime.py:2283: in _cold_graph_read
+    guard.check(worker.store, c)
+src/sim2act/natural_spec_runtime.py:2222: in check
+    _ColdGraphRead._check_dynamic(self, store, c)
+src/sim2act/natural_spec_runtime.py:2200: in _check_dynamic
+    require(self.active and len(self.scope) == 1 and self.scope[0] is self.nonce
+src/sim2act/natural_spec_runtime.py:114: in require
+    codec.require(value, message)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+ok = False, message = 'Cold graph read segment or complete role inputs changed'
+
+    def require(ok, message="Exact natural-spec contract changed"):
+        if not ok:
+>           raise DomainError("VERSION_CONFLICT", message)
+E           sim2act.errors.DomainError: Cold graph read segment or complete role inputs changed
+
+src/sim2act/natural_specs.py:72: DomainError
+__________ test_current_dynamic_or_content_changes_still_reject[role] __________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7ff2b9b53890>, worker=<sim2act.worker.Worker object at 0x7ff2b9fb1c40>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+change = 'role'
+
+    @pytest.mark.parametrize('change', ['stop', 'epoch', 'scope', 'role', 'contract'])
+    def test_current_dynamic_or_content_changes_still_reject(local_origin, change):
+        f = local_origin
+>       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as graph:
+                                                              ^^^^^^^^^^^
+
+tests/test_cold_graph_structure.py:136: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/natural_spec_runtime.py:2283: in _cold_graph_read
+    guard.check(worker.store, c)
+src/sim2act/natural_spec_runtime.py:2222: in check
+    _ColdGraphRead._check_dynamic(self, store, c)
+src/sim2act/natural_spec_runtime.py:2200: in _check_dynamic
+    require(self.active and len(self.scope) == 1 and self.scope[0] is self.nonce
+src/sim2act/natural_spec_runtime.py:114: in require
+    codec.require(value, message)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+ok = False, message = 'Cold graph read segment or complete role inputs changed'
+
+    def require(ok, message="Exact natural-spec contract changed"):
+        if not ok:
+>           raise DomainError("VERSION_CONFLICT", message)
+E           sim2act.errors.DomainError: Cold graph read segment or complete role inputs changed
+
+src/sim2act/natural_specs.py:72: DomainError
+________ test_current_dynamic_or_content_changes_still_reject[contract] ________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7ff2b37d9880>, worker=<sim2act.worker.Worker object at 0x7ff2b3d00260>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+change = 'contract'
+
+    @pytest.mark.parametrize('change', ['stop', 'epoch', 'scope', 'role', 'contract'])
+    def test_current_dynamic_or_content_changes_still_reject(local_origin, change):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as graph:
+            warm(f, c, graph)
+            if change == 'stop':
+                f.worker.stop.set()
+            elif change == 'epoch':
+                c.info['source_proof_write_epoch'] = graph.epoch + 1
+            elif change == 'scope':
+                graph.scope[0] = object()
+            elif change == 'role':
+                graph.role_limits['source'].max_requests -= 1
+            else:
+>               graph.binding.contract.run_seconds -= 1
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cold_graph_structure.py:147: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PBTrialContract(namespace='natural-live-trial.v1', trial_key='synthetic-origin', project_id='proj_d48e1f916587445dba59....save_text', depends_on=['check_pick'], inputs={'text': FieldSource(source='step', ref='check_pick', field='text')})]))
+item = 'run_seconds'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'PBTrialContract' object has no attribute 'run_seconds'
+
+.venv/lib/python3.12/site-packages/pydantic/main.py:1026: AttributeError
+______________ test_native_original_reducer_error_is_not_replayed ______________
+
+local_origin = <[AttributeError("'object' object has no attribute 'keys'") raised in repr()] SimpleNamespace object at 0x7ff2b3395330>
+
+    def test_native_original_reducer_error_is_not_replayed(local_origin):
+        f = local_origin
+>       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as graph:
+                                                              ^^^^^^^^^^^
+
+tests/test_cold_graph_structure.py:178: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/natural_spec_runtime.py:2283: in _cold_graph_read
+    guard.check(worker.store, c)
+src/sim2act/natural_spec_runtime.py:2222: in check
+    _ColdGraphRead._check_dynamic(self, store, c)
+src/sim2act/natural_spec_runtime.py:2200: in _check_dynamic
+    require(self.active and len(self.scope) == 1 and self.scope[0] is self.nonce
+src/sim2act/natural_spec_runtime.py:114: in require
+    codec.require(value, message)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+ok = False, message = 'Cold graph read segment or complete role inputs changed'
+
+    def require(ok, message="Exact natural-spec contract changed"):
+        if not ok:
+>           raise DomainError("VERSION_CONFLICT", message)
+E           sim2act.errors.DomainError: Cold graph read segment or complete role inputs changed
+
+src/sim2act/natural_specs.py:72: DomainError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cold_graph_structure.py::test_complete_graph_match_drops_encoding_but_dynamic_is_live
+FAILED tests/test_cold_graph_structure.py::test_current_dynamic_or_content_changes_still_reject[stop]
+FAILED tests/test_cold_graph_structure.py::test_current_dynamic_or_content_changes_still_reject[epoch]
+FAILED tests/test_cold_graph_structure.py::test_current_dynamic_or_content_changes_still_reject[scope]
+FAILED tests/test_cold_graph_structure.py::test_current_dynamic_or_content_changes_still_reject[role]
+FAILED tests/test_cold_graph_structure.py::test_current_dynamic_or_content_changes_still_reject[contract]
+FAILED tests/test_cold_graph_structure.py::test_native_original_reducer_error_is_not_replayed
+7 failed, 11 passed, 1 warning in 4.01s

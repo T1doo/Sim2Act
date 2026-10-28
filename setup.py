@@ -18,6 +18,14 @@ setup(
                     '"' + hashlib.sha256(source.read_bytes()).hexdigest() + '"',
                 )
             ],
-        )
+        ),
+        Extension(
+            "sim2act._cold_graph_structure",
+            ["src/sim2act/_cold_graph_structure.c"],
+            optional=True,
+            define_macros=[("SIM2ACT_GRAPH_SOURCE_SHA", '"' + hashlib.sha256(
+                Path(__file__).parent.joinpath("src/sim2act/_cold_graph_structure.c").read_bytes()
+            ).hexdigest() + '"')],
+        ),
     ]
 )

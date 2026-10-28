@@ -1,0 +1,415 @@
+........................................................................ [ 40%]
+..................................FFFFFFFFF..FF......................... [ 80%]
+.............F....................                                       [100%]
+=================================== FAILURES ===================================
+_______ test_first_manifest_registration_hits_and_reduces_complete_pins ________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f887ce33680>, worker=<sim2act.worker.Worker object at 0x7f887acd9010>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f887ce32c60>
+
+    def test_first_manifest_registration_hits_and_reduces_complete_pins(local_origin, monkeypatch):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+            facts, _ = prepared(f, c, guard)
+            assert facts._manifests == []
+            with observe_core() as calls:
+                assert r._counters(c, facts.job, f.origin[0], _facts=facts) == []
+            assert calls == [1] and len(facts._manifests) == 1
+            start = guard._diagnostic_counts[1]
+            assert r._counters(c, facts.job, f.origin[0], _facts=facts) == []
+            fast = guard._diagnostic_counts[1] - start
+            with monkeypatch.context() as patch:
+                patch.setattr(r, "_cold_counter_loaded", lambda *a: r._RAW_READ_MISS)
+                start = guard._diagnostic_counts[1]
+                assert r._counters(c, facts.job, f.origin[0], _facts=facts) == []
+                slow = guard._diagnostic_counts[1] - start
+>           assert fast < slow, (fast, slow)
+E           AssertionError: (3, 0)
+E           assert 3 < 0
+
+tests/test_counter_loaded_segment.py:157: AssertionError
+_ test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[True-False-False] _
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f887c6025d0>, worker=<sim2act.worker.Worker object at 0x7f887c6c1010>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f887c602120>
+use_seed = False, marker = False, mapping_job = True
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+            facts, _ = prepared(f, c, guard, count=2, marker=marker,
+                mapping_job=mapping_job, use_seed=use_seed)
+            queries = []
+            def sql(*args):
+                queries.append(1)
+            event.listen(f.store.engine, "before_cursor_execute", sql)
+            try:
+                start = guard._diagnostic_counts[1]
+                with observe_core() as calls:
+                    actual = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                fast = guard._diagnostic_counts[1] - start
+                assert calls == [1] and queries == []
+                with monkeypatch.context() as patch:
+                    patch.setattr(r, "_cold_counter_loaded", lambda *args: r._RAW_READ_MISS)
+                    start = guard._diagnostic_counts[1]
+                    expected = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                    slow = guard._diagnostic_counts[1] - start
+>               assert fast < slow
+E               assert 7 < 4
+
+tests/test_counter_loaded_segment.py:185: AssertionError
+_ test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[True-False-True] _
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f887a972510>, worker=<sim2act.worker.Worker object at 0x7f887ad78650>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f887a971f70>
+use_seed = True, marker = False, mapping_job = True
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+            facts, _ = prepared(f, c, guard, count=2, marker=marker,
+                mapping_job=mapping_job, use_seed=use_seed)
+            queries = []
+            def sql(*args):
+                queries.append(1)
+            event.listen(f.store.engine, "before_cursor_execute", sql)
+            try:
+                start = guard._diagnostic_counts[1]
+                with observe_core() as calls:
+                    actual = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                fast = guard._diagnostic_counts[1] - start
+                assert calls == [1] and queries == []
+                with monkeypatch.context() as patch:
+                    patch.setattr(r, "_cold_counter_loaded", lambda *args: r._RAW_READ_MISS)
+                    start = guard._diagnostic_counts[1]
+                    expected = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                    slow = guard._diagnostic_counts[1] - start
+>               assert fast < slow
+E               assert 8 < 3
+
+tests/test_counter_loaded_segment.py:185: AssertionError
+_ test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[True-True-False] _
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f887bfef7d0>, worker=<sim2act.worker.Worker object at 0x7f887a7ef230>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f887bfec6e0>
+use_seed = False, marker = True, mapping_job = True
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+            facts, _ = prepared(f, c, guard, count=2, marker=marker,
+                mapping_job=mapping_job, use_seed=use_seed)
+            queries = []
+            def sql(*args):
+                queries.append(1)
+            event.listen(f.store.engine, "before_cursor_execute", sql)
+            try:
+                start = guard._diagnostic_counts[1]
+                with observe_core() as calls:
+                    actual = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                fast = guard._diagnostic_counts[1] - start
+                assert calls == [1] and queries == []
+                with monkeypatch.context() as patch:
+                    patch.setattr(r, "_cold_counter_loaded", lambda *args: r._RAW_READ_MISS)
+                    start = guard._diagnostic_counts[1]
+                    expected = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                    slow = guard._diagnostic_counts[1] - start
+>               assert fast < slow
+E               assert 7 < 4
+
+tests/test_counter_loaded_segment.py:185: AssertionError
+_ test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[True-True-True] _
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f887ae66bd0>, worker=<sim2act.worker.Worker object at 0x7f887c442180>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f887a3f34a0>
+use_seed = True, marker = True, mapping_job = True
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+            facts, _ = prepared(f, c, guard, count=2, marker=marker,
+                mapping_job=mapping_job, use_seed=use_seed)
+            queries = []
+            def sql(*args):
+                queries.append(1)
+            event.listen(f.store.engine, "before_cursor_execute", sql)
+            try:
+                start = guard._diagnostic_counts[1]
+                with observe_core() as calls:
+                    actual = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                fast = guard._diagnostic_counts[1] - start
+                assert calls == [1] and queries == []
+                with monkeypatch.context() as patch:
+                    patch.setattr(r, "_cold_counter_loaded", lambda *args: r._RAW_READ_MISS)
+                    start = guard._diagnostic_counts[1]
+                    expected = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                    slow = guard._diagnostic_counts[1] - start
+>               assert fast < slow
+E               assert 8 < 3
+
+tests/test_counter_loaded_segment.py:185: AssertionError
+_ test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-False-False] _
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f887ae78590>, worker=<sim2act.worker.Worker object at 0x7f887ae3b7d0>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f887a795700>
+use_seed = False, marker = False, mapping_job = 'cursor'
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+            facts, _ = prepared(f, c, guard, count=2, marker=marker,
+                mapping_job=mapping_job, use_seed=use_seed)
+            queries = []
+            def sql(*args):
+                queries.append(1)
+            event.listen(f.store.engine, "before_cursor_execute", sql)
+            try:
+                start = guard._diagnostic_counts[1]
+                with observe_core() as calls:
+                    actual = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                fast = guard._diagnostic_counts[1] - start
+                assert calls == [1] and queries == []
+                with monkeypatch.context() as patch:
+                    patch.setattr(r, "_cold_counter_loaded", lambda *args: r._RAW_READ_MISS)
+                    start = guard._diagnostic_counts[1]
+                    expected = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                    slow = guard._diagnostic_counts[1] - start
+>               assert fast < slow
+E               assert 7 < 4
+
+tests/test_counter_loaded_segment.py:185: AssertionError
+_ test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-False-True] _
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f887c35d5b0>, worker=<sim2act.worker.Worker object at 0x7f887ae00740>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f887bfef230>
+use_seed = True, marker = False, mapping_job = 'cursor'
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+            facts, _ = prepared(f, c, guard, count=2, marker=marker,
+                mapping_job=mapping_job, use_seed=use_seed)
+            queries = []
+            def sql(*args):
+                queries.append(1)
+            event.listen(f.store.engine, "before_cursor_execute", sql)
+            try:
+                start = guard._diagnostic_counts[1]
+                with observe_core() as calls:
+                    actual = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                fast = guard._diagnostic_counts[1] - start
+                assert calls == [1] and queries == []
+                with monkeypatch.context() as patch:
+                    patch.setattr(r, "_cold_counter_loaded", lambda *args: r._RAW_READ_MISS)
+                    start = guard._diagnostic_counts[1]
+                    expected = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                    slow = guard._diagnostic_counts[1] - start
+>               assert fast < slow
+E               assert 8 < 3
+
+tests/test_counter_loaded_segment.py:185: AssertionError
+_ test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-True-False] _
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f887c35ce30>, worker=<sim2act.worker.Worker object at 0x7f887acb8650>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f887c07d670>
+use_seed = False, marker = True, mapping_job = 'cursor'
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+            facts, _ = prepared(f, c, guard, count=2, marker=marker,
+                mapping_job=mapping_job, use_seed=use_seed)
+            queries = []
+            def sql(*args):
+                queries.append(1)
+            event.listen(f.store.engine, "before_cursor_execute", sql)
+            try:
+                start = guard._diagnostic_counts[1]
+                with observe_core() as calls:
+                    actual = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                fast = guard._diagnostic_counts[1] - start
+                assert calls == [1] and queries == []
+                with monkeypatch.context() as patch:
+                    patch.setattr(r, "_cold_counter_loaded", lambda *args: r._RAW_READ_MISS)
+                    start = guard._diagnostic_counts[1]
+                    expected = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                    slow = guard._diagnostic_counts[1] - start
+>               assert fast < slow
+E               assert 7 < 4
+
+tests/test_counter_loaded_segment.py:185: AssertionError
+_ test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-True-True] _
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f887a97b9b0>, worker=<sim2act.worker.Worker object at 0x7f887acd7230>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f887a97a300>
+use_seed = True, marker = True, mapping_job = 'cursor'
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+            facts, _ = prepared(f, c, guard, count=2, marker=marker,
+                mapping_job=mapping_job, use_seed=use_seed)
+            queries = []
+            def sql(*args):
+                queries.append(1)
+            event.listen(f.store.engine, "before_cursor_execute", sql)
+            try:
+                start = guard._diagnostic_counts[1]
+                with observe_core() as calls:
+                    actual = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                fast = guard._diagnostic_counts[1] - start
+                assert calls == [1] and queries == []
+                with monkeypatch.context() as patch:
+                    patch.setattr(r, "_cold_counter_loaded", lambda *args: r._RAW_READ_MISS)
+                    start = guard._diagnostic_counts[1]
+                    expected = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                    slow = guard._diagnostic_counts[1] - start
+>               assert fast < slow
+E               assert 8 < 3
+
+tests/test_counter_loaded_segment.py:185: AssertionError
+___________ test_two_attempts_match_original_and_retain_rows[False] ____________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f887ac9bbf0>, worker=<sim2act.worker.Worker object at 0x7f887a8f0650>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f887c4001a0>
+marker = False
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-43/test_two_attempts_match_origin0')
+
+    @pytest.mark.parametrize("marker", [False, True])
+    def test_two_attempts_match_original_and_retain_rows(local_origin, monkeypatch, marker, tmp_path):
+        import json
+    
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+            facts, seed = prepared(f, c, guard, count=2, marker=marker)
+            with observe_core() as calls:
+                fast_rows = r._counters(c, facts.job, f.origin[0], _facts=facts)
+            assert calls == [1]
+            start = guard._diagnostic_counts[1]
+            fast_rows = r._counters(c, facts.job, f.origin[0], _facts=facts)
+            fast_pins = guard._diagnostic_counts[1] - start
+            with monkeypatch.context() as patch:
+                patch.setattr(r, "_cold_counter_loaded", lambda *a: r._RAW_READ_MISS)
+                start = guard._diagnostic_counts[1]
+                old_rows = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                old_pins = guard._diagnostic_counts[1] - start
+            assert [x["parameters"]["natural_spec"]["ordinal"] for x in fast_rows] == [0, 1]
+            assert fast_rows == old_rows
+            assert all(a is b for a, b in zip(fast_rows, old_rows, strict=True))
+            assert all(any(row is original for original in seed.attempt_rows) for row in fast_rows)
+>           assert fast_pins < old_pins
+E           assert 3 < 0
+
+tests/test_counter_loaded_segment.py:245: AssertionError
+____________ test_two_attempts_match_original_and_retain_rows[True] ____________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f887c78bb90>, worker=<sim2act.worker.Worker object at 0x7f887aaabb30>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f887c78b170>
+marker = True
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-43/test_two_attempts_match_origin1')
+
+    @pytest.mark.parametrize("marker", [False, True])
+    def test_two_attempts_match_original_and_retain_rows(local_origin, monkeypatch, marker, tmp_path):
+        import json
+    
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+            facts, seed = prepared(f, c, guard, count=2, marker=marker)
+            with observe_core() as calls:
+                fast_rows = r._counters(c, facts.job, f.origin[0], _facts=facts)
+            assert calls == [1]
+            start = guard._diagnostic_counts[1]
+            fast_rows = r._counters(c, facts.job, f.origin[0], _facts=facts)
+            fast_pins = guard._diagnostic_counts[1] - start
+            with monkeypatch.context() as patch:
+                patch.setattr(r, "_cold_counter_loaded", lambda *a: r._RAW_READ_MISS)
+                start = guard._diagnostic_counts[1]
+                old_rows = r._counters(c, facts.job, f.origin[0], _facts=facts)
+                old_pins = guard._diagnostic_counts[1] - start
+            assert [x["parameters"]["natural_spec"]["ordinal"] for x in fast_rows] == [0, 1]
+            assert fast_rows == old_rows
+            assert all(a is b for a, b in zip(fast_rows, old_rows, strict=True))
+            assert all(any(row is original for original in seed.attempt_rows) for row in fast_rows)
+>           assert fast_pins < old_pins
+E           assert 3 < 0
+
+tests/test_counter_loaded_segment.py:245: AssertionError
+_________ test_actual_seed_shape_reduces_internal_pins_and_loaded_read _________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f887c2092b0>, worker=<sim2act.worker.Worker object at 0x7f887a9e0740>, ...134e3cb3e88ec691505e7e:synthetic-seeded-run:complete'}, 'run-facts:synthetic-seeded-run:model-reserved': []}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f887ae03b00>
+
+    def test_actual_seed_shape_reduces_internal_pins_and_loaded_read(local_origin, monkeypatch):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+            facts, seed = seeded_reader(f, c, guard)
+            assert runtime._raw_read_eligible(facts, "attempts")
+            start = guard._diagnostic_counts[1]
+            facts.check(f.store, c, facts.job)
+            assert guard._diagnostic_counts[1] - start == 2
+            start = guard._diagnostic_counts[1]
+            assert facts.model_reserved() is facts._raw["model-reserved"]
+>           assert guard._diagnostic_counts[1] - start == 2
+E           assert (41 - 38) == 2
+
+tests/test_loaded_raw_segment.py:281: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_counter_loaded_segment.py::test_first_manifest_registration_hits_and_reduces_complete_pins
+FAILED tests/test_counter_loaded_segment.py::test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[True-False-False]
+FAILED tests/test_counter_loaded_segment.py::test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[True-False-True]
+FAILED tests/test_counter_loaded_segment.py::test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[True-True-False]
+FAILED tests/test_counter_loaded_segment.py::test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[True-True-True]
+FAILED tests/test_counter_loaded_segment.py::test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-False-False]
+FAILED tests/test_counter_loaded_segment.py::test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-False-True]
+FAILED tests/test_counter_loaded_segment.py::test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-True-False]
+FAILED tests/test_counter_loaded_segment.py::test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-True-True]
+FAILED tests/test_counter_loaded_segment.py::test_two_attempts_match_original_and_retain_rows[False]
+FAILED tests/test_counter_loaded_segment.py::test_two_attempts_match_original_and_retain_rows[True]
+FAILED tests/test_loaded_raw_segment.py::test_actual_seed_shape_reduces_internal_pins_and_loaded_read
+12 failed, 166 passed, 1 warning in 46.37s
