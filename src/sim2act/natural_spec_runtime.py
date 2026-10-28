@@ -2260,7 +2260,7 @@ _RAW_READ_FIELDS = ('store', 'connection', 'job', 'guard', '_origin_guard', 'key
 _RAW_READ_GRAPH_FIELDS = ('phase', '_accounted_frontier', '_typed_native_candidate', 'stop',
     'inputs', 'binding', 'role_limits', 'key', 'worker', 'store', 'connection', 'settings',
     'scope', 'nonce', 'active', 'engine', 'transaction', 'driver', 'changes', 'thread',
-    'epoch', 'token', 'settings_values', 'transport', 'worker_id')
+    'epoch', 'token', 'settings_values', 'transport', 'worker_id', '_diagnostic_counts')
 
 
 
@@ -2272,6 +2272,7 @@ _RAW_DYNAMIC_SPECS = (
         '_journal_trial_store', '_journal_trial_binding', '_journal_trial_drift', '_settlement_interval')),
     (Store, ('engine', 'test_only', 'sqlite')),
     (Settings, ()),
+    (Event, ('_flag',)),
     (_raw_read_pb._SourceReads, ('store', 'connection', 'transaction', 'driver', 'thread', 'epoch')),
     (_RawBinding, ('contract', 'approval_key', 'account_id', 'version', 'contract_fingerprint')),
     (Connection, ('engine', '_transaction', '_dbapi_connection', 'closed', 'connection', 'info')),
@@ -2329,6 +2330,12 @@ def _raw_dynamic_eligible(facts, guard):
     interval = wd.get('_settlement_interval')
     if interval is not None and (type(interval) is not tuple or len(interval) != 2
             or any(type(value) not in (int, float) for value in interval)):
+        return False
+    stop_values = object.__getattribute__(g['stop'], '__dict__')
+    counts = g.get('_diagnostic_counts')
+    if (type(stop_values) is not dict or type(stop_values.get('_flag')) is not bool
+            or type(counts) is not list or len(counts) != 2
+            or any(type(value) is not int for value in counts)):
         return False
     if (type(g.get('inputs')) is not dict or not all(type(key) is str for key in g['inputs'])
             or type(g.get('role_limits')) is not dict

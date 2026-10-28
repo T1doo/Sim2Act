@@ -181,3 +181,18 @@ def test_dynamic_access_and_scalar_boundaries_fall_back(local_origin, monkeypatc
                 patch.setattr(f.worker, "stop", object())
             assert not runtime._raw_read_eligible(facts, "model-reserved")
         assert calls == []
+
+
+@pytest.mark.parametrize("dependency", ["event_flag", "diagnostic_container", "diagnostic_item"])
+def test_internal_bookkeeping_cannot_run_foreign_callbacks(local_origin, monkeypatch, dependency):
+    f = local_origin
+    with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+        facts = reader(f, c, guard, "model-reserved", [])
+        with monkeypatch.context() as patch:
+            if dependency == "event_flag":
+                patch.setattr(guard.stop, "_flag", object())
+            elif dependency == "diagnostic_container":
+                patch.setattr(guard, "_diagnostic_counts", (0, 0))
+            else:
+                patch.setattr(guard, "_diagnostic_counts", [object(), 0])
+            assert not runtime._raw_read_eligible(facts, "model-reserved")
