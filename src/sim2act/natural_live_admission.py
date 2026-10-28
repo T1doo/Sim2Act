@@ -9,10 +9,12 @@ import hashlib
 import math
 import time
 from dataclasses import dataclass
+from inspect import getattr_static
 from typing import Any, Literal, Protocol
 
 from pydantic import Field, model_validator
 from sqlalchemy import select
+from sqlalchemy.engine import CursorResult, MappingResult, Result
 
 from .contracts import Limits, Strict
 from .csv_logic_reuse import implementation
@@ -335,7 +337,7 @@ def _stage_deadlines(c, user, contract, stage, generation_run_id, *, _guard=None
         require(isinstance(source.authority, StageAuthorityV2) and source.approval_key == original.request.request_key and (source.authority.predecessor_run_id == generation_run_id) and (source.authority.predecessor_created_at == generation_at) and (source.authority.stage_approval_expires_at == min(generation_at + contract.stage_handoff_seconds, contract.execution_expires_at)) and (source.authority.stage == 'source') and (source.authority.contract_fingerprint == _trial_result(fingerprint(_trial_result(contract.model_dump(), _guard)), _guard)) and (source.authority.generation_run_id == generation_run_id) and (source.expected_authority_fingerprint == _trial_result(fingerprint(_trial_result(source.authority.model_dump(), _guard)), _guard)))
         predecessor_id, runtime = (source.authority.run_id, source.authority.runtime_id)
         statuses = {'SUCCEEDED'}
-    previous = _trial_result(_trial_result(_trial_result(c.execute(select(runs.c.id, runs.c.created_at, runs.c.principal_id, runs.c.project_id, runs.c.runtime_id, runs.c.status, runs.c.cancel_intent).where(runs.c.id == predecessor_id)), _guard).mappings(), _guard).first(), _guard)
+    previous = _trial_result(_trial_mapping_view(_trial_result(c.execute(select(runs.c.id, runs.c.created_at, runs.c.principal_id, runs.c.project_id, runs.c.runtime_id, runs.c.status, runs.c.cancel_intent).where(runs.c.id == predecessor_id)), _guard), _guard).first(), _guard)
     require(previous is not None and previous['principal_id'] == user and (previous['project_id'] == contract.project_id) and (previous['runtime_id'] == runtime) and (previous['status'] in statuses) and (previous['cancel_intent'] is False) and (type(previous['created_at']) in (int, float)) and _trial_result(math.isfinite(previous['created_at']), _guard) and (contract.prepared_at <= previous['created_at'] <= _trial_result(time.time(), _guard)), 'Exact previous stage timing or identity changed')
     return dict(predecessor_run_id=predecessor_id, predecessor_created_at=previous['created_at'], stage_approval_expires_at=min(previous['created_at'] + contract.stage_handoff_seconds, contract.execution_expires_at))
 
@@ -364,7 +366,7 @@ def _stage_instance_after_bound(store, c, user, project, job, snapshot, release,
     """Recheck the current pointers after the caller's complete SQLite bound proof."""
     from .lifecycle import immutable_release_pointer, owned_release_pointer
     require(store.test_only and store.sqlite and _trial_result(c.in_transaction(), _guard) and (c.connection.driver_connection is not None) and c.connection.driver_connection.in_transaction, 'Bound Release reuse requires an active offline SQLite transaction')
-    inst = _trial_result(_trial_result(_trial_result(c.execute(select(internal_instances).where(internal_instances.c.id == snapshot['instance_id']).with_for_update()), _guard).mappings(), _guard).first(), _guard)
+    inst = _trial_result(_trial_mapping_view(_trial_result(c.execute(select(internal_instances).where(internal_instances.c.id == snapshot['instance_id']).with_for_update()), _guard), _guard).first(), _guard)
     if inst is None or inst['principal_id'] != user:
         raise DomainError('PERMISSION_DENIED')
     draft = release['snapshot']['draft']
@@ -747,7 +749,7 @@ def _current(store, c, user, contract, *, active=True, _guard=None):
         material = _trial_result(authorized_read(store, c, user, contract.runtime_id, contract.project_id, 'resource.read', {'resource_id': binding.resource_id}), _guard)
         require(material['format'] == 'txt' and material['hash'] == binding.source_hash and (material['content'] == binding.content))
         saved = _trial_result(validate_card_version(store, c, user, binding.card_id, binding.goal_version), _guard)
-        head = _trial_result(_trial_result(_trial_result(c.execute(select(goal_cards.c.version, goal_cards.c.fingerprint).where(goal_cards.c.id == binding.card_id)), _guard).mappings(), _guard).first(), _guard)
+        head = _trial_result(_trial_mapping_view(_trial_result(c.execute(select(goal_cards.c.version, goal_cards.c.fingerprint).where(goal_cards.c.id == binding.card_id)), _guard), _guard).first(), _guard)
         require(head is not None and head['version'] == binding.goal_version and (head['fingerprint'] == saved['fingerprint'] == binding.goal_fingerprint) and (_trial_result(fingerprint(saved['snapshot']), _guard) == _trial_result(fingerprint(_trial_result(binding.goal_snapshot.model_dump(), _guard)), _guard)))
     require(_trial_result(authorization_fingerprint(c, user, contract.project_id, contract.runtime_id, [b.resource_id for b in contract.bindings], **{'_guard': _guard} if _guard is not None else {}), _guard) == contract.authorization_fingerprint)
     if active:
@@ -758,7 +760,7 @@ def _current(store, c, user, contract, *, active=True, _guard=None):
 
 
 def _keys(c, user, eid, kind, *, _guard=None):
-    rows = _trial_result(_trial_result(_trial_result(c.execute(select(delivery_graph_requests.c.kind, delivery_graph_requests.c.request_key).where(delivery_graph_requests.c.app_id == eid, delivery_graph_requests.c.principal_id == user, delivery_graph_requests.c.kind.in_([kind, kind + '_seal']))), _guard).mappings(), _guard).all(), _guard)
+    rows = _trial_result(_trial_mapping_view(_trial_result(c.execute(select(delivery_graph_requests.c.kind, delivery_graph_requests.c.request_key).where(delivery_graph_requests.c.app_id == eid, delivery_graph_requests.c.principal_id == user, delivery_graph_requests.c.kind.in_([kind, kind + '_seal']))), _guard), _guard).all(), _guard)
     left = {r['request_key'] for r in rows if r['kind'] == kind}
     right = {r['request_key'] for r in rows if r['kind'] == kind + '_seal'}
     require(left == right, 'Natural trial paired history incomplete')
@@ -1121,8 +1123,50 @@ def _stage_pb_origin_from_facts(contract, body, source_id, *, _guard=None):
 
 
 def _run_context_row(c, run_id, *, _guard=None):
-    run = _trial_result(_trial_result(_trial_result(c.execute(select(runs.c.id, runs.c.project_id, runs.c.principal_id, runs.c.runtime_id, runs.c.request_key, runs.c.status, runs.c.cancel_intent, runs.c.version, runs.c.fence, runs.c.lease_until, runs.c.created_at, runs.c.worker_id, runs.c.resource_refs).where(runs.c.id == run_id).with_for_update()), _guard).mappings(), _guard).first(), _guard)
+    run = _trial_result(_trial_mapping_view(_trial_result(c.execute(select(runs.c.id, runs.c.project_id, runs.c.principal_id, runs.c.runtime_id, runs.c.request_key, runs.c.status, runs.c.cancel_intent, runs.c.version, runs.c.fence, runs.c.lease_until, runs.c.created_at, runs.c.worker_id, runs.c.resource_refs).where(runs.c.id == run_id).with_for_update()), _guard), _guard).first(), _guard)
     return run
+
+
+# Code identities only, never input values or a remembered validation verdict.
+_RESULT_MAPPINGS = Result.mappings
+_MAPPING_INIT = MappingResult.__init__
+_MAPPING_NEW = getattr_static(MappingResult, "__new__")
+_MAPPING_SETATTR = getattr_static(MappingResult, "__setattr__")
+_MAPPING_MISSING = object()
+_MAPPING_FIELDS = tuple((name, getattr_static(MappingResult, name, _MAPPING_MISSING)) for name in
+    ("_real_result", "_unique_filter_state", "_metadata"))
+_MAPPING_CODES = (_RESULT_MAPPINGS.__code__, _MAPPING_INIT.__code__)
+_RESULT_FIELDS = tuple((name, getattr_static(CursorResult, name)) for name in
+    ("_source_supports_scalars", "_unique_filter_state", "_metadata"))
+
+
+def _trial_mapping_view(result, _guard):
+    """Fixed non-fetching view between original execute/fetch content pins.
+
+    Exact CursorResult with scalar reduction disabled only assigns three fields
+    in the original MappingResult constructor. SQL execution and actual fetch
+    remain independently post-pinned at their original caller frames. Unknown
+    result classes or changed code retain the old intermediate boundary.
+    """
+    fixed = (type(result) is CursorResult
+        and getattr_static(result, "_source_supports_scalars") is False
+        and getattr_static(result, "__getattribute__") is object.__getattribute__
+        and getattr_static(result, "mappings") is _RESULT_MAPPINGS
+        and all(getattr_static(CursorResult, name) is field for name, field in _RESULT_FIELDS)
+        and getattr_static(type(result), 'mappings') is _RESULT_MAPPINGS
+        and Result.mappings is _RESULT_MAPPINGS
+        and MappingResult.__init__ is _MAPPING_INIT
+        and getattr_static(MappingResult, "__new__") is _MAPPING_NEW
+        and getattr_static(MappingResult, "__setattr__") is _MAPPING_SETATTR
+        and all(getattr_static(MappingResult, name, _MAPPING_MISSING) is field
+            for name, field in _MAPPING_FIELDS)
+        and _RESULT_MAPPINGS.__code__ is _MAPPING_CODES[0]
+        and _MAPPING_INIT.__code__ is _MAPPING_CODES[1]
+        and _RESULT_MAPPINGS.__globals__.get('MappingResult') is MappingResult)
+    value = result.mappings()
+    if not fixed and _guard is not None:
+        _guard()
+    return value
 
 
 def _trial_result(value, _guard=None):
