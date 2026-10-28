@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="440.035" timestamp="2026-10-28T07:33:14.472221+00:00" hostname="484e8d4e0740"><testcase classname="tests.test_pb_spec_production_controller" name="test_pb_production_original_source_extraction_explicit_use_and_cold" time="439.915"><failure message="AssertionError: {&quot;namespace&quot;:&quot;INTERNAL_APPRUN&quot;,&quot;formal_publication_enabled&quot;:false,&quot;id&quot;:&quot;run_e35c5013fbd949eba4f86158cc813171&quot;,&quot;app_run_id&quot;:&quot;iapprun_a38f60002fb944e7ba1e64a7d2825fba&quot;,&quot;instance_id&quot;:&quot;iinstance_4049c28a51308b6626c4d7fe26bb6ce4&quot;,&quot;release_id&quot;:&quot;irelease_2c42be4da7a24141b86ef1881c627b11&quot;,&quot;status&quot;:&quot;RUNNING&quot;,&quot;version&quot;:1,&quot;cancel_intent&quot;:false,&quot;result&quot;:null,&quot;result_version&quot;:null,&quot;error&quot;:null,&quot;known_effects&quot;:[],&quot;events&quot;:[{&quot;id&quot;:&quot;event_31fde1e0b9b34c5eb4d9877a2546bfc2&quot;,&quot;run_id&quot;:&quot;run_e35c5013fb...&#10;[+5 more lines; full report in element text]">env = (&lt;sim2act.db.Store object at 0x7f594c3f2660&gt;, Settings(database_url='sqlite:////workspace/scratch/seed-real-clock-89b9...c58645b32a452aadbe36523864f911', 'user_6432f88365104dad9040221b11e3173d', 'proj_0d7f115585b54a3dba737565353e7390', ...)
+tmp_path = PosixPath('/workspace/scratch/seed-real-clock-89b928d5/test_pb_production_original_so0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f594c3f2420&gt;
+
+    def test_pb_production_original_source_extraction_explicit_use_and_cold(env, tmp_path, monkeypatch):
+        data, binding, fixture, factory = configured(env, tmp_path, monkeypatch, prepare_case=prepare_pb)
+        generation, _, release, source_instance, generated = apps.ready(data, style="ordered")
+        assert len(generated) == 3
+        read_reports, before_sql = observe_reservation_reads(monkeypatch)
+        event.listen(data[0].engine, "before_cursor_execute", before_sql)
+        source_id = apps.enqueue(data, release, source_instance, key=binding.contract.stage_keys.source)
+        approve_stage(data, binding, "source", source_id)
+        source_bytes = []
+        normal = apps.transport([], apps.SOURCE)
+    
+        def source_response(request):
+            raw = normal.handle_request(request).json()
+            raw["archive_note"] = "合成原始正文；非真实模型"
+            payload = (json.dumps(raw, ensure_ascii=False, indent=2) + "\n").encode()
+            source_bytes.append((request.content, payload))
+            return httpx.Response(200, content=payload)
+    
+        assert factory(data[0], data[1], goal_planner_transport=httpx.MockTransport(source_response)).once()
+        source_result = apps.inspect(data, source_instance, source_id)
+        assert source_result.status_code == 200 and source_result.json()["status"] == "SUCCEEDED", source_result.text
+        assert len(source_bytes) == 2 and len(fixture["sends"]) == 5
+        route = f"/api/projects/{data[4]}/natural-spec-task-runs/{source_id}"
+        options = data[2].get(route + "/extraction-options")
+        assert options.status_code == 200, options.text
+        target = binding.contract.bindings[1]
+        review = dict(source_run_id=source_id,
+            expected_source_proof_fingerprint=options.json()["source_proof_fingerprint"],
+            expected_source_recipe_fingerprint=options.json()["recipe_fingerprint"],
+            card_id=target.card_id, expected_goal_version=target.goal_version,
+            expected_goal_fingerprint=target.goal_fingerprint, expected_source_hash=target.source_hash,
+            recipe=binding.contract.extraction_recipe.model_dump(exclude_none=True),
+            name="P-B production-shaped fixture", request_key=binding.contract.extraction_request_key)
+        preview = data[2].post(route + "/extraction-reviews", json=review)
+        assert preview.status_code == 200, preview.text
+        body = pb.ExtractInput(review=review, expected_review_fingerprint=preview.json()["review_fingerprint"],
+            consent=pb.CONSENT, artifact_write_consent=natural.CONSENT)
+        worker = factory(data[0], data[1], goal_planner_transport=httpx.MockTransport(
+            lambda request: pytest.fail("Extraction must not send")))
+        made = trial.extract_pb(worker, data[3], source_id, body)
+        assert trial.extract_pb(worker, data[3], source_id, body) == made
+        assert len(fixture["sends"]) == 5
+        resolved = archive.resolve_trial_source(data[0], data[3], binding.contract, binding.approval_key)
+        assert list(zip(resolved.request_bodies, resolved.response_bodies, strict=True)) == source_bytes
+        assert resolved.public_receipt["verification"] == "SPEC_PRODUCTION_CONTROLLER_ARCHIVE"
+        assert resolved.public_receipt["live_allowed"] is False
+        assert all(p["decoded_body_sha256"] != p["canonical_ascii_sha256"]
+                   for p in resolved.public_receipt["attempts"])
+        failures = refused_archive_copies(data, binding, tmp_path)
+        release, inst = apps.instance(data, made["id"])
+        catalog = data[2].get("/api/apps", params={"metadata_only": "true"})
+        assert catalog.status_code == 200, catalog.text
+        assert next(item for item in catalog.json()["items"] if item["id"] == made["id"])["use_family"] == "NATURAL_PB"
+    
+        # Fresh Store/client/Worker on the same durable database; no old worker result.
+        cold_store = Store(data[1].database_url, test_only=True)
+        event.listen(cold_store.engine, "before_cursor_execute", before_sql)
+        cold_client = TestClient(create_app(cold_store, data[1]))
+        cold_client.headers["Authorization"] = "Bearer synthetic-test-A"
+        cold_data = (cold_store, data[1], cold_client, *data[3:])
+        original_environment = controller.environment
+    
+        def cold_environment(store, settings, transport):
+            if store is cold_store:
+                assert settings is data[1] and transport is None and store.test_only and store.sqlite
+            else:
+                original_environment(store, settings, transport)
+    
+        monkeypatch.setattr(controller, "environment", cold_environment)
+        try:
+            current = cold_client.get("/api/internal/instances/" + inst["id"]).json()
+            current_app = cold_client.get("/api/apps/" + made["id"])
+            assert current_app.status_code == 200, current_app.text
+            app = current_app.json()
+            assert app["fingerprint"] == made["candidate_fingerprint"]
+            use_review = dict(expected_revision=current["revision"],
+                expected_release_fingerprint=release["fingerprint"], expected_app_fingerprint=app["fingerprint"],
+                expected_recipe_fingerprint=fingerprint(binding.contract.extraction_recipe.model_dump(exclude_none=True)),
+                resource_id=target.resource_id, card_id=target.card_id,
+                expected_goal_version=target.goal_version, expected_goal_fingerprint=target.goal_fingerprint,
+                expected_source_hash=target.source_hash, request_key=binding.contract.stage_keys.cold)
+            base = "/api/internal/instances/" + inst["id"]
+            checked = cold_client.post(base + "/pb-use-reviews", json=use_review)
+            assert checked.status_code == 200, checked.text
+            submitted = dict(review=use_review, expected_review_fingerprint=checked.json()["review_fingerprint"],
+                consent=use.CONSENT)
+            queued = cold_client.post(base + "/pb-use-runs", json=submitted)
+            assert queued.status_code == 202, queued.text
+            replayed = cold_client.post(base + "/pb-use-runs", json=submitted)
+            assert replayed.status_code == 202, replayed.text
+            assert queued.json()["cached"] is False and replayed.json()["cached"] is True
+            assert {k: v for k, v in replayed.json().items() if k != "cached"} == {
+                k: v for k, v in queued.json().items() if k != "cached"}
+            cold_id = queued.json()["run_id"]
+            approve_stage(cold_data, binding, "cold", cold_id)
+            assert factory(cold_store, data[1], goal_planner_transport=apps.transport([], apps.COLD)).once()
+            result = apps.inspect(cold_data, inst, cold_id)
+&gt;           assert result.status_code == 200 and result.json()["status"] == "SUCCEEDED", result.text
+E           AssertionError: {"namespace":"INTERNAL_APPRUN","formal_publication_enabled":false,"id":"run_e35c5013fbd949eba4f86158cc813171","app_run_id":"iapprun_a38f60002fb944e7ba1e64a7d2825fba","instance_id":"iinstance_4049c28a51308b6626c4d7fe26bb6ce4","release_id":"irelease_2c42be4da7a24141b86ef1881c627b11","status":"RUNNING","version":1,"cancel_intent":false,"result":null,"result_version":null,"error":null,"known_effects":[],"events":[{"id":"event_31fde1e0b9b34c5eb4d9877a2546bfc2","run_id":"run_e35c5013fbd949eba4f86158cc813171","created_at":1793173068.4027808,"kind":"ACCEPTED","data":{"namespace":"INTERNAL_APPRUN","app_run_id":"iapprun_a38f60002fb944e7ba1e64a7d2825fba","instance_id":"iinstance_4049c28a51308b6626c4d7fe26bb6ce4","release_id":"irelease_2c42be4da7a24141b86ef1881c627b11","input_fingerprint":"2112d272b3bee25d6c638842471dae8c76e299742770a8e5da6749ac1d0ff9a6"}},{"id":"event_c42b3bc6acb447ac93abfca7ab022ee1","run_id":"run_e35c5013fbd949eba4f86158cc813171","created_at":1793173073.7495058,"kind":"CLAIMED","data":{"fence":1}},{"id":"event_f5c39a30640b4a009e121c9e0cfb1722","run_id":"run_e35c5013fbd949eba4f86158cc813171","created_at":1793173075.6491542,"kind":"SPEC_STEP_VERIFIED","data":{"step_id":"read_pick","operation_id":"op_1a4e2b85e8264dea9754f6e796fe18eb","fence":1}},{"id":"event_6328cb7b4be549f49226f2e597860f27","run_id":"run_e35c5013fbd949eba4f86158cc813171","created_at":1793173103.5841293,"kind":"NS_RESERVED","data":{"attempt_id":"attempt_fb5ae9b3a3a646479e605192bd51430f","parameters_fingerprint":"3ebffe43b6fa324d39466982239be89a4939de08c517a55c5c579babd8fc2758","reserved_tokens":6307,"request_model":"intern-s2","mode":"LIVE","created_at":1793173103.5817049,"operation_id":"op_afc8bc4bcc68451fa180adeee468b511","step_id":"duties_pick","fence":1,"reservation_fingerprint":"53c4f89b19dd6dcf2a69af35c57830e339a625100f1a2fe3bd0d16a36512f777"}},{"id":"event_b7545fd56bd64e2da4564d00ef6a49d7","run_id":"run_e35c5013fbd949eba4f86158cc813171","created_at":1793173103.5883043,"kind":"NS_WIRE_ARCHIVED","data":{"attempt_id":"attempt_fb5ae9b3a3a646479e605192bd51430f","archive_fingerprint":"496694207e9db442ed6e4de89c34ac56db8a5448cbdf47260ffbc41a095e8b1b"}},{"id":"event_98f3b0f80036403e87d8eff335efc2d5","run_id":"run_e35c5013fbd949eba4f86158cc813171","created_at":1793173103.5886004,"kind":"MODEL_RESERVED","data":{"attempt_id":"attempt_fb5ae9b3a3a646479e605192bd51430f","mode":"live"}},{"id":"event_94e257c71f394ca69f780dde894ffdc7","run_id":"run_e35c5013fbd949eba4f86158cc813171","created_at":1793173103.593466,"kind":"PA_TRIAL_BODY","data":{"attempt_id":"attempt_fb5ae9b3a3a646479e605192bd51430f","family":"pa_trial_request_body.v1","body_fingerprint":"496694207e9db442ed6e4de89c34ac56db8a5448cbdf47260ffbc41a095e8b1b","decoded_sha256":"de6ab2d5c5da1d844fe5839c664d61ef3db39fdfe92a2feb980e5558347ccc2f","canonical_sha256":null,"byte_count":5283,"complete":true,"omission":"NONE"}},{"id":"event_27c0c75733744787984aad9bb19a8045","run_id":"run_e35c5013fbd949eba4f86158cc813171","created_at":1793173112.9984572,"kind":"PA_TRIAL_BODY","data":{"attempt_id":"attempt_fb5ae9b3a3a646479e605192bd51430f","family":"pa_trial_response_body.v1","body_fingerprint":"e00c3424c49de60c599d3656fb26d1426877387e1eb27ea122f41bf0ee404ac9","decoded_sha256":"458107e7f73e7ae7103b9c02a2cb0fe28a0e55aad8839cd8319da9a5e0309aa4","canonical_sha256":"458107e7f73e7ae7103b9c02a2cb0fe28a0e55aad8839cd8319da9a5e0309aa4","byte_count":476,"complete":true,"omission":"NONE"}},{"id":"event_316a3c45409f401290ff853825801953","run_id":"run_e35c5013fbd949eba4f86158cc813171","created_at":1793173113.0013041,"kind":"NS_BODY_ARCHIVED","data":{"attempt_id":"attempt_fb5ae9b3a3a646479e605192bd51430f","archive_fingerprint":"e00c3424c49de60c599d3656fb26d1426877387e1eb27ea122f41bf0ee404ac9"}},{"id":"event_446febe6c0aa47e8be8d16f0d08cc63e","run_id":"run_e35c5013fbd949eba4f86158cc813171","created_at":1793173113.059153,"kind":"NS_RECEIVED","data":{"attempt_id":"attempt_fb5ae9b3a3a646479e605192bd51430f","response_fingerprint":"f761425be4033844ab9cadff6db4674f4b253ac0028de8f7fdc833c4b955e02a","reception_fingerprint":"517684790c4a8a7b934a560c58aea47928290aa03d6271142947edbf3e6e0dd8"}},{"id":"event_ecd8ae1955574ec6bf04539756caccaa","run_id":"run_e35c5013fbd949eba4f86158cc813171","created_at":1793173113.1369648,"kind":"NS_SETTLEMENT_LEASE_RESERVED","data":{"attempt_id":"attempt_fb5ae9b3a3a646479e605192bd51430f","protocol":"sqlite-exclusive-settlement.v1","seconds":120,"contract_fingerprint":"ac211e80ac5247b6ff1e88d7d17fb79e1693ed87c2585b30ef50cd60f654a848","worker_id":"worker_585590cf5f964540ab6770f52dc983e8","fence":1,"version":1,"previous_lease_until":1793173143.054229,"lease_until":1793173233.1360302,"deadline":1793173368.397807}},{"id":"event_bfb1f21ba7ee4e4c924a5df51b2a5ac7","run_id":"run_e35c5013fbd949eba4f86158cc813171","created_at":1793173233.1493738,"kind":"NS_REJECTED","data":{"attempt_id":"attempt_fb5ae9b3a3a646479e605192bd51430f","attempt_fingerprint":"cb34074fde9285ca0e89ed586d38166059583ce475ff7c495a859f9a019445bc","operation_id":"op_afc8bc4bcc68451fa180adeee468b511","error":"BUDGET_EXHAUSTED"}}],"steps":[{"step_id":"read_pick","status":"VERIFIED","fingerprint":"77e4ea447fb1e0801d9a09885e3e4d68397883c8954af1ca1393a3a58ab67aac"}],"semantic_status":"UNKNOWN","owner_acceptance":"PENDING","citation_status":"NOT_RUN","semantic_goal_acceptance":"NOT_RUN","markdown_view":null}
+E           assert (200 == 200 and 'RUNNING' == 'SUCCEEDED'
+E            +  where 200 = &lt;Response [200 OK]&gt;.status_code
+E             
+E             - SUCCEEDED
+E             + RUNNING)
+
+tests/test_pb_spec_production_controller.py:370: AssertionError</failure></testcase></testsuite></testsuites>
