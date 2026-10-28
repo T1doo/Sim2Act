@@ -1,0 +1,48 @@
+....................F.............................................       [100%]
+=================================== FAILURES ===================================
+_ test_between_calls_current_mutation_or_authorization_write_is_sticky[revoke] _
+
+sql_facts = namespace(store=<sim2act.db.Store object at 0x7ff3690102f0>, settings=Settings(database_url='sqlite:////tmp/pytest-of-...key='offline-cold-phase', consent='BIND_ONLY_THIS_ACCEPTED_STAGE_RUN_APP_RELEASE_AND_COMPLETE_GOAL_TO_ORIGINAL_TRIAL'))
+change = 'revoke'
+
+    @pytest.mark.parametrize('change', ['settings', 'stop', 'input', 'original-model', 'returned-raw', 'revoke'])
+    def test_between_calls_current_mutation_or_authorization_write_is_sticky(sql_facts, change):
+        f = sql_facts
+        seed_cold(f)
+        witness = None
+        with pytest.raises(DomainError), f.store.tx() as c, native_segment(f, c) as s:
+            graph = coordinator(s)
+            models = []
+            pin = gate._trial_typed_guard(graph.check, models)
+            graph._requirements_value(f.user, f.contract, f.binding.approval_key, pin)
+            approval = gate._approved(f.store, c, f.user, f.contract, f.binding.approval_key)
+            raw = gate._graph_trial_produced(s.graph, f.store, c, models, gate.Approval, approval)
+            if change == 'settings':
+                object.__setattr__(f.worker.s, 'max_output_tokens', f.worker.s.max_output_tokens - 1)
+            elif change == 'stop':
+                f.worker.stop.set()
+            elif change == 'input':
+                s.graph.inputs['synthetic-native-candidate'] = False
+            elif change == 'original-model':
+                approval.approved_at -= 1
+            elif change == 'returned-raw':
+                raw['approved_at'] -= 1
+            else:
+                c.execute(update(grants).where(grants.c.principal_id == f.user).values(revoked=True))
+            with pytest.raises(DomainError) as caught:
+                graph._requirements_value(f.user, f.contract, f.binding.approval_key, pin)
+            witness = caught.value
+            assert not s.graph.active and not s.mode.active and graph.phase == 'INVALID'
+>       assert witness is not None
+E       assert None is not None
+
+tests/test_cold_policy_segment.py:159: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cold_policy_segment.py::test_between_calls_current_mutation_or_authorization_write_is_sticky[revoke]
+1 failed, 65 passed, 1 warning in 123.32s (0:02:03)
