@@ -113,8 +113,9 @@ def test_owned_g0_full_original_controller(env, tmp_path, monkeypatch):
             monitor.set_local_events(
                 slot,
                 code,
-                monitor.events.PY_START | monitor.events.PY_RETURN | monitor.events.PY_UNWIND,
+                monitor.events.PY_START | monitor.events.PY_RETURN,
             )
+        monitor.set_events(slot, monitor.events.PY_UNWIND)
         record = dict(started=time.time(), completed=False)
         start = time.monotonic()
         try:
