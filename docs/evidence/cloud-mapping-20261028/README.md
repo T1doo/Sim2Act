@@ -1,0 +1,11 @@
+# 固定mapping视图边界优化及恢复键修复
+
+完整实钟冻结efe2ab1da9045e05f4906dc7e4aa422254b421b8，测试438.22秒退出1，仍未可用交付。两次Source结算成功；首Cold G0完成46.8597秒，commit:first34.8187秒、second5.4383秒。原五SQL全部执行rowcount1，G1在73.1528秒处触发120秒截止，全段120.1333秒，W5回滚，无保存成果。6次Mock、真实模型0，不能冒充生产实链。此前1389轮G0约51.65秒，本轮观察值约46.86秒；并非所有其他环境或完整路径的性能保证。
+
+变更只合并SQLAlchemy固定不取数的MappingResult视图构造后的中间边界，保留SQL执行后和fetch后完整校验。精确result/方法/code/构造器/字段描述符/赋值及实例覆盖资格未知时保留原中间pin。独审通过；相关policy/schema回归50项通过，补充构造回调回退测试后5项mapping测试通过。135项生产清单pin4157b7f4cf4bff8671bab80f10d5ae7d98b49626cb6f5b986426f4b5d22f6212核实匹配。未扩大120秒、删除完整图校验、重用PASS或开启未完成owned模型桥。
+
+完整日志/XML/timings及8份数据库/观察压缩原件在本目录。源码冻结期间没有修改；测试结束后仅app.css/app.js相对冻结有界面修复，这两项不作为本轮结算测量的实现内容。
+
+后续界面修复提交e5100b22b4799cc3d2fbeffc8fea513350b4e317：项目分区切换保留trial-project/trial-key；目标编辑器宽列、目录窄列并缩回内边距；材料轨道最小120px与子列表一致。真实模板/实际控制器JSDOM回归在旧源码efe2上能复现恢复键丢失（退出1），修复源码通过，0网络/0提交；pytest包装1通过，JS语法通过。JSDOM不是浏览器像素验收；浏览器sandbox阻塞、两个viewport截图仍未完成。首次npm依赖安装因默认cache路径不可写失败，改为工作区cache安装固定jsdom26.1.0，ignore-scripts；没有改权限或用户电脑。
+
+实际免费Intern Source/Cold的两次成功提取证据保存在../cloud-settlement-20261028/intern-v2-id-fix.json。当前生产PG连接及既有principal/project/trial/approval选择仍缺失，未创建新凭据/权限。现阶段不能认定核心完整闭环、生产整体、owner语义或Release完成。
