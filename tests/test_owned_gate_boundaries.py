@@ -29,8 +29,10 @@ def cell(value):
 
 
 def declared_fixture(qualname, values):
-    code = next(code for code in _codes(fixture_module.configured.__code__)
-                if code.co_qualname == qualname)
+    from pathlib import Path
+    path = Path(fixture_module.__file__)
+    original = compile(path.read_bytes(),str(path),"exec",dont_inherit=True)
+    code = next(code for code in _codes(original) if code.co_qualname == qualname)
     return types.FunctionType(code, vars(fixture_module), code.co_name,
         closure=tuple(cell(values[name]) for name in code.co_freevars) or None)
 
@@ -57,7 +59,10 @@ def test_preconstructor_fixture_effect_substitution_never_executes(monkeypatch, 
         monkeypatch.setattr(evidence, "EvidenceRequirements", unknown)
     else:
         monkeypatch.setattr(fixture_module, "getattr", unknown, raising=False)
-    with pytest.raises(UnsupportedPlan):
+    reason = {"global_alias": "imported function|global role",
+        "module_factory": "schema constructor role", "downstream_schema": "schema constructor role",
+        "builtin_shadow": "Shadowed fixture builtin"}[damage]
+    with pytest.raises(UnsupportedPlan, match=reason):
         MockCandidate(fixture_callbacks=(source,))
 
 
@@ -192,3 +197,58 @@ def test_parent_sql_method_cannot_shadow_actual_dialect_dispatch(sql_facts):
                     scope.check(full_code=True)
                 finally:
                     del c.engine.dialect.__dict__["on_connect"]
+
+
+def test_complete_reviewed_callback_graph_qualifies_without_execution(monkeypatch,tmp_path,received):
+    """Construct every declared observer, execute no Worker, model or callback."""
+    from contextlib import contextmanager
+    from pathlib import Path
+    import test_pb_spec_production_controller as pb_fixture
+    import test_owned_g0_full_controller as full_fixture
+    from sim2act import pa_trial_dispatch as dispatch
+    from sim2act import production_trial_admission as admission
+    from sim2act import spec_production as controller
+    cache = {}
+    def build(module, qualname, values):
+        if module not in cache:
+            path = Path(module.__file__)
+            cache[module] = tuple(_codes(compile(path.read_bytes(),str(path),'exec',dont_inherit=True)))
+        code = next(code for code in cache[module] if code.co_qualname == qualname)
+        return types.FunctionType(code,vars(module),code.co_name,
+            closure=tuple(cell(values[name]) for name in code.co_freevars) or None)
+    worker, job, _, _, _ = received
+    data=(worker.store,worker.s,None,job["principal_id"])
+    fixture=dict(revoked=False,source_reads=0)
+    environment=build(fixture_module,'configured.<locals>.environment',dict(data=data))
+    source=build(fixture_module,'configured.<locals>.source',dict(data=data,binding=worker.pa_trial,fixture=fixture))
+    qualified=build(fixture_module,'configured.<locals>.<lambda>',{})
+    record=build(pb_fixture,'observe_original_lease_failures.<locals>.record',
+        dict(observation_failures=[],tmp_path=tmp_path))
+    lease_guard=build(pb_fixture,'observe_original_lease_failures.<locals>.observed_guard',
+        dict(guard=Store.guard,record=record))
+    local=threading.local()
+    check=build(pb_fixture,'observe_reservation_reads.<locals>.check_token',dict(local=local))
+    preflight=build(pb_fixture,'observe_reservation_reads.<locals>.observed_preflight',
+        dict(check_token=check,local=local,preflight=dispatch.preflight))
+    guard=build(pb_fixture,'observe_reservation_reads.<locals>.observed_guard',dict(guard=lease_guard,local=local))
+    reservation=build(pb_fixture,'observe_reservation_reads.<locals>.observed_check',
+        dict(check_token=check,reservation_check=runtime.reservation_check))
+    reads=contextmanager(build(pb_fixture,'observe_reservation_reads.<locals>.observed_reads',
+        dict(journal_reads=dispatch._journal_reads,local=local,tokens=[])))
+    cold=build(pb_fixture,'test_pb_production_original_source_extraction_explicit_use_and_cold.<locals>.cold_environment',
+        dict(cold_store=worker.store,data=data,original_environment=environment))
+    candidates,g1,stages=[],[],{}
+    save=build(full_fixture,'test_owned_g0_full_original_controller.<locals>.save',
+        dict(candidates=candidates,g1=g1,stages=stages,tmp_path=tmp_path))
+    after=contextmanager(build(full_fixture,'test_owned_g0_full_original_controller.<locals>.measured_after',
+        dict(g1=g1,original_after=runtime._model_settlement_read,save=save,stages=stages)))
+    for owner,name,value in ((controller,'environment',cold),(evidence,'resolve_account',source),
+        (admission,'_qualified',qualified),(Store,'guard',guard),(dispatch,'preflight',preflight),
+        (runtime,'reservation_check',reservation),(dispatch,'_journal_reads',reads),
+        (runtime,'_model_settlement_read',after)):
+        monkeypatch.setattr(owner,name,value)
+    callbacks=full_fixture.declared_callbacks(cold,source,qualified,guard,preflight,reservation,reads,after)
+    assert len(callbacks)>=13
+    candidate=MockCandidate(fixture_callbacks=callbacks)
+    assert type(candidate) is MockCandidate
+    assert candidate.code.fixture_current(worker,job)

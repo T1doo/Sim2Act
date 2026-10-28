@@ -245,6 +245,8 @@ class _Code:
                 return
             seen.add(id(fn))
             code = fn.__code__
+            global_names = tuple(item.argval for item in dis.get_instructions(code)
+                if item.opname in {"LOAD_GLOBAL", "LOAD_NAME"})
             path = Path(code.co_filename)
             namespace = fn.__globals__
             module = sys.modules.get(namespace.get("__name__"))
@@ -252,7 +254,7 @@ class _Code:
                     or Path(module.__file__).resolve() != path.resolve()):
                 raise UnsupportedPlan("Foreign function global namespace")
             self.fixture_globals.append((fn, namespace, tuple((name, namespace[name])
-                for name in code.co_names if name in namespace)))
+                for name in global_names if name in namespace)))
             if str(path) not in self.ast_files:
                 self.ast_files[str(path)] = ast.parse(path.read_bytes())
             nodes = self.ast_files[str(path)].body
@@ -265,7 +267,7 @@ class _Code:
                     continue
                 for alias in node.names:
                     name = alias.asname or alias.name
-                    if name not in code.co_names:
+                    if name not in global_names:
                         continue
                     child = sys.modules.get(package + "." + alias.name)
                     imported = sys.modules.get(package)
@@ -281,12 +283,12 @@ class _Code:
                 if fn.__builtins__ is not vars(builtins) or any(
                         name in vars(builtins) and name in namespace
                         and namespace[name] is not vars(builtins)[name]
-                        for name in code.co_names):
+                        for name in global_names):
                     raise UnsupportedPlan("Shadowed fixture builtin effect")
                 roles = {"evidence": fixture_evidence, "policy": fixture_policy,
                     "fingerprint": db.fingerprint, "pb": fixture_pb,
                     "time": time, "sys": sys}
-                for name in code.co_names:
+                for name in global_names:
                     if name in roles and namespace.get(name) is not roles[name]:
                         raise UnsupportedPlan("Changed fixture global role: " + name)
                 source_kind = next(kind for kind, *_ in schema._SCHEMAS
@@ -299,9 +301,6 @@ class _Code:
                     if vars(owner).get(key) is not value:
                         raise UnsupportedPlan("Changed fixture effect attribute")
                     self.fixture_attributes.append((owner, key, value))
-                self.fixture_globals.append((fn, fn.__globals__, tuple(
-                    (name, fn.__globals__[name]) for name in code.co_names
-                    if name in fn.__globals__)))
             else:
                 if path.parent.name != "sim2act" and not (
                     path.name == "contextlib.py"
