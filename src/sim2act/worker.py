@@ -68,6 +68,7 @@ class Worker:
             raise DomainError("PERMISSION_DENIED", "Synthetic protocol clock is test-only")
         self.protocol_clock = protocol_clock
         self.stop = threading.Event()
+        self._settlement_lock = threading.Lock()
         self._project_cancel_scan = {}
 
     def reserve(self, run_id, fence, context, *, request_tools=None, verify_goal_source=False,
@@ -126,6 +127,10 @@ class Worker:
                     "max_tokens": s.max_output_tokens,
                 },
             ).content
+            if natural_spec_request is not None:
+                from .natural_request import body, protocol
+                serialized = body(context["messages"], request_tools, s.max_output_tokens,
+                    request_protocol=protocol(natural_spec_request))
             wire_seal = {
                 "sha256": hashlib.sha256(serialized).hexdigest(),
                 "bytes": len(serialized),

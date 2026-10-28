@@ -32,6 +32,21 @@ _FUTURE_ROOTS = frozenset((
 ))
 
 
+def _bounded_settlement_config():
+    """Closed ordinary SQLite candidate; capacity misses use complete legacy work.
+
+    These are allocation/work counters, not authority or time extensions. The
+    separately signed settlement policy and monotonic/wall deadlines bound time.
+    """
+    from ._cold_accounted_budget import _Limits
+    from ._cold_accounted_values import _Bounds
+    bounds = _Bounds(nodes=60000, edges=120000, depth=128,
+        leaf_bytes=8 * 1024**2, encoded_bytes=64 * 1024**2)
+    upper = 8 * (2 * (bounds.nodes + bounds.edges + bounds.encoded_bytes) + 1) ** 4
+    return _NativeConfig(bounds, _Limits(resident=512 * 1024**2,
+        peak=1024**3, work=2 * upper, integer_bits=16000))
+
+
 class _SizingProjection(_Projection):
     """Admission-only full remaining-root size, never a consumer source.
 

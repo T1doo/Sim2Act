@@ -88,12 +88,30 @@ def _binding(worker):
     )
 
 
-def _wire(contract, wire):
+def _wire(contract, wire, *, stage=None):
     _require(type(wire) is bytes and 0 < len(wire) <= contract.caps.max_wire_bytes)
     body = strict_json(wire, contract.caps.max_wire_bytes)
+    _require(type(body) is dict)
+    fields = {"model", "messages", "tools", "stream", "max_tokens"}
+    version = None
+    if stage in ("source", "cold"):
+        messages = body.get("messages")
+        _require(type(messages) is list and len(messages) == 2
+            and all(type(message) is dict for message in messages)
+            and messages[1].get("role") == "user"
+            and type(messages[1].get("content")) is str)
+        payload = strict_json(messages[1]["content"], contract.caps.max_wire_bytes)
+        _require(type(payload) is dict)
+        from .natural_request import protocol
+        version = protocol(payload)
+    if version is not None:
+        from .natural_request import VERSION
+        _require(version == VERSION and body.get("thinking_mode") is False
+            and body.get("tools") == [])
+        fields.add("thinking_mode")
     _require(
         type(body) is dict
-        and set(body) == {"model", "messages", "tools", "stream", "max_tokens"}
+        and set(body) == fields
         and body["model"] == contract.model == "intern-s2"
         and body["stream"] is False
         and type(body["max_tokens"]) is int
@@ -470,7 +488,7 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
         and worker.s.max_output_tokens == original.caps.max_output_tokens
         and worker.s.quota_subject == original.quota_subject
     )
-    _wire(original, wire)
+    _wire(original, wire, stage=item.stage)
     user = original.principal_id
     if worker_id != item.worker_id:
         # A restarted worker may inspect the original key, never inherit its send.

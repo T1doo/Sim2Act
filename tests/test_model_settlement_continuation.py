@@ -138,7 +138,7 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
     monkeypatch.setattr(runtime, "enabled", lambda _: None)
     monkeypatch.setattr(runtime, "renew", lambda *_, **__: None)
     monkeypatch.setattr(runtime, "effective", lambda *_, **__: node)
-    monkeypatch.setattr(runtime, "messages", lambda *_: [dict(role="user", content="synthetic")])
+    monkeypatch.setattr(runtime, "messages", lambda *_, **kwargs: [dict(role="user", content="synthetic")])
     monkeypatch.setattr(runtime, "parse", lambda *_: ({}, normalize_usage(raw)))
     monkeypatch.setattr(spec, "intent_for", lambda *_: dict(tool="unit-model", args={}))
     monkeypatch.setattr(spec, "receipt_for", lambda op, *_: dict(operation_id=op, data={}))
@@ -250,7 +250,8 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
     monkeypatch.setattr(evidence, "resolve_account", source)
 
     def reserve(run_id, fence, ctx, *, request_tools, natural_spec_request):
-        wire = runtime.body(ctx["messages"], [], node.max_output_tokens)
+        wire = runtime.body(ctx["messages"], [], node.max_output_tokens,
+            request_protocol=runtime.request_protocol(natural_spec_request))
         state["wire"] = wire
         with store.tx() as c:
             c.execute(insert(attempts).values(id=aid, run_id=rid, status="STARTED", mode="LIVE",

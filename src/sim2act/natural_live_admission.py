@@ -81,6 +81,13 @@ class TrialCaps(Strict):
     paid_cap: Literal[0] = 0
 
 
+class SQLiteSettlementCaps(TrialCaps):
+    """New signed P-B policy; old serialized caps keep the 30-second policy."""
+
+    settlement_protocol: Literal["sqlite-exclusive-settlement.v1"] = "sqlite-exclusive-settlement.v1"
+    settlement_seconds: Literal[120] = 120
+
+
 class SourceSnapshot(Strict):
     resource_id: str = Field(pattern=r"^res_[a-f0-9]{32}$")
     hash: str = Field(pattern=HASH)
@@ -143,7 +150,7 @@ class _TrialContractFields(Strict):
     endpoint: Literal["https://chat.intern-ai.org.cn/api/v1/chat/completions"] = (
         "https://chat.intern-ai.org.cn/api/v1/chat/completions")
     stream: Literal[False] = False
-    caps: TrialCaps = Field(default_factory=TrialCaps)
+    caps: TrialCaps | SQLiteSettlementCaps = Field(default_factory=TrialCaps)
 
     @model_validator(mode="after")
     def finite(self):
@@ -190,6 +197,7 @@ class PBTrialContract(TrialContract):
     path: Literal["P-B"]
     extraction_request_key: str = Field(pattern=KEY)
     extraction_recipe: Recipe
+    caps: TrialCaps | SQLiteSettlementCaps = Field(default_factory=SQLiteSettlementCaps)
 
     @model_validator(mode="after")
     def extraction_key_distinct(self):
@@ -1242,7 +1250,7 @@ def _trial_typed_nested_classes():
     from . import pb_natural_specs as pb
     from . import production_trial_policy as policy
 
-    return _trial_typed_classes() + (ApproveInput, TrialCaps, SourceSnapshot,
+    return _trial_typed_classes() + (ApproveInput, TrialCaps, SQLiteSettlementCaps, SourceSnapshot,
         GoalSnapshot, StageKeys, GoalCardInput, natural.Recipe, natural.Step,
         pb.ReviewInput, policy.Outcome,
         contracts.Dependency, contracts.PermissionRequirement, contracts.View,

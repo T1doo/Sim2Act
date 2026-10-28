@@ -80,7 +80,8 @@ def prepare_pb(env, out):
     data = (data[0], replace(data[1], quota_subject=subject), *data[2:])
     data[0].initialize(quota_subject=subject)
     original, consent = frozen(data, ttl=1800)
-    contract = gate.PBTrialContract(**(original.model_dump() | dict(quota_subject=subject)),
+    contract = gate.PBTrialContract(**(original.model_dump() | dict(quota_subject=subject,
+        caps=gate.SQLiteSettlementCaps().model_dump())),
         path="P-B", extraction_request_key="original-pb-production-extraction",
         extraction_recipe=apps.recipe("ordered"))
     consent = consent.model_copy(update=dict(expected_contract_fingerprint=fingerprint(contract.model_dump())))

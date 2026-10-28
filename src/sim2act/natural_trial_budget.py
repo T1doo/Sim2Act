@@ -63,6 +63,9 @@ def scope_for(contract, approval_key):
     """Project approved canonical identifiers, never persist raw Goal/material."""
     data = contract.model_dump()
     caps = data["caps"]
+    from .natural_live_admission import SQLiteSettlementCaps, TrialCaps
+    _require(type(contract.caps) in (TrialCaps, SQLiteSettlementCaps))
+    _require(type(contract.caps).model_validate(caps).model_dump() == caps)
     expected = dict(generate_requests=3, source_requests=2, cold_requests=2,
                     max_requests=7, max_output_tokens=1024, max_wire_bytes=32768,
                     max_response_ascii_bytes=32768, per_run_reserved=64000,

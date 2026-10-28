@@ -790,7 +790,9 @@ class _OwnedPrewriteMode:
         contract = header(binding_raw.get('contract'), gate.PBTrialContract)
         if contract is None:
             return False
-        caps = header(contract.get('caps'), gate.TrialCaps)
+        actual_caps = contract.get('caps')
+        caps = (header(actual_caps, type(actual_caps))
+            if type(actual_caps) in (gate.TrialCaps, gate.SQLiteSettlementCaps) else None)
         if (caps is None or type(contract.get('model')) is not str
                 or type(caps.get('max_output_tokens')) is not int):
             return False

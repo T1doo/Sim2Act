@@ -235,9 +235,11 @@ def test_native_cannot_export_or_cross_stage(sql_facts):
 
 
 @pytest.mark.parametrize('limits', [LIMITS, NATIVE_LIMITS])
-def test_missing_original_entitlement_still_blocks_pb_accounting(sql_facts, limits):
+def test_missing_original_entitlement_still_blocks_pb_accounting(sql_facts, limits, monkeypatch):
     f = sql_facts
-    with pytest.raises(DomainError, match='No reviewed production account evidence'), f.store.tx() as c:
+    monkeypatch.delenv('INTERN_API_TOKEN', raising=False)
+    monkeypatch.delenv('SIM2ACT_INTERN_TOKEN', raising=False)
+    with pytest.raises(DomainError, match='Configured Intern credential missing'), f.store.tx() as c:
         with native_segment(f, c, limits=limits) as s:
             generation = s.generated.run if s.mode else s.generated[0]
             dispatch._graph_pb_accounting(s.graph, f.store, c, f.binding,

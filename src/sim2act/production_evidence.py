@@ -145,7 +145,7 @@ def _contract_data(value, depth=0):
             _deny("Production evidence original contract has invalid data keys")
         return {key: _contract_data(item, depth + 1) for key, item in value.items()}
     if kind in (gate.TrialContract, gate.TrialContractV2, gate.PBTrialContract,
-                gate.TrialCaps, gate.MaterialGoal, gate.StageKeys, gate.GoalSnapshot,
+                gate.TrialCaps, gate.SQLiteSettlementCaps, gate.MaterialGoal, gate.StageKeys, gate.GoalSnapshot,
                 gate.SourceSnapshot, GoalCardInput, Recipe, Step, FieldSource):
         return _contract_data(_model_data(value, kind), depth + 1)
     _deny("Production evidence original contract contains untrusted data")
