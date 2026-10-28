@@ -27,7 +27,7 @@ from types import BuiltinFunctionType as _ColdNativeFunctionType
 from typing import TYPE_CHECKING, Any, cast
 
 import httpx
-from pydantic_core import PydanticSerializationError
+from pydantic_core import PydanticSerializationError, SchemaSerializer
 from sqlalchemy import Column as _RawSeedColumn
 from sqlalchemy import insert, literal, select, update
 from sqlalchemy.dialects.sqlite.pysqlite import SQLiteDialect_pysqlite as _RawDialect
@@ -2671,6 +2671,53 @@ def _raw_seed_eligible(facts, guard):
     return _raw_seed_plain(values)
 
 
+
+_RAW_MANIFEST_SLOTS = tuple((entry[0], tuple((name, _counter_getattr_static(entry[0], name, _RAW_READ_MISS))
+    for name in ('__dict__', '__pydantic_extra__', '__pydantic_private__', '__pydantic_fields_set__')))
+    for entry in _policy_segments._SCHEMAS)
+_RAW_MANIFEST_DUMP = _counter_getattr_static(AppManifest, 'model_dump')
+_RAW_MANIFEST_MODEL_FIELDS = _RAW_READ_COMPARISON.model_fields
+
+
+class _RawManifestComparison(_RAW_READ_COMPARISON):
+    """One invocation's discovery and actual storage walk, no retained PASS."""
+
+    def __init__(self, allowed):
+        _RAW_READ_COMPARISON.__init__(self, allowed)
+        self.qualified_kinds = {}
+
+    def model_fields(self, value):
+        kind = type(value)
+        if id(kind) not in self.qualified_kinds:
+            # Gate all getters before the original complete storage validator.
+            fields = type.__getattribute__(kind, '__pydantic_fields__')
+            if (type(fields) is not dict or not all(type(key) is str for key in fields)
+                    or _counter_getattr_static(kind, '__getattribute__') is not object.__getattribute__
+                    or _counter_getattr_static(kind, '__del__', None) is not None
+                    or any(_counter_getattr_static(kind, key, _RAW_READ_MISS) is not _RAW_READ_MISS for key in fields)
+                    or _counter_getattr_static(kind, 'model_dump') is not _RAW_MANIFEST_DUMP):
+                raise DomainError('VERSION_CONFLICT', 'Unknown raw manifest getter')
+            selected = next((slots for original, slots in _RAW_MANIFEST_SLOTS if kind is original), None)
+            if selected is None or any(_counter_getattr_static(kind, name, _RAW_READ_MISS) is not original for name, original in selected):
+                raise DomainError('VERSION_CONFLICT', 'Unknown raw manifest storage')
+            namespace = type.__getattribute__(kind, '__dict__')
+            serializer = namespace.get('__pydantic_serializer__')
+            if (type(serializer) is not SchemaSerializer
+                    or SchemaSerializer.__reduce__(serializer)[1][0] is not namespace.get('__pydantic_core_schema__')):
+                raise DomainError('VERSION_CONFLICT', 'Unknown compiled raw manifest serializer')
+            if not _RAW_READ_SCHEMA(kind):
+                raise DomainError('VERSION_CONFLICT', 'Unknown raw manifest schema')
+            self.qualified_kinds[id(kind)] = kind
+        return _RAW_MANIFEST_MODEL_FIELDS(self, value)
+
+
+_RAW_MANIFEST_CLASS = _RawManifestComparison
+_RAW_MANIFEST_NAMESPACE = tuple(vars(_RawManifestComparison).items())
+_RAW_MANIFEST_MRO = type.__getattribute__(_RawManifestComparison, '__mro__')
+_RAW_MANIFEST_METHODS = tuple((name, _counter_getattr_static(_RawManifestComparison, name))
+    for name in ('__init__', 'model_fields'))
+_RAW_MANIFEST_CODE = tuple((fn, fn.__code__) for _, fn in _RAW_MANIFEST_METHODS)
+
 def _raw_read_eligible(facts, name):
     """Qualification only; no SQL, permission result, serialization or hook."""
     if (type(facts) is not _ColdRunFacts or type(name) is not str
@@ -2769,22 +2816,22 @@ def _raw_read_eligible(facts, name):
         if type(saved) is not dict or type(saved.get('manifest')) is not dict:
             return False
         models.append((AppManifest, model, saved['manifest']))
-    if not _COUNTER_SERIALIZERS(models):
+    if (_RawManifestComparison is not _RAW_MANIFEST_CLASS
+            or type.__getattribute__(_RawManifestComparison, '__mro__') is not _RAW_MANIFEST_MRO
+            or len(vars(_RawManifestComparison)) != len(_RAW_MANIFEST_NAMESPACE)
+            or any(key is not old_key or value is not old_value
+                for (key, value), (old_key, old_value) in zip(vars(_RawManifestComparison).items(), _RAW_MANIFEST_NAMESPACE, strict=True))
+            or _RAW_MANIFEST_DUMP.__code__ is not _RAW_SEED_SCOPE_DUMP_CODE
+            or any(_counter_getattr_static(_RawManifestComparison, name) is not fn for name, fn in _RAW_MANIFEST_METHODS)
+            or any(fn.__code__ is not code for fn, code in _RAW_MANIFEST_CODE)):
         return False
-    kinds = _COUNTER_KINDS(models)
-    if kinds is None or any(
-            _counter_getattr_static(kind, '__getattribute__') is not object.__getattribute__
-            or _counter_getattr_static(kind, '__del__', None) is not None
-            or any(_counter_getattr_static(kind, field_name, missing) is not missing
-                for field_name in type.__getattribute__(kind, '__pydantic_fields__'))
-            for kind in kinds):
-        return False
-    # Reject qualification without invoking warning/serializer callbacks.
-    comparison = _RAW_READ_COMPARISON(_row_native_code._trial_typed_nested_classes())
+    # Discovery happens during the same complete actual storage validation.
+    # No result survives this invocation. The complete saved comparison remains.
+    comparison = _RawManifestComparison(_row_native_code._trial_typed_nested_classes())
     try:
         for _, model, saved in models:
-            comparison.validate_model(model)
-            if not comparison.raw_equal(model, saved):
+            _RAW_READ_COMPARISON.validate_model(comparison, model)
+            if not _RAW_READ_COMPARISON.raw_equal(comparison, model, saved):
                 return False
     except DomainError:
         return False
