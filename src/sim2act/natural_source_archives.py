@@ -271,7 +271,7 @@ def _resolve_source_before_extraction(store, c, user, contract, approval_key):
     from . import natural_live_admission as gate
     from . import pa_spec_apps as spec
 
-    require(c.in_transaction() and c.engine is store.engine)
+    require(c.in_transaction() and store.owns_connection(c))
     require(type(contract) is gate.PBTrialContract
             and gate.PBTrialContract.model_validate(contract.model_dump()) == contract)
     with store.proof_authorities(c) as authorities:
@@ -310,7 +310,7 @@ def _resolve_trial_source(store, c, user, contract, approval_key):
     require(type(contract) is gate.PBTrialContract)
     exact = gate.PBTrialContract.model_validate(contract.model_dump())
     require(exact == contract)
-    require(c.in_transaction() and c.engine is store.engine,
+    require(c.in_transaction() and store.owns_connection(c),
             "Original source proof requires the caller transaction")
     with store.proof_authorities(c) as authorities:
         # Active original approval, both current material/Goals and all identities

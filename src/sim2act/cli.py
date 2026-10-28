@@ -15,16 +15,17 @@ def main():
     parser.add_argument("--data-dir")
     parser.add_argument("--new", action="store_true")
     parser.add_argument("--port", type=int, default=0)
+    parser.add_argument("--control-stdin", action="store_true", help="Private desktop-owned synthetic shutdown pipe")
     args = parser.parse_args()
-    if args.command != "synthetic-workspace" and (args.data_dir or args.new or args.port != 0):
-        parser.error("--data-dir, --new and --port belong to synthetic-workspace only")
+    if args.command != "synthetic-workspace" and (args.data_dir or args.new or args.port != 0 or args.control_stdin):
+        parser.error("--data-dir, --new, --port and --control-stdin belong to synthetic-workspace only")
     if args.command == "synthetic-workspace":
         from .synthetic_workspace import WorkspaceError, serve
 
         if not args.data_dir:
             parser.error("synthetic-workspace requires an explicit --data-dir")
         try:
-            serve(args.data_dir, new=args.new, port=args.port)
+            serve(args.data_dir, new=args.new, port=args.port, control_stdin=args.control_stdin)
         except WorkspaceError as error:
             parser.exit(1, "Synthetic workspace stopped; existing data preserved: " + str(error) + "\n")
         except Exception:

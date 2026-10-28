@@ -1,0 +1,11 @@
+# Owned content plan / private SQLite writer — explicit candidate
+
+Status at this checkpoint: directed checks PASS (69, 73.89s); complete controller measurement NOT_RUN. No production/default path promotion. B2/9a remain the prior accepted complete engineering evidence.
+
+An explicit test-only Worker handle owns immutable typed/ordered/aliased input bytes before writer acquisition. Its G0 runs the original public bound, two commit guards with fresh original source/admission, receipts, current Attempt, parse, output validation and receipt construction. Joint pins cover originals/private inputs/current data/public outputs, including original receipt borrowing. No Graph, authorization, source ALLOW or PASS is transferred by the data plan.
+
+The candidate uses a fresh creator-owned SQLite connection, private Engine/dialect/type caches and no external compiled cache. It retains the same Store and database file. A lifetime-bound provenance relation verifies Store/original Engine/private Engine/driver/transaction; ordinary connections and strict submit_tx retain the original Engine relation. Actual schema, attachments, native function extent, fixed declarations and SQL constants are qualified. Unsupported selection returns to legacy before business; selected failures roll back and propagate without replay. The original five writes and original complete G1 remain in that one transaction. Original 300s Run / signed 120s synthetic settlement bounds and original renewal lock are unchanged. Standard 30s is not claimed passed.
+
+Read-only review found and drove fixes for row/Limits alias loss, unknown metaclass callbacks, inconsistent compile snapshots, target/default qualification, current-root pinning, final finite bounds, Engine transaction ownership, actual schema/DB-API provenance, SQL processor/cache isolation and final commit provenance. Review of the explicit wiring found no new direct blocker; it is not a whole-product/production acceptance.
+
+No real model calls, PG configuration, Windows native host or Windows controller proof is supplied by these directed tests. The new stdin control is explicit synthetic-workspace-only and uses the existing real worker shutdown/finally receipt; ordinary CLI does not read stdin. Native window work remains separate.

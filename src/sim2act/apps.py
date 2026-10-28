@@ -126,7 +126,7 @@ class _ColdGraphOriginFacts:
             "Strict origin fact shapes changed")
         require(self.active and len(self.scope) == 1 and self.scope[0] is self.nonce
             and self.store is store and w.store is store and c is self.connection
-            and c.engine is self.engine and store.engine is self.engine and w.s is self.settings
+            and store.owns_connection(c) and store.engine is self.engine and w.s is self.settings
             and vars(w.s) == self.settings_values and w.pa_trial is self.binding
             and w.stop is self.stop and w.goal_planner_transport is self.transport
             and w.id == self.worker_id and getattr(w, "_journal_trial_store", None) is store

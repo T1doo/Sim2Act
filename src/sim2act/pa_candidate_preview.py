@@ -28,7 +28,7 @@ def require(ok, message="Literal candidate preview context changed"):
 
 def prepare(store, c, user, card_id, request, limits):
     """Read original owned Goal/material; allocate target IDs without creating a Run/App."""
-    require(c.engine is store.engine and not c.closed, "Original read connection required")
+    require(store.owns_connection(c) and not c.closed, "Original read connection required")
     request = generation.GenerationRunInput.model_validate(request)
     require(request.activation is None and request.family is None)
     require(type(limits) is Limits)

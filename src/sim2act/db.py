@@ -3,6 +3,7 @@
 import hashlib
 import json
 import re
+import sys
 import time
 import uuid
 from contextlib import contextmanager
@@ -721,6 +722,18 @@ class Store:
         sqlalchemy_event.listen(self.engine, "before_cursor_execute", proof_write_boundary)
         self.sqlite = self.engine.dialect.name == "sqlite"
         self.test_only = test_only  # Explicit fixture guard; production entrypoints leave False.
+
+    def owns_connection(self, c):
+        """Original Engine, or this Store's narrowly issued synthetic writer.
+
+        This relationship does not replace any authorization, version, driver,
+        transaction, epoch, deadline or complete-content check.
+        """
+        if c.engine is self.engine:
+            return True
+        module = sys.modules.get("sim2act._owned_sqlite")
+        return (self.test_only and self.sqlite and module is not None
+            and module.connection_owned(self, c))
 
     @contextmanager
     def tx(self, *, wait_seconds=None, _cap_wait=False):

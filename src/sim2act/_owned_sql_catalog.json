@@ -1,0 +1,3489 @@
+{
+  "queries": {
+    "sim2act.db:_AUTHORITY_GRANTS_QUERY": {
+      "parameters": {
+        "authority_identity": null,
+        "authority_project": null,
+        "authority_resource": null,
+        "authority_tool": null
+      },
+      "sql": "SELECT grants.id, grants.principal_id, grants.project_id, grants.resource_id, grants.tool_ref, grants.expires_at, grants.revision, grants.revoked \nFROM grants \nWHERE grants.principal_id = ? AND grants.project_id = ? AND grants.resource_id = ? AND grants.tool_ref = ? ORDER BY grants.id"
+    },
+    "sim2act.db:_AUTHORIZED_RESOURCE_QUERY": {
+      "parameters": {
+        "authorized_resource_id": null,
+        "authorized_resource_project": null
+      },
+      "sql": "SELECT resources.id \nFROM resources \nWHERE resources.id = ? AND resources.project_id = ?"
+    },
+    "sim2act.db:_OWNED_PROJECT_QUERY": {
+      "parameters": {
+        "owned_project_id": null,
+        "owned_project_principal": null
+      },
+      "sql": "SELECT projects.id, projects.owner_id, projects.runtime_id, projects.name \nFROM projects \nWHERE projects.id = ? AND projects.owner_id = ?"
+    },
+    "sim2act.delivery_graph_apps:_REQUEST_LOOKUP_QUERY": {
+      "parameters": {
+        "lookup_app_id": null,
+        "lookup_kind": null,
+        "lookup_principal_id": null,
+        "lookup_request_key": null
+      },
+      "sql": "SELECT delivery_graph_requests.app_id, delivery_graph_requests.principal_id, delivery_graph_requests.kind, delivery_graph_requests.request_key, delivery_graph_requests.request_fingerprint, delivery_graph_requests.snapshot, delivery_graph_requests.fingerprint \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.app_id = ? AND delivery_graph_requests.principal_id = ? AND delivery_graph_requests.kind = ? AND delivery_graph_requests.request_key = ?"
+    },
+    "sim2act.pa_spec_apps:_SCOPE_CONFIRMED": {
+      "parameters": {
+        "scope_app_id": null
+      },
+      "sql": "SELECT goal_application_candidates.app_id \nFROM goal_application_candidates \nWHERE goal_application_candidates.app_id = ?"
+    },
+    "sim2act.pa_spec_apps:_SCOPE_GENERATION": {
+      "parameters": {
+        "param_1": "version",
+        "scope_app_id": null,
+        "snapshot_1": "application_generation"
+      },
+      "sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(run_contracts.snapshot, ?)), ?) AS anon_1 \nFROM run_contracts JOIN goal_application_candidates ON goal_application_candidates.run_id = run_contracts.run_id \nWHERE goal_application_candidates.app_id = ?"
+    },
+    "sim2act.pa_spec_apps:_SCOPE_KIND": {
+      "parameters": {
+        "scope_app_id": null,
+        "snapshot_1": "kind"
+      },
+      "sql": "SELECT JSON_EXTRACT(task_extractions.snapshot, ?) AS anon_1 \nFROM task_extractions \nWHERE task_extractions.app_id = ?"
+    },
+    "sim2act.pa_spec_apps:_SCOPE_LEDGER": {
+      "parameters": {
+        "scope_app_id": null,
+        "scope_kinds": null
+      },
+      "sql": "SELECT delivery_graph_requests.app_id \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.app_id = ? AND delivery_graph_requests.kind IN (__[POSTCOMPILE_scope_kinds])"
+    },
+    "sim2act.pa_spec_apps:_SCOPE_LOCATION": {
+      "parameters": {
+        "candidate_1": "namespace",
+        "candidate_2": "spec_binding",
+        "candidate_3": "spec_task",
+        "candidate_4": "manifest",
+        "param_1": "kind",
+        "param_2": "kind",
+        "param_3": "data_bindings",
+        "param_4": 0,
+        "param_5": "resource_ref",
+        "scope_app_id": null
+      },
+      "sql": "SELECT app_drafts.project_id, app_drafts.runtime_id, JSON_EXTRACT(app_drafts.candidate, ?) AS family, JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?) AS binding, JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?) AS task, JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?)), ?)), ?) AS resource \nFROM app_drafts \nWHERE app_drafts.id = ?"
+    },
+    "sim2act.pa_spec_apps:_SCOPE_ORIGIN": {
+      "parameters": {
+        "scope_app_id": null,
+        "scope_principal": null
+      },
+      "sql": "SELECT goal_application_candidates.run_id \nFROM goal_application_candidates \nWHERE goal_application_candidates.app_id = ? AND goal_application_candidates.principal_id = ?"
+    },
+    "sim2act.pb_natural_specs:_GATE_APPS": {
+      "parameters": {
+        "candidate_1": "namespace",
+        "candidate_2": "manifest",
+        "candidate_3": "spec_task",
+        "param_1": "origin",
+        "param_2": "kind",
+        "pb_gate_project": null,
+        "pb_gate_runtime": null
+      },
+      "sql": "SELECT app_drafts.id, JSON_EXTRACT(app_drafts.candidate, ?) AS family, JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?) AS origin, JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(app_drafts.candidate, ?)), ?) AS task \nFROM app_drafts \nWHERE app_drafts.runtime_id = ? AND app_drafts.project_id = ?"
+    },
+    "sim2act.pb_natural_specs:_GATE_COMMITTED": {
+      "parameters": {
+        "data_1": "artifact_resource",
+        "kind_1": "SPEC_COMMITTED",
+        "pb_gate_run": null
+      },
+      "sql": "SELECT JSON_EXTRACT(events.data, ?) AS anon_1 \nFROM events \nWHERE events.run_id = ? AND events.kind = ?"
+    },
+    "sim2act.pb_natural_specs:_GATE_HEADER": {
+      "parameters": {
+        "pb_gate_run": null
+      },
+      "sql": "SELECT runs.principal_id, runs.project_id, runs.runtime_id \nFROM runs \nWHERE runs.id = ?"
+    },
+    "sim2act.pb_natural_specs:_GATE_KIND": {
+      "parameters": {
+        "pb_gate_app": null,
+        "snapshot_1": "kind"
+      },
+      "sql": "SELECT JSON_EXTRACT(task_extractions.snapshot, ?) AS anon_1 \nFROM task_extractions \nWHERE task_extractions.app_id = ?"
+    },
+    "sim2act.pb_natural_specs:_GATE_LEDGER": {
+      "parameters": {
+        "kind_1": [
+          "pb_natural_spec_metadata",
+          "pb_natural_spec_metadata_seal",
+          "pb_natural_spec_extract",
+          "pb_natural_spec_extract_seal"
+        ],
+        "pb_gate_app": null
+      },
+      "sql": "SELECT delivery_graph_requests.app_id \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.app_id = ? AND delivery_graph_requests.kind IN (__[POSTCOMPILE_kind_1])"
+    },
+    "sim2act.pb_natural_specs:_GATE_OUTPUT": {
+      "parameters": {
+        "output_1": "resource_id",
+        "pb_gate_app_run": null,
+        "pb_gate_instance": null
+      },
+      "sql": "SELECT JSON_EXTRACT(internal_app_runs.output, ?) AS anon_1 \nFROM internal_app_runs \nWHERE internal_app_runs.id = ? AND internal_app_runs.instance_id = ?"
+    },
+    "sim2act.pb_natural_specs:_GATE_SAVED": {
+      "parameters": {
+        "pb_gate_run": null,
+        "status_1": "VERIFIED",
+        "tool_ref_1": "artifact.save_text"
+      },
+      "sql": "SELECT local_effects.resource_id \nFROM local_effects JOIN operations ON operations.id = local_effects.operation_id \nWHERE operations.run_id = ? AND operations.tool_ref = ? AND operations.status = ?"
+    },
+    "sim2act.pb_natural_specs:_GATE_STATUS": {
+      "parameters": {
+        "pb_gate_run": null
+      },
+      "sql": "SELECT runs.status \nFROM runs \nWHERE runs.id = ?"
+    },
+    "sim2act.pb_natural_specs:_GATE_TYPED": {
+      "parameters": {
+        "data_1": "result",
+        "param_1": "resource_id",
+        "pb_gate_app_run": null,
+        "pb_gate_instance": null
+      },
+      "sql": "SELECT JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(internal_instance_data.data, ?)), ?) AS anon_1 \nFROM internal_instance_data \nWHERE internal_instance_data.run_id = ? AND internal_instance_data.instance_id = ?"
+    },
+    "sim2act.pb_natural_uses:_HINT_LEDGER": {
+      "parameters": {
+        "hint_kinds": null,
+        "hint_run_id": null
+      },
+      "sql": "SELECT delivery_graph_requests.app_id \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.app_id = ? AND delivery_graph_requests.kind IN (__[POSTCOMPILE_hint_kinds])"
+    },
+    "sim2act.pb_natural_uses:_HINT_RESPONSE": {
+      "parameters": {
+        "hint_kind": null,
+        "hint_run_id": null,
+        "param_1": "run_id",
+        "snapshot_1": "response"
+      },
+      "sql": "SELECT delivery_graph_requests.app_id \nFROM delivery_graph_requests \nWHERE delivery_graph_requests.kind = ? AND JSON_EXTRACT(JSON_QUOTE(JSON_EXTRACT(delivery_graph_requests.snapshot, ?)), ?) = ?"
+    }
+  },
+  "schema": [
+    [
+      "table",
+      "app_drafts",
+      "app_drafts",
+      "CREATE TABLE app_drafts (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\truntime_id VARCHAR NOT NULL, \n\tname VARCHAR NOT NULL, \n\tcandidate JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tPRIMARY KEY (id)\n)"
+    ],
+    [
+      "table",
+      "app_previews",
+      "app_previews",
+      "CREATE TABLE app_previews (\n\tid VARCHAR NOT NULL, \n\tapp_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tinput JSON NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\toutput JSON, \n\terror JSON, \n\tcreated_at FLOAT NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (app_id, principal_id, request_key)\n)"
+    ],
+    [
+      "table",
+      "attempts",
+      "attempts",
+      "CREATE TABLE attempts (\n\tid VARCHAR NOT NULL, \n\trun_id VARCHAR, \n\tcreated_at FLOAT, \n\tmode VARCHAR, \n\trequest_model VARCHAR, \n\tresponse_model VARCHAR, \n\tstatus VARCHAR, \n\tusage JSON, \n\treserved_tokens INTEGER, \n\tparameters JSON, \n\tresponse JSON, \n\terror VARCHAR, \n\telapsed FLOAT, \n\tPRIMARY KEY (id)\n)"
+    ],
+    [
+      "table",
+      "csv_owner_records",
+      "csv_owner_records",
+      "CREATE TABLE csv_owner_records (\n\tid VARCHAR NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tinstance_id VARCHAR NOT NULL, \n\tsequence INTEGER NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tkind VARCHAR NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tprevious_fingerprint VARCHAR NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tpayload JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (run_id, sequence), \n\tUNIQUE (run_id, principal_id, request_key)\n)"
+    ],
+    [
+      "table",
+      "csv_owner_seals",
+      "csv_owner_seals",
+      "CREATE TABLE csv_owner_seals (\n\trecord_id VARCHAR NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tmetadata_fingerprint VARCHAR NOT NULL, \n\tpayload_fingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (record_id), \n\tUNIQUE (run_id, record_id)\n)"
+    ],
+    [
+      "table",
+      "csv_report_workflow_uses",
+      "csv_report_workflow_uses",
+      "CREATE TABLE csv_report_workflow_uses (\n\trun_id VARCHAR NOT NULL, \n\tworkflow_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tresource_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tbinding JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (run_id), \n\tUNIQUE (principal_id, workflow_id, request_key)\n)"
+    ],
+    [
+      "table",
+      "csv_report_workflows",
+      "csv_report_workflows",
+      "CREATE TABLE csv_report_workflows (\n\tid VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\truntime_id VARCHAR NOT NULL, \n\tsource_run_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tname VARCHAR NOT NULL, \n\tdefinition JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (principal_id, source_run_id, request_key)\n)"
+    ],
+    [
+      "table",
+      "delivery_graph_anchors",
+      "delivery_graph_anchors",
+      "CREATE TABLE delivery_graph_anchors (\n\tid VARCHAR NOT NULL, \n\tapp_id VARCHAR NOT NULL, \n\trevision INTEGER NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (app_id, revision)\n)"
+    ],
+    [
+      "table",
+      "delivery_graph_locks",
+      "delivery_graph_locks",
+      "CREATE TABLE delivery_graph_locks (\n\tapp_id VARCHAR NOT NULL, \n\tnode_id VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (app_id, node_id)\n)"
+    ],
+    [
+      "table",
+      "delivery_graph_requests",
+      "delivery_graph_requests",
+      "CREATE TABLE delivery_graph_requests (\n\tapp_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tkind VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (app_id, principal_id, kind, request_key)\n)"
+    ],
+    [
+      "table",
+      "delivery_graph_scope_jobs",
+      "delivery_graph_scope_jobs",
+      "CREATE TABLE delivery_graph_scope_jobs (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tapp_id VARCHAR NOT NULL, \n\tsource_app_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (source_app_id, principal_id, request_key, app_id)\n)"
+    ],
+    [
+      "table",
+      "delivery_graph_source_versions",
+      "delivery_graph_source_versions",
+      "CREATE TABLE delivery_graph_source_versions (\n\tapp_id VARCHAR NOT NULL, \n\tlogical_key VARCHAR NOT NULL, \n\trevision INTEGER NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (app_id, logical_key, revision)\n)"
+    ],
+    [
+      "table",
+      "delivery_graph_states",
+      "delivery_graph_states",
+      "CREATE TABLE delivery_graph_states (\n\tapp_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\truntime_id VARCHAR NOT NULL, \n\tanchor_id VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (app_id)\n)"
+    ],
+    [
+      "table",
+      "events",
+      "events",
+      "CREATE TABLE events (\n\tid VARCHAR NOT NULL, \n\trun_id VARCHAR, \n\tcreated_at FLOAT, \n\tkind VARCHAR, \n\tdata JSON, \n\tPRIMARY KEY (id)\n)"
+    ],
+    [
+      "table",
+      "goal_application_candidates",
+      "goal_application_candidates",
+      "CREATE TABLE goal_application_candidates (\n\tapp_id VARCHAR NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tcandidate_fingerprint VARCHAR NOT NULL, \n\tconfirmation JSON NOT NULL, \n\tPRIMARY KEY (app_id), \n\tUNIQUE (run_id)\n)"
+    ],
+    [
+      "table",
+      "goal_candidate_requests",
+      "goal_candidate_requests",
+      "CREATE TABLE goal_candidate_requests (\n\tcard_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tapp_id VARCHAR NOT NULL, \n\tPRIMARY KEY (card_id, principal_id, request_key)\n)"
+    ],
+    [
+      "table",
+      "goal_card_versions",
+      "goal_card_versions",
+      "CREATE TABLE goal_card_versions (\n\tcard_id VARCHAR NOT NULL, \n\tversion INTEGER NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tPRIMARY KEY (card_id, version)\n)"
+    ],
+    [
+      "table",
+      "goal_cards",
+      "goal_cards",
+      "CREATE TABLE goal_cards (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\ttitle VARCHAR NOT NULL, \n\tversion INTEGER NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tPRIMARY KEY (id)\n)"
+    ],
+    [
+      "table",
+      "grants",
+      "grants",
+      "CREATE TABLE grants (\n\tid VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tresource_id VARCHAR NOT NULL, \n\ttool_ref VARCHAR NOT NULL, \n\texpires_at FLOAT NOT NULL, \n\trevision INTEGER, \n\trevoked BOOLEAN, \n\tPRIMARY KEY (id)\n)"
+    ],
+    [
+      "table",
+      "heartbeats",
+      "heartbeats",
+      "CREATE TABLE heartbeats (\n\tid VARCHAR NOT NULL, \n\tat FLOAT, \n\tPRIMARY KEY (id)\n)"
+    ],
+    [
+      "table",
+      "internal_app_runs",
+      "internal_app_runs",
+      "CREATE TABLE internal_app_runs (\n\tid VARCHAR NOT NULL, \n\tinstance_id VARCHAR NOT NULL, \n\trelease_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tinput JSON NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\toutput JSON, \n\terror JSON, \n\tresult_version INTEGER, \n\tPRIMARY KEY (id), \n\tUNIQUE (instance_id, principal_id, request_key)\n)"
+    ],
+    [
+      "table",
+      "internal_approvals",
+      "internal_approvals",
+      "CREATE TABLE internal_approvals (\n\tid VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tkind VARCHAR NOT NULL, \n\tpayload JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\texpires_at FLOAT NOT NULL, \n\tconsumed BOOLEAN NOT NULL, \n\tPRIMARY KEY (id)\n)"
+    ],
+    [
+      "table",
+      "internal_instance_data",
+      "internal_instance_data",
+      "CREATE TABLE internal_instance_data (\n\tinstance_id VARCHAR NOT NULL, \n\tversion INTEGER NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\trelease_id VARCHAR NOT NULL, \n\tschema_version INTEGER NOT NULL, \n\tdata JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (instance_id, version), \n\tUNIQUE (run_id)\n)"
+    ],
+    [
+      "table",
+      "internal_instances",
+      "internal_instances",
+      "CREATE TABLE internal_instances (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tsource_app_id VARCHAR NOT NULL, \n\truntime_id VARCHAR NOT NULL, \n\trelease_id VARCHAR NOT NULL, \n\trevision INTEGER NOT NULL, \n\tdata_version INTEGER NOT NULL, \n\thistory JSON NOT NULL, \n\tPRIMARY KEY (id)\n)"
+    ],
+    [
+      "table",
+      "internal_owner_records",
+      "internal_owner_records",
+      "CREATE TABLE internal_owner_records (\n\tid VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tinstance_id VARCHAR NOT NULL, \n\tsequence INTEGER NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tkind VARCHAR NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tprevious_fingerprint VARCHAR NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tpayload JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (instance_id, sequence), \n\tUNIQUE (instance_id, principal_id, request_key)\n)"
+    ],
+    [
+      "table",
+      "internal_owner_seals",
+      "internal_owner_seals",
+      "CREATE TABLE internal_owner_seals (\n\trecord_id VARCHAR NOT NULL, \n\tinstance_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tsequence INTEGER NOT NULL, \n\tmetadata_fingerprint VARCHAR NOT NULL, \n\tpayload_fingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (record_id), \n\tUNIQUE (instance_id, sequence)\n)"
+    ],
+    [
+      "table",
+      "internal_releases",
+      "internal_releases",
+      "CREATE TABLE internal_releases (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tapproval_id VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (approval_id)\n)"
+    ],
+    [
+      "table",
+      "internal_run_bindings",
+      "internal_run_bindings",
+      "CREATE TABLE internal_run_bindings (\n\trun_id VARCHAR NOT NULL, \n\tapp_run_id VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (run_id), \n\tUNIQUE (app_run_id)\n)"
+    ],
+    [
+      "table",
+      "internal_spec_run_terminals",
+      "internal_spec_run_terminals",
+      "CREATE TABLE internal_spec_run_terminals (\n\tinstance_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tapp_id VARCHAR NOT NULL, \n\trelease_id VARCHAR NOT NULL, \n\trequest JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (instance_id, principal_id, request_key)\n)"
+    ],
+    [
+      "table",
+      "local_csv_tasks",
+      "local_csv_tasks",
+      "CREATE TABLE local_csv_tasks (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tresource_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tinput JSON, \n\toutput JSON, \n\terror JSON, \n\tproof JSON, \n\tproof_fingerprint VARCHAR, \n\tPRIMARY KEY (id), \n\tUNIQUE (project_id, principal_id, request_key)\n)"
+    ],
+    [
+      "table",
+      "local_effects",
+      "local_effects",
+      "CREATE TABLE local_effects (\n\toperation_id VARCHAR NOT NULL, \n\tresource_id VARCHAR NOT NULL, \n\tcontent_hash VARCHAR NOT NULL, \n\tPRIMARY KEY (operation_id), \n\tUNIQUE (resource_id)\n)"
+    ],
+    [
+      "table",
+      "natural_activations",
+      "natural_activations",
+      "CREATE TABLE natural_activations (\n\tid VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\tversion INTEGER NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tscope JSON NOT NULL, \n\tscope_fingerprint VARCHAR NOT NULL, \n\tapproval JSON, \n\tapproval_fingerprint VARCHAR, \n\tledger JSON NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (principal_id, project_id, request_key)\n)"
+    ],
+    [
+      "table",
+      "natural_owner_records",
+      "natural_owner_records",
+      "CREATE TABLE natural_owner_records (\n\tid VARCHAR NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tinstance_id VARCHAR NOT NULL, \n\tsequence INTEGER NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tkind VARCHAR NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tprevious_fingerprint VARCHAR NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tpayload JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (run_id, sequence), \n\tUNIQUE (run_id, principal_id, request_key)\n)"
+    ],
+    [
+      "table",
+      "natural_owner_seals",
+      "natural_owner_seals",
+      "CREATE TABLE natural_owner_seals (\n\trecord_id VARCHAR NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tmetadata_fingerprint VARCHAR NOT NULL, \n\tpayload_fingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (record_id), \n\tUNIQUE (run_id, record_id)\n)"
+    ],
+    [
+      "table",
+      "operation_intents",
+      "operation_intents",
+      "CREATE TABLE operation_intents (\n\toperation_id VARCHAR NOT NULL, \n\trequest JSON NOT NULL, \n\tPRIMARY KEY (operation_id)\n)"
+    ],
+    [
+      "table",
+      "operations",
+      "operations",
+      "CREATE TABLE operations (\n\tid VARCHAR NOT NULL, \n\trun_id VARCHAR, \n\tcall_id VARCHAR, \n\tfingerprint VARCHAR, \n\ttool_ref VARCHAR, \n\tstatus VARCHAR, \n\treceipt JSON, \n\tPRIMARY KEY (id), \n\tUNIQUE (run_id, call_id)\n)"
+    ],
+    [
+      "table",
+      "ordinary_correction_links",
+      "ordinary_correction_links",
+      "CREATE TABLE ordinary_correction_links (\n\tparent_run_id VARCHAR NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (parent_run_id), \n\tUNIQUE (run_id)\n)"
+    ],
+    [
+      "table",
+      "ordinary_owner_records",
+      "ordinary_owner_records",
+      "CREATE TABLE ordinary_owner_records (\n\tid VARCHAR NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tsequence INTEGER NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tkind VARCHAR NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tprevious_fingerprint VARCHAR NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tpayload JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (run_id, sequence), \n\tUNIQUE (run_id, principal_id, request_key)\n)"
+    ],
+    [
+      "table",
+      "ordinary_owner_seals",
+      "ordinary_owner_seals",
+      "CREATE TABLE ordinary_owner_seals (\n\trecord_id VARCHAR NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tmetadata_fingerprint VARCHAR NOT NULL, \n\tpayload_fingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (record_id), \n\tUNIQUE (run_id, record_id)\n)"
+    ],
+    [
+      "table",
+      "preview_extractions",
+      "preview_extractions",
+      "CREATE TABLE preview_extractions (\n\tpreview_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tapp_id VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tPRIMARY KEY (preview_id, principal_id, request_key), \n\tUNIQUE (app_id)\n)"
+    ],
+    [
+      "table",
+      "principals",
+      "principals",
+      "CREATE TABLE principals (\n\tid VARCHAR NOT NULL, \n\tname VARCHAR NOT NULL, \n\ttoken_hash VARCHAR, \n\tPRIMARY KEY (id), \n\tUNIQUE (token_hash)\n)"
+    ],
+    [
+      "table",
+      "projects",
+      "projects",
+      "CREATE TABLE projects (\n\tid VARCHAR NOT NULL, \n\towner_id VARCHAR NOT NULL, \n\truntime_id VARCHAR NOT NULL, \n\tname VARCHAR NOT NULL, \n\tPRIMARY KEY (id)\n)"
+    ],
+    [
+      "table",
+      "protocol_jobs",
+      "protocol_jobs",
+      "CREATE TABLE protocol_jobs (\n\trun_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\truntime_id VARCHAR NOT NULL, \n\tkind VARCHAR NOT NULL, \n\taccepted_snapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tresult_snapshot JSON, \n\tresult_fingerprint VARCHAR, \n\tcompleted_fence INTEGER, \n\tcreated_at FLOAT NOT NULL, \n\tPRIMARY KEY (run_id)\n)"
+    ],
+    [
+      "table",
+      "protocol_request_pools",
+      "protocol_request_pools",
+      "CREATE TABLE protocol_request_pools (\n\tid VARCHAR NOT NULL, \n\tmode VARCHAR NOT NULL, \n\trequest_limit INTEGER NOT NULL, \n\ttoken_limit INTEGER NOT NULL, \n\treserved_requests INTEGER NOT NULL, \n\treserved_tokens INTEGER NOT NULL, \n\tknown_tokens INTEGER NOT NULL, \n\thalted BOOLEAN NOT NULL, \n\thalt_reason VARCHAR, \n\tpolicy_fingerprint VARCHAR NOT NULL, \n\tversion INTEGER NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tPRIMARY KEY (id)\n)"
+    ],
+    [
+      "table",
+      "protocol_request_slots",
+      "protocol_request_slots",
+      "CREATE TABLE protocol_request_slots (\n\tattempt_id VARCHAR NOT NULL, \n\tpool_id VARCHAR NOT NULL, \n\tordinal INTEGER NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tfence INTEGER NOT NULL, \n\tphase VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\treserved_tokens INTEGER NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\tusage JSON, \n\tsafe_response_fingerprint VARCHAR, \n\terror VARCHAR, \n\tcreated_at FLOAT NOT NULL, \n\tfinished_at FLOAT, \n\tPRIMARY KEY (attempt_id), \n\tUNIQUE (pool_id, ordinal)\n)"
+    ],
+    [
+      "table",
+      "protocol_reviews",
+      "protocol_reviews",
+      "CREATE TABLE protocol_reviews (\n\tid VARCHAR NOT NULL, \n\trun_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tcontract_id VARCHAR NOT NULL, \n\tpayload JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\tcreated_at FLOAT NOT NULL, \n\tPRIMARY KEY (id), \n\tUNIQUE (run_id, request_key)\n)"
+    ],
+    [
+      "table",
+      "quotas",
+      "quotas",
+      "CREATE TABLE quotas (\n\tsubject VARCHAR NOT NULL, \n\tblocked_until FLOAT, \n\tPRIMARY KEY (subject)\n)"
+    ],
+    [
+      "table",
+      "registered_extraction_requests",
+      "registered_extraction_requests",
+      "CREATE TABLE registered_extraction_requests (\n\tsource_run_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tinstance_id VARCHAR NOT NULL, \n\tsource_app_id VARCHAR NOT NULL, \n\ttarget_app_id VARCHAR NOT NULL, \n\texpected_proof_fingerprint VARCHAR NOT NULL, \n\texpected_target_draft_fingerprint VARCHAR NOT NULL, \n\tsequence INTEGER NOT NULL, \n\tprevious_key VARCHAR, \n\trequest_fingerprint VARCHAR NOT NULL, \n\trequest JSON NOT NULL, \n\tstate VARCHAR NOT NULL, \n\tapp_id VARCHAR, \n\tcandidate_fingerprint VARCHAR, \n\thistory JSON NOT NULL, \n\tPRIMARY KEY (source_run_id, principal_id, request_key), \n\tUNIQUE (source_run_id, principal_id, sequence)\n)"
+    ],
+    [
+      "table",
+      "reservations",
+      "reservations",
+      "CREATE TABLE reservations (\n\tid VARCHAR NOT NULL, \n\tsubject VARCHAR, \n\tcreated_at FLOAT, \n\trun_id VARCHAR, \n\tPRIMARY KEY (id)\n)"
+    ],
+    [
+      "table",
+      "resource_retirements",
+      "resource_retirements",
+      "CREATE TABLE resource_retirements (\n\tresource_id VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\ttask_id VARCHAR NOT NULL, \n\tproof_fingerprint VARCHAR NOT NULL, \n\tsource_hash VARCHAR NOT NULL, \n\tpolicy VARCHAR NOT NULL, \n\tPRIMARY KEY (resource_id)\n)"
+    ],
+    [
+      "table",
+      "resources",
+      "resources",
+      "CREATE TABLE resources (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tname VARCHAR, \n\tformat VARCHAR, \n\tcontent VARCHAR, \n\thash VARCHAR, \n\tPRIMARY KEY (id)\n)"
+    ],
+    [
+      "table",
+      "run_contracts",
+      "run_contracts",
+      "CREATE TABLE run_contracts (\n\trun_id VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tfingerprint VARCHAR NOT NULL, \n\tPRIMARY KEY (run_id)\n)"
+    ],
+    [
+      "table",
+      "runs",
+      "runs",
+      "CREATE TABLE runs (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\truntime_id VARCHAR NOT NULL, \n\tgoal VARCHAR, \n\tresource_refs JSON, \n\tstatus VARCHAR NOT NULL, \n\trequest_key VARCHAR, \n\tfingerprint VARCHAR, \n\tcreated_at FLOAT, \n\tlease_until FLOAT, \n\tfence INTEGER, \n\tworker_id VARCHAR, \n\tcontext JSON, \n\tresult JSON, \n\terror JSON, \n\tcancel_intent BOOLEAN, \n\tversion INTEGER, \n\tPRIMARY KEY (id), \n\tUNIQUE (principal_id, project_id, request_key)\n)"
+    ],
+    [
+      "table",
+      "spec_checklist_tasks",
+      "spec_checklist_tasks",
+      "CREATE TABLE spec_checklist_tasks (\n\tid VARCHAR NOT NULL, \n\tproject_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\truntime_id VARCHAR NOT NULL, \n\tresource_id VARCHAR NOT NULL, \n\tsource_hash VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\trequest JSON NOT NULL, \n\tstatus VARCHAR NOT NULL, \n\toutput JSON, \n\treceipt JSON, \n\tproof JSON, \n\tproof_fingerprint VARCHAR, \n\terror JSON, \n\tPRIMARY KEY (id), \n\tUNIQUE (principal_id, project_id, request_key)\n)"
+    ],
+    [
+      "table",
+      "task_extractions",
+      "task_extractions",
+      "CREATE TABLE task_extractions (\n\ttask_id VARCHAR NOT NULL, \n\tprincipal_id VARCHAR NOT NULL, \n\trequest_key VARCHAR NOT NULL, \n\trequest_fingerprint VARCHAR NOT NULL, \n\tapp_id VARCHAR NOT NULL, \n\tsnapshot JSON NOT NULL, \n\tPRIMARY KEY (task_id, principal_id, request_key), \n\tUNIQUE (app_id)\n)"
+    ]
+  ],
+  "types": {
+    "app_drafts": {
+      "candidate": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "created_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "name": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "runtime_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "app_previews": {
+      "app_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "created_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "error": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "input": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "output": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "status": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "attempts": {
+      "created_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "elapsed": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "error": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "mode": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "parameters": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "request_model": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "reserved_tokens": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "response": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "response_model": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "status": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "usage": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      }
+    },
+    "csv_owner_records": {
+      "created_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "instance_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "kind": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "payload": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "previous_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "sequence": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "status": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "csv_owner_seals": {
+      "metadata_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "payload_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "record_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "csv_report_workflow_uses": {
+      "binding": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "resource_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "workflow_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "csv_report_workflows": {
+      "created_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "definition": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "name": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "runtime_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "source_run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "delivery_graph_anchors": {
+      "app_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "revision": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "snapshot": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      }
+    },
+    "delivery_graph_locks": {
+      "app_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "node_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "snapshot": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      }
+    },
+    "delivery_graph_requests": {
+      "app_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "kind": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "snapshot": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      }
+    },
+    "delivery_graph_scope_jobs": {
+      "app_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "snapshot": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "source_app_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "status": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "delivery_graph_source_versions": {
+      "app_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "logical_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "revision": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "snapshot": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      }
+    },
+    "delivery_graph_states": {
+      "anchor_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "app_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "runtime_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "snapshot": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      }
+    },
+    "events": {
+      "created_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "data": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "kind": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "goal_application_candidates": {
+      "app_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "candidate_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "confirmation": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "goal_candidate_requests": {
+      "app_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "card_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "goal_card_versions": {
+      "card_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "created_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "snapshot": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "version": {
+        "declaration": {},
+        "kind": "Integer"
+      }
+    },
+    "goal_cards": {
+      "created_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "title": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "version": {
+        "declaration": {},
+        "kind": "Integer"
+      }
+    },
+    "grants": {
+      "expires_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "resource_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "revision": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "revoked": {
+        "declaration": {
+          "create_constraint": false,
+          "name": null
+        },
+        "kind": "Boolean"
+      },
+      "tool_ref": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "heartbeats": {
+      "at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "internal_app_runs": {
+      "error": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "input": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "instance_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "output": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "release_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "result_version": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "status": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "internal_approvals": {
+      "consumed": {
+        "declaration": {
+          "create_constraint": false,
+          "name": null
+        },
+        "kind": "Boolean"
+      },
+      "expires_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "kind": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "payload": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "internal_instance_data": {
+      "data": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "instance_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "release_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "schema_version": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "version": {
+        "declaration": {},
+        "kind": "Integer"
+      }
+    },
+    "internal_instances": {
+      "data_version": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "history": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "release_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "revision": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "runtime_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "source_app_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "internal_owner_records": {
+      "created_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "instance_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "kind": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "payload": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "previous_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "sequence": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "status": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "internal_owner_seals": {
+      "instance_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "metadata_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "payload_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "record_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "sequence": {
+        "declaration": {},
+        "kind": "Integer"
+      }
+    },
+    "internal_releases": {
+      "approval_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "snapshot": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      }
+    },
+    "internal_run_bindings": {
+      "app_run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "snapshot": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      }
+    },
+    "internal_spec_run_terminals": {
+      "app_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "instance_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "release_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "local_csv_tasks": {
+      "error": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "input": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "output": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "proof": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "proof_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "resource_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "status": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "local_effects": {
+      "content_hash": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "operation_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "resource_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "natural_activations": {
+      "approval": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "approval_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "created_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "ledger": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "scope": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "scope_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "status": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "version": {
+        "declaration": {},
+        "kind": "Integer"
+      }
+    },
+    "natural_owner_records": {
+      "created_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "instance_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "kind": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "payload": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "previous_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "sequence": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "status": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "natural_owner_seals": {
+      "metadata_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "payload_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "record_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "operation_intents": {
+      "operation_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      }
+    },
+    "operations": {
+      "call_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "receipt": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "status": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "tool_ref": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "ordinary_correction_links": {
+      "parent_run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "ordinary_owner_records": {
+      "created_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "kind": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "payload": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "previous_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "sequence": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "status": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "ordinary_owner_seals": {
+      "metadata_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "payload_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "record_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "preview_extractions": {
+      "app_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "preview_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "snapshot": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      }
+    },
+    "principals": {
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "name": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "token_hash": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "projects": {
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "name": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "owner_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "runtime_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "protocol_jobs": {
+      "accepted_snapshot": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "completed_fence": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "created_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "kind": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "result_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "result_snapshot": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "runtime_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "protocol_request_pools": {
+      "created_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "halt_reason": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "halted": {
+        "declaration": {
+          "create_constraint": false,
+          "name": null
+        },
+        "kind": "Boolean"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "known_tokens": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "mode": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "policy_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_limit": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "reserved_requests": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "reserved_tokens": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "token_limit": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "version": {
+        "declaration": {},
+        "kind": "Integer"
+      }
+    },
+    "protocol_request_slots": {
+      "attempt_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "created_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "error": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "fence": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "finished_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "ordinal": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "phase": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "pool_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "reserved_tokens": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "safe_response_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "status": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "usage": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      }
+    },
+    "protocol_reviews": {
+      "contract_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "created_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "payload": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "quotas": {
+      "blocked_until": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "subject": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "registered_extraction_requests": {
+      "app_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "candidate_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "expected_proof_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "expected_target_draft_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "history": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "instance_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "previous_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "request_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "sequence": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "source_app_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "source_run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "state": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "target_app_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "reservations": {
+      "created_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "subject": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "resource_retirements": {
+      "policy": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "proof_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "resource_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "source_hash": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "task_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "resources": {
+      "content": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "format": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "hash": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "name": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "run_contracts": {
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "run_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "snapshot": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      }
+    },
+    "runs": {
+      "cancel_intent": {
+        "declaration": {
+          "create_constraint": false,
+          "name": null
+        },
+        "kind": "Boolean"
+      },
+      "context": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "created_at": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "error": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "fence": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "goal": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "lease_until": {
+        "declaration": {
+          "asdecimal": false,
+          "decimal_return_scale": null,
+          "precision": null
+        },
+        "kind": "Float"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "resource_refs": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "result": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "runtime_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "status": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "version": {
+        "declaration": {},
+        "kind": "Integer"
+      },
+      "worker_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "spec_checklist_tasks": {
+      "error": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "output": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "project_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "proof": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "proof_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "receipt": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "request": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "request_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "resource_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "runtime_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "source_hash": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "status": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    },
+    "task_extractions": {
+      "app_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "principal_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_fingerprint": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "request_key": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      },
+      "snapshot": {
+        "declaration": {
+          "none_as_null": false
+        },
+        "kind": "JSON"
+      },
+      "task_id": {
+        "declaration": {
+          "collation": null,
+          "length": null
+        },
+        "kind": "String"
+      }
+    }
+  },
+  "version": 1
+}

@@ -201,7 +201,7 @@ def _admission(worker, *, _source_out=None):
 def _account(worker, b, *, connection=None):
     if _journal_binding(b):
         if connection is not None:
-            gate.require(connection.engine is worker.store.engine and connection.in_transaction())
+            gate.require(worker.store.owns_connection(connection) and connection.in_transaction())
             return _journal_source(worker.store, connection, b)
         with worker.store.tx() as c:
             return _journal_source(worker.store, c, b)
@@ -392,7 +392,7 @@ def _journal_reads(worker, c):
         return nullcontext()
     if not ordinary:
         _binding(worker)
-    gate.require(c.engine is worker.store.engine and c.in_transaction())
+    gate.require(worker.store.owns_connection(c) and c.in_transaction())
     from .pb_natural_specs import _source_reads
     return _source_reads(worker.store, c)
 
@@ -1173,7 +1173,7 @@ def reject(worker, c, run, aid, raw):
         # Receive already committed immutable accounting. No current binding,
         # duplicate settle or missing response may mint authority/refund here.
         b = worker._journal_trial_binding
-        gate.require(c.engine is worker._journal_trial_store.engine)
+        gate.require(worker._journal_trial_store.owns_connection(c))
         _journal_owner(c, b, run, aid)
         return
     b = _identity(worker, c, run, aid)
@@ -1243,7 +1243,7 @@ def check_journal_claim(store, c, run, b):
 
 def _journal_state(store, c, b, *, _guard=None):
     from . import production_trial_journal as journal
-    gate.require((gate._trial_result(_production_binding(b), _guard) or (store.test_only and store.sqlite)) and c.engine is store.engine)
+    gate.require((gate._trial_result(_production_binding(b), _guard) or (store.test_only and store.sqlite)) and store.owns_connection(c))
     _, scope, request, quota_request, entity = gate._trial_result(journal._context(store, c, b.contract.principal_id, b.contract, b.approval_key, b.account_id), _guard)
     old = gate._trial_result(budget.scope_for(b.contract, b.approval_key), _guard)
     gate.require(gate._trial_result(budget._load(c, old.principal_id, old.project_id, budget.KIND, old.trial_key), _guard) is None)

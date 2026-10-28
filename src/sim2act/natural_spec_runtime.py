@@ -2199,7 +2199,7 @@ class _ColdGraphRead:
             and all(v is None or type(v) is Limits for v in self.role_limits.values()))
         require(self.active and len(self.scope) == 1 and self.scope[0] is self.nonce
             and self.store is store and w.store is store and c is self.connection
-            and store.engine is self.engine and c.engine is self.engine
+            and store.engine is self.engine and store.owns_connection(c)
             and w.s is self.settings and vars(w.s) == self.settings_values
             and w.pa_trial is self.binding and w.stop is self.stop
             and w.goal_planner_transport is self.transport and w.id == self.worker_id
@@ -4736,7 +4736,7 @@ class _ModelSettlementRead:
         w, c = self.worker, self.connection
         require(self.active and self.state not in {"INVALID", "CLOSED"}
             and c.info.get("_model_settlement_scope") is self.scope_nonce
-            and w.store is self.store and c.engine is self.store.engine
+            and w.store is self.store and self.store.owns_connection(c)
             and w.s is self.settings and vars(w.s) == self.settings_values
             and w.pa_trial is self.binding and w.stop is self.stop
             and w.goal_planner_transport is self.transport and w.id == self.worker_id
@@ -5026,6 +5026,17 @@ def _model_settlement_read(worker, c, inputs):
                 c.info.pop("_model_settlement_scope", None)
 
 
+@contextmanager
+def _model_writer_connection(worker, candidate, plan):
+    """Default is the original transaction; private candidate is explicit only."""
+    if candidate is None:
+        with worker.store.tx() as c:
+            yield c, None
+    else:
+        with candidate.connection(worker, plan) as selected:
+            yield selected
+
+
 def advance_model(worker, run, *, _heartbeat_state=None):
     from . import pa_spec_apps as spec
     from .app_jobs import lock_live
@@ -5248,8 +5259,22 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                             request_body=wire)
         if failure:
             raise failure
+        graph_call = dict(call_run=run, aid=aid, wire=wire, meta=meta, raw=raw,
+            response=response, step=step, action=action, intent=intent, node=node_limits)
+        candidate = getattr(worker, "_owned_g0_candidate", None)
+        plan = None
+        if candidate is not None:
+            from ._owned_g0_candidate import MockCandidate
+            from .natural_live_admission import PBTrialContract
+            require(type(candidate) is MockCandidate and store.test_only and store.sqlite,
+                "Owned G0 candidate is explicit synthetic SQLite only")
+            selected_binding = getattr(worker, "pa_trial", None)
+            if (selected_binding is not None and type(selected_binding.contract) is PBTrialContract
+                    and run["runtime_id"] != selected_binding.contract.runtime_id
+                    and run["resource_refs"] == [selected_binding.contract.bindings[1].resource_id]):
+                plan = candidate.prepare(worker, binding, graph_call, limits)
         with _model_settlement_writer(worker, job, meta["deadline"], _heartbeat_state, attempt_id=aid), \
-                store.tx() as c, _journal_reads(worker, c):
+                _model_writer_connection(worker, candidate, plan) as (c, owned_plan), _journal_reads(worker, c):
             current = lock_live(store, c, run)
             require(
                 current["version"] == meta["run_version"]
@@ -5257,62 +5282,66 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                 and time.time() < meta["deadline"],
                 "Run version/deadline competed during model node",
             )
-            graph_call = dict(call_run=run, aid=aid, wire=wire, meta=meta, raw=raw,
-                response=response, step=step, action=action, intent=intent, node=node_limits)
-            with _cold_model_before(worker, c, current, graph_call, limits) as cold:
-                current_binding = (cold.platform.binding if cold is not None else
-                    spec.bound(store, c, current["principal_id"], current, limits))
-                if cold is None:
-                    spec.commit_guard(worker, c, run, current_binding)
-                else:
-                    cold.commit(spec._cold_commit_prefix(worker, c, run, current_binding,
-                        cold.guard, "first"))
-                enabled(worker)
-                if cold is None:
-                    spec.receipts(store, c, current, current_binding, pending_id=meta["operation_id"])
-                else:
-                    cold.check()
-                    spec._cold_receipts(store, c, current, current_binding,
-                        cold.platform.counter_reader, pending_id=meta["operation_id"])
-                    cold.check()
-                row = (
-                    c.execute(
-                        select(attempts).where(attempts.c.id == aid, attempts.c.run_id == job["id"])
+            if owned_plan is not None:
+                require(_cold_model_eligible(worker, c, current), "Original PB Cold eligibility required")
+                from ._owned_g0_candidate import run as owned_prewrite
+                current_binding, receipt = owned_prewrite(candidate, owned_plan, worker, c,
+                    current, graph_call, limits)
+            else:
+                with _cold_model_before(worker, c, current, graph_call, limits) as cold:
+                    current_binding = (cold.platform.binding if cold is not None else
+                        spec.bound(store, c, current["principal_id"], current, limits))
+                    if cold is None:
+                        spec.commit_guard(worker, c, run, current_binding)
+                    else:
+                        cold.commit(spec._cold_commit_prefix(worker, c, run, current_binding,
+                            cold.guard, "first"))
+                    enabled(worker)
+                    if cold is None:
+                        spec.receipts(store, c, current, current_binding, pending_id=meta["operation_id"])
+                    else:
+                        cold.check()
+                        spec._cold_receipts(store, c, current, current_binding,
+                            cold.platform.counter_reader, pending_id=meta["operation_id"])
+                        cold.check()
+                    row = (
+                        c.execute(
+                            select(attempts).where(attempts.c.id == aid, attempts.c.run_id == job["id"])
+                        )
+                        .mappings()
+                        .one()
                     )
-                    .mappings()
-                    .one()
-                )
-                if cold is not None:
-                    cold.check()
-                    cold.guard.add("settlement-current-attempt", dict(row))
-                require(
-                    row["status"] == "RECEIVED"
-                    and row["parameters"]["natural_spec"] == meta
-                    and row["response"] == response
-                )
-                value, usage = parse(
-                    raw,
-                    current_binding["source"],
-                    action["executor"]["ref"],
-                    node_limits,
-                    row["reserved_tokens"],
-                )
-                if cold is not None:
-                    cold.check()
-                require(usage == row["usage"])
-                validate_value(action["output_schema"], value)
-                if cold is not None:
-                    cold.check()
-                receipt = spec.receipt_for(
-                    meta["operation_id"], step, action, current_binding["plan"], intent, value
-                )
-                if cold is None:
-                    spec.commit_guard(worker, c, run, current_binding)
-                else:
-                    cold.check()
-                    cold.guard.add("settlement-parsed", dict(value=value, usage=usage, receipt=receipt))
-                    cold.commit(spec._cold_commit_prefix(worker, c, run, current_binding,
-                        cold.guard, "second"))
+                    if cold is not None:
+                        cold.check()
+                        cold.guard.add("settlement-current-attempt", dict(row))
+                    require(
+                        row["status"] == "RECEIVED"
+                        and row["parameters"]["natural_spec"] == meta
+                        and row["response"] == response
+                    )
+                    value, usage = parse(
+                        raw,
+                        current_binding["source"],
+                        action["executor"]["ref"],
+                        node_limits,
+                        row["reserved_tokens"],
+                    )
+                    if cold is not None:
+                        cold.check()
+                    require(usage == row["usage"])
+                    validate_value(action["output_schema"], value)
+                    if cold is not None:
+                        cold.check()
+                    receipt = spec.receipt_for(
+                        meta["operation_id"], step, action, current_binding["plan"], intent, value
+                    )
+                    if cold is None:
+                        spec.commit_guard(worker, c, run, current_binding)
+                    else:
+                        cold.check()
+                        cold.guard.add("settlement-parsed", dict(value=value, usage=usage, receipt=receipt))
+                        cold.commit(spec._cold_commit_prefix(worker, c, run, current_binding,
+                            cold.guard, "second"))
             c.execute(
                 update(attempts)
                 .where(

@@ -81,7 +81,7 @@ def source(store, c, binding):
     """Fresh original approval and fixed producer; never a DTO/registry override."""
     from .production_trial_admission import _qualified
 
-    gate.require(type(binding) is ProductionTrialBinding and c.engine is store.engine
+    gate.require(type(binding) is ProductionTrialBinding and store.owns_connection(c)
                  and c.in_transaction())
     gate.require(fingerprint(evidence._contract_data(binding.contract))
                  == binding.contract_fingerprint)

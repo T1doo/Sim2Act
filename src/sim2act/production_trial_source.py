@@ -181,7 +181,7 @@ def load_offline(store, c, user, contract, key, account_id):
     The sender re-reads at each mutation, wire guard and settlement.
     """
     _require(type(store) is Store and store.test_only and store.sqlite, "LIVE_BLOCKED")
-    _require(type(c) is Connection and c.engine is store.engine and c.in_transaction())
+    _require(type(c) is Connection and store.owns_connection(c) and c.in_transaction())
     _, scope, _, _, _ = journal._context(store, c, user, contract, key, account_id)
     request = request_for(scope, account_id)
     at = time.time()

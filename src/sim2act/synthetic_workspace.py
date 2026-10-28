@@ -11,6 +11,7 @@ import os
 import re
 import signal
 import socket
+import sys
 import threading
 import traceback
 from contextlib import contextmanager
@@ -178,8 +179,34 @@ def _console_break_as_interrupt():
         if managed:
             signal.signal(signal.SIGBREAK, previous)
 
-def serve(path, *, new=False, port=0):
+def _read_owned_control(stream, worker_id, request_stop):
+    """Private desktop pipe only; EOF also stops startup before READY.
+
+    This has no HTTP/credential/Run admission surface. Both accepted STOP and
+    EOF enter the original server shutdown/finally path and emit its receipt.
+    """
+    while True:
+        line = stream.readline(512)
+        if line == "":
+            request_stop()
+            return
+        if len(line) > 256 or not line.endswith("\n"):
+            request_stop()
+            return
+        try:
+            message = json.loads(line)
+        except (ValueError, TypeError):
+            continue
+        if (type(message) is dict and set(message) == {"command", "worker_id"}
+                and message["command"] == "stop" and message["worker_id"] == worker_id):
+            request_stop()
+            return
+
+
+def serve(path, *, new=False, port=0, control_stdin=False):
     require(type(port) is int and 0 <= port <= 65535, "INVALID_PORT")
+    require(type(control_stdin) is bool, "INVALID_CONTROL_MODE")
+    require(not control_stdin or (sys.stdin is not None and not sys.stdin.isatty()), "OWNED_STDIN_PIPE_REQUIRED")
     # Reserve the actual socket before touching a data directory; no port scan.
     with socket.socket() as listener:
         try:
@@ -221,7 +248,7 @@ def serve(path, *, new=False, port=0):
                     if server.started and not announced:
                         print(json.dumps(dict(event="SYNTHETIC_WORKSPACE_READY", url=address,
                             data_dir=str(root), public_token=TOKEN, worker_id=worker.id,
-                            principal_id=marker["principal_id"], mode="SYNTHETIC_TEST_ONLY")), flush=True)
+                            principal_id=marker["principal_id"], mode="SYNTHETIC_TEST_ONLY", control_stdin=control_stdin)), flush=True)
                         announced = True
                     stopped.wait(1)  # Original worker.main service cadence.
             except Exception as error:
@@ -236,8 +263,19 @@ def serve(path, *, new=False, port=0):
             finally:
                 worker_turn.clear()
 
+        if control_stdin:
+            print(json.dumps(dict(event="SYNTHETIC_WORKSPACE_STARTING", worker_id=worker.id,
+                mode="SYNTHETIC_TEST_ONLY", control_stdin=True)), flush=True)
         thread = threading.Thread(target=work, daemon=True)
         thread.start()
+        if control_stdin:
+            def control():
+                try:
+                    _read_owned_control(sys.stdin, worker.id,
+                        lambda: setattr(server, "should_exit", True))
+                except (OSError, ValueError):
+                    server.should_exit = True
+            threading.Thread(target=control, name="owned-desktop-control", daemon=True).start()
         try:
             with _console_break_as_interrupt():
                 server.run(sockets=[listener])
