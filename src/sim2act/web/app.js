@@ -132,7 +132,7 @@ function selectProjectSection(id, focus=false) {
   const links=[...document.querySelectorAll(".section-links a")];
   links.forEach(link=>link.addEventListener("click",event=>{
     event.preventDefault();selectProjectSection(link.hash.slice(1),true);
-    history.replaceState(null,"",link.hash);
+    // Section navigation stays local; preserve the trial original-key recovery address.
     if(matchMedia("(max-width:1000px)").matches)document.getElementById(link.hash.slice(1)).scrollIntoView({block:"start"});
   }));
   addEventListener("hashchange",()=>selectProjectSection(location.hash.slice(1)));
