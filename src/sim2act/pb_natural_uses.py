@@ -9,7 +9,6 @@ from pydantic import Field
 from sqlalchemy import bindparam, insert, select
 
 from . import natural_specs as natural
-from . import pa_spec_apps as spec
 from . import pb_natural_specs as pb
 from .contracts import GoalCardRunSource, Limits, Strict
 from .db import (
@@ -86,6 +85,11 @@ _HINT_BINDINGS = {family.field: select(internal_run_bindings.c.snapshot[family.f
 _HINT_RESPONSE = select(delivery_graph_requests.c.app_id).where(
     delivery_graph_requests.c.kind == bindparam("hint_kind", type_=delivery_graph_requests.c.kind.type),
     delivery_graph_requests.c.snapshot["response"]["run_id"].as_string() == bindparam("hint_run_id", type_=internal_run_bindings.c.run_id.type))
+
+
+# Publish the strict input models before the spec module bootstraps its fixed
+# schema catalogue. This keeps direct CLI imports independent of API preload.
+from . import pa_spec_apps as spec  # noqa: E402
 
 
 def saved_family(candidate):
