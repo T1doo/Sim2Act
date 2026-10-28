@@ -2221,9 +2221,11 @@ class _ColdGraphRead:
         try:
             _ColdGraphRead._check_dynamic(self, store, c)
             selected = None
-            if self._accounted_frontier is None and self.phase == "post":
+            if self._accounted_frontier is None:
                 from ._cold_graph_structure_guard import select
                 selected = select(self)
+            else:
+                vars(self).pop("_structure_state", None)
             require((self.input_key() == self.key if selected is None else selected)
                     if self._accounted_frontier is None else self._accounted_frontier.check() is None,
                 "Cold graph read segment or complete role inputs changed")

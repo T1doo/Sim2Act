@@ -131,7 +131,7 @@ def _qualified(graph):
         return False
     fields = object.__getattribute__(graph, '__dict__')
     return (not any(name in fields for name in ('input_bytes', 'input_key'))
-        and type(fields.get('phase')) is str and fields['phase'] == 'post'
+        and type(fields.get('phase')) is str and fields['phase'] in ('pre', 'post')
         and type(fields.get('key')) is str and type(fields.get('epoch')) is int and fields.get('_accounted_frontier') is None
         and fields.get('_typed_native_candidate') is None and fields.get('active') is True)
 

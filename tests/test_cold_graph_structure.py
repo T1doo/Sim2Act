@@ -3,6 +3,7 @@
 import copyreg
 import itertools
 import struct
+import sys
 import time
 from contextlib import contextmanager
 
@@ -101,6 +102,7 @@ def test_scope_binding_and_bounded_unsupported():
     value = dict(a=[1])
     saved = native.snapshot(value, *arguments(), identity)
     assert native.matches_fast(saved, value, (object(), *identity[1:])) is native.UNSUPPORTED
+    assert native.matches_fast(saved, value, (*identity[:4], 'pre')) is native.UNSUPPORTED
     assert native.snapshot(dict(a=1 << 100), *arguments(), identity) is native.UNSUPPORTED
     deep = []
     for _ in range(70):
@@ -220,6 +222,7 @@ def test_unknown_graph_binding_and_row_lookup_getters_deopt_before_callbacks(loc
             patch.setattr(r._ColdGraphRead, 'key', property(lambda self: calls.append(1)), raising=False)
             assert guard_code.select(graph) is None
             assert calls == []
+
         with monkeypatch.context() as patch:
             patch.setattr(type(graph.binding), 'account_id', property(lambda self: calls.append(1)), raising=False)
             assert guard_code.select(graph) is None
@@ -231,3 +234,85 @@ def test_unknown_graph_binding_and_row_lookup_getters_deopt_before_callbacks(loc
             patch.setattr(r._row_native_code, '_RAW_ROW_LOOKUP', callback)
             assert guard_code.select(graph) is None
             assert calls == []
+
+
+def test_pre_scope_fresh_complete_walk_and_original_frontier_selection(local_origin):
+    f = local_origin
+    with f.store.tx() as c, pb._source_reads(f.store, c), r._cold_graph_read(
+        f.worker, c, f.inputs, f.roles, 'pre'
+    ) as graph:
+        graph.add('pre-structure', [[1]])
+        warm(f, c, graph)
+        saved = vars(graph)['_structure_state'].capsule
+        scope_ = (graph, graph.nonce, graph.key, graph.epoch, graph.phase)
+        assert native.matches_fast(saved, graph.input_bytes(_snapshot_values=True),
+            (*scope_[:4], 'post')) is native.UNSUPPORTED
+        start = graph._diagnostic_counts[1]
+        graph.check(f.store, c)
+        assert graph._diagnostic_counts[1] == start
+        # Qualification does not consume or validate an accounted frontier.
+        # Only the original Graph.check frontier branch may handle one.
+        vars(graph)['_accounted_frontier'] = object()
+        try:
+            assert guard_code.select(graph) is None
+            assert '_structure_state' not in vars(graph)
+        finally:
+            vars(graph)['_accounted_frontier'] = None
+        vars(graph)['_typed_native_candidate'] = object()
+        try:
+            assert guard_code.select(graph) is None
+        finally:
+            vars(graph)['_typed_native_candidate'] = None
+        warm(f, c, graph)
+
+
+def test_pre_scope_content_change_still_invalidates(local_origin):
+    f = local_origin
+    finished = False
+    with f.store.tx() as c, pb._source_reads(f.store, c):
+        with pytest.raises(DomainError):
+            with r._cold_graph_read(f.worker, c, f.inputs, f.roles, 'pre') as graph:
+                graph.add('pre-structure', [[1]])
+                warm(f, c, graph)
+                graph.inputs['pre-structure'][0].append(2)
+                with pytest.raises(DomainError):
+                    graph.check(f.store, c)
+                assert not graph.active and '_structure_state' not in vars(graph)
+                finished = True
+        assert finished
+
+
+def test_frontier_branch_clears_snapshot_and_keeps_original_rejection(local_origin):
+    from sim2act._cold_accounted_native import _Frontier
+
+    f = local_origin
+    finished = False
+    with f.store.tx() as c, pb._source_reads(f.store, c):
+        with pytest.raises(DomainError):
+            with r._cold_graph_read(f.worker, c, f.inputs, f.roles, 'pre') as graph:
+                warm(f, c, graph)
+                # Deliberately unissued: the ORIGINAL frontier must reject it.
+                # It supplies no mock check method, permit or accepted result.
+                frontier = object.__new__(_Frontier)
+                frontier.graph, frontier.mode = graph, object()
+                vars(graph)['_accounted_frontier'] = frontier
+                monitoring = sys.monitoring
+                slot = next(i for i in (4, 3, 5) if monitoring.get_tool(i) is None)
+                monitoring.use_tool_id(slot, 'original frontier branch witness')
+                calls = []
+
+                def entered(*args):
+                    calls.append('_structure_state' not in vars(graph))
+
+                monitoring.register_callback(slot, monitoring.events.PY_START, entered)
+                monitoring.set_local_events(slot, _Frontier.check.__code__, monitoring.events.PY_START)
+                try:
+                    with pytest.raises(DomainError):
+                        graph.check(f.store, c)
+                finally:
+                    monitoring.set_local_events(slot, _Frontier.check.__code__, 0)
+                    monitoring.free_tool_id(slot)
+                assert calls == [True]
+                assert not graph.active and '_structure_state' not in vars(graph)
+                finished = True
+        assert finished
