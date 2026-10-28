@@ -61,6 +61,6 @@ UI独审找到并修复四处明确交接：Goal向导完成后打开Goal区；�
 
 `8dc05115` 的原完整真实时钟用例实际 **1 FAIL /359.15秒**，非timeout。生成和Source已完成，首个Cold实际接收响应后，G0 **39.563506秒**，第一commit校验32.623268秒，仍在 `_graph_run_context → _require_run_context_row` 因有限lease拒绝。第一commit没有返回、第二commit未进入、原结果保存链未完成。仅根据原异常位置可断定停在W5前；没有伪造动态W5计数。**不能用局部8倍复制速度、104项定向通过或源码独审替代这个失败。** 两个完整候选分别35.21与39.56秒，条件/代码不同且样本有限，不声称归因或稳定性能改善。
 
-native-frozen-source.json中的所有源码与实际binary运行前后零差异。6次Mock交换，0真实模型调用；原DB、failure/lease/mock日志与closed-state在native-originals中gzip无损保全，原长度/SHA与压缩件SHA见native-originals.json。最终只读DB：生成PARTIAL、Source SUCCEEDED、Cold RUNNING/version1且Attempt REJECTED_KNOWN，result仍null，未伪造完成或恢复执行此失败Run。
+native-frozen-source.json中的所有源码与实际binary运行前后零差异。6次Mock交换，0真实模型调用；原DB和failure/lease/mock日志在native-originals中gzip无损保全，原长度/SHA与压缩件SHA见native-originals.json。最终只读DB：生成PARTIAL、Source SUCCEEDED、Cold RUNNING/version1且Attempt REJECTED_KNOWN，result仍null，未伪造完成或恢复执行此失败Run。
 
 当前仅交付**待审开发候选**：固定免费来源接入、紧凑任务工作区与可审原生快照实现；G0首个完整验证窗口仍超期，需继续降低整个read/typed/continuity链成本或另行设计经明确版本约束的租约协议，不能把缺口归为用户没授权费用。正式生产数据库链仍缺当前现有应用连接和具体既有trial选择；UI截图/像素仍被平台sandbox配置阻塞；真实提取诊断仍未通过。没有main合并、部署、正式发布、强推、用户电脑操作、新费用、凭据或安全权限变化。
