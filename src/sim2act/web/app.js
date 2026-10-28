@@ -133,6 +133,7 @@ function selectProjectSection(id, focus=false) {
   links.forEach(link=>link.addEventListener("click",event=>{
     event.preventDefault();selectProjectSection(link.hash.slice(1),true);
     history.replaceState(null,"",link.hash);
+    if(matchMedia("(max-width:1000px)").matches)document.getElementById(link.hash.slice(1)).scrollIntoView({block:"start"});
   }));
   addEventListener("hashchange",()=>selectProjectSection(location.hash.slice(1)));
   selectProjectSection(links.some(link=>link.hash===location.hash)?location.hash.slice(1):"task-workbench");
@@ -1726,7 +1727,7 @@ function continueNaturalFirstGoal(p) {
   g.stage="generate";g.card={...activeGoalCard};g.selection=goalSelectionGeneration;
   $("goal-application-family").value="natural_spec";$("goal-application-family").onchange();
   $("goal-application-name").value=Array.from(card.content.title).slice(0,100).join("");
-  renderGoalRun();renderGoalApplicationControls();selectWorkspace("projects",g);renderNaturalFirstGuide();
+  renderGoalRun();renderGoalApplicationControls();selectWorkspace("projects",g);selectProjectSection("goal-cards-panel");renderNaturalFirstGuide();
   $("goal-application-panel").scrollIntoView?.({block:"start"});$("goal-application-name").focus();
 }
 function naturalFirstGuideForEntry(entry) {

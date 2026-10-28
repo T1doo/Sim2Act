@@ -88,9 +88,14 @@ def consent_for(version):
 
 
 def implementation():
-    return fingerprint({p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-                        for p in sorted(Path(__file__).parent.glob("*.py"))
-                        if p.name != "config.py"})
+    from .natural_live_admission import raw_snapshot_backend
+
+    root = Path(__file__).parent
+    files = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+             for p in sorted([*root.glob("*.py"), *root.glob("*.c"),
+                              *root.glob("*.so"), *root.glob("*.pyd")])
+             if p.name != "config.py"}
+    return fingerprint(dict(files=files, raw_snapshot=raw_snapshot_backend()))
 
 
 def canonical(version, column=None):

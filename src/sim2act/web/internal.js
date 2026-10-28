@@ -345,7 +345,7 @@ async function showKnownInternalRunStop(scope){
   // Entered only from a verified accepted receipt after its own instance read
   // lost content access. Keep opaque IDs, never restore a cached instance.
   const identity=token,connection=identityConnectionGeneration,project=$("project-select").value;
-  clearApp();selectWorkspace("projects");clearRunDetail();activeRun=null;
+  clearApp();selectWorkspace("projects");selectProjectSection("task-workbench");clearRunDetail();activeRun=null;
   const workspace=workspaceSelectionGeneration,selection=++runUserSelectionGeneration;runSelectionGeneration++;
   const panel=document.createElement("section"),title=document.createElement("p"),status=document.createElement("p"),read=document.createElement("button"),cancel=document.createElement("button");
   panel.id="known-internal-stop";title.textContent=`已受理修正Run ${scope.rid} · 实例 ${scope.iid}；当前内容不可读，仅保留本人停止控制。`;

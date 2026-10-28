@@ -42,6 +42,23 @@ KEY = r"^[A-Za-z0-9_-]{1,100}$"
 Stage = Literal["generate", "source", "cold"]
 
 
+
+# Optional packaged C capture. Never load a caller path or retry a native error.
+try:
+    from pathlib import Path as _RawPath
+
+    from . import _raw_snapshot as _RAW_MODULE
+    from ._raw_snapshot import SOURCE_SHA256 as _RAW_SOURCE_SHA
+    from ._raw_snapshot import UNSUPPORTED as _RAW_UNSUPPORTED
+    from ._raw_snapshot import copy_snapshot as _RAW_COPY
+    from ._raw_snapshot import equal_values as _RAW_EQUAL
+    if hashlib.sha256(_RawPath(__file__).with_name("_raw_snapshot.c").read_bytes()).hexdigest() != _RAW_SOURCE_SHA:
+        raise ImportError("Raw capture source/build mismatch")
+    _RAW_BINARY_PATH = _RawPath(_RAW_MODULE.__file__).resolve()
+    _RAW_BINARY_SHA = hashlib.sha256(_RAW_BINARY_PATH.read_bytes()).hexdigest()
+except (ImportError, OSError):
+    _RAW_COPY = _RAW_EQUAL = None
+
 def require(ok, message="Exact natural trial changed"):
     if not ok:
         raise DomainError("VERSION_CONFLICT", message)
@@ -1188,6 +1205,10 @@ def _trial_typed_classes():
 
 def _trial_typed_equal(actual, saved):
     """Compare complete fixed-model dumps without Python numeric coercion."""
+    if _RAW_EQUAL is not None:
+        same = _RAW_EQUAL(actual, saved)
+        if same is not _RAW_UNSUPPORTED:
+            return same
     pending = [(actual, saved)]
     while pending:
         left, right = pending.pop()
@@ -1259,8 +1280,17 @@ def _trial_pure_mapping(value):
     return {name: item for name, (_, item) in zip(names, items, strict=True)}
 
 
+_RAW_MAPPING_ORIGINAL = _trial_pure_mapping
+_RAW_REQUIRE_ORIGINAL = require
+
+
 def _trial_pure_data(value):
     """Copy only complete controlled data; never equality/iteration on strangers."""
+    if (_RAW_COPY is not None and _trial_pure_mapping is _RAW_MAPPING_ORIGINAL
+            and require is _RAW_REQUIRE_ORIGINAL):
+        copied = _RAW_COPY(value)
+        if copied is not _RAW_UNSUPPORTED:
+            return copied
     from sqlalchemy.engine import RowMapping
 
     active = set()
@@ -1268,9 +1298,9 @@ def _trial_pure_data(value):
     def visit(item):
         result: Any
         kind = type(item)
-        if any(kind is allowed for allowed in (str, int, float, bool, bytes, type(None))):
+        if kind is str or kind is int or kind is float or kind is bool or kind is bytes or kind is type(None):
             return item
-        require(any(kind is allowed for allowed in (dict, RowMapping, list, tuple)),
+        require(kind is dict or kind is RowMapping or kind is list or kind is tuple,
             'Unsupported nested trial raw data')
         identity = id(item)
         require(identity not in active, 'Cyclic trial raw data')
@@ -1626,3 +1656,13 @@ def _graph_trial_stage_raw(graph, stage_facts, *, _owned=None):
     inputs = _trial_pure_mapping(graph.inputs)
     require('cold-trial:complete' in inputs)
     _graph_trial_stage_raw_from_raw(stage_facts, inputs['cold-trial:complete'])
+
+
+def raw_snapshot_backend():
+    """Loaded implementation identity, never a credential or an admission."""
+    if _RAW_COPY is None:
+        return {"kind": "python"}
+    require(hashlib.sha256(_RAW_BINARY_PATH.read_bytes()).hexdigest() == _RAW_BINARY_SHA,
+            "Loaded raw capture binary changed on disk")
+    return {"kind": "native", "source_sha256": _RAW_SOURCE_SHA,
+            "binary_sha256": _RAW_BINARY_SHA, "binary": _RAW_BINARY_PATH.name}

@@ -23,7 +23,7 @@ from .db import attempts, fingerprint, runs
 from .errors import DomainError
 from .text_continuations import ANCHOR_HASH
 
-PRODUCTION_QUALIFICATION_HASH = "d6fda34b93687eb80e59006565e928fd1a4d717d74e3b14deee21dee937ce5a3"
+PRODUCTION_QUALIFICATION_HASH = "c39dd9db27b4f4107cbb1d0d70ab06522480578717dfd5475207a6345c628075"
 
 
 class AccountEvidence(Strict):
@@ -100,7 +100,7 @@ def _qualified():
             and proof["version"] == "production-software-qualification.v1"
             and proof["baseline"] == "206153da27edb5353e7106ab52b6e5bcaad86627")
         current = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-                   for p in root.glob("*.py") if p.name != "config.py"}
+                   for p in (*root.glob("*.py"), *root.glob("*.c")) if p.name != "config.py"}
         source = Path(__file__).read_bytes()
         literal = ('PRODUCTION_QUALIFICATION_HASH = "' + PRODUCTION_QUALIFICATION_HASH + '"').encode()
         gate.require(source.count(literal) == 1, "Exact production manifest pin required")
