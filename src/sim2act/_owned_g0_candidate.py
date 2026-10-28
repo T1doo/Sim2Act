@@ -115,7 +115,7 @@ _FIXTURE_CATALOG = {
         },
     ),
     "test_owned_g0_full_controller.py": (
-        "1158c7a4af2c073d05cee61ec2b7be4246db28ba84c8a3be457f5499a9c1693f",
+        "99d9b376dc189afb3d3b62680ae487b36f956f37a3ca38a5d5e3aa3be3b11459",
         {
             "test_owned_g0_full_original_controller.<locals>.measured_after": ("g1", "original_after", "save", "stages"),
             "test_owned_g0_full_original_controller.<locals>.save": ("candidates", "g1", "stages", "tmp_path"),
@@ -766,6 +766,8 @@ def _sql_current(worker, c, own_listeners=()):
         or c.connection.driver_connection.text_factory is not str
         or c.engine.dialect._json_serializer is not None
         or c.engine.dialect._json_deserializer is not None
+        or c._echo is not False
+        or not _private_sql.quiet_logger(c.engine.logger)
         or any(
             type.__getattribute__(kind, "__dict__").get(name) is not value
             for kind, name, value in _SQL_SLOTS
@@ -782,16 +784,10 @@ def _sql_current(worker, c, own_listeners=()):
             return False
     for table in db.attempts.metadata.tables.values():
         for column in table.c:
-            if not any(
-                type(column.type) is allowed
-                for allowed in (
-                    sqltypes.String,
-                    sqltypes.Integer,
-                    sqltypes.Float,
-                    sqltypes.Boolean,
-                    sqltypes.JSON,
-                )
-            ):
+            kind = type(column.type)
+            if not (kind is sqltypes.String or kind is sqltypes.Integer
+                    or kind is sqltypes.Float or kind is sqltypes.Boolean
+                    or kind is sqltypes.JSON):
                 return False
     # Only the original epoch-invalidation hook is permitted. Unknown SQL
     # callbacks select legacy BEFORE business; additions after selection reject.

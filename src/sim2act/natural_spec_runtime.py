@@ -4718,6 +4718,9 @@ class _ModelSettlementRead:
     post_graph: Any = None
     _post_graph_initial: Any = None
     _byte_digests: dict = field(default_factory=dict, repr=False)
+    _input_structure: Any = field(default=None, init=False, repr=False)
+    _input_key_calls: int = field(default=0, init=False)
+    _input_structure_hits: int = field(default=0, init=False)
     state: str = "BUILDING"
     active: bool = True
 
@@ -4736,6 +4739,7 @@ class _ModelSettlementRead:
         self.check()
 
     def _inputs_key(self):
+        self._input_key_calls = getattr(self, "_input_key_calls", 0) + 1
         seen = set()
         result = fingerprint(_model_value(self.inputs, _byte_digests=self._byte_digests,
             _byte_seen=seen))
@@ -4743,6 +4747,13 @@ class _ModelSettlementRead:
         # only after a complete fresh walk, so replacements cannot accumulate.
         self._byte_digests = {key: entry for key, entry in self._byte_digests.items() if key in seen}
         return result
+
+    def _inputs_current(self):
+        from ._model_input_structure import same
+        if same(self) is True:
+            self._input_structure_hits += 1
+            return True
+        return self._inputs_key() == self.input_fingerprint
 
     def binding_key(self):
         b = self.binding
@@ -4766,7 +4777,7 @@ class _ModelSettlementRead:
             and self.driver.total_changes == self.changes and self.thread == get_ident()
             and _source_reads_current(self.store, c, self.token)
             and self.binding_key() == self.binding_fingerprint
-            and self._inputs_key() == self.input_fingerprint,
+            and self._inputs_current(),
             "Model settlement read segment or complete inputs changed")
         if self.post_graph is not None:
             require(type(self.post_graph) is _ColdTrialGraph
@@ -4782,6 +4793,7 @@ class _ModelSettlementRead:
             and set(values) <= {"fresh", "post_binding", "actual_attempt", "actual_operation",
                 "trial_limits", "frozen_limits", "declared", "action_limits", "full_admission",
                 "current_journal", "post_graph"}, "Model proof inputs cannot be rebound")
+        self._input_structure = None
         self.inputs.update(values)
         self.input_fingerprint = self._inputs_key()
 
@@ -4893,6 +4905,7 @@ class _ModelSettlementRead:
         self.active, self.state = False, "INVALID"
         self.authorities.clear()
         self._byte_digests.clear()
+        self._input_structure = None
 
 
 @contextmanager
@@ -5040,6 +5053,7 @@ def _model_settlement_read(worker, c, inputs):
                 proof.active = False
                 proof.authorities.clear()
                 proof._byte_digests.clear()
+                proof._input_structure = None
             if c.info.get("_model_settlement_scope") is nonce:
                 c.info.pop("_model_settlement_scope", None)
 

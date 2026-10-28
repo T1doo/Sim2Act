@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib.resources
 import inspect
 import json
+import logging
 import sqlite3
 import sys
 from contextlib import contextmanager
@@ -29,6 +30,66 @@ from ._immutable_settlement import UnsupportedPlan
 _ISSUED = {}  # Strong per-lifetime references; removed before transaction disposal.
 _CONNECT = sqlite3.connect
 _DRIVER = sqlite3.Connection
+_LOG_CLASSES = tuple((kind, tuple(vars(kind).items()))
+    for kind in (logging.Logger, logging.RootLogger, logging.Manager))
+_LOG_FUNCTIONS = tuple((name, vars(logging)[name])
+    for name in ("getLogger", "getLoggerClass", "_acquireLock", "_releaseLock"))
+_LOG_LOCK = logging._lock
+_LOG_CODE = tuple((fn, fn.__code__)
+    for fn in (*[fn for _, fn in _LOG_FUNCTIONS],
+        *[value for _, items in _LOG_CLASSES for _, value in items
+            if type(value) is FunctionType],
+        *[fn for _, items in _LOG_CLASSES for _, value in items
+            if type(value) is property for fn in (value.fget, value.fset)
+            if type(fn) is FunctionType]))
+
+
+def quiet_logger(logger=None):
+    """Refuse SQL logging callbacks; never change any logger/handler setting."""
+    if (logging.Logger is not _LOG_CLASSES[0][0]
+            or logging.RootLogger is not _LOG_CLASSES[1][0]
+            or logging.Manager is not _LOG_CLASSES[2][0]
+            or logging._lock is not _LOG_LOCK
+            or type(logging.INFO) is not int or logging.INFO != 20
+            or type(logging.DEBUG) is not int or logging.DEBUG != 10
+            or any(vars(logging).get(name) is not fn for name, fn in _LOG_FUNCTIONS)
+            or any(fn.__code__ is not code for fn, code in _LOG_CODE)
+            or any(len(vars(kind)) != len(items)
+                or any(vars(kind).get(name) is not value for name, value in items)
+                for kind, items in _LOG_CLASSES)
+            or logging.getLoggerClass() is not logging.Logger
+            or type(logging.Logger.manager) is not logging.Manager
+            or (logging.Logger.manager.loggerClass is not None
+                and logging.Logger.manager.loggerClass is not logging.Logger)):
+        return False
+    if logger is None:
+        return True
+    if type(logger) is not logging.Logger:
+        return False
+    current, effective = logger, None
+    for _ in range(64):
+        if type(current) is not logging.Logger and type(current) is not logging.RootLogger:
+            return False
+        raw = object.__getattribute__(current, "__dict__")
+        if (type(raw) is not dict or not all(type(key) is str for key in raw)
+                or type(raw.get("level")) is not int
+                or type(raw.get("disabled")) is not bool
+                or type(raw.get("manager", logging.Logger.manager)) is not logging.Manager
+                or any(name in raw for name, value in _LOG_CLASSES[0][1]
+                    if callable(value) or type(value) in (property, classmethod, staticmethod))):
+            return False
+        if effective is None and raw["level"]:
+            effective = raw["level"]
+        current = raw.get("parent")
+        if current is None:
+            break
+    else:
+        return False
+    cache = vars(logger).get("_cache")
+    return (effective is not None and effective > logging.INFO
+        and type(cache) is dict
+        and all(type(key) is int and type(value) is bool for key, value in cache.items())
+        and not cache.get(logging.INFO, False) and not cache.get(logging.DEBUG, False))
 with _CONNECT(":memory:") as _bootstrap_driver:
     _NATIVE_SQL_FUNCTIONS = _bootstrap_driver.execute(
         "SELECT name,builtin,narg,flags,enc,type FROM pragma_function_list ORDER BY name,narg,builtin,flags,enc,type"
@@ -280,6 +341,9 @@ class Writer:
         c = self.connection
         if (
             not self.active
+            or not quiet_logger(self.engine.logger)
+            or not quiet_logger(self.pool.logger)
+            or c._echo is not False
             or not connection_owned(self.store, c)
             or not self.transaction.is_active
             or c is None
@@ -307,6 +371,8 @@ def writer(worker, epoch_hook):
         raise UnsupportedPlan("Unknown DB-API creator")
     if not _epoch_current(epoch_hook):
         raise UnsupportedPlan("Original epoch hook required")
+    if not quiet_logger():
+        raise UnsupportedPlan("Unknown SQL logger configuration")
     owned = Writer(worker)
     dialect = SQLiteDialect_pysqlite(dbapi=sqlite3)
     owned.dialect = dialect
@@ -326,6 +392,10 @@ def writer(worker, epoch_hook):
     owned.pool = pool
     engine = Engine(pool, dialect, url, execution_options={})
     owned.engine = engine
+    if not quiet_logger(engine.logger) or not quiet_logger(pool.logger):
+        # No connection has been created. Even dispose() emits a pool INFO
+        # record, so do not invoke that callback while rejecting this setup.
+        raise UnsupportedPlan("SQL logging callbacks require the original full path")
     # Inspect class/global listeners before a driver is created or can escape.
     if engine._has_events or not _dispatch_empty(engine, dialect, pool):
         pool.dispose()
@@ -394,6 +464,7 @@ _SQLITE_FUNCTIONS = tuple(
     (name, globals()[name])
     for name in (
         "_plain",
+        "quiet_logger",
         "declarations",
         "_schema",
         "_dispatch_empty",

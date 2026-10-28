@@ -89,6 +89,8 @@ def test_owned_g0_full_original_controller(env, tmp_path, monkeypatch):
             (dispatch._graph_journal_chain, "journal_chain"),
             (runtime._ModelSettlementRead.live, "proof.live"),
             (runtime._ModelSettlementRead.check, "proof.check"),
+            (runtime._ModelSettlementRead._inputs_key, "proof.inputs_key"),
+            (runtime._ModelSettlementRead._inputs_current, "proof.inputs_current"),
         )
         codes = {fn.__code__: name for fn, name in targets}
         stacks = {}
@@ -117,13 +119,19 @@ def test_owned_g0_full_original_controller(env, tmp_path, monkeypatch):
             )
         monitor.set_events(slot, monitor.events.PY_UNWIND)
         record = dict(started=time.time(), completed=False)
+        proof = None
         start = time.monotonic()
         try:
             with original_after(*args, **kwargs) as value:
+                proof = value[2]
                 yield value
             record["completed"] = True
         finally:
             record["seconds"] = time.monotonic() - start
+            if proof is not None:
+                record["input_key_calls"] = proof._input_key_calls
+                record["input_structure_hits"] = proof._input_structure_hits
+                record["input_structure_cleared"] = proof._input_structure is None
             g1.append(record)
             monitor.set_events(slot, 0)
             for code in codes:
