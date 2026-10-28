@@ -11,7 +11,9 @@ function Assert-Ordinary([string] $Path) {
     $current = Get-Item -LiteralPath $Path -Force
     while ($null -ne $current) {
         if (($current.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "Linked path refused: $Path" }
-        $current = if ($current.PSIsContainer) { $current.Parent } else { $current.Directory }
+        $current = if ($current -is [IO.DirectoryInfo]) { $current.Parent }
+        elseif ($current -is [IO.FileInfo]) { $current.Directory }
+        else { throw "Unsupported filesystem object: $Path" }
     }
 }
 Assert-Ordinary $desktopRoot

@@ -45,6 +45,7 @@ FILES = [
     "scripts/portable_desktop.py",
     "scripts/windows/Sim2ActDesktop.cs",
     "scripts/windows/Build-Desktop.ps1",
+    "scripts/windows/Test-OrdinaryPaths.ps1",
     "scripts/windows/desktop.manifest",
     "scripts/windows/README.md",
 ]
