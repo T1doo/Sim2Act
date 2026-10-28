@@ -25,6 +25,7 @@ FILES = [
     "requirements-windows.lock",
     ".env.example",
     "docs/Installation.md",
+    "docs/ProductionConnection.md",
     "docs/FirstUse.md",
     "docs/LocalCandidate.md",
     "docs/PreviewRelease.md",

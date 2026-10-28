@@ -179,7 +179,7 @@ def select(graph):
     # This is only a frequency hint. Every pending call executes its full SHA
     # in the original Graph.check frame; no prior content/PASS is remembered.
     state.count += 1
-    if state.count < 4:
+    if state.count < 2:
         return None
     if graph.input_key() != graph.key:
         return False
