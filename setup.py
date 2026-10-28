@@ -1,13 +1,16 @@
 """Optional bounded raw-data capture accelerator; Python remains available."""
 
 import hashlib
+import os
 from pathlib import Path
 
 from setuptools import Extension, setup
 
 source = Path(__file__).parent / "src/sim2act/_raw_snapshot.c"
 setup(
-    ext_modules=[
+    ext_modules=[]
+    if os.environ.get("SIM2ACT_BUILD_PYTHON_PREVIEW") == "1"
+    else [
         Extension(
             "sim2act._raw_snapshot",
             ["src/sim2act/_raw_snapshot.c"],
@@ -23,9 +26,18 @@ setup(
             "sim2act._cold_graph_structure",
             ["src/sim2act/_cold_graph_structure.c"],
             optional=True,
-            define_macros=[("SIM2ACT_GRAPH_SOURCE_SHA", '"' + hashlib.sha256(
-                Path(__file__).parent.joinpath("src/sim2act/_cold_graph_structure.c").read_bytes()
-            ).hexdigest() + '"')],
+            define_macros=[
+                (
+                    "SIM2ACT_GRAPH_SOURCE_SHA",
+                    '"'
+                    + hashlib.sha256(
+                        Path(__file__)
+                        .parent.joinpath("src/sim2act/_cold_graph_structure.c")
+                        .read_bytes()
+                    ).hexdigest()
+                    + '"',
+                )
+            ],
         ),
     ]
 )

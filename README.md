@@ -1,6 +1,6 @@
 # Sim2Act
 
-> **2026-10-27 预发布候选**：下载与免开发环境启动见[候选使用说明](docs/PreviewRelease.md)。本次仅为合成工程预览；该历史包的 G0 为 UNKNOWN、账户来源未接入、Windows 包未执行。本轮云端改进见 [2026-10-28 云端候选与失败证据](docs/evidence/cloud-core-20261028/README.md)。下文与历史文档保留各自阶段记录，以本次发布说明区分当前状态。
+> **2026-10-28 当前云端候选**：完整 Generate→Source→提取→新 Store Cold→保存结果已在真实时钟、合成 SQLite/7 次有限 Mock 下跑通；[原始结果与限制](docs/evidence/cloud-frontier-structure-20261028/README.md)。当前验证的是明确签署的 120 秒 settlement 协议，旧 30 秒协议、Windows、真实模型整链和自然语义尚未验收。既有免费 Intern Source/Cold 提取的独立实测见 [云端模型证据](docs/evidence/cloud-settlement-20261028/README.md)。历史包与历史阶段说明仍按原版本保留。
 
 让想法成为会行动的应用。当前接续开发分支 `dev/production-trial-stages-20261018`，F1 底座之上正推进有限 F2 工程；F1/F2/R0 整体验收尚未通过。
 

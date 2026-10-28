@@ -9,18 +9,18 @@
 ```sh
 python3.12 -m venv .venv
 .venv/bin/python -m pip install --no-deps --only-binary=:all: -r requirements.lock
-.venv/bin/python -m pip install --no-deps wheels/sim2act-0.1.0-py3-none-any.whl
+.venv/bin/python -m pip install --no-deps wheels/<candidate-manifest.json 中实际记录的 wheel 文件名>
 .venv/bin/python -m pip check
 .venv/bin/python scripts/local_candidate_demo.py prepare-pa --data-dir ./synthetic-demo
 .venv/bin/python scripts/local_candidate_demo.py verify --data-dir ./synthetic-demo
 .venv/bin/python scripts/local_candidate_demo.py serve --data-dir ./synthetic-demo --port 8000
 ```
 
-Windows 将 Python 路径改为 `.venv\Scripts\python.exe`，依赖文件用 `requirements-windows.lock`；本轮未执行 Windows。安装需要既有网络或预备好的本地 wheelhouse，候选不捆绑第三方依赖，不是完全离线安装包。演示本身只访问 loopback HTTP，模型响应固定为 `httpx.MockTransport`；不需要 Node、浏览器自动化或测试目录。
+Windows 使用 `.venv\Scripts\python.exe` 和 `requirements-windows.lock`，并必须使用独立的 Windows wheel（或明确的纯 Python 预览）；Linux 原生 wheel 不能仅改解释器路径后复用。本轮云端没有执行 Windows。安装需要既有网络或预备好的本地 wheelhouse，候选不捆绑第三方依赖，不是完全离线安装包。演示本身只访问 loopback HTTP，模型响应固定为 `httpx.MockTransport`；不需要 Node、浏览器自动化或测试目录。
 
 `prepare-pa` 只能写入不存在的新目录，现有目录会拒绝，不删除数据。明确调用一次后依次完成：CSV 数字列求和 30 → 内部 Release/实例/真实 AppRun；自然 P-A mock 生成与明确保存；在空实例以第一份新材料和已保存 Goal 经逐次 review/commit 运行得 v1，再在同一应用/Release/实例提交另一材料和 Goal 得 v2，保留首份 typed 行及 artifact。首次使用材料、Goal 和 recipe 固定为首包 0f 的合成案例，未先执行原材料 Run。共 3 条生成、2 条 P-A 运行固定 mock 响应，真实请求为 0。
 
-候选按正常 Worker 服务生命周期等实际终态，`Worker.once()` 的布尔值仅是进度，不代表完成。服务只调用既有 Worker/Store.claim，保持每 Run 原接受时钟及最多 300 秒预算、30 秒 lease 和普通 1 秒服务间隔；到绝对截止、出现失败/阻塞/未知状态或意外异常即停止。它不会重发提交、resume、清除 unknown 或修改 Run 状态。若原机制合法回收过期 owner 后重领，每次 claim/fence/WORKER_LOST/RECONCILED 都在回执中公开，不再限定只一次 claim，也不将它冒充旧 F9 的复现或修复。每个 `worker-service-<Run>.json` 保存原接受时钟与逐次服务状态，`worker-receipts.json` 保存真实 ledger。运行中仅观测已知合成 Run 的 metadata 标量，终态才执行完整 HTTP 结果读取。
+候选按正常 Worker 服务生命周期等实际终态，`Worker.once()` 的布尔值仅是进度，不代表完成。服务只调用既有 Worker/Store.claim，保持每 Run 原接受时钟及最多 300 秒预算、普通30秒lease（新P-B可显式签署一次有限120秒SQLite结算合同）和普通1秒服务间隔；到绝对截止、出现失败/阻塞/未知状态或意外异常即停止。它不会重发提交、resume、清除 unknown 或修改 Run 状态。若原机制合法回收过期 owner 后重领，每次 claim/fence/WORKER_LOST/RECONCILED 都在回执中公开，不再限定只一次 claim，也不将它冒充旧 F9 的复现或修复。每个 `worker-service-<Run>.json` 保存原接受时钟与逐次服务状态，`worker-receipts.json` 保存真实 ledger。运行中仅观测已知合成 Run 的 metadata 标量，终态才执行完整 HTTP 结果读取。
 
 每轮服务前后检查隔离库中没有其他 active Run，并核实际本 Worker 领取过的全部 Run ID；发现非目标任务立即停止并保留回执，不私改 claim 选择器或隐藏旁路工作。这个入口只用于自己全新创建的合成数据目录。
 
@@ -32,10 +32,9 @@ Windows 将 Python 路径改为 `.venv\Scripts\python.exe`，依赖文件用 `re
 
 ## 普通安装及真实模型边界
 
-普通使用继续遵循 [安装文档](Installation.md) 和既有 `Setup/Start/Status/Stop` 脚本，要求显式 PostgreSQL 应用角色配置及单独迁移角色；不会从本演示自动切换。默认配置没有批准模型消费，模板内 `LOCAL_PASSWORD` 是占位符。不要将公开演示身份用于真实项目。
+普通使用继续遵循 [安装文档](Installation.md) 和既有 `Setup/Start/Status/Stop` 脚本，要求显式 PostgreSQL 应用角色配置及单独迁移角色；不会从本演示自动切换。本包默认保持合成预览，模板内 `LOCAL_PASSWORD` 是占位符。不要将公开演示身份用于真实项目。
 
-真实自然 P-A/P-B 当前缺少可执行的专用 LIVE 批准门与跨 Run 总预算账本，状态为 `BLOCKED / NOT_IMPLEMENTED`，真实模型额度为 0。仅填 token 或打开通用 live 开关不能启用它。后续最低前提是：用户明确批准精确软件、模型、材料/Goal、各生成/运行范围和总次数/token/费用上限；实现并验证自然族的专用批准/总账门；私下配置受支持的 `intern-s2` 凭据、PostgreSQL 角色和受限预算，再重新申请有限实际运行。不能沿用其它 CSV/字面任务批准。本候选不配置、不调用、不扩展这些权限。
-
+2026-10-28 已接入固定免费 `intern-s2`／原 Intern endpoint 的可信账户来源与有限执行门；用户的零费用确认有效，不要求重新泛化授权。已有独立真实 Source/Cold 提取成功记录；最新完整控制链使用7个有限 Mock、真实SQLite事务并保存结果，见 [云端闭环证据](https://github.com/T1doo/Sim2Act/blob/cc0616519adabb21d89cdc7555ffbdb042152669/docs/evidence/cloud-frontier-structure-20261028/README.md)。这两组证据不能合并为真实模型全链。当前包仍明确为合成候选，不含token、不自动启用LIVE。正式外部执行仍需要实际 PostgreSQL应用角色配置、选定principal/project/trial及对应精确软件/材料/预算审批；缺少这些具体部署事实时不能拿合成身份替代，也不能再泛称免费模型未授权或接入未实现。
 已有通用传输还要求明确 `SIM2ACT_MODEL_MODE=live`、`SIM2ACT_LIVE_ENABLED=true`、`SIM2ACT_MODEL=intern-s2`、私下 token、quota subject/RPM；这些只是已有通用条件，不构成自然能力授权。单 Run 上限仍 4 requests / 4 tools / 1 repair / 64000 tokens / 1024 output / 300 秒，只可收紧。不要在包或报告中放入真实值。
 
 ## 验证范围
@@ -55,11 +54,16 @@ Windows 将 Python 路径改为 `.venv\Scripts\python.exe`，依赖文件用 `re
 ```sh
 python scripts/package_windows_portable.py \
   --inputs ./current-portable-inputs.json --assets /path/to/existing-frozen-assets \
-  --app-wheel ./dist/candidate-new/sim2act-0.1.0-py3-none-any.whl \
+  --app-wheel ./dist/candidate-new/<匹配 Windows 的实际 wheel 文件名> \
   --candidate-manifest ./dist/candidate-new/candidate-manifest.json \
   --output ./dist/new-preview.zip
 ```
 
-装配前核对完整提交、wheel 摘要、全部已打包 Python/网页/数据文件字节及文件集合，拒绝混入、遗漏和重复项；两份原本不随 wheel 分发的实验 C 源码仍不分发。新版清单摘要写入包内 manifest。候选清单须来自已核实的精确 Git 构建：这些校验只证明包与清单一致，不会把任意手写清单认证成可信源码。未传清单只允许原固定旧提交及旧 wheel，不能借旧 wheel 改标新版本。
+装配前核对完整提交、wheel 摘要、全部已打包 Python/网页/数据文件字节及文件集合，拒绝混入、遗漏和重复项；新profile包含全部受软件资格约束的C源码；两份实验C只作源码资源，不自动启用。原生输出按单独白名单与摘要核对，Windows拒绝Linux `.so` 或标签不符的wheel。新版清单摘要写入包内 manifest。候选清单须来自已核实的精确 Git 构建：这些校验只证明包与清单一致，不会把任意手写清单认证成可信源码。未传清单只允许原固定旧提交及旧 wheel，不能借旧 wheel 改标新版本。
 
 这一步只装配、不下载、不安装、不执行 Windows，也不授予正式软件、账户或模型资格。现有运行库仍是已标记 superseded 的 Python 3.12.10；只能保留其原隔离合成预览边界，不能据此称长期正式交付。实际 Windows 启动/退出、像素、真实账户、G0及人工语义仍须各自有效证据，装配状态始终为 `BUILT_NOT_WINDOWS_EXECUTED`。
+
+
+构建命令现在从同一干净Git提交包含 `setup.py`，仅使用已安装 `setuptools==82.0.1`，以 `--no-index --no-build-isolation --no-deps` 禁止隐式后端/依赖下载。默认原生候选必须实际含两份受支持扩展，缺少任一则拒绝成包；只做回退预览需显式 `--python-preview`。清单记录实际文件名、Tag、Root-Is-Purelib、构建平台及原生文件SHA；构建不等于运行验收，重建产生的新二进制仍需验证。本轮已验原生字节只属于云端Linux/CPython3.12，Windows需自行有界构建/测试已有工具，不下载新工具或改权限。
+
+完整云端通过仍余量很窄：两次Cold结算118.04/115.48秒，分别在120秒界限内；G0 41.39/43.64秒超过旧30秒。自然语义NOT_RUN、owner PENDING，正式发布关闭；不能将一次工程通过扩大为生产稳健性或跨平台验收。

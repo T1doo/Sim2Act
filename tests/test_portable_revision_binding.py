@@ -11,12 +11,18 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
-    "portable_revision_builder", ROOT / "scripts/package_windows_portable.py")
+    "portable_revision_builder", ROOT / "scripts/package_windows_portable.py"
+)
 builder = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(builder)
 COMMIT = "c" * 40
-META = {"sim2act-0.1.0.dist-info/" + name: b"synthetic packaging test metadata"
-        for name in ("METADATA", "RECORD", "WHEEL", "entry_points.txt", "top_level.txt")}
+META = {
+    "sim2act-0.1.0.dist-info/" + name: b"synthetic packaging test metadata"
+    for name in ("METADATA", "RECORD", "entry_points.txt", "top_level.txt")
+}
+META["sim2act-0.1.0.dist-info/WHEEL"] = (
+    b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
+)
 
 
 def record(data):
@@ -33,14 +39,21 @@ def archive(files):
 
 @pytest.fixture
 def candidate(tmp_path):
-    files = {"sim2act/__init__.py": b"", "sim2act/web/index.html": b"<p>synthetic</p>",
-             "sim2act/web/app.js": b"void 0;"}
+    files = {
+        "sim2act/__init__.py": b"",
+        "sim2act/web/index.html": b"<p>synthetic</p>",
+        "sim2act/web/app.js": b"void 0;",
+    }
     wheel = tmp_path / "sim2act-0.1.0-py3-none-any.whl"
     wheel.write_bytes(archive({**files, **META}))
     manifest = tmp_path / "candidate-manifest.json"
-    data = dict(format="sim2act-local-candidate.v1", source_commit=COMMIT,
-                mode="SYNTHETIC_MOCK_DEMO", python="3.12",
-                files={"src/" + name: record(value) for name, value in files.items()})
+    data = dict(
+        format="sim2act-local-candidate.v1",
+        source_commit=COMMIT,
+        mode="SYNTHETIC_MOCK_DEMO",
+        python="3.12",
+        files={"src/" + name: record(value) for name, value in files.items()},
+    )
     data["files"]["wheels/" + wheel.name] = record(wheel.read_bytes())
     manifest.write_text(json.dumps(data))
     return wheel, manifest, data, files
@@ -91,13 +104,24 @@ def test_full_local_assembly_binds_revision_and_preserves_existing_output(candid
     wheel, manifest, _, _ = candidate
     assets = tmp_path / "assets"
     assets.mkdir()
-    runtime = archive({"python.exe": b"not executable: synthetic fixture",
-                       "LICENSE.txt": b"synthetic license fixture"})
+    runtime = archive(
+        {
+            "python.exe": b"not executable: synthetic fixture",
+            "LICENSE.txt": b"synthetic license fixture",
+        }
+    )
     runtime_file = assets / "runtime.zip"
     runtime_file.write_bytes(runtime)
     inputs = tmp_path / "inputs.json"
-    inputs.write_text(json.dumps(dict(product_commit=COMMIT, wheels=[], python={
-        **record(runtime), "filename": runtime_file.name, "version": "3.12.10"})))
+    inputs.write_text(
+        json.dumps(
+            dict(
+                product_commit=COMMIT,
+                wheels=[],
+                python={**record(runtime), "filename": runtime_file.name, "version": "3.12.10"},
+            )
+        )
+    )
     output = tmp_path / "preview.zip"
     result = builder.build(inputs, assets, wheel, output, candidate_manifest=manifest)
     assert result["product_commit"] == COMMIT and result["windows_execution"] == "NOT_RUN"
@@ -119,6 +143,7 @@ def test_source_mismatch_leaves_no_output(candidate, tmp_path):
     inputs.write_text(json.dumps(dict(product_commit="d" * 40)))
     output = tmp_path / "not-created.zip"
     with pytest.raises(ValueError, match="source binding mismatch"):
-        builder.build(inputs, tmp_path / "missing-assets", wheel, output,
-                      candidate_manifest=manifest)
+        builder.build(
+            inputs, tmp_path / "missing-assets", wheel, output, candidate_manifest=manifest
+        )
     assert not output.exists()

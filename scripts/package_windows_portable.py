@@ -29,8 +29,13 @@ def merge_archive(files, data, prefix):
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         for member in archive.infolist():
             name = PurePosixPath(member.filename)
-            if (name.is_absolute() or ".." in name.parts or "\\" in member.filename
-                    or ":" in member.filename or (member.external_attr >> 16) & 0o170000 == 0o120000):
+            if (
+                name.is_absolute()
+                or ".." in name.parts
+                or "\\" in member.filename
+                or ":" in member.filename
+                or (member.external_attr >> 16) & 0o170000 == 0o120000
+            ):
                 raise ValueError("Unsafe archive entry")
             if member.is_dir():
                 continue
@@ -48,44 +53,65 @@ def checked_app(app_wheel, specification, candidate_manifest=None):
     """
     if candidate_manifest is None:
         data = app_wheel.read_bytes()
-        if (specification["product_commit"] != "7794748c78041682c82f0e7fda239d2601dc91b5"
-                or digest(data) != "29c344e4d5931a2b8c9a97fb1d1ae222356bbbd6a2b58a928f960fb443f0aad5"):
+        if (
+            specification["product_commit"] != "7794748c78041682c82f0e7fda239d2601dc91b5"
+            or digest(data) != "29c344e4d5931a2b8c9a97fb1d1ae222356bbbd6a2b58a928f960fb443f0aad5"
+        ):
             raise ValueError("Unreviewed app wheel; exact candidate manifest required")
         return data, None
     record_bytes = candidate_manifest.read_bytes()
     candidate = json.loads(record_bytes)
     commit = candidate.get("source_commit")
-    if (candidate.get("format") != "sim2act-local-candidate.v1"
-            or type(commit) is not str or re.fullmatch(r"[0-9a-f]{40}", commit) is None
-            or commit != specification["product_commit"]
-            or candidate.get("mode") != "SYNTHETIC_MOCK_DEMO"
-            or candidate.get("python") != "3.12"
-            or type(candidate.get("files")) is not dict):
+    if (
+        candidate.get("format") != "sim2act-local-candidate.v1"
+        or type(commit) is not str
+        or re.fullmatch(r"[0-9a-f]{40}", commit) is None
+        or commit != specification["product_commit"]
+        or candidate.get("mode") != "SYNTHETIC_MOCK_DEMO"
+        or candidate.get("python") != "3.12"
+        or type(candidate.get("files")) is not dict
+    ):
         raise ValueError("App candidate source binding mismatch")
     records = candidate["files"]
     wheel_record = records.get("wheels/" + app_wheel.name)
     if type(wheel_record) is not dict:
         raise ValueError("App candidate wheel record missing")
     data = read_asset(app_wheel, wheel_record)
-    # These are the only source files intentionally omitted by the existing
-    # pyproject package-data contract. Neither native experiment is enabled.
-    omitted = {"src/sim2act/_cold_row_native_impl.c",
-               "src/sim2act/_cold_typed_native_impl.c"}
-    source = {name[4:]: record for name, record in records.items()
-              if name.startswith("src/sim2act/") and name not in omitted}
-    metadata = {"sim2act-0.1.0.dist-info/" + name for name in
-                ("METADATA", "RECORD", "WHEEL", "entry_points.txt", "top_level.txt")}
-    import io
+    # A profile is byte assembly integrity, never production/Windows authority.
+    import importlib.util
 
-    with zipfile.ZipFile(io.BytesIO(data)) as wheel:
-        names = [item.filename for item in wheel.infolist() if not item.is_dir()]
-        if (not source or "sim2act/__init__.py" not in source
-                or len(names) != len(set(names)) or set(names) != set(source) | metadata):
-            raise ValueError("App wheel source inventory mismatch")
-        for name, record in source.items():
-            value = wheel.read(name)
-            if len(value) != record["bytes"] or digest(value) != record["sha256"]:
-                raise ValueError("App wheel source bytes mismatch: " + name)
+    helper = importlib.util.spec_from_file_location(
+        "candidate_wheel", Path(__file__).with_name("candidate_wheel.py")
+    )
+    wheel_tools = importlib.util.module_from_spec(helper)
+    helper.loader.exec_module(wheel_tools)
+    profile = wheel_tools.wheel_profile(app_wheel.name, data, target="windows")
+    kind = candidate.get("artifact_profile")
+    if kind is None:
+        # Historical pure preview manifests predate qualified C package-data.
+        omitted = {"src/sim2act/_cold_row_native_impl.c", "src/sim2act/_cold_typed_native_impl.c"}
+        if profile["native_artifacts"]:
+            raise ValueError("Historical manifest cannot qualify native artifacts")
+    elif kind in ("native-candidate.v1", "python-preview.v1"):
+        omitted = set()
+        if candidate.get("wheel_profile") != profile:
+            raise ValueError("Candidate native/wheel metadata mismatch")
+        if kind == "python-preview.v1" and (
+            profile["tags"] != ["py3-none-any"]
+            or not profile["root_is_purelib"]
+            or profile["native_artifacts"]
+        ):
+            raise ValueError("Python preview requires a pure py3-none-any wheel")
+        if kind == "native-candidate.v1" and len(profile["native_artifacts"]) != 2:
+            raise ValueError("Native candidate requires both compiled extensions")
+    else:
+        raise ValueError("Unknown candidate artifact profile")
+    source = {
+        name[4:]: value
+        for name, value in records.items()
+        if name.startswith("src/sim2act/") and name not in omitted
+    }
+    wheel_tools.verify_source(data, source, profile)
     return data, digest(record_bytes)
 
 
@@ -106,17 +132,35 @@ def build(inputs, assets, app_wheel, output, *, candidate_manifest=None):
     for wheel in specification["wheels"]:
         if wheel["name"].replace("_", "-") in ("psycopg", "psycopg-binary"):
             continue
-        merge_archive(files, read_asset(assets / "runtime-wheels" / wheel["filename"], wheel),
-                      "runtime/Lib/site-packages/")
-        selected.append({key: wheel[key] for key in ("name", "version", "url", "sha256",
-                                                    "license", "license_expression", "source_distribution_urls")})
+        merge_archive(
+            files,
+            read_asset(assets / "runtime-wheels" / wheel["filename"], wheel),
+            "runtime/Lib/site-packages/",
+        )
+        selected.append(
+            {
+                key: wheel[key]
+                for key in (
+                    "name",
+                    "version",
+                    "url",
+                    "sha256",
+                    "license",
+                    "license_expression",
+                    "source_distribution_urls",
+                )
+            }
+        )
     merge_archive(files, app, "runtime/Lib/site-packages/")
     files["runtime/python312._pth"] = b"python312.zip\n.\nLib\\site-packages\nimport site\n"
     files["runtime/LOCAL-CHANGES.txt"] = (
         b"Only python312._pth adds private Lib/site-packages. Binaries and packages are unchanged.\n"
-        b"This isolated synthetic SQLite preview omits PostgreSQL drivers.\n")
+        b"This isolated synthetic SQLite preview omits PostgreSQL drivers.\n"
+    )
     files["desktop.py"] = Path(__file__).with_name("portable_desktop.py").read_bytes()
-    files["使用说明.md"] = (Path(__file__).resolve().parents[1] / "docs/PreviewRelease.md").read_bytes()
+    files["使用说明.md"] = (
+        Path(__file__).resolve().parents[1] / "docs/PreviewRelease.md"
+    ).read_bytes()
     files["Start-Sim2Act.cmd"] = (
         '@echo off\r\nsetlocal\r\ncd /d "%~dp0"\r\n'
         'set "TEMP=%~dp0temp"\r\nset "TMP=%~dp0temp"\r\n'
@@ -124,8 +168,9 @@ def build(inputs, assets, app_wheel, output, *, candidate_manifest=None):
         'if not exist "%~dp0temp" mkdir "%~dp0temp"\r\n'
         '"%~dp0runtime\\python.exe" -I -B -X utf8 "%~dp0desktop.py"\r\n'
         'set "SIM2ACT_PREVIEW_EXIT=%ERRORLEVEL%"\r\n'
-        'echo.\r\necho Preview stopped. Close the test Chrome window before deleting this folder.\r\n'
-        'pause\r\nexit /b %SIM2ACT_PREVIEW_EXIT%\r\n').encode("ascii")
+        "echo.\r\necho Preview stopped. Close the test Chrome window before deleting this folder.\r\n"
+        "pause\r\nexit /b %SIM2ACT_PREVIEW_EXIT%\r\n"
+    ).encode("ascii")
     files["READ-ME-FIRST.txt"] = (
         "Sim2Act Windows x64 - OFFLINE SYNTHETIC PREVIEW\n\n"
         "Unzip to a new ordinary folder. Double-click Start-Sim2Act.cmd.\n"
@@ -146,13 +191,21 @@ def build(inputs, assets, app_wheel, output, *, candidate_manifest=None):
         "License notices remain in runtime/LICENSE.txt and package *.dist-info/licenses.\n"
         "See THIRD-PARTY-SOURCES.json for exact original archives and source links.\n"
     ).encode("utf-8")
-    files["THIRD-PARTY-SOURCES.json"] = (json.dumps(dict(python=runtime, wheels=selected), indent=2) + "\n").encode()
-    manifest = dict(format="sim2act-offline-windows-sqlite-preview.v1",
-                    product_commit=specification["product_commit"], python=runtime["version"],
-                    status="BUILT_NOT_WINDOWS_EXECUTED", installed_runtime_wheels=len(selected),
-                    omitted=["psycopg", "psycopg-binary"],
-                    app_wheel_sha256=digest(app),
-                    files={name: dict(bytes=len(data), sha256=digest(data)) for name, data in sorted(files.items())})
+    files["THIRD-PARTY-SOURCES.json"] = (
+        json.dumps(dict(python=runtime, wheels=selected), indent=2) + "\n"
+    ).encode()
+    manifest = dict(
+        format="sim2act-offline-windows-sqlite-preview.v1",
+        product_commit=specification["product_commit"],
+        python=runtime["version"],
+        status="BUILT_NOT_WINDOWS_EXECUTED",
+        installed_runtime_wheels=len(selected),
+        omitted=["psycopg", "psycopg-binary"],
+        app_wheel_sha256=digest(app),
+        files={
+            name: dict(bytes=len(data), sha256=digest(data)) for name, data in sorted(files.items())
+        },
+    )
     if candidate_digest is not None:
         manifest["app_candidate_manifest_sha256"] = candidate_digest
     manifest_bytes = (json.dumps(manifest, indent=2) + "\n").encode()
@@ -164,10 +217,16 @@ def build(inputs, assets, app_wheel, output, *, candidate_manifest=None):
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o100644 << 16
             archive.writestr(info, data)
-    return dict(archive=output.name, bytes=output.stat().st_size, sha256=digest(output.read_bytes()),
-                files=len(files), uncompressed_bytes=sum(map(len, files.values())),
-                manifest_sha256=digest(manifest_bytes), product_commit=specification["product_commit"],
-                windows_execution="NOT_RUN")
+    return dict(
+        archive=output.name,
+        bytes=output.stat().st_size,
+        sha256=digest(output.read_bytes()),
+        files=len(files),
+        uncompressed_bytes=sum(map(len, files.values())),
+        manifest_sha256=digest(manifest_bytes),
+        product_commit=specification["product_commit"],
+        windows_execution="NOT_RUN",
+    )
 
 
 if __name__ == "__main__":
@@ -175,9 +234,22 @@ if __name__ == "__main__":
     parser.add_argument("--inputs", type=Path, required=True)
     parser.add_argument("--assets", type=Path, required=True)
     parser.add_argument("--app-wheel", type=Path, required=True)
-    parser.add_argument("--candidate-manifest", type=Path,
-                        help="Exact package_local_candidate manifest for a new app revision")
+    parser.add_argument(
+        "--candidate-manifest",
+        type=Path,
+        help="Exact package_local_candidate manifest for a new app revision",
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    print(json.dumps(build(args.inputs, args.assets, args.app_wheel, args.output,
-                           candidate_manifest=args.candidate_manifest), indent=2))
+    print(
+        json.dumps(
+            build(
+                args.inputs,
+                args.assets,
+                args.app_wheel,
+                args.output,
+                candidate_manifest=args.candidate_manifest,
+            ),
+            indent=2,
+        )
+    )

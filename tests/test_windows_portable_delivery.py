@@ -171,7 +171,8 @@ def test_exact_assembled_archive_all_bytes_and_notices():
         assert any("certifi-" in name and "LICENSE" in name for name in names)
         assert any("pydantic_core/" in name and name.endswith(".pyd") for name in names)
         assert not any(name.endswith((".db", ".sqlite", ".env")) for name in names)
-        assert archive.read(prefix + "desktop.py") == (ROOT / "scripts/portable_desktop.py").read_bytes()
+        # This is the immutable historical archive, not today's launcher.
+        assert builder.digest(archive.read(prefix + "desktop.py")) == "45d6b799cc46398ce57818974731e4005f72492bd5c6514b20589127c969769a"
 
 def test_chrome_detection_uses_existing_program_files_only(tmp_path, monkeypatch):
     module = load("portable_desktop")
