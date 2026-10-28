@@ -77,7 +77,7 @@ def original_contract(store, user, pid, key):
         return contract
 
 
-def mount(app, store, identity):
+def mount(app, store, identity, settings=None):
     dependency = Depends(identity)
     base = "/api/projects/{pid}/natural-trials/{key}"
 
@@ -86,7 +86,7 @@ def mount(app, store, identity):
     @app.post(base + "/preparation")
     def prepare(pid: str, key: str, body: preparation.PrepareInput, user=dependency):
         gate.require(re.fullmatch(gate.KEY, key) is not None)
-        return preparation.prepare(store, user, pid, key, body)
+        return preparation.prepare(store, user, pid, key, body, settings=settings)
 
     @app.get(base + "/preparation")
     def prepared(pid: str, key: str, user=dependency):

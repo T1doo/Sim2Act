@@ -1,0 +1,2070 @@
+..ss................FFFFFFFFFFFFFFFFFFFFF                                [100%]
+=================================== FAILURES ===================================
+_____________ test_actual_page_preparation_consent_recovery[happy] _____________
+
+prepared_data = ((<sim2act.db.Store object at 0x7f77916eb650>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...4d8bf4df6fee0c', 'expected_version': 1}, {'card_id': 'goal_181ebcd126464bd19342d1ec21c3520f', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f77900fdd90>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c0')
+scenario = 'happy'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+_______ test_actual_page_preparation_consent_recovery[lost-preparation] ________
+
+prepared_data = ((<sim2act.db.Store object at 0x7f7790167c50>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...52f2fcdf53041c', 'expected_version': 1}, {'card_id': 'goal_c79538f635224e59a3bd475c1abc8202', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f778bd90e30>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c1')
+scenario = 'lost-preparation'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+_________ test_actual_page_preparation_consent_recovery[lost-consent] __________
+
+prepared_data = ((<sim2act.db.Store object at 0x7f778be938f0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...216d5e1c6ed92c', 'expected_version': 1}, {'card_id': 'goal_0880d092ead2439a87255706ea6c9b48', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f77891e1f40>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c2')
+scenario = 'lost-consent'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+________ test_actual_page_preparation_consent_recovery[lost-withdrawal] ________
+
+prepared_data = ((<sim2act.db.Store object at 0x7f7789595760>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...94546bb03f7f53', 'expected_version': 1}, {'card_id': 'goal_f9403b6c30aa4a1a88556a87a8454da8', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f778ba836e0>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c3')
+scenario = 'lost-withdrawal'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+_____________ test_actual_page_preparation_consent_recovery[cold] ______________
+
+prepared_data = ((<sim2act.db.Store object at 0x7f778b407260>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...c395e5109ab1b3', 'expected_version': 1}, {'card_id': 'goal_e697a1fac48f43e28d2acf70199aca26', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f778bd93d10>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c4')
+scenario = 'cold'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+________ test_actual_page_preparation_consent_recovery[late-navigation] ________
+
+prepared_data = ((<sim2act.db.Store object at 0x7f7788d847d0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...a4a3fd2b521df2', 'expected_version': 1}, {'card_id': 'goal_787761e86032480a9a4abbfc716ea839', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f778b3c8a70>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c5')
+scenario = 'late-navigation'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+_____________ test_actual_page_preparation_consent_recovery[goal] ______________
+
+prepared_data = ((<sim2act.db.Store object at 0x7f778b6df320>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...c97a4e734b8075', 'expected_version': 1}, {'card_id': 'goal_f10704f3422b49ecb3da6ca2f6a11f96', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f778a13e570>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c6')
+scenario = 'goal'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+__________ test_actual_page_preparation_consent_recovery[revoke-read] __________
+
+prepared_data = ((<sim2act.db.Store object at 0x7f778b370650>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...77b056224fe188', 'expected_version': 1}, {'card_id': 'goal_383244e0cbad41fdb0f6f0d96860b6c9', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f778befd130>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c7')
+scenario = 'revoke-read'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+____________ test_actual_page_preparation_consent_recovery[expiry] _____________
+
+prepared_data = ((<sim2act.db.Store object at 0x7f778a12f020>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...c5f27f7bb8788f', 'expected_version': 1}, {'card_id': 'goal_6efc4097d0874a7490156af99c3423c3', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f778a5b3d10>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c8')
+scenario = 'expiry'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+_______ test_actual_page_preparation_consent_recovery[after-read-revoke] _______
+
+prepared_data = ((<sim2act.db.Store object at 0x7f778a1e83e0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...18a3346fb9be53', 'expected_version': 1}, {'card_id': 'goal_e819513254e3464695dd0a74fa432cdb', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f77883b3fb0>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c9')
+scenario = 'after-read-revoke'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+__________ test_actual_page_preparation_consent_recovery[unknown400] ___________
+
+prepared_data = ((<sim2act.db.Store object at 0x7f77899e74a0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...b3ed2ffdccb0af', 'expected_version': 1}, {'card_id': 'goal_1a0b56c2145b4b76ab5d2f51606f0df2', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f778912e1e0>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c10')
+scenario = 'unknown400'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+___________ test_actual_page_preparation_consent_recovery[lost-cold] ___________
+
+prepared_data = ((<sim2act.db.Store object at 0x7f779160d190>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...a6a829c7b35566', 'expected_version': 1}, {'card_id': 'goal_9b02dc9ab4604485a24f6386f7f37e61', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7788313e60>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c11')
+scenario = 'lost-cold'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+_________ test_actual_page_preparation_consent_recovery[new-prepared] __________
+
+prepared_data = ((<sim2act.db.Store object at 0x7f77915ca9c0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...468f993aa17bc0', 'expected_version': 1}, {'card_id': 'goal_816dd23512ba41bcaf74538251d85a24', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f77911af6e0>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c12')
+scenario = 'new-prepared'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+__________ test_actual_page_preparation_consent_recovery[new-revoked] __________
+
+prepared_data = ((<sim2act.db.Store object at 0x7f778804b9b0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...34cec37b1bccb6', 'expected_version': 1}, {'card_id': 'goal_8f9b56b78b3c4814a6b9cde9bb0ef5a2', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7788d1f380>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c13')
+scenario = 'new-revoked'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+__________ test_actual_page_preparation_consent_recovery[new-history] __________
+
+prepared_data = ((<sim2act.db.Store object at 0x7f7788584c80>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...57cab9cd615715', 'expected_version': 1}, {'card_id': 'goal_50b6fa4e3fbc4478a83ecd8525e140c7', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f778a18ddc0>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c14')
+scenario = 'new-history'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+___________ test_actual_page_preparation_consent_recovery[new-late] ____________
+
+prepared_data = ((<sim2act.db.Store object at 0x7f778ba6f320>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...223c563a564ba4', 'expected_version': 1}, {'card_id': 'goal_a4101d6c328a4d47a24b9e39bf8667ea', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f77917be8a0>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c15')
+scenario = 'new-late'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+______ test_actual_page_preparation_consent_recovery[new-history-pending] ______
+
+prepared_data = ((<sim2act.db.Store object at 0x7f778be22a80>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...89d1a5d61d3295', 'expected_version': 1}, {'card_id': 'goal_34a02a3a71544af3a3a7f45601ec03d5', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f77885efbf0>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c16')
+scenario = 'new-history-pending'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+_______ test_actual_page_preparation_consent_recovery[manual-b-consent] ________
+
+prepared_data = ((<sim2act.db.Store object at 0x7f7791338f50>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...f3026f56a4bb3d', 'expected_version': 1}, {'card_id': 'goal_24802d2e4b8d496ea01b67a5ced0e9f5', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f778b300350>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c17')
+scenario = 'manual-b-consent'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+______ test_actual_page_preparation_consent_recovery[manual-b-withdrawal] ______
+
+prepared_data = ((<sim2act.db.Store object at 0x7f7788911610>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...5a65f09eae3b19', 'expected_version': 1}, {'card_id': 'goal_14d77715fffe47ab826bea389f1fe7d9', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f77883471d0>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c18')
+scenario = 'manual-b-withdrawal'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+________ test_actual_page_preparation_consent_recovery[goal-close-lost] ________
+
+prepared_data = ((<sim2act.db.Store object at 0x7f77916b5c70>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ac...90c7374a6466c6', 'expected_version': 1}, {'card_id': 'goal_f8374cf818414f5bba284fb5ed82f840', 'expected_version': 1}]})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f77881f9640>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_actual_page_preparation_c19')
+scenario = 'goal-close-lost'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+>           assert code == 0, errors
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/natural_trial_consent_ui.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs:2:152)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/natural_trial_consent_ui.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_natural_trial_consent_ui.py:79: AssertionError
+__________ test_original_trial_budget_is_visible_unknown_and_readonly __________
+
+env = (<sim2act.db.Store object at 0x7f778bd60050>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-60/test_ori...f8000bbe0744d9b1eb7afac5abb782', 'user_42fe85f5e00e41afa75f30d3e0e42eac', 'proj_85e58278e4f745dca49bd5504e5213c8', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f778b493fb0>
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-60/test_original_trial_budget_is_0')
+
+    def test_original_trial_budget_is_visible_unknown_and_readonly(env, monkeypatch, tmp_path):
+        root = Path.cwd()
+        production = {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in (root / "src/sim2act").rglob("*")
+            if p.is_file() and p.suffix in {".py", ".js", ".html", ".css", ".json"}}
+        data = setup(env)
+        store, settings, client, user, pid, *_ = data
+        assert store.sqlite and settings.mode == "mock" and not settings.live_enabled
+        fixture_http, provider_calls = [], []
+    
+        def capture(reply):
+            reply.read()
+            fixture_http.append(dict(method=reply.request.method,
+                path=reply.request.url.raw_path.decode(), body_text=reply.request.content.decode(),
+                status=reply.status_code, response_text=reply.content.decode(),
+                response_sha256=hashlib.sha256(reply.content).hexdigest()))
+    
+        def no_provider(*args, **kwargs):
+            provider_calls.append("BLOCKED_PROVIDER_CALL")
+            raise AssertionError("No provider HTTP is part of budget viewing")
+    
+        import httpx
+    
+        monkeypatch.setattr(httpx.HTTPTransport, "handle_request", no_provider)
+        monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", no_provider)
+        client.event_hooks["response"].append(capture)
+        try:
+            _, cold_card = material(client, pid, COLD)
+            with store.tx() as c:
+                project = store.own_project(c, user, pid)
+                store.add_grants(c, user, project["runtime_id"], pid, pid, ["artifact.save_text"])
+            body = dict(bindings=[dict(card_id=card["id"], expected_version=card["version"])
+                for card in (data[6], cold_card)])
+            receipts = {}
+            for key in ["empty-budget-view", "held-budget-view"]:
+                base = f"/api/projects/{pid}/natural-trials/{key}"
+                prepared = client.post(base + "/preparation", json=body)
+                assert prepared.status_code == 200, prepared.text
+                receipts[key] = prepared.json()
+                consent = client.post(base + "/consent", json=dict(
+                    review_token=prepared.json()["review_token"], confirm_exact_scope=True))
+                assert consent.status_code == 200 and consent.json()["live_allowed"] is False
+            contract = gate.parse_contract(receipts["held-budget-view"]["contract"])
+            approval_key = preparation.approval_key(contract)
+            made = client.post(f"/api/projects/{pid}/goal-cards/{data[6]['id']}/application-runs",
+                json=dict(expected_version=data[6]["version"], expected_fingerprint=data[6]["fingerprint"],
+                    request_key=contract.stage_keys.generate, family="natural_spec"))
+            assert made.status_code == 202, made.text
+            rid = made.json()["run_id"]
+            job = store.claim("budget-view-fixture-claim", 30)
+            assert job["id"] == rid and job["status"] == "RUNNING"
+            fee = gate.SyntheticOnlyFeeAuthority(fingerprint(contract.model_dump()), contract.quota_subject)
+            permits = []
+    
+            def admitted(store, c, principal, frozen, key, stage, run_id, version, fence):
+                permit = gate.admit(store, c, principal, frozen, key, stage, run_id, version, fence, fee)
+                assert permit.scope == "SYNTHETIC_ONLY" and permit.live_allowed is False
+                permits.append(permit.model_dump())
+                return permit
+    
+            scope = budget.scope_for(contract, approval_key)
+            wire = b"synthetic-ledger-only".ljust(100, b" ")
+            request = budget.Reservation(request_key="held-unknown", stage="generate", run_id=rid,
+                expected_version=job["version"], fence=job["fence"], wire_bytes=len(wire),
+                wire_sha256=hashlib.sha256(wire).hexdigest())
+            reserved = budget.reserve(store, user, scope, contract, request, admission=admitted)
+            result = budget.settle(store, user, scope, contract,
+                budget.Settlement(request_key=request.request_key, response_sha256="b" * 64,
+                    response_ascii_bytes=10, prompt_tokens=5, completion_tokens=None, total_tokens=None),
+                admission=admitted)
+            assert result["status"] == "RECONCILING" and result["total_tokens"] is None
+            assert result["ledger"]["halted"] and result["reserved_envelope"] == 1124
+            other = store.project(user, "Other budget-view project")
+            before = snapshot(store)
+            assert not before["attempts"] and not before["reservations"] and not before["internal_app_runs"]
+            with socket.socket() as sock:
+                sock.bind(("127.0.0.1", 0))
+                port = sock.getsockname()[1]
+            (tmp_path / "info.json").write_text(json.dumps(dict(base=f"http://127.0.0.1:{port}",
+                project=pid, other_project=other, trial=contract.trial_key, empty_trial="empty-budget-view",
+                approval_key=approval_key, contract_fingerprint=fingerprint(contract.model_dump()),
+                run=rid, held_requests=1, held_envelope=1124)), encoding="utf-8")
+            (tmp_path / "synthetic-ledger-fixture.json").write_text(json.dumps(dict(
+                classification="SYNTHETIC_ONLY_REAL_ADMISSION_AND_LEDGER_NO_PROVIDER_OR_WORKER",
+                permits=permits, request=request.model_dump(), reserved=reserved, settled=result,
+                consent_is_live_authority=False, valid_live_tokens_created=0, worker_once_calls=0), indent=2), encoding="utf-8")
+            server = uvicorn.Server(uvicorn.Config(create_app(store, settings), host="127.0.0.1",
+                port=port, log_level="error"))
+            thread = threading.Thread(target=server.run, daemon=True)
+            thread.start()
+            try:
+                until = time.monotonic() + 10
+                while not server.started:
+                    assert thread.is_alive() and time.monotonic() < until
+                    time.sleep(.01)
+                try:
+                    process = subprocess.run(["node", str(Path(__file__).with_name("natural_trial_budget_view_ui.cjs")),
+                        str(tmp_path)], capture_output=True, text=True, timeout=360,
+                        env={**os.environ, "NODE_PATH": str(root / "scripts/engineering-ci/node_modules")})
+                except subprocess.TimeoutExpired as error:
+                    for name, content in [("stdout", error.stdout), ("stderr", error.stderr)]:
+                        (tmp_path / ("driver." + name)).write_bytes(content.encode() if isinstance(content, str) else content or b"")
+                    raise
+                (tmp_path / "driver.stdout").write_text(process.stdout, encoding="utf-8")
+                (tmp_path / "driver.stderr").write_text(process.stderr, encoding="utf-8")
+>               assert process.returncode == 0, process.stdout + process.stderr
+E               AssertionError: node:internal/modules/cjs/loader:1520
+E                   throw err;
+E                   ^
+E                 
+E                 Error: Cannot find module 'jsdom'
+E                 Require stack:
+E                 - /workspace/Sim2Act/tests/natural_trial_budget_view_ui.cjs
+E                     at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                     at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                     at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                     at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                     at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                     at require (node:internal/modules/helpers:153:16)
+E                     at Object.<anonymous> (/workspace/Sim2Act/tests/natural_trial_budget_view_ui.cjs:11:17)
+E                     at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E                   code: 'MODULE_NOT_FOUND',
+E                   requireStack: [ '/workspace/Sim2Act/tests/natural_trial_budget_view_ui.cjs' ]
+E                 }
+E                 
+E                 Node.js v24.19.0
+E                 
+E               assert 1 == 0
+E                +  where 1 = CompletedProcess(args=['node', '/workspace/Sim2Act/tests/natural_trial_budget_view_ui.cjs', '/tmp/pytest-of-agent/pyte...NOT_FOUND',\n  requireStack: [ '/workspace/Sim2Act/tests/natural_trial_budget_view_ui.cjs' ]\n}\n\nNode.js v24.19.0\n").returncode
+
+tests/test_natural_trial_budget_view_ui.py:128: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[happy]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[lost-preparation]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[lost-consent]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[lost-withdrawal]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[cold]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[late-navigation]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[goal]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[revoke-read]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[expiry]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[after-read-revoke]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[unknown400]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[lost-cold]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[new-prepared]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[new-revoked]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[new-history]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[new-late]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[new-history-pending]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[manual-b-consent]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[manual-b-withdrawal]
+FAILED tests/test_natural_trial_consent_ui.py::test_actual_page_preparation_consent_recovery[goal-close-lost]
+FAILED tests/test_natural_trial_budget_view_ui.py::test_original_trial_budget_is_visible_unknown_and_readonly
+21 failed, 18 passed, 2 skipped, 1 warning in 34.99s

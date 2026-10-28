@@ -118,7 +118,7 @@ def test_original_trial_budget_is_visible_unknown_and_readonly(env, monkeypatch,
             try:
                 process = subprocess.run(["node", str(Path(__file__).with_name("natural_trial_budget_view_ui.cjs")),
                     str(tmp_path)], capture_output=True, text=True, timeout=360,
-                    env={**os.environ, "NODE_PATH": str(root / "scripts/engineering-ci/node_modules")})
+                    env={**os.environ, "NODE_PATH": os.environ.get("NODE_PATH", str(root / "scripts/engineering-ci/node_modules"))})
             except subprocess.TimeoutExpired as error:
                 for name, content in [("stdout", error.stdout), ("stderr", error.stderr)]:
                     (tmp_path / ("driver." + name)).write_bytes(content.encode() if isinstance(content, str) else content or b"")

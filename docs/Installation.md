@@ -8,6 +8,8 @@
 
 ## 1. 准备软件与拉取代码
 
+当前交付的正式连接与已有试运行接线见 [正式连接步骤](ProductionConnection.md)，包含跨平台显式配置、限时Doctor、固定账号quota与原选择导出；沿用已有身份与凭据。
+
 从 [Git](https://git-scm.com/downloads/win)、[Python](https://www.python.org/downloads/windows/)、[PowerShell](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows)、[PostgreSQL](https://www.postgresql.org/download/windows/) 的官方入口手动安装所需软件。Python 选择 **3.12 x64，并包含 `py` 启动器**；PowerShell 使用 7（命令 `pwsh`，Windows 自带的 `powershell` 不是本说明的启动环境）。数据库需本机服务和独立应用数据库；`psql` 不在 PATH 不代表数据库服务未安装。安装后重新打开终端，先检查：
 
 ```powershell
@@ -21,7 +23,7 @@ Python 必须显示 3.12，PowerShell 必须显示 7.x。没有 `py` 时先修�
 在 PowerShell 7 中进入你自己的可用目录（路径可以包含空格），再执行：
 
 ```powershell
-git clone --branch dev/f1-foundation https://github.com/T1doo/Sim2Act.git
+git clone --branch dev/cloud-g0-live-20261028 https://github.com/T1doo/Sim2Act.git
 Set-Location Sim2Act
 Copy-Item .env.example .env
 notepad .env

@@ -1004,7 +1004,7 @@ def create_app(store=None, settings=None):
     from .pa_spec_apps import mount as mount_spec_apps
     mount_spec_apps(app, db, platform_limits, identity)
     from .natural_trial_api import mount as mount_natural_trials
-    mount_natural_trials(app, db, identity)
+    mount_natural_trials(app, db, identity, s)
     from .pb_natural_specs import mount as mount_pb_natural_specs
     mount_pb_natural_specs(app, db, platform_limits, identity)
     from .pb_natural_uses import mount as mount_pb_natural_uses

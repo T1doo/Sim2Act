@@ -408,10 +408,37 @@ function trialValid(r, key) {
   if (c.namespace === "natural-live-trial.v2" && (!Number.isFinite(c.prepared_at) || c.review_expires_at !== c.prepared_at + 300 || c.execution_expires_at !== c.prepared_at + 3600 || c.expires_at !== c.execution_expires_at || c.stage_handoff_seconds !== 900 || typeof r.review_expired !== "boolean")) throw Error("未知期限合同");
   return r;
 }
+function trialWorkerSelection(receipt) {
+  const value=receipt?.worker_selection,c=receipt?.contract;
+  if(!receipt?.approved || receipt.revoked || receipt.expired || !c || Date.now()>=c.expires_at*1000 || !value) return null;
+  const fields=["account","approval","project","trial","user"];
+  if(Object.keys(value).sort().join(",")!==fields.join(",") || value.account!=="intern-ai-configured-account"
+    || value.user!==c.principal_id || value.project!==c.project_id || value.trial!==c.trial_key
+    || value.approval!==trialBudgetApproval(receipt)) return null;
+  return value;
+}
+async function exportTrialSelection() {
+  const ctx=trialContext(),entry=trialEntry();
+  if(!entry || entry.state!=="known" || !trialWorkerSelection(entry.receipt))return;
+  const operation=entry.operation;
+  const current=()=>trialCurrent(ctx) && entry===trialEntry() && entry.operation===operation;
+  let reply;
+  try{reply=await api(`${entry.base}/preparation`);}catch(error){if(current())throw error;return;}
+  if(!current())return;
+  const fresh=trialValid(reply,entry.key);
+  entry.receipt=fresh;showTrialScope(fresh);renderTrialConsent();
+  const selection=trialWorkerSelection(fresh);
+  if(!selection)throw Error("原批准已变化、过期或未配置固定账户；重新读取当前范围。");
+  const url=URL.createObjectURL(new Blob([JSON.stringify(selection,null,2)+"\n"],{type:"application/json;charset=utf-8"}));
+  try{const link=document.createElement("a");link.href=url;link.download="trial-selection.json";link.hidden=true;document.body.append(link);try{link.click();}finally{link.remove();}}
+  finally{URL.revokeObjectURL(url);}
+  entry.message="已导出原试运行选择，不含凭据。用同一配置先执行 Doctor，再明确启动；没有创建任务或外发请求。";renderTrialConsent();
+}
 function renderTrialConsent() {
   const entry = trialEntry(), r = entry?.receipt, busy = entry?.state === "sending", unknown = ["unknown", "unapproved"].includes(entry?.state);
   if(trialBudgetSelection && (trialBudgetSelection.entry!==entry || trialBudgetSelection.receipt!==r || trialBudgetSelection.operation!==entry?.operation))clearTrialBudget();
   $("trial-budget-read").disabled=busy || unknown || !trialBudgetApproval(r) || !!trialBudgetRead?.current();
+  $("trial-export-selection").disabled=busy || unknown || !trialWorkerSelection(r);
   const expired = r?.expired || r?.review_expired || (r?.contract && Date.now() >= trialReviewDeadline(r.contract) * 1000);
   $("trial-source").disabled = $("trial-cold").disabled = Boolean(entry);
   $("trial-prepare").disabled = !token || !$("project-select").value || Boolean(entry) || trialCards.length < 2;
@@ -501,7 +528,7 @@ function renderTrialBudget(value) {
   output.replaceChildren(row(`已保留 ${p.held_requests} / ${p.request_limit} 槽 · 保守预留 ${p.held_token_envelope} / ${p.token_envelope_limit}`),
     row(`账本状态 ${value.status} · 已停止 ${value.ledger.halted} · 未决用量 ${p.unresolved_usage_requests}`),
     row(`完整 total_tokens：${value.total_tokens===null?"未知":value.total_tokens} · 已返回 total_tokens 分量：${value.known_total_tokens} · 已知未接受 tokens：${p.known_unaccepted_tokens}`),
-    row("实际费用：UNKNOWN（币种未知）· 付费上限 0；免费权益与强制不可收费未核实，LIVE 继续拒绝。"),
+    row("实际费用：UNKNOWN（币种未知）· 付费上限 0；此预算视图未核实账户权益；实际执行由固定账户来源及原批准重新核验。"),
     row("成功、失败和未知槽均保留，不退款或因换 Run 重置。以下未预留容量仅为数学余量，不是发送许可；保守预留不是实际 tokenizer 用量或货币。"));
   const table=document.createElement("table"),head=document.createElement("thead"),titles=document.createElement("tr"),body=document.createElement("tbody");
   for(const text of ["阶段","原 Run","已保留槽","未预留槽容量（非许可）","保守预留","未预留 token 容量"]){const cell=document.createElement("th");cell.scope="col";cell.textContent=text;titles.append(cell);}
@@ -581,6 +608,13 @@ async function trialRead(ctx, entry, operation) {
   entry.message = entry.state === "closed" ? "旧准备已永久结束，无批准；可明确开始另一份准备。LIVE 关闭。" : entry.state === "unapproved" ? "原准备当前未批准；须明确永久结束并读取终结回执后，才能开始另一份准备。" : receipt.revoked ? "已恢复原键：批准已撤回，LIVE 关闭。" : receipt.approved ? "已恢复原键：精确批准已持久保存，LIVE 关闭。" : "准备已冻结，请阅读完整范围后明确确认。LIVE 关闭。";
   if (trialCurrent(ctx)) { $("trial-ack").checked = false; $("trial-withdraw-ack").checked = false; $("trial-end-ack").checked = false; showTrialScope(receipt); }
 }
+function trialConfigurationFailure(error) {
+  const prefix="SPEC production controller is disabled: ";
+  if(error.message!=="LIVE_BLOCKED" || typeof error.detail!=="string" || !error.detail.startsWith(prefix))return null;
+  const allowed=new Set(["validated_server_settings","postgresql_application_database","SIM2ACT_MODEL_MODE=live","SIM2ACT_LIVE_ENABLED=true","existing_Intern_token","SIM2ACT_APPLICATION_GENERATION_ACTIVATION_ENABLED=true","SIM2ACT_GOAL_PLANNER_PROVIDER=intern-s2","SIM2ACT_MODEL=intern-s2","existing_Intern_token_matches_server","SIM2ACT_QUOTA_SUBJECT=fixed_Intern_account","original_transport"]);
+  const fields=error.detail.slice(prefix.length).split(", ");
+  return fields.length && fields.every(field=>allowed.has(field)) ? fields.join("；") : null;
+}
 async function prepareTrial() {
   const ctx = trialContext(); if (!ctx.identity || !ctx.project || trialEntry()) return;
   const choices = [$("trial-source").value, $("trial-cold").value].map(id => trialCards.find(c => c.id === id));
@@ -597,7 +631,7 @@ async function prepareTrial() {
     if (!trialCurrent(ctx)) { entry.state = "unknown"; entry.message = "页面已切换；只读取原键恢复。"; return; }
     entry.receipt = trialValid(receipt, key); entry.state = "known"; entry.message = "准备已冻结，请阅读完整范围后明确确认。LIVE 关闭。";
     showTrialScope(entry.receipt);
-  } catch (error) { if (entry.operation !== operation) return; const rejected = error.message !== "OUTCOME_UNKNOWN" && Number.isInteger(error.httpStatus) && error.httpStatus >= 400 && error.httpStatus < 500 && ![408,425,429].includes(error.httpStatus); entry.state = rejected ? "rejected" : "unknown"; entry.receipt = null; entry.message = rejected ? `准备明确被拒绝：${error.message}。可修正目标或授权后明确开始另一份准备。` : `准备结果未确认：${error.message}。只读取原键恢复，不自动另建。`; }
+  } catch (error) { if (entry.operation !== operation) return; const rejected = error.message !== "OUTCOME_UNKNOWN" && Number.isInteger(error.httpStatus) && error.httpStatus >= 400 && error.httpStatus < 500 && ![408,425,429].includes(error.httpStatus); entry.state = rejected ? "rejected" : "unknown"; entry.receipt = null; const configuration=trialConfigurationFailure(error); entry.message = rejected ? configuration ? `准备未创建，服务器配置缺项：${configuration}。按正式连接说明修正已有配置后，明确新建准备；无需重新确认免费模型许可。` : `准备明确被拒绝：${error.message}。可修正目标或授权后明确开始另一份准备。` : `准备结果未确认：${error.message}。只读取原键恢复，不自动另建。`; }
   finally { if (trialCurrent(ctx)) renderTrialConsent(); }
 }
 async function recoverTrial() {
@@ -642,6 +676,7 @@ async function endTrialPreparation() {
   } catch (error) { if (entry.operation !== operation) return; entry.state = "unknown"; entry.message = `结束结果未确认：${error.message}。只读取原键恢复，不重发。`; }
   finally { if (trialCurrent(ctx)) { $("trial-end-ack").checked = false; renderTrialConsent(); } }
 }
+$("trial-export-selection").onclick = safe(exportTrialSelection);
 $("trial-end").onclick = safe(endTrialPreparation);
 $("trial-end-ack").onchange = renderTrialConsent;
 $("trial-refresh").onclick = safe(refreshTrialCards);

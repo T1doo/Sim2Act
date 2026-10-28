@@ -1,4 +1,6 @@
-param([string] $Config = '.env')
+param([string] $Config = '.env', [string] $SpecSelection = '')
 . "$PSScriptRoot\Common.ps1"
 Import-Sim2ActConfig $Config
-Invoke-Sim2ActPython -Arguments @('scripts/manage.py', 'doctor')
+$arguments = @('scripts/manage.py', 'doctor')
+if ($SpecSelection) { $arguments += @('--spec-selection', $SpecSelection) }
+Invoke-Sim2ActPython -Arguments $arguments

@@ -81,6 +81,15 @@ async function boot(hash = "") {
     check(posts("/preparation") === 1, "lost response cold recovery never reposts preparation");
   }
   check(posts("/preparation") === 1, "one original preparation POST");
+  if(originalScenario === "live-config-blocked") {
+    const message=$("trial-status").textContent;
+    check(message.includes("postgresql_application_database") && message.includes("SIM2ACT_APPLICATION_GENERATION_ACTIVATION_ENABLED=true"),"actual server configuration detail reaches the visible status");
+    check(message.includes("无需重新确认免费模型许可") && !message.includes("修正目标或授权"),"configuration failure is not presented as missing model fee permission");
+    check($("trial-consent").disabled && $("trial-export-selection").disabled && !$("trial-new").disabled,"refused new preparation creates no approval or export and permits explicit corrected new intent");
+    check(posts("/consent")===0 && !requests.some(r=>r.method==="POST" && /\/runs|\/admission/.test(r.path)),"configuration diagnosis does not dispatch or request authorization");
+    fs.writeFileSync(info.output,JSON.stringify({status:"PASS",scenario:info.scenario,checks,requests,static_resource_loads:loads,loaded_source_sha256:hashes,boots},null,2));
+    dom.window.close();process.stdout.write(JSON.stringify({done:true})+"\n");process.exit(0);
+  }
   if (originalScenario === "unknown400") {
     check($("trial-new").disabled && $("trial-consent").disabled && $("trial-prepare").disabled, "actual API400 OUTCOME_UNKNOWN locks all new mutations");
     await click("trial-recover");
@@ -184,12 +193,35 @@ async function boot(hash = "") {
     check(posts("/consent") === 1, "exact consent posted once");
     check($("trial-status").textContent.includes("精确批准已持久保存"), "durable approval recovered through actual HTTP");
     check(!$("trial-ack").checked && $("trial-consent").disabled, "duplicate approval disabled after durable receipt");
+    if(originalScenario === "configured-selection") {
+      const blobs=[],downloads=[];
+      w.Blob=Blob;w.URL.createObjectURL=blob=>{blobs.push(blob);return "blob:synthetic-selection";};
+      w.URL.revokeObjectURL=()=>{};w.HTMLAnchorElement.prototype.click=function(){downloads.push(this.download);};
+      const button=$("trial-export-selection");button.closest("details").open=true;
+      check(!button.disabled,"only approved fixed-account scope enables selection export");
+      const before=requests.length;await click("trial-export-selection");
+      check(blobs.length===1 && downloads.join(",")==="trial-selection.json","actual export gesture creates one JSON attachment");
+      const selected=JSON.parse(await blobs[0].text());
+      assert.deepEqual(Object.keys(selected).sort(),["account","approval","project","trial","user"]);
+      check(selected.account==="intern-ai-configured-account" && selected.project===info.project && selected.trial===key,"export binds original project/trial and fixed account without credentials");
+      check(requests.slice(before).length===1 && requests[before].method==="GET" && requests[before].path.endsWith("/preparation"),"export freshly reauthorizes exact original scope by GET only");
+      w.eval("trialEntry().receipt.worker_selection.user='user_'+ '0'.repeat(32);renderTrialConsent()");
+      check(button.disabled,"identity mismatch disables export rather than creating a guessed selection");
+      await click("trial-recover");
+      const originalFetch=w.fetch;let releaseExport,heldExport=false;
+      w.fetch=async (...args)=>{const response=await originalFetch(...args);if(args[0].endsWith("/preparation")){heldExport=true;await new Promise(resolve=>releaseExport=resolve);}return response;};
+      const late=click("trial-export-selection");await wait(()=>heldExport);
+      await click(w.document.querySelector('[data-tab="resources"]'));releaseExport();await late;
+      check(blobs.length===1 && $("error").textContent==="","late export after view switch creates no attachment or error in another view");
+      w.fetch=originalFetch;await click(w.document.querySelector('[data-tab="projects"]'));await click("trial-recover");
+    }
     if (originalScenario === "after-read-revoke") { await rpc({command: "revoke-read"}); await click("trial-recover"); check($("trial-scope").textContent.includes("仅恢复同意元数据"), "revoked READ yields metadata only without cached TXT"); }
     if (originalScenario === "lost-withdrawal") fault = "withdrawal";
     tick("trial-withdraw-ack"); await click("trial-withdraw");
     if (originalScenario === "lost-withdrawal") { check($("trial-new").disabled, "lost withdrawal stays unknown"); await click("trial-recover"); }
     check(posts("/withdrawal") === 1, "withdrawal posted once");
     check($("trial-status").textContent.includes("已撤回") && $("trial-consent").disabled, "withdrawn approval cannot be reused");
+    if(originalScenario === "configured-selection")check($("trial-export-selection").disabled,"revoked approval cannot export a runnable selection");
     if (originalScenario === "new-revoked") await restartPreparation(key);
   }
   check(!requests.some(r => /\/application-runs|\/runs(?:$|\/)|\/admission|\/stage-approval/.test(r.path) && r.method === "POST"), "page never creates Run reserves slot or asks for LIVE admission");

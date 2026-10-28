@@ -1,4 +1,6 @@
-param([string] $Config = '.env', [int] $Port = 8000)
+param([string] $Config = '.env', [int] $Port = 8000, [string] $SpecSelection = '')
 . "$PSScriptRoot\Common.ps1"
 Import-Sim2ActConfig $Config
-Invoke-Sim2ActPython -Arguments @('scripts/manage.py', 'start', '--port', "$Port")
+$arguments = @('scripts/manage.py', 'start', '--port', "$Port")
+if ($SpecSelection) { $arguments += @('--spec-selection', $SpecSelection) }
+Invoke-Sim2ActPython -Arguments $arguments

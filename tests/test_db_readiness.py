@@ -290,7 +290,7 @@ def test_doctor_closed_json_exit_and_no_state_file_or_start(tmp_path, monkeypatc
     monkeypatch.setattr(
         config.Settings,
         "from_env",
-        lambda: SimpleNamespace(database_url="PRIVATE_DSN", data_dir=tmp_path, mode="mock"),
+        lambda: SimpleNamespace(database_url="postgresql+psycopg://fixture:PRIVATE_DSN@127.0.0.1/fixture", data_dir=tmp_path, mode="mock"),
     )
     monkeypatch.setattr(db, "Store", lambda _url: SimpleNamespace(engine=engine))
     monkeypatch.setattr(module.sys, "argv", ["manage.py", "doctor"])
@@ -376,7 +376,7 @@ def test_doctor_dispose_failure_is_safe_blocked_json(monkeypatch, capsys, tmp_pa
     monkeypatch.setattr(
         config.Settings,
         "from_env",
-        lambda: SimpleNamespace(database_url="PRIVATE_DSN", data_dir=tmp_path, mode="mock"),
+        lambda: SimpleNamespace(database_url="postgresql+psycopg://fixture:PRIVATE_DSN@127.0.0.1/fixture", data_dir=tmp_path, mode="mock"),
     )
     monkeypatch.setattr(db, "Store", lambda _url: SimpleNamespace(engine=engine))
     monkeypatch.setattr(module.sys, "argv", ["manage.py", "doctor"])

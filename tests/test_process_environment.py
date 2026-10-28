@@ -32,6 +32,11 @@ def test_actual_child_has_only_application_config_and_system_names(tmp_path, liv
         max_total_tokens=1000,
         max_output_tokens=100,
         run_seconds=60,
+        goal_planner_provider="intern-s2",
+        natural_activation_enabled=True,
+        natural_activation_live_id="nlactivation_"+"a"*32,
+        application_generation_activation_enabled=True,
+        application_generation_live_id="gaapproval_"+"b"*32,
     )
     source = {key: "SYNTHETIC private value" for key in FORBIDDEN}
     source.update({"HTTPS_PROXY": "http://synthetic-proxy.invalid:8080", "NO_PROXY": "localhost,127.0.0.1", "PATHEXT": ".COM;.EXE;.BAT;.CMD"})
@@ -53,6 +58,8 @@ s=Settings.from_env()
 assert s.quota_subject=='SYNTHETIC quota' and s.rpm==7
 assert (s.max_requests,s.max_tools,s.max_repairs,s.max_total_tokens,s.max_output_tokens,s.run_seconds)==(2,3,0,1000,100,60)
 assert bool(s.token)==s.live_enabled==(s.mode=='live')
+assert s.goal_planner_provider=='intern-s2' and s.natural_activation_enabled and s.natural_activation_live_id=='nlactivation_'+'a'*32
+assert s.application_generation_activation_enabled and s.application_generation_live_id=='gaapproval_'+'b'*32
 assert os.environ['HTTPS_PROXY']=='http://synthetic-proxy.invalid:8080' and os.environ['NO_PROXY']=='localhost,127.0.0.1'
 assert os.environ['PATHEXT']=='.COM;.EXE;.BAT;.CMD'
 print(json.dumps({'environment_names':sorted(os.environ),'configuration_valid':True}))

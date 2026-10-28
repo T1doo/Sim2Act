@@ -18,6 +18,29 @@ from .errors import DomainError
 VERSION = "spec-production-controller.v1"
 
 
+def configuration_issues(store, settings, transport=None):
+    """Fixed field names only; no credential, URL or authorization is returned."""
+    from .config import Settings
+    from .db import Store
+    from .production_trial_admission import canonical_quota_subject
+
+    if type(store) is not Store or type(settings) is not Settings:
+        return ["validated_server_settings"]
+    checks = {
+        "postgresql_application_database": not store.test_only and not store.sqlite,
+        "SIM2ACT_MODEL_MODE=live": settings.mode == "live",
+        "SIM2ACT_LIVE_ENABLED=true": settings.live_enabled is True,
+        "existing_Intern_token": bool(settings.token),
+        "SIM2ACT_APPLICATION_GENERATION_ACTIVATION_ENABLED=true": settings.application_generation_activation_enabled is True,
+        "SIM2ACT_GOAL_PLANNER_PROVIDER=intern-s2": settings.goal_planner_provider == "intern-s2",
+        "SIM2ACT_MODEL=intern-s2": settings.model == "intern-s2",
+        "existing_Intern_token_matches_server": secrets.compare_digest(settings.token, evidence.configured_token()),
+        "SIM2ACT_QUOTA_SUBJECT=fixed_Intern_account": settings.quota_subject == canonical_quota_subject(evidence.ACCOUNT_ID),
+        "original_transport": transport is None,
+    }
+    return [name for name, valid in checks.items() if not valid]
+
+
 @dataclass(frozen=True)
 class ProductionTrialBinding:
     contract: gate.TrialContract | gate.TrialContractV2 | gate.PBTrialContract
@@ -50,7 +73,8 @@ def environment(store, settings, transport):
         and settings.quota_subject == canonical_quota_subject(evidence.ACCOUNT_ID)
         and transport is None
     ):
-        raise DomainError("LIVE_BLOCKED", "SPEC production controller is disabled")
+        raise DomainError("LIVE_BLOCKED", "SPEC production controller is disabled: "
+                          + ", ".join(configuration_issues(store, settings, transport)))
 
 
 def source(store, c, binding):

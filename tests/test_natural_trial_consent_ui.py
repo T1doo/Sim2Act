@@ -16,11 +16,23 @@ from sim2act.natural_trial_preparation import PREPARE
 
 
 @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
-    "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost"])
+    "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked"])
 def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
     data, body = prepared_data
     store, _, client, _, pid = data[:5]
     before = business(store)
+    if scenario in {"configured-selection", "live-config-blocked"}:
+        # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+        from dataclasses import replace
+        from sim2act import natural_trial_preparation as preparation
+        from sim2act import spec_production
+        original_prepare = preparation.prepare
+        def fixed_server_branch(*args, settings=None, **kwargs):
+            with monkeypatch.context() as branch:
+                if scenario == "configured-selection":
+                    branch.setattr(spec_production, "environment", lambda *a: None)
+                return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+        monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
     cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
     if scenario == 'unknown400':
         seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
@@ -40,7 +52,7 @@ def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tm
         output=str(tmp_path / 'results.json'))))
     process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-        env={k: v for k, v in dict(os.environ, NODE_PATH='/workspace/node-tools/node_modules').items()
+        env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
              if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
     raw = []
     try:
@@ -78,7 +90,7 @@ def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tm
         (tmp_path / 'driver.log').write_text(errors)
         assert code == 0, errors
         proof = json.loads((tmp_path / 'results.json').read_text())
-        assert proof['status'] == 'PASS' and len(proof['checks']) >= (10 if scenario == 'unknown400' else 15)
+        assert proof['status'] == 'PASS' and len(proof['checks']) >= (10 if scenario in {'unknown400', 'live-config-blocked'} else 15)
         web = Path(__file__).parents[1] / 'src/sim2act/web'
         assert set(proof['loaded_source_sha256']) == {'index.html', 'app.css',
             *re.findall(r'<script src="/([^"]+)"', (web / 'index.html').read_text())}

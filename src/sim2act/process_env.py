@@ -54,6 +54,11 @@ def application_environment(
             "SIM2ACT_MODEL": settings.model,
             "SIM2ACT_QUOTA_SUBJECT": settings.quota_subject,
             "SIM2ACT_RPM": str(settings.rpm),
+            "SIM2ACT_GOAL_PLANNER_PROVIDER": settings.goal_planner_provider,
+            "SIM2ACT_NATURAL_ACTIVATION_ENABLED": str(settings.natural_activation_enabled).lower(),
+            "SIM2ACT_NATURAL_ACTIVATION_LIVE_ID": settings.natural_activation_live_id,
+            "SIM2ACT_APPLICATION_GENERATION_ACTIVATION_ENABLED": str(settings.application_generation_activation_enabled).lower(),
+            "SIM2ACT_APPLICATION_GENERATION_LIVE_ID": settings.application_generation_live_id,
         }
     )
     for name in (

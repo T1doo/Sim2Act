@@ -120,6 +120,16 @@ def _receipt(store, c, user, contract):
         receipt["revoked"] = bool(gate._keys(c, user, gate.entity(contract), gate.REVOKE))
     else:
         receipt["revoked"] = False
+    # Metadata for an explicit launcher choice, never dispatch permission.
+    # The launcher revalidates original approval, account and current grants.
+    from .production_evidence import ACCOUNT_ID
+    from .production_trial_admission import canonical_quota_subject
+
+    receipt["worker_selection"] = None
+    if (approved and not receipt["revoked"] and not receipt["expired"]
+            and contract.quota_subject == canonical_quota_subject(ACCOUNT_ID)):
+        receipt["worker_selection"] = dict(user=user, project=contract.project_id,
+            trial=contract.trial_key, approval=approval_key(contract), account=ACCOUNT_ID)
     return receipt
 
 
@@ -169,7 +179,7 @@ def end_preparation(store, user, pid, key, body: EndInput):
 
 
 @controlled
-def prepare(store, user, pid, key, body: PrepareInput):
+def prepare(store, user, pid, key, body: PrepareInput, *, settings=None):
     with store.tx() as c:
         project = store.lock_project(c, user, pid)
         eid = entity(user, pid, key)
@@ -210,11 +220,21 @@ def prepare(store, user, pid, key, body: PrepareInput):
                 goal_version=choice.expected_version, goal_fingerprint=saved["fingerprint"],
                 goal_snapshot=saved["snapshot"]))
             gate.require(material["format"] == "txt", "Only finite TXT is supported")
+        subject = "unconfigured:" + user
+        if settings is not None and settings.mode == "live":
+            # New server-authored scope only; never migrate/rebind an old key.
+            # This config check issues neither approval nor account evidence.
+            from .production_evidence import ACCOUNT_ID
+            from .production_trial_admission import canonical_quota_subject
+            from .spec_production import environment
+
+            environment(store, settings, None)
+            subject = canonical_quota_subject(ACCOUNT_ID)
         prepared_at = time.time()
         contract = gate.TrialContractV2(prepared_at=prepared_at,
             review_expires_at=prepared_at + 300, execution_expires_at=prepared_at + 3600,
             trial_key=key, project_id=pid, principal_id=user,
-            runtime_id=project["runtime_id"], quota_subject="unconfigured:" + user,
+            runtime_id=project["runtime_id"], quota_subject=subject,
             software_fingerprint=gate.implementation(),
             authorization_fingerprint=gate.authorization_fingerprint(c, user, pid,
                 project["runtime_id"], sources), bindings=bindings,
