@@ -1,0 +1,316 @@
+.....FFFFFF......                                                        [100%]
+=================================== FAILURES ===================================
+__________ test_bad_loaded_values_keep_original_rejection[extra_slot] __________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f02edf21fa0>, worker=<sim2act.worker.Worker object at 0x7f02edf43170>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f02ee33e630>
+change = 'extra_slot'
+
+    @pytest.mark.parametrize(
+        "change",
+        ["extra_slot", "duplicate_anchor", "wrong_anchor", "wrong_mode", "context", "repeated_ordinal"],
+    )
+    def test_bad_loaded_values_keep_original_rejection(local_origin, monkeypatch, change):
+        f = local_origin
+    
+        def altered(context, rows, raw, reserved):
+            aid = rows[0]["id"]
+            if change == "extra_slot":
+                raw["reservation:" + aid].append(dict(raw["reservation:" + aid][0]))
+            elif change == "duplicate_anchor":
+                raw["anchor:NS_RESERVED:" + aid].append(dict(raw["anchor:NS_RESERVED:" + aid][0]))
+            elif change == "wrong_anchor":
+                raw["anchor:NS_RESERVED:" + aid][0]["reserved_tokens"] += 1
+            elif change == "wrong_mode":
+                raw["mode"] = "MOCK"
+            elif change == "context":
+                context["repairs"] = 1
+            else:
+                rows[1]["parameters"]["natural_spec"]["ordinal"] = 0
+    
+        # Each rejection has its own graph, since failure invalidates the scope.
+        results = []
+        for legacy in (False, True):
+            with f.store.tx() as c, pb._source_reads(f.store, c):
+                with pytest.raises(DomainError) as caught:
+                    with scope(f, c) as guard:
+                        facts, _ = prepared(f, c, guard, count=2, change=altered)
+                        with monkeypatch.context() as patch:
+                            if legacy:
+                                patch.setattr(r, "_cold_counter_loaded", lambda *a: r._RAW_READ_MISS)
+                            r._counters(c, facts.job, f.origin[0], _facts=facts)
+                results.append(caught.value.public())
+            assert not guard.active
+>       assert results[0] == results[1]
+E       AssertionError: assert {'code': 'VER...n': True, ...} == {'code': 'VER...n': True, ...}
+E         
+E         Omitting 4 identical items, use -vv to show
+E         Differing items:
+E         {'message': 'Natural model evidence changed'} != {'message': 'Cold graph read inputs cannot be rebound'}
+E         Use -v to get more diff
+
+tests/test_counter_loaded_segment.py:250: AssertionError
+_______ test_bad_loaded_values_keep_original_rejection[duplicate_anchor] _______
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f02edb7c890>, worker=<sim2act.worker.Worker object at 0x7f02ef9dc380>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f02efe67e00>
+change = 'duplicate_anchor'
+
+    @pytest.mark.parametrize(
+        "change",
+        ["extra_slot", "duplicate_anchor", "wrong_anchor", "wrong_mode", "context", "repeated_ordinal"],
+    )
+    def test_bad_loaded_values_keep_original_rejection(local_origin, monkeypatch, change):
+        f = local_origin
+    
+        def altered(context, rows, raw, reserved):
+            aid = rows[0]["id"]
+            if change == "extra_slot":
+                raw["reservation:" + aid].append(dict(raw["reservation:" + aid][0]))
+            elif change == "duplicate_anchor":
+                raw["anchor:NS_RESERVED:" + aid].append(dict(raw["anchor:NS_RESERVED:" + aid][0]))
+            elif change == "wrong_anchor":
+                raw["anchor:NS_RESERVED:" + aid][0]["reserved_tokens"] += 1
+            elif change == "wrong_mode":
+                raw["mode"] = "MOCK"
+            elif change == "context":
+                context["repairs"] = 1
+            else:
+                rows[1]["parameters"]["natural_spec"]["ordinal"] = 0
+    
+        # Each rejection has its own graph, since failure invalidates the scope.
+        results = []
+        for legacy in (False, True):
+            with f.store.tx() as c, pb._source_reads(f.store, c):
+                with pytest.raises(DomainError) as caught:
+                    with scope(f, c) as guard:
+                        facts, _ = prepared(f, c, guard, count=2, change=altered)
+                        with monkeypatch.context() as patch:
+                            if legacy:
+                                patch.setattr(r, "_cold_counter_loaded", lambda *a: r._RAW_READ_MISS)
+                            r._counters(c, facts.job, f.origin[0], _facts=facts)
+                results.append(caught.value.public())
+            assert not guard.active
+>       assert results[0] == results[1]
+E       AssertionError: assert {'code': 'VER...n': True, ...} == {'code': 'VER...n': True, ...}
+E         
+E         Omitting 4 identical items, use -vv to show
+E         Differing items:
+E         {'message': 'Missing/duplicate natural model anchor'} != {'message': 'Cold graph read inputs cannot be rebound'}
+E         Use -v to get more diff
+
+tests/test_counter_loaded_segment.py:250: AssertionError
+_________ test_bad_loaded_values_keep_original_rejection[wrong_anchor] _________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f02ef90cb30>, worker=<sim2act.worker.Worker object at 0x7f02edc44380>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f02ef90ca10>
+change = 'wrong_anchor'
+
+    @pytest.mark.parametrize(
+        "change",
+        ["extra_slot", "duplicate_anchor", "wrong_anchor", "wrong_mode", "context", "repeated_ordinal"],
+    )
+    def test_bad_loaded_values_keep_original_rejection(local_origin, monkeypatch, change):
+        f = local_origin
+    
+        def altered(context, rows, raw, reserved):
+            aid = rows[0]["id"]
+            if change == "extra_slot":
+                raw["reservation:" + aid].append(dict(raw["reservation:" + aid][0]))
+            elif change == "duplicate_anchor":
+                raw["anchor:NS_RESERVED:" + aid].append(dict(raw["anchor:NS_RESERVED:" + aid][0]))
+            elif change == "wrong_anchor":
+                raw["anchor:NS_RESERVED:" + aid][0]["reserved_tokens"] += 1
+            elif change == "wrong_mode":
+                raw["mode"] = "MOCK"
+            elif change == "context":
+                context["repairs"] = 1
+            else:
+                rows[1]["parameters"]["natural_spec"]["ordinal"] = 0
+    
+        # Each rejection has its own graph, since failure invalidates the scope.
+        results = []
+        for legacy in (False, True):
+            with f.store.tx() as c, pb._source_reads(f.store, c):
+                with pytest.raises(DomainError) as caught:
+                    with scope(f, c) as guard:
+                        facts, _ = prepared(f, c, guard, count=2, change=altered)
+                        with monkeypatch.context() as patch:
+                            if legacy:
+                                patch.setattr(r, "_cold_counter_loaded", lambda *a: r._RAW_READ_MISS)
+                            r._counters(c, facts.job, f.origin[0], _facts=facts)
+                results.append(caught.value.public())
+            assert not guard.active
+>       assert results[0] == results[1]
+E       AssertionError: assert {'code': 'VER...n': True, ...} == {'code': 'VER...n': True, ...}
+E         
+E         Omitting 4 identical items, use -vv to show
+E         Differing items:
+E         {'message': 'Natural model evidence changed'} != {'message': 'Cold graph read inputs cannot be rebound'}
+E         Use -v to get more diff
+
+tests/test_counter_loaded_segment.py:250: AssertionError
+__________ test_bad_loaded_values_keep_original_rejection[wrong_mode] __________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f02ee009190>, worker=<sim2act.worker.Worker object at 0x7f02ef7a88f0>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f02ee00a4b0>
+change = 'wrong_mode'
+
+    @pytest.mark.parametrize(
+        "change",
+        ["extra_slot", "duplicate_anchor", "wrong_anchor", "wrong_mode", "context", "repeated_ordinal"],
+    )
+    def test_bad_loaded_values_keep_original_rejection(local_origin, monkeypatch, change):
+        f = local_origin
+    
+        def altered(context, rows, raw, reserved):
+            aid = rows[0]["id"]
+            if change == "extra_slot":
+                raw["reservation:" + aid].append(dict(raw["reservation:" + aid][0]))
+            elif change == "duplicate_anchor":
+                raw["anchor:NS_RESERVED:" + aid].append(dict(raw["anchor:NS_RESERVED:" + aid][0]))
+            elif change == "wrong_anchor":
+                raw["anchor:NS_RESERVED:" + aid][0]["reserved_tokens"] += 1
+            elif change == "wrong_mode":
+                raw["mode"] = "MOCK"
+            elif change == "context":
+                context["repairs"] = 1
+            else:
+                rows[1]["parameters"]["natural_spec"]["ordinal"] = 0
+    
+        # Each rejection has its own graph, since failure invalidates the scope.
+        results = []
+        for legacy in (False, True):
+            with f.store.tx() as c, pb._source_reads(f.store, c):
+                with pytest.raises(DomainError) as caught:
+                    with scope(f, c) as guard:
+                        facts, _ = prepared(f, c, guard, count=2, change=altered)
+                        with monkeypatch.context() as patch:
+                            if legacy:
+                                patch.setattr(r, "_cold_counter_loaded", lambda *a: r._RAW_READ_MISS)
+                            r._counters(c, facts.job, f.origin[0], _facts=facts)
+                results.append(caught.value.public())
+            assert not guard.active
+>       assert results[0] == results[1]
+E       AssertionError: assert {'code': 'VER...n': True, ...} == {'code': 'VER...n': True, ...}
+E         
+E         Omitting 4 identical items, use -vv to show
+E         Differing items:
+E         {'message': 'Natural model evidence changed'} != {'message': 'Cold graph read inputs cannot be rebound'}
+E         Use -v to get more diff
+
+tests/test_counter_loaded_segment.py:250: AssertionError
+___________ test_bad_loaded_values_keep_original_rejection[context] ____________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f02ed816c30>, worker=<sim2act.worker.Worker object at 0x7f02edf317f0>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f02edbf76e0>
+change = 'context'
+
+    @pytest.mark.parametrize(
+        "change",
+        ["extra_slot", "duplicate_anchor", "wrong_anchor", "wrong_mode", "context", "repeated_ordinal"],
+    )
+    def test_bad_loaded_values_keep_original_rejection(local_origin, monkeypatch, change):
+        f = local_origin
+    
+        def altered(context, rows, raw, reserved):
+            aid = rows[0]["id"]
+            if change == "extra_slot":
+                raw["reservation:" + aid].append(dict(raw["reservation:" + aid][0]))
+            elif change == "duplicate_anchor":
+                raw["anchor:NS_RESERVED:" + aid].append(dict(raw["anchor:NS_RESERVED:" + aid][0]))
+            elif change == "wrong_anchor":
+                raw["anchor:NS_RESERVED:" + aid][0]["reserved_tokens"] += 1
+            elif change == "wrong_mode":
+                raw["mode"] = "MOCK"
+            elif change == "context":
+                context["repairs"] = 1
+            else:
+                rows[1]["parameters"]["natural_spec"]["ordinal"] = 0
+    
+        # Each rejection has its own graph, since failure invalidates the scope.
+        results = []
+        for legacy in (False, True):
+            with f.store.tx() as c, pb._source_reads(f.store, c):
+                with pytest.raises(DomainError) as caught:
+                    with scope(f, c) as guard:
+                        facts, _ = prepared(f, c, guard, count=2, change=altered)
+                        with monkeypatch.context() as patch:
+                            if legacy:
+                                patch.setattr(r, "_cold_counter_loaded", lambda *a: r._RAW_READ_MISS)
+                            r._counters(c, facts.job, f.origin[0], _facts=facts)
+                results.append(caught.value.public())
+            assert not guard.active
+>       assert results[0] == results[1]
+E       AssertionError: assert {'code': 'VER...n': True, ...} == {'code': 'VER...n': True, ...}
+E         
+E         Omitting 4 identical items, use -vv to show
+E         Differing items:
+E         {'message': 'Natural model evidence changed'} != {'message': 'Cold graph read inputs cannot be rebound'}
+E         Use -v to get more diff
+
+tests/test_counter_loaded_segment.py:250: AssertionError
+_______ test_bad_loaded_values_keep_original_rejection[repeated_ordinal] _______
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f02ef55a4b0>, worker=<sim2act.worker.Worker object at 0x7f02ef933d70>, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f02ef55a420>
+change = 'repeated_ordinal'
+
+    @pytest.mark.parametrize(
+        "change",
+        ["extra_slot", "duplicate_anchor", "wrong_anchor", "wrong_mode", "context", "repeated_ordinal"],
+    )
+    def test_bad_loaded_values_keep_original_rejection(local_origin, monkeypatch, change):
+        f = local_origin
+    
+        def altered(context, rows, raw, reserved):
+            aid = rows[0]["id"]
+            if change == "extra_slot":
+                raw["reservation:" + aid].append(dict(raw["reservation:" + aid][0]))
+            elif change == "duplicate_anchor":
+                raw["anchor:NS_RESERVED:" + aid].append(dict(raw["anchor:NS_RESERVED:" + aid][0]))
+            elif change == "wrong_anchor":
+                raw["anchor:NS_RESERVED:" + aid][0]["reserved_tokens"] += 1
+            elif change == "wrong_mode":
+                raw["mode"] = "MOCK"
+            elif change == "context":
+                context["repairs"] = 1
+            else:
+                rows[1]["parameters"]["natural_spec"]["ordinal"] = 0
+    
+        # Each rejection has its own graph, since failure invalidates the scope.
+        results = []
+        for legacy in (False, True):
+            with f.store.tx() as c, pb._source_reads(f.store, c):
+                with pytest.raises(DomainError) as caught:
+                    with scope(f, c) as guard:
+                        facts, _ = prepared(f, c, guard, count=2, change=altered)
+                        with monkeypatch.context() as patch:
+                            if legacy:
+                                patch.setattr(r, "_cold_counter_loaded", lambda *a: r._RAW_READ_MISS)
+                            r._counters(c, facts.job, f.origin[0], _facts=facts)
+                results.append(caught.value.public())
+            assert not guard.active
+>       assert results[0] == results[1]
+E       AssertionError: assert {'code': 'VER...n': True, ...} == {'code': 'VER...n': True, ...}
+E         
+E         Omitting 4 identical items, use -vv to show
+E         Differing items:
+E         {'message': 'Natural model evidence changed'} != {'message': 'Cold graph read inputs cannot be rebound'}
+E         Use -v to get more diff
+
+tests/test_counter_loaded_segment.py:250: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_counter_loaded_segment.py::test_bad_loaded_values_keep_original_rejection[extra_slot]
+FAILED tests/test_counter_loaded_segment.py::test_bad_loaded_values_keep_original_rejection[duplicate_anchor]
+FAILED tests/test_counter_loaded_segment.py::test_bad_loaded_values_keep_original_rejection[wrong_anchor]
+FAILED tests/test_counter_loaded_segment.py::test_bad_loaded_values_keep_original_rejection[wrong_mode]
+FAILED tests/test_counter_loaded_segment.py::test_bad_loaded_values_keep_original_rejection[context]
+FAILED tests/test_counter_loaded_segment.py::test_bad_loaded_values_keep_original_rejection[repeated_ordinal]
+6 failed, 11 passed, 1 warning in 9.21s
