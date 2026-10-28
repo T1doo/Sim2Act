@@ -68,4 +68,4 @@ python scripts/package_windows_portable.py \
 
 完整云端通过仍余量很窄：两次Cold结算118.04/115.48秒，分别在120秒界限内；G0 41.39/43.64秒超过旧30秒。自然语义NOT_RUN、owner PENDING，正式发布关闭；不能将一次工程通过扩大为生产稳健性或跨平台验收。
 
-2026-10-28 新冻结源码85835d37524c0644dfd682e9a58d02f1b9938cac的完整合成P-B控制链已在真实时钟SQLite上以7次Mock保存最终结果，两次事务94.05/114.18秒，完整G1 59.35/74.31秒；参见 [新完整证据](evidence/cloud-model-input-structure-20261028/README.md)。G0 owned公共链仍为显式实验候选；G1新路径每次完整比较当前输入并保留原canonical回退。新包身份和Windows宿主生命周期须单独验收，不能沿用旧6742包称新版本已运行；旧30秒、正式PG/live与语义/owner仍未通过。
+2026-10-28 新冻结源码72c523608004244d0be94df0ecaf4e4f7f0b00b5的完整合成P-B控制链已在真实时钟SQLite上以7次Mock保存最终结果，两次事务103.84/98.38秒，完整G1 67.32/62.07秒；参见 [新完整证据](evidence/cloud-raw-mapping-20261028/README.md)。G0 owned公共链仍为显式实验候选；G1新路径每次完整比较当前输入并保留原canonical回退。新包身份和Windows宿主生命周期须单独验收，不能沿用旧6742包称新版本已运行；旧30秒、正式PG/live与语义/owner仍未通过。
