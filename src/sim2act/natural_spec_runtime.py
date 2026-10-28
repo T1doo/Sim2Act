@@ -15,6 +15,7 @@ import time
 from collections.abc import Mapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
+from inspect import getattr_static as _counter_getattr_static
 from io import BytesIO as _ColdGraphBytesIO
 from pickle import Pickler as _ColdGraphPicklerBase
 from sqlite3 import Connection as SQLiteConnection
@@ -24,6 +25,7 @@ from types import BuiltinFunctionType as _ColdNativeFunctionType
 from typing import TYPE_CHECKING, Any, cast
 
 import httpx
+from pydantic_core import PydanticSerializationError
 from sqlalchemy import insert, literal, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.engine import RowMapping as _ColdGraphRowMapping
@@ -37,7 +39,7 @@ from . import _cold_typed_native_candidate as _typed_native_code
 from . import natural_live_admission as _row_native_code
 from . import natural_specs as codec
 from .config import Settings
-from .contracts import Limits, strict_json, validate_value
+from .contracts import AppManifest, Limits, strict_json, validate_value
 from .db import (
     Store,
     attempts,
@@ -62,6 +64,15 @@ from .model import (
 from .natural_request import VERSION as REQUEST_PROTOCOL
 from .natural_request import body, coordinates
 from .natural_request import protocol as request_protocol
+
+_COUNTER_EQUAL = _row_native_code._trial_typed_equal
+_COUNTER_SNAPSHOT = _policy_segments._snapshot
+_COUNTER_SERIALIZERS = _base_segments.fixed_serializers
+_COUNTER_KINDS = _base_segments._model_kinds
+_COUNTER_RAW_COPY = _row_native_code._RAW_COPY
+_COUNTER_RAW_EQUAL = _row_native_code._RAW_EQUAL
+_COUNTER_VALUE_CODE = tuple((function, function.__code__) for function in
+    (_COUNTER_EQUAL, _COUNTER_SNAPSHOT, _COUNTER_SERIALIZERS, _COUNTER_KINDS))
 
 if TYPE_CHECKING:
     from .app_jobs import _ColdBindingPrefix
@@ -478,6 +489,66 @@ class _ColdRunFacts:
             self._put(name, dict(manifest=manifest.model_dump(), limits=manifest.runtime_limits))
             self._manifests.append((manifest, name))
             return name
+        except BaseException:
+            _invalidate_cold_run_facts(self)
+            raise
+
+    def canonical_counter_manifest(self, manifest):
+        """Reuse only a complete equal typed value, never a counter verdict.
+
+        The original model_validate and complete checkpoint precede this call.
+        All original counter predicates/read helpers still execute afterward.
+        Avoid registering another equal model and growing every later pin.
+        """
+        try:
+            require(type(self) is _ColdRunFacts)
+            if type(manifest) is not AppManifest:
+                return manifest
+            if (_row_native_code._trial_typed_equal is not _COUNTER_EQUAL
+                    or _policy_segments._snapshot is not _COUNTER_SNAPSHOT
+                    or _base_segments.fixed_serializers is not _COUNTER_SERIALIZERS
+                    or _base_segments._model_kinds is not _COUNTER_KINDS
+                    or _row_native_code._RAW_COPY is not _COUNTER_RAW_COPY
+                    or _row_native_code._RAW_EQUAL is not _COUNTER_RAW_EQUAL
+                    or any(function.__code__ is not code
+                        for function, code in _COUNTER_VALUE_CODE)):
+                return manifest
+            missing = object()
+            for current, name in self._manifests:
+                if current is manifest:
+                    return manifest
+                saved = self._raw.get(name)
+                if type(current) is not AppManifest or type(saved) is not dict:
+                    return manifest
+                if set(saved) != {'manifest', 'limits'} or type(saved['manifest']) is not dict:
+                    return manifest
+                models = [(AppManifest, manifest, {}), (AppManifest, current, saved['manifest'])]
+                if not _COUNTER_SERIALIZERS(models):
+                    return manifest
+                kinds = _COUNTER_KINDS(models)
+                if kinds is None or any(
+                        _counter_getattr_static(kind, '__getattribute__') is not object.__getattribute__
+                        or _counter_getattr_static(kind, '__del__', None) is not None
+                        or any(_counter_getattr_static(kind, field_name, missing) is not missing
+                            for field_name in type.__getattribute__(kind, '__pydantic_fields__'))
+                        for kind in kinds):
+                    return manifest
+                owned = _COUNTER_SNAPSHOT((current, manifest, saved['manifest']))
+                if owned is _policy_segments._UNSUITABLE:
+                    return manifest
+                old, new, raw = owned
+                try:
+                    old_value = AppManifest.model_dump(old, warnings='error')
+                    new_value = AppManifest.model_dump(new, warnings='error')
+                except PydanticSerializationError:
+                    return manifest  # The unchanged original route owns warnings/errors.
+                if (_COUNTER_EQUAL(old_value, new_value)
+                        and _COUNTER_EQUAL(old_value, raw)):
+                    # Whole graph, original models, epoch, stop and clocks are
+                    # fresh again before selecting the existing typed object.
+                    self.check(self.store, self.connection, self.job)
+                    return current
+            return manifest
         except BaseException:
             _invalidate_cold_run_facts(self)
             raise
@@ -1292,6 +1363,8 @@ def _prove_node(store, c, job, binding, op, intent, action, *, _facts=None, _rec
 
     manifest = spec.AppManifest.model_validate(binding["draft"]["candidate"]["manifest"])
     _counter_checkpoint(c, job, _facts)
+    if _facts is not None:
+        manifest = _facts.canonical_counter_manifest(manifest)
     rows = (_counters(c, job, manifest, _facts=_facts) if _facts is not None
         else counters(c, job, manifest))
     selected = [a for a in rows if a["parameters"]["natural_spec"]["operation_id"] == op["id"]]
@@ -1446,6 +1519,8 @@ def _prove_pending(store, c, job, binding, op, intent, action, *, _facts=None, _
 
     manifest = AppManifest.model_validate(binding["draft"]["candidate"]["manifest"])
     _counter_checkpoint(c, job, _facts)
+    if _facts is not None:
+        manifest = _facts.canonical_counter_manifest(manifest)
     rows = (_counters(c, job, manifest, _facts=_facts) if _facts is not None
         else counters(c, job, manifest))
     chosen = [a for a in rows if a["parameters"]["natural_spec"]["operation_id"] == op["id"]]
