@@ -1314,6 +1314,12 @@ def _trial_typed_nested_classes():
 
 def _trial_pure_mapping(value):
     """Exact native mapping projection, before any key lookup or comparison."""
+    # The common exact-str dictionary already IS the required projection.
+    # Walk every current key, without allocating tuple(items) or walking it
+    # twice. Unknown require hooks retain the original callback/error order.
+    if (require is _RAW_REQUIRE_ORIGINAL and require.__code__ is _RAW_REQUIRE_CODE
+            and type(value) is dict and all(type(key) is str for key in value)):
+        return value
     from sqlalchemy.engine import RowMapping
     from sqlalchemy.sql.elements import quoted_name
 
@@ -1337,6 +1343,7 @@ def _trial_pure_mapping(value):
 
 _RAW_MAPPING_ORIGINAL = _trial_pure_mapping
 _RAW_REQUIRE_ORIGINAL = require
+_RAW_REQUIRE_CODE = require.__code__
 
 
 def _trial_pure_data(value):

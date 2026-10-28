@@ -115,7 +115,7 @@ _FIXTURE_CATALOG = {
         },
     ),
     "test_owned_g0_full_controller.py": (
-        "99d9b376dc189afb3d3b62680ae487b36f956f37a3ca38a5d5e3aa3be3b11459",
+        "34b8506e16fcb23227d7903202e52bc78f3611e4fa0c97bceb38b89f2848706a",
         {
             "test_owned_g0_full_original_controller.<locals>.measured_after": ("g1", "original_after", "save", "stages"),
             "test_owned_g0_full_original_controller.<locals>.save": ("candidates", "g1", "stages", "tmp_path"),

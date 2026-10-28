@@ -84,6 +84,9 @@ def test_owned_g0_full_original_controller(env, tmp_path, monkeypatch):
         monitor.use_tool_id(slot, "owned candidate G1 passive timing")
         targets = (
             (runtime._ColdTrialGraph.commit, "graph.commit"),
+            (runtime._ColdTrialGraph._base, "graph.base"),
+            (runtime._ColdTrialGraph._typed_parameter_models, "graph.typed_parameters"),
+            (runtime._ColdTrialGraph._typed_values_from_models, "graph.typed_values"),
             (runtime._cold_binding_limits_facet, "post_binding"),
             (spec._cold_receipts, "receipts"),
             (dispatch._graph_journal_chain, "journal_chain"),
