@@ -28,22 +28,27 @@ from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 from pydantic_core import PydanticSerializationError
+from sqlalchemy import Column as _RawSeedColumn
 from sqlalchemy import insert, literal, select, update
 from sqlalchemy.dialects.sqlite.pysqlite import SQLiteDialect_pysqlite as _RawDialect
 from sqlalchemy.engine import Connection
 from sqlalchemy.engine import RootTransaction as _RawRootTransaction
 from sqlalchemy.engine import RowMapping as _ColdGraphRowMapping
 from sqlalchemy.engine.cursor import CursorResultMetaData as _ColdGraphCursorMeta
+from sqlalchemy.engine.result import ResultMetaData as _RawRowMeta
+from sqlalchemy.engine.result import RMKeyView as _RawKeyView
 from sqlalchemy.engine.result import SimpleResultMetaData as _ColdGraphSimpleMeta
 from sqlalchemy.pool import QueuePool as _RawQueuePool
 from sqlalchemy.pool import SingletonThreadPool as _RawSingletonPool
 from sqlalchemy.pool.base import _ConnectionFairy as _RawFairy
 from sqlalchemy.pool.base import _ConnectionRecord as _RawRecord
+from sqlalchemy.sql.elements import _truncated_label as _RawSeedLabel
 from sqlalchemy.sql.elements import quoted_name as _ColdGraphQuotedName
 
 from . import _cold_base_segment as _base_segments
 from . import _cold_policy_segment as _policy_segments
 from . import _cold_typed_native_candidate as _typed_native_code
+from . import db as _raw_seed_db
 from . import model_settlement as _raw_read_settlement
 from . import natural_live_admission as _row_native_code
 from . import natural_specs as codec
@@ -364,6 +369,78 @@ def _cold_run_raw_seed(store, c, guard, audit_facts):
         raise
 
 
+def _cold_seed_fixed_rows(store, c, guard, audit):
+    """Locate exact already-read raw rows; do not perform Source verification."""
+    try:
+        from .db import runs
+        from .pb_natural_specs import _ColdSourceAuditFacts, _ColdSourceAuditPrefix
+
+        require(type(guard) is _ColdGraphRead and type(audit) is _ColdSourceAuditFacts,
+            "Exact Cold source audit raw facts required")
+        _ColdGraphRead._check_dynamic(guard, store, c)
+        prefix = audit.prefix
+        require(type(prefix) is _ColdSourceAuditPrefix
+            and prefix.guard is guard and prefix._origin_guard is guard,
+            "Cold source raw audit belongs to a different read scope")
+        require(prefix.user == guard.binding.contract.principal_id
+            and prefix.pid == guard.binding.contract.project_id
+            and prefix.key == f"pb-source-audit:{prefix.user}:{prefix.pid}:{prefix.rid}"
+            and audit.key == prefix.key + ":complete"
+            and guard.inputs[prefix.key] == _ColdSourceAuditPrefix.fields(prefix)
+            and guard.inputs[prefix.key + ":native"] is audit.original_audit_rows
+            and guard.inputs[audit.key] == _ColdSourceAuditFacts.fields(audit)
+            and guard.inputs[audit.key]["rows"] is audit.rows,
+            "Cold source raw audit pin changed")
+        _ColdGraphRead._check_dynamic(guard, store, c)
+        rows = audit.rows
+        require(type(rows) is dict and set(rows) == {
+            "scope", "seal", "original_audit", "original", "run", "contract", "binding",
+            "app_run", "typed", "release", "attempts", "operations", "intents", "effects",
+            "events", "reservations", "origin_marker", "origin_seals", "current_goal",
+            "current_goal_versions"}, "Complete original source audit rows required")
+        require(type(rows["run"]) is list and len(rows["run"]) == 1
+            and type(rows["run"][0]) is dict and set(rows["run"][0]) == set(runs.c.keys())
+            and rows["run"][0]["id"] == prefix.rid
+            and rows["run"][0]["principal_id"] == prefix.user
+            and rows["run"][0]["project_id"] == prefix.pid,
+            "Complete original source Run row required")
+        require(type(rows["attempts"]) is list and all(type(row) is dict
+            and set(row) == set(attempts.c.keys()) and row["run_id"] == prefix.rid
+            for row in rows["attempts"]), "Complete source Attempt raw rows required")
+        require(type(rows["operations"]) is list and all(type(row) is dict
+            and set(row) == set(operations.c.keys()) and row["run_id"] == prefix.rid
+            for row in rows["operations"]), "Complete source Operation raw rows required")
+        return rows
+    except BaseException:
+        if type(guard) is _ColdGraphRead:
+            _ColdGraphRead.invalidate(guard)
+        raise
+
+
+def _cold_seed_fixed_check(self, store, c, job, guard):
+    try:
+        require(type(self) is _ColdRunRawSeed, "Exact Cold Run raw seed required")
+        require(type(guard) is _ColdGraphRead and self.guard is self._origin_guard
+            and self.guard is guard and self.store is store and self.connection is c,
+            "Cold Run raw seed changed read scope")
+        rows = _cold_seed_fixed_rows(store, c, guard, self.audit)
+        require(self.key == "run-raw-seed:" + self.audit.key
+            and guard.inputs[self.key] == _ColdRunRawSeed.fields(self)
+            and guard.inputs[self.key]["job"] is self.job
+            and guard.inputs[self.key]["attempts"] is self.attempt_rows
+            and guard.inputs[self.key]["operations"] is self.operation_rows,
+            "Cold Run raw seed pin changed")
+        require(self.job == rows["run"][0] == dict(job)
+            and self.attempt_rows == rows["attempts"]
+            and self.operation_rows == rows["operations"],
+            "Cold Run raw seed changed complete Run or raw collections")
+        _cold_read_checkpoint(store, c, guard)
+    except BaseException:
+        _invalidate_cold_run_raw_seed(self)
+        if type(guard) is _ColdGraphRead:
+            _ColdGraphRead.invalidate(guard)
+        raise
+
 class _ColdRunFacts:
     """One exact Run's lazy raw reads in an existing Cold read epoch.
 
@@ -431,7 +508,12 @@ class _ColdRunFacts:
             if "raw-seed" in self._raw:
                 if type(raw_seed) is not _ColdRunRawSeed:
                     raise DomainError("VERSION_CONFLICT", "Exact attached Cold raw seed required")
-                _ColdRunRawSeed.check(raw_seed, store, c, job, self.guard)
+                # Entry complete pin above and seed's final complete pin remain.
+                # Only two internal fixed seed checkpoints can use dynamic reads.
+                if _raw_read_eligible(self, "attempts"):
+                    _cold_seed_fixed_check(raw_seed, store, c, job, self.guard)
+                else:
+                    _ColdRunRawSeed.check(raw_seed, store, c, job, self.guard)
                 require(self._raw["raw-seed"] == dict(key=raw_seed.key)
                     and self._raw["attempts"] is raw_seed.attempt_rows
                     and self._raw["receipt-operations"] is raw_seed.operation_rows,
@@ -2271,6 +2353,9 @@ _RAW_DYNAMIC_SPECS = (
     (_RawWorker, ('store', '_store', 's', 'id', 'pa_trial', 'stop', 'goal_planner_transport',
         '_journal_trial_store', '_journal_trial_binding', '_journal_trial_drift', '_settlement_interval')),
     (Store, ('engine', 'test_only', 'sqlite')),
+    (_ColdRunRawSeed, ('store', 'connection', 'guard', '_origin_guard', 'audit', 'key', 'job', 'attempt_rows', 'operation_rows')),
+    (_raw_read_pb._ColdSourceAuditFacts, ('prefix', 'key', 'original_audit_rows', 'rows', 'digest')),
+    (_raw_read_pb._ColdSourceAuditPrefix, ('guard', '_origin_guard', 'key', 'user', 'pid', 'rid', 'scope', 'seal', 'original', 'rows')),
     (Settings, ()),
     (Event, ('_flag',)),
     (_raw_read_pb._SourceReads, ('store', 'connection', 'transaction', 'driver', 'thread', 'epoch')),
@@ -2329,7 +2414,7 @@ def _raw_dynamic_eligible(facts, guard):
         return False
     interval = wd.get('_settlement_interval')
     if interval is not None and (type(interval) is not tuple or len(interval) != 2
-            or any(type(value) not in (int, float) for value in interval)):
+            or any(type(value) is not int and type(value) is not float for value in interval)):
         return False
     stop_values = object.__getattribute__(g['stop'], '__dict__')
     counts = g.get('_diagnostic_counts')
@@ -2358,7 +2443,7 @@ def _raw_dynamic_eligible(facts, guard):
             or type(record) is not _RawRecord):
         return False
     pool = object.__getattribute__(record, '_ConnectionRecord__pool')
-    if type(pool) not in (_RawQueuePool, _RawSingletonPool):
+    if type(pool) is not _RawQueuePool and type(pool) is not _RawSingletonPool:
         return False
     dialect = object.__getattribute__(pool, '__dict__').get('_dialect')
     if (type(dialect) is not _RawDialect
@@ -2388,6 +2473,204 @@ def _raw_dynamic_eligible(facts, guard):
     return True
 
 
+
+_RAW_SEED_FUNCTIONS = (
+    _ColdRunRawSeed.check, _ColdRunRawSeed.fields, _cold_seed_audit_rows,
+    _cold_seed_fixed_rows, _cold_seed_fixed_check,
+    _raw_read_pb._ColdSourceAuditPrefix.fields, _raw_read_pb._ColdSourceAuditFacts.fields,
+    _raw_read_pb._cold_model_dump, _raw_read_pb.require,
+)
+_RAW_SEED_CODE = tuple((fn, fn.__code__) for fn in _RAW_SEED_FUNCTIONS)
+_RAW_SEED_BINDINGS = (
+    (_ColdRunRawSeed, 'check', _ColdRunRawSeed.check),
+    (_ColdRunRawSeed, 'fields', _ColdRunRawSeed.fields),
+    (_raw_read_pb._ColdSourceAuditPrefix, 'fields', _raw_read_pb._ColdSourceAuditPrefix.fields),
+    (_raw_read_pb._ColdSourceAuditFacts, 'fields', _raw_read_pb._ColdSourceAuditFacts.fields),
+    (_raw_read_pb, '_cold_model_dump', _raw_read_pb._cold_model_dump),
+    (_raw_read_pb, 'require', _raw_read_pb.require),
+)
+_RAW_SEED_SCOPE = _policy_segments._PairRunScope
+_RAW_SEED_SCOPE_DUMP = _counter_getattr_static(_RAW_SEED_SCOPE, 'model_dump')
+_RAW_SEED_SCOPE_DUMP_CODE = _RAW_SEED_SCOPE_DUMP.__code__
+_RAW_SEED_SCHEMA = tuple((kind, _counter_getattr_static(kind, name, _RAW_READ_MISS), name)
+    for kind in (_RAW_SEED_SCOPE, _ColdGraphQuotedName, _RawSeedLabel)
+    for name in ('__getattribute__', '__getattr__', '__dict__', '__eq__', '__hash__',
+        '__pydantic_extra__', '__pydantic_private__', '__pydantic_fields_set__'))
+_RAW_SEED_TABLES = tuple((table, table.c, tuple(table.c._collection))
+    for table in (attempts.metadata.tables['runs'], attempts, operations))
+_RAW_SEED_METADATA = tuple((kind, name, _counter_getattr_static(kind, name, _RAW_READ_MISS))
+    for kind, names in ((type(_RAW_SEED_TABLES[0][0]), ('c', '__getattribute__')),
+        (type(_RAW_SEED_TABLES[0][1]), ('keys', '_collection', '__getattribute__')))
+    for name in names)
+_RAW_SEED_METADATA_CODE = tuple((fn, fn.__code__) for _, _, value in _RAW_SEED_METADATA
+    for fn in (getattr(value, 'fget', value),) if hasattr(fn, '__code__'))
+
+
+def _raw_seed_plain(values):
+    """Fresh no-hook eligibility walk, not equality or a remembered content pin."""
+    active, done = set(), set()
+    frames = [(None, iter((values,)))]
+    while frames:
+        try:
+            value = next(frames[-1][1])
+        except StopIteration:
+            identity, _ = frames.pop()
+            if identity is not None:
+                active.remove(identity)
+                done.add(identity)
+            continue
+        kind = type(value)
+        if (kind is str or kind is int or kind is float or kind is bool
+                or kind is bytes or kind is type(None) or kind is _ColdGraphQuotedName):
+            continue
+        identity = id(value)
+        if identity in active:
+            return False
+        if identity in done:
+            continue
+        if kind is dict:
+            if not all(type(key) is str or type(key) is _ColdGraphQuotedName for key in value):
+                return False
+            children = iter(dict.values(value))
+        elif kind is list or kind is tuple:
+            children = iter(value)
+        elif kind is _ColdGraphRowMapping:
+            # Original dict(RowMapping) has only these fixed C access paths.
+            if any(_counter_getattr_static(owner, attr) is not original
+                    for owner, attr, original in _RAW_SEED_ROW_METHODS):
+                return False
+            index = object.__getattribute__(value, '_key_to_index')
+            parent = object.__getattribute__(value, '_parent')
+            if (type(index) is not dict
+                    or not (type(parent) is _ColdGraphCursorMeta or type(parent) is _ColdGraphSimpleMeta)):
+                return False
+            keys = object.__getattribute__(parent, '_keys')
+            if type(keys) is not list or not all(type(key) is str or type(key) is _ColdGraphQuotedName for key in keys):
+                return False
+            visible_hashes = {str.__hash__(key) for key in keys}
+            for key in index:
+                key_kind = type(key)
+                if key_kind is str or key_kind is _ColdGraphQuotedName:
+                    continue
+                if (key_kind is _RawSeedLabel
+                        and _counter_getattr_static(_RawSeedLabel, '__hash__') is str.__hash__
+                        and _counter_getattr_static(_RawSeedLabel, '__eq__') is str.__eq__):
+                    continue
+                # Original dict(row) performs the C index.get(str) lookups.
+                # A colliding Column or any unknown key can dispatch __eq__.
+                if (key_kind is not _RawSeedColumn
+                        or _counter_getattr_static(_RawSeedColumn, '__hash__') is not object.__hash__
+                        or object.__hash__(key) in visible_hashes):
+                    return False
+            children = iter(_cold_graph_row_storage(value))
+        else:
+            return False
+        active.add(identity)
+        frames.append((identity, children))
+    return True
+
+
+_RAW_SEED_ROW_METHODS = tuple((kind, attr, _counter_getattr_static(kind, attr, _RAW_READ_MISS))
+    for kind, attrs in (
+        (_ColdGraphRowMapping, ('keys', '__iter__', '__getitem__')),
+        (_ColdGraphCursorMeta, ('keys',)), (_ColdGraphSimpleMeta, ('keys',)),
+        (_RawKeyView, ('__init__', '__iter__', '__len__', '__new__', '__getattribute__', '__setattr__', '_keys', '_parent')))
+    for attr in attrs)
+_RAW_SEED_ROW_CODE = tuple((fn, fn.__code__) for _, _, value in _RAW_SEED_ROW_METHODS
+    for fn in ((value.fget,) if isinstance(value, property) else (value,))
+    if hasattr(fn, '__code__'))
+_RAW_SEED_CONTRACT_SLOTS = tuple((name, _counter_getattr_static(_row_native_code.PBTrialContract, name, _RAW_READ_MISS))
+    for name in ('__getattribute__', '__getattr__', '__dict__', 'principal_id', 'project_id'))
+
+
+def _raw_seed_eligible(facts, guard):
+    raw = object.__getattribute__(facts, '__dict__')
+    seed = raw.get('_raw_seed')
+    if seed is None:
+        return 'raw-seed' not in raw['_raw']
+    if (type(seed) is not _ColdRunRawSeed
+            or any(_counter_getattr_static(owner, name) is not fn
+                for owner, name, fn in _RAW_SEED_BINDINGS)
+            or any(fn.__code__ is not code for fn, code in _RAW_SEED_CODE)
+            or globals().get('_cold_seed_audit_rows') is not _RAW_SEED_FUNCTIONS[2]
+            or any(_counter_getattr_static(kind, name, _RAW_READ_MISS) is not original
+                for kind, original, name in _RAW_SEED_SCHEMA)
+            or any(_counter_getattr_static(kind, name, _RAW_READ_MISS) is not original
+                for kind, name, original in _RAW_SEED_METADATA)
+            or any(fn.__code__ is not code for fn, code in _RAW_SEED_METADATA_CODE)
+            or _raw_seed_db.runs is not _RAW_SEED_TABLES[0][0]
+            or attempts is not _RAW_SEED_TABLES[1][0] or operations is not _RAW_SEED_TABLES[2][0]
+            or _cold_seed_fixed_rows is not _RAW_SEED_FUNCTIONS[3]
+            or _cold_seed_fixed_check is not _RAW_SEED_FUNCTIONS[4]
+            or any(_counter_getattr_static(owner, name, _RAW_READ_MISS) is not original
+                for owner, name, original in _RAW_SEED_ROW_METHODS)
+            or any(fn.__code__ is not code for fn, code in _RAW_SEED_ROW_CODE)
+            or _RawRowMeta.keys.fget.__globals__.get('RMKeyView') is not _RawKeyView
+            or _RAW_SEED_SCOPE_DUMP.__code__ is not _RAW_SEED_SCOPE_DUMP_CODE
+            or any(_counter_getattr_static(_row_native_code.PBTrialContract, name, _RAW_READ_MISS) is not original
+                for name, original in _RAW_SEED_CONTRACT_SLOTS)):
+        return False
+    for table, columns, original in _RAW_SEED_TABLES:
+        if object.__getattribute__(table, '__dict__').get('c') is not columns:
+            return False
+        collection = object.__getattribute__(columns, '_collection')
+        if (type(collection) is not list or len(collection) != len(original)
+                or any(type(row) is not tuple or len(row) != len(old)
+                    or any(value is not prior for value, prior in zip(row, old, strict=True))
+                    for row, old in zip(collection, original, strict=True))):
+            return False
+    sd = object.__getattribute__(seed, '__dict__')
+    audit = sd.get('audit')
+    if type(audit) is not _raw_read_pb._ColdSourceAuditFacts:
+        return False
+    ad = object.__getattribute__(audit, '__dict__')
+    prefix = ad.get('prefix')
+    if type(prefix) is not _raw_read_pb._ColdSourceAuditPrefix:
+        return False
+    if _counter_getattr_static(prefix, 'fields') is not _RAW_SEED_BINDINGS[2][2]:
+        return False
+    pd = object.__getattribute__(prefix, '__dict__')
+    scope = pd.get('scope')
+    if (type(scope) is not _RAW_SEED_SCOPE
+            or not _policy_segments._fixed_schema(_RAW_SEED_SCOPE)
+            or _counter_getattr_static(_RAW_SEED_SCOPE, 'model_dump') is not _RAW_SEED_SCOPE_DUMP
+            or _counter_getattr_static(scope, 'model_dump') is not _RAW_SEED_SCOPE_DUMP):
+        return False
+    scope_values = object.__getattribute__(scope, '__dict__')
+    fields = type.__getattribute__(_RAW_SEED_SCOPE, '__pydantic_fields__')
+    if (type(scope_values) is not dict or type(fields) is not dict
+            or not all(type(key) is str for key in fields)
+            or not all(type(key) is str for key in scope_values)
+            or scope_values.keys() != fields.keys()
+            or not all(type(key) is str and type(value) is str for key, value in scope_values.items())
+            or any(_counter_getattr_static(_RAW_SEED_SCOPE, key, _RAW_READ_MISS) is not _RAW_READ_MISS for key in fields)
+            or object.__getattribute__(scope, '__pydantic_extra__') is not None
+            or object.__getattribute__(scope, '__pydantic_private__') is not None
+            or type(object.__getattribute__(scope, '__pydantic_fields_set__')) is not set
+            or not all(type(key) is str for key in object.__getattribute__(scope, '__pydantic_fields_set__'))):
+        return False
+    if (any(type(d.get(key)) is not str for d, keys in (
+            (sd, ('key',)), (ad, ('key', 'digest')), (pd, ('key', 'user', 'pid', 'rid')))
+            for key in keys)
+            or not (type(pd.get('original')) is dict or type(pd.get('original')) is _ColdGraphRowMapping)):
+        return False
+    contract = object.__getattribute__(guard.binding, '__dict__').get('contract')
+    if type(contract) is not _row_native_code.PBTrialContract:
+        return False
+    contract_raw = object.__getattribute__(contract, '__dict__')
+    if any(type(contract_raw.get(key)) is not str for key in ('principal_id', 'project_id')):
+        return False
+    # Walk complete compared packets, including unused row positions and both
+    # stored sides. Never replace original Python == with a new equality rule.
+    values = [sd.get('job'), sd.get('attempt_rows'), sd.get('operation_rows'),
+        ad.get('original_audit_rows'), ad.get('rows'), pd.get('seal'), pd.get('original'), pd.get('rows')]
+    for key in (sd['key'], ad['key'], pd['key'], pd['key'] + ':native'):
+        if key not in guard.inputs:
+            return False
+        values.append(guard.inputs[key])
+    return _raw_seed_plain(values)
+
+
 def _raw_read_eligible(facts, name):
     """Qualification only; no SQL, permission result, serialization or hook."""
     if (type(facts) is not _ColdRunFacts or type(name) is not str
@@ -2395,7 +2678,7 @@ def _raw_read_eligible(facts, name):
         return False
     early = object.__getattribute__(facts, '__dict__')
     early_guard = early.get('guard')
-    if (early.get('_raw_seed') is not None or type(early_guard) is not _ColdGraphRead
+    if (type(early_guard) is not _ColdGraphRead
             or _counter_getattr_static(_ColdGraphRead, '__dict__') is not _RAW_READ_GRAPH_DICT):
         return False
     early_graph = object.__getattribute__(early_guard, '__dict__')
@@ -2445,7 +2728,7 @@ def _raw_read_eligible(facts, name):
     namespace = object.__getattribute__(facts, '__dict__')
     raw, guard = namespace.get('_raw'), namespace.get('guard')
     if (type(raw) is not dict or not all(type(key) is str for key in raw)
-            or name not in raw or 'raw-seed' in raw or namespace.get('_raw_seed') is not None
+            or name not in raw
             or type(guard) is not _ColdGraphRead or guard is not namespace.get('_origin_guard')
             or _counter_getattr_static(_ColdGraphRead, '__getattribute__') is not object.__getattribute__
             or any(_counter_getattr_static(_ColdGraphRead, field_name, missing) is not missing
@@ -2505,7 +2788,7 @@ def _raw_read_eligible(facts, name):
                 return False
     except DomainError:
         return False
-    return True
+    return _raw_seed_eligible(facts, guard)
 
 
 @dataclass(frozen=True)
