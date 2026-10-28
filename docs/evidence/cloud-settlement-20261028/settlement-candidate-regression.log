@@ -1,0 +1,27 @@
+............................F
+=================================== FAILURES ===================================
+____ test_missing_original_entitlement_still_blocks_pb_accounting[limits0] _____
+
+sql_facts = namespace(store=<sim2act.db.Store object at 0x7f95f9edbe00>, settings=Settings(database_url='sqlite:////workspace/scra...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=<sim2act.worker.Worker object at 0x7f95f9919f40>)
+limits = _Limits(resident=67108864, peak=268435456, work=10000000000, integer_bits=16000)
+
+    @pytest.mark.parametrize('limits', [LIMITS, NATIVE_LIMITS])
+    def test_missing_original_entitlement_still_blocks_pb_accounting(sql_facts, limits):
+        f = sql_facts
+>       with pytest.raises(DomainError, match='No reviewed production account evidence'), f.store.tx() as c:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'No reviewed production account evidence'
+E         Actual message: 'Trial quota subject does not identify the configured Intern account'
+
+tests/test_cold_accounted_native.py:240: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cold_accounted_native.py::test_missing_original_entitlement_still_blocks_pb_accounting[limits0]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 28 passed, 1 warning in 50.16s
