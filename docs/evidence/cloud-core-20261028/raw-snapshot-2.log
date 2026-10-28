@@ -1,0 +1,32 @@
+.....................F
+=================================== FAILURES ===================================
+______________ test_original_nonfinite_and_signed_zero_rules[nan] ______________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f1d9bad18b0>, worker=<sim2act.worker.Worker object at 0x7f1d9b5ede50>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+number = nan
+
+    @pytest.mark.parametrize('number', [float('nan'), float('inf'), -float('inf'), -0.0, 0.0])
+    def test_original_nonfinite_and_signed_zero_rules(local_origin, number):
+        model = manifest(local_origin)
+        model.input_schema = dict(number=number)
+        raw = model.model_dump()
+>       assert (same(model, raw) is None) is (number == number)
+                ^^^^^^^^^^^^^^^^
+
+tests/test_cold_typed_stream.py:126: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+model = AppManifest(schema_version='1.0-draft', app_id='app_11e5e6fd9469429182e7c8aa2ef7e953', revision=1, origin='goal', goal...2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300), data_schema_version=1)
+raw = {'schema_version': '1.0-draft', 'app_id': 'app_11e5e6fd9469429182e7c8aa2ef7e953', 'revision': 1, 'origin': 'goal', ...}
+
+    def same(model, raw):
+        old = outcome(lambda: reference(type(model), model, raw))
+        new = outcome(lambda: gate._trial_typed_values([(type(model), model, raw)]))
+>       assert new == old
+E       AssertionError: assert {'code': 'VERSION_CONFLICT', 'message': 'Typed trial storage changed after its complete raw proof', 'safe_retry': False, 'effect_known': True, ...} == None
+
+tests/test_cold_typed_stream.py:53: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_cold_typed_stream.py::test_original_nonfinite_and_signed_zero_rules[nan]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 21 passed, 1 warning in 9.46s

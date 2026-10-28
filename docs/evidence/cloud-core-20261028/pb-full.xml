@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="184.126" timestamp="2026-10-28T02:24:24.561318+00:00" hostname="484e8d4e0740"><testcase classname="tests.test_pb_spec_production_controller" name="test_pb_production_original_source_extraction_explicit_use_and_cold" time="183.517"><failure message="AssertionError: {&quot;namespace&quot;:&quot;INTERNAL_APPRUN&quot;,&quot;formal_publication_enabled&quot;:false,&quot;id&quot;:&quot;run_dd74885f24974940b6013097f37a951b&quot;,&quot;app_run_id&quot;:&quot;iapprun_96a3e13226b04db5a4713b8fd2ae6996&quot;,&quot;instance_id&quot;:&quot;iinstance_5b09b797259a70f6abc19ccac8ca45f4&quot;,&quot;release_id&quot;:&quot;irelease_f4a47b3ce9944a12955aec604c778363&quot;,&quot;status&quot;:&quot;FAILED&quot;,&quot;version&quot;:2,&quot;cancel_intent&quot;:false,&quot;result&quot;:null,&quot;result_version&quot;:null,&quot;error&quot;:{&quot;code&quot;:&quot;VERSION_CONFLICT&quot;,&quot;message&quot;:&quot;Trial software changed&quot;,&quot;safe_retry&quot;:false,&quot;effect_known&quot;:true,&quot;user...&#10;[+5 more lines; full report in element text]">env = (&lt;sim2act.db.Store object at 0x7fa79275c950&gt;, Settings(database_url='sqlite:////workspace/scratch/pb-core-20261028/tes...7cca8ed52a4af091ea8cfa19f9e528', 'user_1d7fab9f70ba41d392dcff233a357d6d', 'proj_ac457ac231ec45aa83a088140d1602fe', ...)
+tmp_path = PosixPath('/workspace/scratch/pb-core-20261028/test_pb_production_original_so0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fa79275d7f0&gt;
+
+    def test_pb_production_original_source_extraction_explicit_use_and_cold(env, tmp_path, monkeypatch):
+        data, binding, fixture, factory = configured(env, tmp_path, monkeypatch, prepare_case=prepare_pb)
+        generation, _, release, source_instance, generated = apps.ready(data, style="ordered")
+        assert len(generated) == 3
+        read_reports, before_sql = observe_reservation_reads(monkeypatch)
+        event.listen(data[0].engine, "before_cursor_execute", before_sql)
+        source_id = apps.enqueue(data, release, source_instance, key=binding.contract.stage_keys.source)
+        approve_stage(data, binding, "source", source_id)
+        source_bytes = []
+        normal = apps.transport([], apps.SOURCE)
+    
+        def source_response(request):
+            raw = normal.handle_request(request).json()
+            raw["archive_note"] = "合成原始正文；非真实模型"
+            payload = (json.dumps(raw, ensure_ascii=False, indent=2) + "\n").encode()
+            source_bytes.append((request.content, payload))
+            return httpx.Response(200, content=payload)
+    
+        assert factory(data[0], data[1], goal_planner_transport=httpx.MockTransport(source_response)).once()
+        source_result = apps.inspect(data, source_instance, source_id)
+&gt;       assert source_result.status_code == 200 and source_result.json()["status"] == "SUCCEEDED", source_result.text
+E       AssertionError: {"namespace":"INTERNAL_APPRUN","formal_publication_enabled":false,"id":"run_dd74885f24974940b6013097f37a951b","app_run_id":"iapprun_96a3e13226b04db5a4713b8fd2ae6996","instance_id":"iinstance_5b09b797259a70f6abc19ccac8ca45f4","release_id":"irelease_f4a47b3ce9944a12955aec604c778363","status":"FAILED","version":2,"cancel_intent":false,"result":null,"result_version":null,"error":{"code":"VERSION_CONFLICT","message":"Trial software changed","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"},"known_effects":[],"events":[{"id":"event_11b2adcb587340bca795f80d2fd83132","run_id":"run_dd74885f24974940b6013097f37a951b","created_at":1793154392.4221492,"kind":"ACCEPTED","data":{"namespace":"INTERNAL_APPRUN","app_run_id":"iapprun_96a3e13226b04db5a4713b8fd2ae6996","instance_id":"iinstance_5b09b797259a70f6abc19ccac8ca45f4","release_id":"irelease_f4a47b3ce9944a12955aec604c778363","input_fingerprint":"99d2be932f9dc4455985ea6a265c0788355b07edf12226f78ea1bef89996e7e5"}},{"id":"event_05e8047f13c74a29ac541e31bab5e33e","run_id":"run_dd74885f24974940b6013097f37a951b","created_at":1793154393.9029293,"kind":"CLAIMED","data":{"fence":1}},{"id":"event_54bb25af351840618521b44aa7032667","run_id":"run_dd74885f24974940b6013097f37a951b","created_at":1793154394.4039805,"kind":"SPEC_STEP_VERIFIED","data":{"step_id":"read_pick","operation_id":"op_2d8618a19c6944faaf868e108c0898a1","fence":1}},{"id":"event_481743599a4c4e8fb176904efe95ef63","run_id":"run_dd74885f24974940b6013097f37a951b","created_at":1793154447.8413727,"kind":"STATE","data":{"status":"FAILED","error":{"code":"VERSION_CONFLICT","message":"Trial software changed","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}}],"steps":[{"step_id":"read_pick","status":"VERIFIED","fingerprint":"1f0628370bdb8314c00ca61631ca35c87f9498dd63fa4d6fec7a07e08ea0d30e"}],"semantic_status":"UNKNOWN","owner_acceptance":"PENDING","citation_status":"NOT_RUN","semantic_goal_acceptance":"NOT_RUN","markdown_view":null}
+E       assert (200 == 200 and 'FAILED' == 'SUCCEEDED'
+E        +  where 200 = &lt;Response [200 OK]&gt;.status_code
+E         
+E         - SUCCEEDED
+E         + FAILED)
+
+tests/test_pb_spec_production_controller.py:294: AssertionError</failure></testcase></testsuite></testsuites>

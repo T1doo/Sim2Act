@@ -1,6 +1,6 @@
 # Sim2Act
 
-> **2026-10-27 预发布候选**：下载与免开发环境启动见[候选使用说明](docs/PreviewRelease.md)。本次仅为合成工程预览；该历史包的 G0 为 UNKNOWN、账户来源未接入、Windows 包未执行。本轮云端改进见 [2026-10-28 核心修复证据](docs/evidence/cloud-core-20261028/README.md)。下文与历史文档保留各自阶段记录，以本次发布说明区分当前状态。
+> **2026-10-27 预发布候选**：下载与免开发环境启动见[候选使用说明](docs/PreviewRelease.md)。本次仅为合成工程预览；该历史包的 G0 为 UNKNOWN、账户来源未接入、Windows 包未执行。本轮云端改进见 [2026-10-28 云端候选与失败证据](docs/evidence/cloud-core-20261028/README.md)。下文与历史文档保留各自阶段记录，以本次发布说明区分当前状态。
 
 让想法成为会行动的应用。当前接续开发分支 `dev/production-trial-stages-20261018`，F1 底座之上正推进有限 F2 工程；F1/F2/R0 整体验收尚未通过。
 
@@ -102,7 +102,7 @@ python3.12 -m venv .venv
 
 运行模型限定 `intern-s2`，固定官方非流式 Chat Completions 端点；开发辅助模型不会进入运行链。适配器使用 HTTP 请求，关闭隐藏重试，严格校验工具参数、结构和结束原因；所有请求共用数据库配额主体。账号被其他程序共用时仍可能遭上游限流。
 
-2026-10-28 云端已用既有 `INTERN_API_TOKEN` 完成一次真实 HTTP 200 调用：身份与精确输出校验通过，161 tokens、2.50 秒、无重试。用户已明确确认既有固定服务零费用；服务器来源采用该确认，固定 `intern-s2` 与原端点、付费上限 0、失败停止，无其他供应商或付费回退。这不是 provider 账单 API 证明，也不代表完整生产业务或语义验收。正式执行配置与当前缺项见 [核心修复证据](docs/evidence/cloud-core-20261028/README.md)。
+2026-10-28 云端已用既有 `INTERN_API_TOKEN` 完成一次真实 HTTP 200 调用：身份与精确输出校验通过，161 tokens、2.50 秒、无重试。用户已明确确认既有固定服务零费用；服务器来源采用该确认，固定 `intern-s2` 与原端点、付费上限 0、失败停止，无其他供应商或付费回退。这不是 provider 账单 API 证明，也不代表完整生产业务或语义验收。正式执行配置与当前缺项见 [云端候选与失败证据](docs/evidence/cloud-core-20261028/README.md)。
 
 名称优先级：非空 `SIM2ACT_INTERN_TOKEN` 优先；专用变量为空或未设置时读取 `INTERN_API_TOKEN`；两者都为空或未设置则无 token。`.env.example` 中的空专用变量不会遮蔽通用别名。PowerShell 显式配置载入接受这两个名称；Python 仍不自动搜索/读取 `.env`。由用户亲自在私有环境输入，不把值发到聊天、日志或提交；设置 token 本身不会打开 LIVE。
 
@@ -151,4 +151,4 @@ F1 仍未签收，F2 正式准入尚未满足；本轮用户明确授权隔离�
 
 取消提交前不创建候选。提交已接受后“返回编辑”只停止页面跳转，候选仍保留；同步事务不是可暂停/取消的后台AppRun。失败保留编辑；相同请求键重试返回同候选且不重复创建身份/Grant。旧目标版本候选不随目标修订改变；所有来源材料在候选详情/预览重新校验权限及hash，旧快照不能恢复撤权。候选列表仅元信息，不作为执行授权。
 
-P-A只支持人工目标分项+用户明确选择固定声明式模板的工程子集，没有自然语言理解、任意应用生成或语义验收；完整P-B仍未验收；成功内部CSV任务→已有授权新CSV→冷运行的有界子集见[上手说明](docs/F2/RegisteredRunQuickstart.md)。零真实模型请求，候选PREVIEW_ONLY，不是Release。更新既有安装仍需迁移角色显式migrate创建goal_candidate_requests并给应用角色该表业务CRUD；API/worker不自动DDL，不发现凭据。测试边界见docs/F2/Plan.md。
+P-A只支持人工目标分项+用户明确选择固定声明式模板的工程子集，没有自然语言理解、任意应用生成或语义验收；完整P-B仍未验收；成功内部CSV任务→已有授权新CSV→冷运行的有界子集见[上手说明](docs/F2/RegisteredRunQuickstart.md)。该历史子集零真实模型请求；本轮独立云端实测见上文。候选仍PREVIEW_ONLY，不是Release。更新既有安装仍需迁移角色显式migrate创建goal_candidate_requests并给应用角色该表业务CRUD；API/worker不自动DDL，不发现凭据。测试边界见docs/F2/Plan.md。
