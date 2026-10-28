@@ -7,7 +7,9 @@ and are committed by the existing pa_spec_apps transaction only.
 
 from __future__ import annotations
 
+import builtins as _raw_read_builtins
 import copy
+import copyreg as _raw_read_copyreg
 import hashlib
 import json
 import math
@@ -27,17 +29,25 @@ from typing import TYPE_CHECKING, Any, cast
 import httpx
 from pydantic_core import PydanticSerializationError
 from sqlalchemy import insert, literal, select, update
+from sqlalchemy.dialects.sqlite.pysqlite import SQLiteDialect_pysqlite as _RawDialect
 from sqlalchemy.engine import Connection
+from sqlalchemy.engine import RootTransaction as _RawRootTransaction
 from sqlalchemy.engine import RowMapping as _ColdGraphRowMapping
 from sqlalchemy.engine.cursor import CursorResultMetaData as _ColdGraphCursorMeta
 from sqlalchemy.engine.result import SimpleResultMetaData as _ColdGraphSimpleMeta
+from sqlalchemy.pool import QueuePool as _RawQueuePool
+from sqlalchemy.pool import SingletonThreadPool as _RawSingletonPool
+from sqlalchemy.pool.base import _ConnectionFairy as _RawFairy
+from sqlalchemy.pool.base import _ConnectionRecord as _RawRecord
 from sqlalchemy.sql.elements import quoted_name as _ColdGraphQuotedName
 
 from . import _cold_base_segment as _base_segments
 from . import _cold_policy_segment as _policy_segments
 from . import _cold_typed_native_candidate as _typed_native_code
+from . import model_settlement as _raw_read_settlement
 from . import natural_live_admission as _row_native_code
 from . import natural_specs as codec
+from . import pb_natural_specs as _raw_read_pb
 from .config import Settings
 from .contracts import AppManifest, Limits, strict_json, validate_value
 from .db import (
@@ -64,6 +74,8 @@ from .model import (
 from .natural_request import VERSION as REQUEST_PROTOCOL
 from .natural_request import body, coordinates
 from .natural_request import protocol as request_protocol
+from .spec_production import ProductionTrialBinding as _RawBinding
+from .worker import Worker as _RawWorker
 
 _COUNTER_EQUAL = _row_native_code._trial_typed_equal
 _COUNTER_SNAPSHOT = _policy_segments._snapshot
@@ -73,6 +85,7 @@ _COUNTER_RAW_COPY = _row_native_code._RAW_COPY
 _COUNTER_RAW_EQUAL = _row_native_code._RAW_EQUAL
 _COUNTER_VALUE_CODE = tuple((function, function.__code__) for function in
     (_COUNTER_EQUAL, _COUNTER_SNAPSHOT, _COUNTER_SERIALIZERS, _COUNTER_KINDS))
+_RAW_READ_MISS = object()
 
 if TYPE_CHECKING:
     from .app_jobs import _ColdBindingPrefix
@@ -463,6 +476,25 @@ class _ColdRunFacts:
             _invalidate_cold_run_facts(self)
             raise
 
+    def _read_loaded(self, name):
+        """One late complete pin for a fixed presence/read pair, not a cache.
+
+        Misses, seeded readers and unknown code take the original two checks.
+        No value is captured until the final complete check has returned.
+        """
+        if not _raw_read_eligible(self, name):
+            return _RAW_READ_MISS
+        try:
+            _ColdGraphRead._check_dynamic(self.guard, self.store, self.connection)
+            _ColdRunFacts.check(self, self.store, self.connection, self.job)
+            value = self._raw[name]
+            require(self.guard.inputs[f"{self.key}:{name}"] is value,
+                "Cold Run raw facts cannot be replaced")
+            return value
+        except BaseException:
+            _invalidate_cold_run_facts(self)
+            raise
+
     def _put(self, name, value):
         try:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
@@ -612,6 +644,9 @@ class _ColdRunFacts:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
             from .natural_trial_runs import context_association
 
+            loaded = _ColdRunFacts._read_loaded(self, "association")
+            if loaded is not _RAW_READ_MISS:
+                return loaded
             if not self._present("association"):
                 value = context_association(self.connection, self.job)
                 self.check(self.store, self.connection, self.job)
@@ -626,6 +661,9 @@ class _ColdRunFacts:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
             from .spec_production import evidence_mode
 
+            loaded = _ColdRunFacts._read_loaded(self, "mode")
+            if loaded is not _RAW_READ_MISS:
+                return loaded
             if not self._present("mode"):
                 value = evidence_mode(self.connection, self.job)
                 self.check(self.store, self.connection, self.job)
@@ -638,6 +676,9 @@ class _ColdRunFacts:
     def model_reserved(self):
         try:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
+            loaded = _ColdRunFacts._read_loaded(self, "model-reserved")
+            if loaded is not _RAW_READ_MISS:
+                return loaded
             if not self._present("model-reserved"):
                 rows = self.connection.execute(select(events.c.data).where(
                     events.c.run_id == self.job["id"], events.c.kind == "MODEL_RESERVED"
@@ -654,6 +695,9 @@ class _ColdRunFacts:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
             require(kind in {"NS_RESERVED", "NS_RECEIVED", "NS_SETTLED", "NS_REJECTED"})
             name = f"anchor-ids:{kind}"
+            loaded = _ColdRunFacts._read_loaded(self, name)
+            if loaded is not _RAW_READ_MISS:
+                return loaded
             if not self._present(name):
                 rows = self.connection.execute(select(events.c.data["attempt_id"].as_string()).where(
                     events.c.run_id == self.job["id"], events.c.kind == kind
@@ -669,6 +713,9 @@ class _ColdRunFacts:
         try:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
             name = f"reservation:{aid}"
+            loaded = _ColdRunFacts._read_loaded(self, name)
+            if loaded is not _RAW_READ_MISS:
+                return loaded
             if not self._present(name):
                 rows = self.connection.execute(select(reservations).where(
                     reservations.c.id == aid)).mappings().all()
@@ -684,6 +731,9 @@ class _ColdRunFacts:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
             require(kind in {"NS_RESERVED", "NS_RECEIVED", "NS_SETTLED", "NS_REJECTED"})
             name = f"anchor:{kind}:{aid}"
+            loaded = _ColdRunFacts._read_loaded(self, name)
+            if loaded is not _RAW_READ_MISS:
+                return loaded
             if not self._present(name):
                 rows = self.connection.execute(select(events.c.data).where(
                     events.c.run_id == self.job["id"], events.c.kind == kind,
@@ -698,6 +748,9 @@ class _ColdRunFacts:
     def model_operations(self):
         try:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
+            loaded = _ColdRunFacts._read_loaded(self, "model-operations")
+            if loaded is not _RAW_READ_MISS:
+                return loaded
             if not self._present("model-operations"):
                 rows = self.connection.execute(select(operations.c.id).where(
                     operations.c.run_id == self.job["id"],
@@ -712,6 +765,9 @@ class _ColdRunFacts:
     def receipt_operations(self):
         try:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
+            loaded = _ColdRunFacts._read_loaded(self, "receipt-operations")
+            if loaded is not _RAW_READ_MISS:
+                return loaded
             if not self._present("receipt-operations"):
                 rows = self.connection.execute(select(operations).where(
                     operations.c.run_id == self.job["id"])).mappings().all()
@@ -726,6 +782,9 @@ class _ColdRunFacts:
         try:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
             name = f"intent:{oid}"
+            loaded = _ColdRunFacts._read_loaded(self, name)
+            if loaded is not _RAW_READ_MISS:
+                return loaded
             if not self._present(name):
                 value = self.connection.execute(select(operation_intents.c.request).where(
                     operation_intents.c.operation_id == oid)).scalar()
@@ -742,6 +801,9 @@ class _ColdRunFacts:
             from .db import local_effects
 
             name = f"effect:{oid}"
+            loaded = _ColdRunFacts._read_loaded(self, name)
+            if loaded is not _RAW_READ_MISS:
+                return loaded
             if not self._present(name):
                 value = self.connection.execute(select(local_effects).where(
                     local_effects.c.operation_id == oid)).mappings().first()
@@ -758,6 +820,9 @@ class _ColdRunFacts:
             from .db import local_effects
 
             name = f"has-effect:{oid}"
+            loaded = _ColdRunFacts._read_loaded(self, name)
+            if loaded is not _RAW_READ_MISS:
+                return loaded
             if not self._present(name):
                 value = self.connection.execute(select(local_effects.c.operation_id).where(
                     local_effects.c.operation_id == oid)).first()
@@ -772,6 +837,9 @@ class _ColdRunFacts:
         try:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
             name = f"pending-step:{oid}"
+            loaded = _ColdRunFacts._read_loaded(self, name)
+            if loaded is not _RAW_READ_MISS:
+                return loaded
             if not self._present(name):
                 value = self.connection.execute(select(events.c.id).where(
                     events.c.run_id == self.job["id"], events.c.kind == "SPEC_STEP_VERIFIED",
@@ -787,6 +855,9 @@ class _ColdRunFacts:
         try:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
             name = f"step-anchors:{oid}"
+            loaded = _ColdRunFacts._read_loaded(self, name)
+            if loaded is not _RAW_READ_MISS:
+                return loaded
             if not self._present(name):
                 rows = self.connection.execute(select(events.c.data).where(
                     events.c.run_id == self.job["id"], events.c.kind == "SPEC_STEP_VERIFIED",
@@ -803,6 +874,9 @@ class _ColdRunFacts:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
             require(kind in {"CLAIMED", "SPEC_STEP_VERIFIED", "WORKER_LOST"})
             name = f"progress:{kind}:{fence}"
+            loaded = _ColdRunFacts._read_loaded(self, name)
+            if loaded is not _RAW_READ_MISS:
+                return loaded
             if not self._present(name):
                 value = self.connection.execute(select(events.c.id).where(
                     events.c.run_id == self.job["id"], events.c.kind == kind,
@@ -820,6 +894,9 @@ class _ColdRunFacts:
             from .db import internal_instance_data
 
             name = f"typed:{instance}:{app_run}"
+            loaded = _ColdRunFacts._read_loaded(self, name)
+            if loaded is not _RAW_READ_MISS:
+                return loaded
             if not self._present(name):
                 rows = self.connection.execute(select(internal_instance_data).where(
                     internal_instance_data.c.instance_id == instance,
@@ -835,6 +912,9 @@ class _ColdRunFacts:
         # Per-attempt slot reads cannot prove absence of additional Run slots.
         try:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
+            loaded = _ColdRunFacts._read_loaded(self, "ledger-reservations")
+            if loaded is not _RAW_READ_MISS:
+                return loaded
             if not self._present("ledger-reservations"):
                 rows = self.connection.execute(select(reservations).where(
                     reservations.c.run_id == self.job["id"]).order_by(
@@ -850,6 +930,9 @@ class _ColdRunFacts:
         # Anchor projections cannot prove the full ledger row multiset.
         try:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
+            loaded = _ColdRunFacts._read_loaded(self, "ledger-events")
+            if loaded is not _RAW_READ_MISS:
+                return loaded
             if not self._present("ledger-events"):
                 rows = self.connection.execute(select(events).where(
                     events.c.run_id == self.job["id"], events.c.kind.in_([
@@ -2118,6 +2201,304 @@ def _cold_read_checkpoint(store, c, guard):
     if guard is not None:
         require(type(guard) is _ColdGraphRead, "Exact Cold graph read scope required")
         guard.check(store, c)
+
+
+_RAW_READ_IMPORT = _raw_read_builtins.__import__
+_RAW_READ_METHODS = tuple((name, getattr(_ColdRunFacts, name)) for name in ('check', '_present', '_get'))
+_RAW_READ_GRAPH_CHECK = _ColdGraphRead.check
+_RAW_READ_GRAPH_METHODS = tuple((name, getattr(_ColdGraphRead, name))
+    for name in ('input_key', 'input_bytes'))
+_RAW_READ_CODEC = tuple((name, globals()[name]) for name in (
+    '_cold_graph_bytes', '_cold_graph_row_storage', '_cold_graph_limit_values',
+    '_cold_graph_pickle_marker'))
+_RAW_READ_NAMESPACE = _cold_graph_bytes.__globals__
+_RAW_READ_BYTES_IO = _ColdGraphBytesIO
+_RAW_READ_PICKLER = _ColdGraphPickler
+_RAW_READ_PICKLER_METHODS = tuple((name, _counter_getattr_static(_ColdGraphPickler, name))
+    for name in ('__init__', '__new__', 'dump', 'reducer_override', 'persistent_id',
+        '__getattribute__', '__setattr__'))
+_RAW_READ_DISPATCH = _counter_getattr_static(_ColdGraphPickler, 'dispatch_table', _RAW_READ_MISS)
+_RAW_READ_COPYREG = _raw_read_copyreg.dispatch_table
+_RAW_READ_COPYREG_ITEMS = tuple(dict.items(_RAW_READ_COPYREG))
+_RAW_READ_FACTS_DICT = _counter_getattr_static(_ColdRunFacts, '__dict__')
+_RAW_READ_GRAPH_DICT = _counter_getattr_static(_ColdGraphRead, '__dict__')
+_RAW_READ_TYPED_STORAGE = _row_native_code._trial_typed_storage
+_RAW_READ_ROW_SLOTS = tuple((kind, attr, _counter_getattr_static(kind, attr, _RAW_READ_MISS))
+    for kind, attrs in (
+        (_ColdGraphRowMapping, ('__getattribute__', '_parent', '_data', '_key_to_index')),
+        (_ColdGraphCursorMeta, ('__getattribute__', '_keys')),
+        (_ColdGraphSimpleMeta, ('__getattribute__', '_keys')),
+        (_ColdGraphQuotedName, ('__str__', '__del__')),
+        (Limits, ('__dict__', '__pydantic_extra__', '__pydantic_private__')))
+    for attr in attrs)
+_RAW_READ_DYNAMIC = _ColdGraphRead._check_dynamic
+_RAW_READ_CHECKPOINT = _cold_read_checkpoint
+_RAW_READ_REQUIRE = require
+_RAW_READ_REQUIRE_LEAF = codec.require
+_RAW_READ_SOURCE_CURRENT = _raw_read_pb._source_reads_current
+_RAW_READ_SOURCE_TRANSACTION = _raw_read_pb._source_transaction
+_RAW_READ_SETTLEMENT_CHECKPOINT = _raw_read_settlement.checkpoint
+_RAW_READ_CONNECTION_METHODS = tuple((name, _counter_getattr_static(Connection, name))
+    for name in ('in_transaction', 'get_transaction'))
+_RAW_READ_STOP_IS_SET = Event.is_set
+_RAW_READ_SCHEMA = _policy_segments._fixed_schema
+_RAW_READ_COMPARISON = _base_segments._Comparison
+_RAW_READ_STREAM = tuple((name, _counter_getattr_static(_RAW_READ_COMPARISON, name))
+    for name in ('__init__', 'validate_model', 'model_fields', 'raw_mapping', 'raw_equal'))
+_RAW_READ_CODE = tuple((function, function.__code__) for function in (
+    *[fn for _, fn in _RAW_READ_METHODS], _RAW_READ_GRAPH_CHECK, _RAW_READ_DYNAMIC,
+    _RAW_READ_CHECKPOINT, _RAW_READ_REQUIRE, _RAW_READ_REQUIRE_LEAF,
+    _RAW_READ_SOURCE_CURRENT, _RAW_READ_STOP_IS_SET,
+    _RAW_READ_SOURCE_TRANSACTION, _RAW_READ_SETTLEMENT_CHECKPOINT,
+    *[fn for _, fn in _RAW_READ_CONNECTION_METHODS],
+    *[fn for _, fn in _RAW_READ_GRAPH_METHODS], *[fn for _, fn in _RAW_READ_CODEC],
+    _RAW_READ_TYPED_STORAGE,
+    *[fn for _, fn in _RAW_READ_PICKLER_METHODS if hasattr(fn, '__code__')],
+    _RAW_READ_SCHEMA, *[fn for _, fn in _RAW_READ_STREAM]))
+_RAW_READ_FIELDS = ('store', 'connection', 'job', 'guard', '_origin_guard', 'key', '_raw',
+    '_manifests', '_receipt_proofs', '_counter_proofs', '_node_proofs')
+_RAW_READ_GRAPH_FIELDS = ('phase', '_accounted_frontier', '_typed_native_candidate', 'stop',
+    'inputs', 'binding', 'role_limits', 'key', 'worker', 'store', 'connection', 'settings',
+    'scope', 'nonce', 'active', 'engine', 'transaction', 'driver', 'changes', 'thread',
+    'epoch', 'token', 'settings_values', 'transport', 'worker_id')
+
+
+
+# These are code/descriptor witnesses only. Every value and every original
+# dynamic predicate below is read afresh; unknown access paths keep both pins.
+
+_RAW_DYNAMIC_SPECS = (
+    (_RawWorker, ('store', '_store', 's', 'id', 'pa_trial', 'stop', 'goal_planner_transport',
+        '_journal_trial_store', '_journal_trial_binding', '_journal_trial_drift', '_settlement_interval')),
+    (Store, ('engine', 'test_only', 'sqlite')),
+    (Settings, ()),
+    (_raw_read_pb._SourceReads, ('store', 'connection', 'transaction', 'driver', 'thread', 'epoch')),
+    (_RawBinding, ('contract', 'approval_key', 'account_id', 'version', 'contract_fingerprint')),
+    (Connection, ('engine', '_transaction', '_dbapi_connection', 'closed', 'connection', 'info')),
+    (_RawRootTransaction, ('is_active',)),
+    (_RawFairy, ('_connection_record', 'driver_connection', 'info', 'dbapi_connection')),
+    (_RawRecord, ('_ConnectionRecord__pool', 'driver_connection', 'dbapi_connection')),
+    (_RawQueuePool, ('_dialect',)), (_RawSingletonPool, ('_dialect',)),
+    (_RawDialect, ('get_driver_connection',)),
+    (SQLiteConnection, ('in_transaction', 'total_changes')),
+)
+_RAW_DYNAMIC_SLOTS = tuple((kind, attr, _counter_getattr_static(kind, attr, _RAW_READ_MISS))
+    for kind, fields in _RAW_DYNAMIC_SPECS
+    for attr in ('__getattribute__', '__getattr__', '__dict__', *fields))
+_RAW_DYNAMIC_CODE = tuple((fn, fn.__code__) for _, _, value in _RAW_DYNAMIC_SLOTS
+    for fn in ((value.fget,) if isinstance(value, property) else (value,))
+    if hasattr(fn, '__code__'))
+_RAW_DYNAMIC_TIME = _raw_read_settlement.time
+_RAW_DYNAMIC_CLOCKS = (_RAW_DYNAMIC_TIME.time, _RAW_DYNAMIC_TIME.monotonic)
+_RAW_DYNAMIC_IDENT = (get_ident, _raw_read_pb.get_ident)
+_RAW_DYNAMIC_SHA = hashlib.sha256
+
+
+def _raw_dynamic_eligible(facts, guard):
+    if (any(_counter_getattr_static(kind, attr, _RAW_READ_MISS) is not value
+            for kind, attr, value in _RAW_DYNAMIC_SLOTS)
+            or any(fn.__code__ is not code for fn, code in _RAW_DYNAMIC_CODE)
+            or get_ident is not _RAW_DYNAMIC_IDENT[0]
+            or _raw_read_pb.get_ident is not _RAW_DYNAMIC_IDENT[1]
+            or _raw_read_settlement.time is not _RAW_DYNAMIC_TIME
+            or _RAW_DYNAMIC_TIME.time is not _RAW_DYNAMIC_CLOCKS[0]
+            or _RAW_DYNAMIC_TIME.monotonic is not _RAW_DYNAMIC_CLOCKS[1]
+            or hashlib.sha256 is not _RAW_DYNAMIC_SHA):
+        return False
+    g = object.__getattribute__(guard, '__dict__')
+    w, store, c = g.get('worker'), g.get('store'), g.get('connection')
+    if type(w) is not _RawWorker or type(store) is not Store or type(c) is not Connection:
+        return False
+    wd, sd, cd = (object.__getattribute__(value, '__dict__') for value in (w, store, c))
+    if (type(wd) is not dict or type(sd) is not dict or type(cd) is not dict
+            or not all(type(key) is str for raw in (wd, sd, cd) for key in raw)
+            or wd.get('_store') is not store or type(sd.get('test_only')) is not bool
+            or type(sd.get('sqlite')) is not bool or type(wd.get('id')) is not str
+            or wd.get('_journal_trial_drift') is not False
+            or type(wd.get('s')) is not Settings or wd['s'] is not g.get('settings')
+            or type(wd.get('pa_trial')) is not _RawBinding
+            or wd['pa_trial'] is not g.get('binding') or wd.get('stop') is not g.get('stop')):
+        return False
+    settings = object.__getattribute__(wd['s'], '__dict__')
+    saved = g.get('settings_values')
+    if (type(settings) is not dict or type(saved) is not dict
+            or not all(type(key) is str for raw in (settings, saved) for key in raw)
+            or settings.keys() != saved.keys()
+            or any(value is not saved[key] for key, value in settings.items())):
+        return False
+    interval = wd.get('_settlement_interval')
+    if interval is not None and (type(interval) is not tuple or len(interval) != 2
+            or any(type(value) not in (int, float) for value in interval)):
+        return False
+    if (type(g.get('inputs')) is not dict or not all(type(key) is str for key in g['inputs'])
+            or type(g.get('role_limits')) is not dict
+            or not all(type(key) is str for key in g['role_limits'])
+            or type(g.get('scope')) is not list or type(g.get('active')) is not bool
+            or any(type(g.get(name)) is not int for name in ('changes', 'thread', 'epoch'))
+            or type(g.get('worker_id')) is not str):
+        return False
+    fairy, transaction, driver = cd.get('_dbapi_connection'), cd.get('_transaction'), g.get('driver')
+    if (type(fairy) is not _RawFairy or type(transaction) is not _RawRootTransaction
+            or type(transaction.is_active) is not bool or type(driver) is not SQLiteConnection):
+        return False
+    # An already-open connection and already-materialized info prohibit both
+    # reconnect and the memoized-property initialization callback branches.
+    fd = object.__getattribute__(fairy, '__dict__')
+    info = fd.get('info')
+    record = object.__getattribute__(fairy, '_connection_record')
+    if (type(info) is not dict or not all(type(key) is str for key in info)
+            or type(info.get('source_proof_write_epoch', 0)) is not int
+            or type(record) is not _RawRecord):
+        return False
+    pool = object.__getattribute__(record, '_ConnectionRecord__pool')
+    if type(pool) not in (_RawQueuePool, _RawSingletonPool):
+        return False
+    dialect = object.__getattribute__(pool, '__dict__').get('_dialect')
+    if (type(dialect) is not _RawDialect
+            or _counter_getattr_static(dialect, 'get_driver_connection')
+                is not _counter_getattr_static(_RawDialect, 'get_driver_connection')
+            or object.__getattribute__(record, 'dbapi_connection') is not driver
+            or object.__getattribute__(fairy, 'dbapi_connection') is not driver):
+        return False
+    token = g.get('token')
+    if type(token) is not _raw_read_pb._SourceReads:
+        return False
+    td = object.__getattribute__(token, '__dict__')
+    if (type(td) is not dict or type(td.get('epoch')) is not int
+            or type(td.get('thread')) is not int):
+        return False
+    # Fact identity predicates use these strings, never an external __str__/eq.
+    job = object.__getattribute__(facts, '__dict__').get('job')
+    if type(job) is dict:
+        if not all(type(key) is str for key in job) or type(job.get('id')) is not str:
+            return False
+    elif type(job) is _ColdGraphRowMapping:
+        keys, data, lookup = _cold_graph_row_storage(job)
+        if type(data[lookup['id']]) is not str:
+            return False
+    else:
+        return False
+    return True
+
+
+def _raw_read_eligible(facts, name):
+    """Qualification only; no SQL, permission result, serialization or hook."""
+    if (type(facts) is not _ColdRunFacts or type(name) is not str
+            or _counter_getattr_static(_ColdRunFacts, '__dict__') is not _RAW_READ_FACTS_DICT):
+        return False
+    early = object.__getattribute__(facts, '__dict__')
+    early_guard = early.get('guard')
+    if (early.get('_raw_seed') is not None or type(early_guard) is not _ColdGraphRead
+            or _counter_getattr_static(_ColdGraphRead, '__dict__') is not _RAW_READ_GRAPH_DICT):
+        return False
+    early_graph = object.__getattribute__(early_guard, '__dict__')
+    if type(early_graph.get('phase')) is not str or early_graph['phase'] != 'post':
+        return False
+    if (type(facts) is not _ColdRunFacts or type(name) is not str
+            or _raw_read_builtins.__import__ is not _RAW_READ_IMPORT
+            or _counter_getattr_static(_ColdRunFacts, '__getattribute__') is not object.__getattribute__
+            or any(_counter_getattr_static(facts, attr) is not function
+                for attr, function in _RAW_READ_METHODS)
+            or any(function.__code__ is not code for function, code in _RAW_READ_CODE)
+            or _ColdGraphRead.check is not _RAW_READ_GRAPH_CHECK
+            or _ColdGraphRead._check_dynamic is not _RAW_READ_DYNAMIC
+            or _ColdGraphBytesIO is not _RAW_READ_BYTES_IO or _ColdGraphPickler is not _RAW_READ_PICKLER
+            or _row_native_code._trial_typed_storage is not _RAW_READ_TYPED_STORAGE
+            or any(_RAW_READ_NAMESPACE.get(attr) is not function for attr, function in _RAW_READ_CODEC)
+            or any(_counter_getattr_static(_ColdGraphPickler, attr) is not function
+                for attr, function in _RAW_READ_PICKLER_METHODS)
+            or _counter_getattr_static(_ColdGraphPickler, 'dispatch_table', _RAW_READ_MISS) is not _RAW_READ_DISPATCH
+            or _raw_read_copyreg.dispatch_table is not _RAW_READ_COPYREG
+            or len(_RAW_READ_COPYREG) != len(_RAW_READ_COPYREG_ITEMS)
+            or any(key is not original_key or value is not original_value
+                for (key, value), (original_key, original_value) in
+                zip(dict.items(_RAW_READ_COPYREG), _RAW_READ_COPYREG_ITEMS, strict=True))
+            or any(_counter_getattr_static(kind, attr, _RAW_READ_MISS) is not value
+                for kind, attr, value in _RAW_READ_ROW_SLOTS)
+            or _counter_getattr_static(_ColdGraphRead, '__getattr__', None) is not None
+            or _cold_read_checkpoint is not _RAW_READ_CHECKPOINT
+            or require is not _RAW_READ_REQUIRE or codec.require is not _RAW_READ_REQUIRE_LEAF
+            or _raw_read_pb.__dict__.get('_source_reads_current') is not _RAW_READ_SOURCE_CURRENT
+            or _raw_read_pb.__dict__.get('_source_transaction') is not _RAW_READ_SOURCE_TRANSACTION
+            or _raw_read_settlement.__dict__.get('checkpoint') is not _RAW_READ_SETTLEMENT_CHECKPOINT
+            or _policy_segments._fixed_schema is not _RAW_READ_SCHEMA
+            or _base_segments.fixed_serializers is not _COUNTER_SERIALIZERS
+            or _base_segments._model_kinds is not _COUNTER_KINDS
+            or any(function.__code__ is not code for function, code in _COUNTER_VALUE_CODE)
+            or any(_row_native_code.__dict__.get(attr) is not function
+                for attr, function in _base_segments._GATE_CODE)
+            or _base_segments._Comparison is not _RAW_READ_COMPARISON
+            or any(_counter_getattr_static(_RAW_READ_COMPARISON, attr) is not function
+                for attr, function in _RAW_READ_STREAM)):
+        return False
+    missing = _RAW_READ_MISS
+    if any(_counter_getattr_static(_ColdRunFacts, field_name, missing) is not missing
+            for field_name in _RAW_READ_FIELDS):
+        return False
+    namespace = object.__getattribute__(facts, '__dict__')
+    raw, guard = namespace.get('_raw'), namespace.get('guard')
+    if (type(raw) is not dict or not all(type(key) is str for key in raw)
+            or name not in raw or 'raw-seed' in raw or namespace.get('_raw_seed') is not None
+            or type(guard) is not _ColdGraphRead or guard is not namespace.get('_origin_guard')
+            or _counter_getattr_static(_ColdGraphRead, '__getattribute__') is not object.__getattribute__
+            or any(_counter_getattr_static(_ColdGraphRead, field_name, missing) is not missing
+                for field_name in _RAW_READ_GRAPH_FIELDS)
+            or any(_counter_getattr_static(guard, attr) is not function
+                for attr, function in _RAW_READ_GRAPH_METHODS)
+            or _counter_getattr_static(guard, 'check') is not _RAW_READ_GRAPH_CHECK):
+        return False
+    graph_values = object.__getattribute__(guard, '__dict__')
+    if (type(graph_values.get('phase')) is not str or graph_values['phase'] != 'post'
+            or graph_values.get('_accounted_frontier') is not None
+            or graph_values.get('_typed_native_candidate') is not None):
+        return False
+    if (type(namespace.get('connection')) is not Connection
+            or any(_counter_getattr_static(namespace['connection'], attr) is not function
+                for attr, function in _RAW_READ_CONNECTION_METHODS)):
+        return False
+    if (type(guard.stop) is not Event
+            or _counter_getattr_static(guard.stop, 'is_set') is not _RAW_READ_STOP_IS_SET):
+        return False
+    if not _raw_dynamic_eligible(facts, guard):
+        return False
+    if any(type(namespace.get(field)) is not list
+            or not all(type(value) is str for value in namespace[field])
+            for field in ('_receipt_proofs', '_counter_proofs', '_node_proofs')):
+        return False
+    manifests = namespace.get('_manifests')
+    if type(manifests) is not list:
+        return False
+    models = []
+    for entry in manifests:
+        if type(entry) is not tuple or len(entry) != 2:
+            return False
+        model, key = entry
+        if type(model) is not AppManifest or type(key) is not str:
+            return False
+        saved = raw.get(key)
+        if type(saved) is not dict or type(saved.get('manifest')) is not dict:
+            return False
+        models.append((AppManifest, model, saved['manifest']))
+    if not _COUNTER_SERIALIZERS(models):
+        return False
+    kinds = _COUNTER_KINDS(models)
+    if kinds is None or any(
+            _counter_getattr_static(kind, '__getattribute__') is not object.__getattribute__
+            or _counter_getattr_static(kind, '__del__', None) is not None
+            or any(_counter_getattr_static(kind, field_name, missing) is not missing
+                for field_name in type.__getattribute__(kind, '__pydantic_fields__'))
+            for kind in kinds):
+        return False
+    # Reject qualification without invoking warning/serializer callbacks.
+    comparison = _RAW_READ_COMPARISON(_row_native_code._trial_typed_nested_classes())
+    try:
+        for _, model, saved in models:
+            comparison.validate_model(model)
+            if not comparison.raw_equal(model, saved):
+                return False
+    except DomainError:
+        return False
+    return True
 
 
 @dataclass(frozen=True)
