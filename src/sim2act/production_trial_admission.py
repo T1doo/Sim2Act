@@ -1,4 +1,4 @@
-"""Production admission boundary; no production resolver or sender is installed.
+"""Production admission boundary with an exact server source/software target.
 
 The offline harness exercises the existing consent and seven-slot ledger. Its
 fixed data sender cannot perform IO. It is not a network dispatch implementation
@@ -21,7 +21,9 @@ from . import production_evidence
 from .contracts import Strict
 from .db import attempts, fingerprint, runs
 from .errors import DomainError
-from .text_continuations import ANCHOR_HASH, qualified_target
+from .text_continuations import ANCHOR_HASH
+
+PRODUCTION_QUALIFICATION_HASH = "d6fda34b93687eb80e59006565e928fd1a4d717d74e3b14deee21dee937ce5a3"
 
 
 class AccountEvidence(Strict):
@@ -85,13 +87,29 @@ def canonical_quota_subject(account_id):
 
 
 def _qualified():
+    """Exact reviewed production target; historical compatibility stays separate."""
     root = Path(__file__).parent
-    current = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-               for p in root.glob("*.py") if p.name != "config.py"}
-    raw = (root / "text_software_anchors.json").read_bytes()
-    gate.require(hashlib.sha256(raw).hexdigest() == ANCHOR_HASH, "Software anchors changed")
-    anchors = json.loads(raw)
-    qualified_target(current, anchors)
+    try:
+        gate.require(hashlib.sha256((root / "text_software_anchors.json").read_bytes()).hexdigest()
+                     == ANCHOR_HASH, "Software anchors changed")
+        raw = (root / "production_software_qualification.json").read_bytes()
+        gate.require(hashlib.sha256(raw).hexdigest() == PRODUCTION_QUALIFICATION_HASH,
+                     "Production software manifest changed")
+        proof = json.loads(raw)
+        gate.require(set(proof) == {"version", "baseline", "files"}
+            and proof["version"] == "production-software-qualification.v1"
+            and proof["baseline"] == "206153da27edb5353e7106ab52b6e5bcaad86627")
+        current = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                   for p in root.glob("*.py") if p.name != "config.py"}
+        source = Path(__file__).read_bytes()
+        literal = ('PRODUCTION_QUALIFICATION_HASH = "' + PRODUCTION_QUALIFICATION_HASH + '"').encode()
+        gate.require(source.count(literal) == 1, "Exact production manifest pin required")
+        current[Path(__file__).name] = hashlib.sha256(source.replace(literal,
+            ('PRODUCTION_QUALIFICATION_HASH = "' + '0' * 64 + '"').encode())).hexdigest()
+        gate.require(proof["files"] == current,
+                     "Current production software differs from the reviewed target")
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        raise DomainError("VERSION_CONFLICT", "Unavailable exact production software qualification") from exc
 
 
 def production_preflight(store, user, contract, approval_key, request):

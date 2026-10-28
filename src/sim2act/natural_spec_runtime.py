@@ -18,7 +18,7 @@ from dataclasses import dataclass, field, replace
 from io import BytesIO as _ColdGraphBytesIO
 from pickle import Pickler as _ColdGraphPicklerBase
 from sqlite3 import Connection as SQLiteConnection
-from threading import Event, get_ident
+from threading import Event, Lock, get_ident
 from time import monotonic as _cold_diagnostic_clock
 from types import BuiltinFunctionType as _ColdNativeFunctionType
 from typing import TYPE_CHECKING, Any, cast
@@ -110,6 +110,26 @@ def renew(worker, job, deadline, *, _heartbeat_state=None):
         if _heartbeat_state is not None:
             from .text_workflows import publish_sync_renewal
             publish_sync_renewal(worker, job, _heartbeat_state, renewed)
+
+
+@contextmanager
+def _model_settlement_writer(worker, job, deadline, state):
+    """Renew immediately before the settlement transaction, with one writer.
+
+    SQLite cannot commit a background heartbeat while this transaction owns
+    its snapshot/write lock. Serialize the committed renewal and settlement
+    against that heartbeat; never change the lease inside a read proof epoch.
+    """
+    if state is None or not worker.store.sqlite:
+        renew(worker, job, deadline, _heartbeat_state=state)
+        yield
+        return
+    from .text_workflows import _renew_sync_locked
+    with state['lock']:
+        renewal_lock = state.setdefault('renewal_lock', Lock())
+    with renewal_lock:
+        _renew_sync_locked(worker, job, state, deadline=deadline)
+        yield
 
 
 def effective(worker, c, job, binding, action, *, _scope_checked=False):
@@ -3291,6 +3311,12 @@ def _cold_model_before(worker, c, current, inputs, platform, *, _mock_accounted_
         return
     roles = _cold_model_roles(worker, platform, first='platform')
     with _cold_graph_read(worker, c, dict(current=dict(current), call=inputs), roles, 'pre') as guard:
+        # Fixed pure producer segments retain complete content pins at their
+        # boundaries. Unknown serializers/code keep the original full path.
+        # Never cache an authorization or a content verdict between checks.
+        if _mock_accounted_config is None and '_producer_segment_candidate' not in vars(guard):
+            from ._cold_producer_segment import _ProducerSegment
+            _ProducerSegment(guard, legacy_base=True)
         completed = _cold_first_binding(worker, c, guard, current, platform)
         with ExitStack() as candidate_scope:
             if _mock_accounted_config is None:
@@ -3573,6 +3599,9 @@ def _model_settlement_read(worker, c, inputs):
                     roles = _cold_model_roles(worker, inputs["platform"], first="trial")
                     guard = graph_scope.enter_context(_cold_graph_read(worker, c,
                         dict(current=inputs["current"], call=dict(inputs)), roles, "post"))
+                    if '_producer_segment_candidate' not in vars(guard):
+                        from ._cold_producer_segment import _ProducerSegment
+                        _ProducerSegment(guard, legacy_base=True, post_check=True)
                     commit_prefix = spec._cold_commit_prefix(worker, c, inputs["call_run"],
                         inputs["binding"], guard, "post")
                     seed = _cold_audit_seed(worker, c, guard, inputs["binding"]["draft"])
@@ -3895,8 +3924,8 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                             request_body=wire)
         if failure:
             raise failure
-        renew(worker, job, meta["deadline"], _heartbeat_state=_heartbeat_state)
-        with store.tx() as c, _journal_reads(worker, c):
+        with _model_settlement_writer(worker, job, meta["deadline"], _heartbeat_state), \
+                store.tx() as c, _journal_reads(worker, c):
             current = lock_live(store, c, run)
             require(
                 current["version"] == meta["run_version"]

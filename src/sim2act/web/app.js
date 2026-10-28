@@ -116,22 +116,26 @@ function runHistoryRow(run, open) {
   return item;
 }
 
-// These are same-page section links, not alternate commands or permission modes.
-(function currentProjectSection(){
- if(typeof requestAnimationFrame!=="function")return;
- const links=[...document.querySelectorAll(".section-links a")],sections=links.map(a=>document.getElementById(a.getAttribute("href").slice(1)));
- if(!links.length||sections.some(s=>!s))return;
- let queued=false;
- const update=()=>{
-  queued=false;if($("projects").hidden)return;
-  const line=Math.min(160,innerHeight*.25);let selected=0,nearest=-Infinity;
-  for(let i=0;i<sections.length;i++){const top=sections[i].getBoundingClientRect().top;if(top<=line&&top>nearest){selected=i;nearest=top;}}
-  links.forEach((a,i)=>{if(i===selected)a.setAttribute("aria-current","location");else a.removeAttribute("aria-current");});
- };
- const schedule=()=>{if(!queued){queued=true;requestAnimationFrame(update);}};
- for(const name of ["scroll","resize","hashchange"])addEventListener(name,schedule,{passive:true});
- if(typeof MutationObserver==="function")new MutationObserver(schedule).observe($("projects"),{attributes:true,attributeFilter:["hidden"]});
- schedule();
+// Task zones share the original controllers, identities and saved state.
+// Switching a zone never submits, cancels or reconstructs a task.
+function selectProjectSection(id, focus=false) {
+  const links=[...document.querySelectorAll(".section-links a")];
+  const sections=links.map(a=>document.getElementById(a.hash.slice(1)));
+  if(!sections.some(section=>section?.id===id))return;
+  $("projects").dataset.section=id;
+  sections.forEach(section=>{section.classList.add("project-zone");section.classList.toggle("zone-active",section.id===id);});
+  links.forEach(link=>{const selected=link.hash===`#${id}`;if(selected)link.setAttribute("aria-current","location");else link.removeAttribute("aria-current");});
+  if(id==="project-tools")$(id).open=true;
+  if(focus){const heading=$(id).querySelector("h2,h3,summary");if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});}}
+}
+(function projectSections(){
+  const links=[...document.querySelectorAll(".section-links a")];
+  links.forEach(link=>link.addEventListener("click",event=>{
+    event.preventDefault();selectProjectSection(link.hash.slice(1),true);
+    history.replaceState(null,"",link.hash);
+  }));
+  addEventListener("hashchange",()=>selectProjectSection(location.hash.slice(1)));
+  selectProjectSection(links.some(link=>link.hash===location.hash)?location.hash.slice(1):"task-workbench");
 })();
 let resourceDownloadGeneration = 0;
 const resourceDownloadRequests = new Set();
@@ -510,6 +514,7 @@ function renderInternalTaskResult(r,current) {
   }
 }
 async function showRun(id, userSelection = true, selectionGuard = () => true, validateReceipt = null) {
+  if(userSelection)selectProjectSection("task-workbench");
   if(!selectionGuard())return;
   const project=$("project-select").value,identity=token;
   if(!userSelection && foregroundRunRead?.id===id && foregroundRunRead.project===project && foregroundRunRead.identity===identity)return;
@@ -1191,6 +1196,7 @@ async function refreshGoalCards(pid) {
   if(!cards.items.length)$("goal-card-list").textContent="尚无目标卡。可先整理任意目标及其检查要求。";
 }
 async function showGoalCard(id, pid=$("project-select").value) {
+  selectProjectSection("goal-cards-panel");
   if(pid !== $("project-select").value)return;
   clearGoalCard();
   const generation=goalSelectionGeneration,identity=token;

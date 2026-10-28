@@ -41,6 +41,8 @@ def failure_observation(run, error):
 
 @pytest.fixture(autouse=True)
 def no_real_http(monkeypatch):
+    monkeypatch.delenv("SIM2ACT_INTERN_TOKEN", raising=False)
+    monkeypatch.delenv("INTERN_API_TOKEN", raising=False)
     def denied(*args, **kwargs):
         raise AssertionError("Real HTTP forbidden in SPEC controller qualification")
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", denied)

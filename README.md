@@ -1,6 +1,6 @@
 # Sim2Act
 
-> **2026-10-27 预发布候选**：下载与免开发环境启动见[候选使用说明](docs/PreviewRelease.md)。本次仅为合成工程预览；G0 仍 UNKNOWN、生产账户可信来源仍 SOURCE_MISSING、最新 Windows 包未执行。下文与历史文档保留各自阶段记录，以本次发布说明区分当前状态。
+> **2026-10-27 预发布候选**：下载与免开发环境启动见[候选使用说明](docs/PreviewRelease.md)。本次仅为合成工程预览；该历史包的 G0 为 UNKNOWN、账户来源未接入、Windows 包未执行。本轮云端改进见 [2026-10-28 核心修复证据](docs/evidence/cloud-core-20261028/README.md)。下文与历史文档保留各自阶段记录，以本次发布说明区分当前状态。
 
 让想法成为会行动的应用。当前接续开发分支 `dev/production-trial-stages-20261018`，F1 底座之上正推进有限 F2 工程；F1/F2/R0 整体验收尚未通过。
 
@@ -102,7 +102,7 @@ python3.12 -m venv .venv
 
 运行模型限定 `intern-s2`，固定官方非流式 Chat Completions 端点；开发辅助模型不会进入运行链。适配器使用 HTTP 请求，关闭隐藏重试，严格校验工具参数、结构和结束原因；所有请求共用数据库配额主体。账号被其他程序共用时仍可能遭上游限流。
 
-本轮没有设置真实 token、没有调用收费 API。未来由用户在自己的安全环境设置 `INTERN_API_TOKEN`（或原专用名称 `SIM2ACT_INTERN_TOKEN`），确认有限请求/Token/工具/修复/时限预算，明确设定 `SIM2ACT_LIVE_ENABLED=true` 和 `SIM2ACT_MODEL_MODE=live` 后才能启用。默认工程上限不是用户已批准的 LIVE 预算。
+2026-10-28 云端已用既有 `INTERN_API_TOKEN` 完成一次真实 HTTP 200 调用：身份与精确输出校验通过，161 tokens、2.50 秒、无重试。用户已明确确认既有固定服务零费用；服务器来源采用该确认，固定 `intern-s2` 与原端点、付费上限 0、失败停止，无其他供应商或付费回退。这不是 provider 账单 API 证明，也不代表完整生产业务或语义验收。正式执行配置与当前缺项见 [核心修复证据](docs/evidence/cloud-core-20261028/README.md)。
 
 名称优先级：非空 `SIM2ACT_INTERN_TOKEN` 优先；专用变量为空或未设置时读取 `INTERN_API_TOKEN`；两者都为空或未设置则无 token。`.env.example` 中的空专用变量不会遮蔽通用别名。PowerShell 显式配置载入接受这两个名称；Python 仍不自动搜索/读取 `.env`。由用户亲自在私有环境输入，不把值发到聊天、日志或提交；设置 token 本身不会打开 LIVE。
 

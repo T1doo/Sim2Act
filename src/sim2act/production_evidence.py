@@ -1,11 +1,12 @@
-"""Production account evidence boundary, with no supported authority source.
+"""Fixed server account source for the operator-confirmed free Intern service.
 
-Candidate validation checks data consistency only. Caller booleans, opaque IDs
-and evidence hashes do not prove provenance, entitlement or non-chargeability.
-No function here returns a FeeProof, Permit, account credential or dispatch right.
+Caller-supplied candidates remain diagnostics only. Production resolution uses
+the reviewed operator declaration and the existing server credential, with one
+fixed account, endpoint and model. No credentials or dispatch rights are returned.
 """
 
 import math
+import os
 import time
 from typing import Literal, NoReturn
 
@@ -18,8 +19,28 @@ from .errors import DomainError
 from .goals import GoalCardInput
 from .natural_specs import Recipe, Step
 
-SOURCE_MISSING = "No reviewed production account evidence source is supported"
+SOURCE_MISSING = "Configured Intern credential missing"
+ACCOUNT_ID = "intern-ai-configured-account"
+# Operator declaration received 2026-10-28: the existing Intern account/model
+# is free to use. This is declaration provenance, not a provider billing probe.
+# The application enforces the fixed route, zero paid cap and no fallback.
+FREE_SERVICE_POLICY = {
+    "version": "intern-owner-confirmed-free.v1",
+    "confirmed_on": "2026-10-28",
+    "provider": "intern-ai",
+    "model": "intern-s2",
+    "endpoint": "https://chat.intern-ai.org.cn/api/v1/chat/completions",
+    "account_id": ACCOUNT_ID,
+    "paid_cap": 0,
+    "fallback": "STOP",
+    "source": "operator-explicit-zero-cost-confirmation",
+}
 OPAQUE = r"^[A-Za-z0-9_-]{1,200}$"
+
+
+def configured_token():
+    """Read only the two existing aliases; never serialize the credential."""
+    return os.environ.get("SIM2ACT_INTERN_TOKEN", "") or os.environ.get("INTERN_API_TOKEN", "")
 
 
 class EvidenceData(Strict):
@@ -186,11 +207,27 @@ def validate_candidate(requirements, candidate, *, now=None) -> CandidateDiagnos
 
 
 def resolve_account(user, contract, approval_key) -> object:
-    """Unregistered production boundary; accepts no source/record/callback override.
+    """Resolve only the fixed server account; accepts no client evidence override.
 
     Call only after original _approved. Candidate diagnostics cannot supply
     authority here. Missing source fails before reservation, send or settlement;
     no automatic resend or assumption of zero usage/fees can follow this result.
     """
-    requirements_for(user, contract, approval_key)
-    _deny(SOURCE_MISSING)
+    expected = requirements_for(user, contract, approval_key)
+    if not configured_token().strip():
+        _deny(SOURCE_MISSING + ": set the existing SIM2ACT_INTERN_TOKEN or INTERN_API_TOKEN")
+    from .production_trial_admission import canonical_quota_subject
+    from .production_trial_policy import SourceVerificationResult
+
+    if expected.quota_subject != canonical_quota_subject(ACCOUNT_ID):
+        _deny("Trial quota subject does not identify the configured Intern account")
+    now = time.time()
+    if now >= expected.expires_at:
+        _deny("Original Intern trial contract expired")
+    return SourceVerificationResult(
+        requirements_fingerprint=fingerprint(expected.model_dump()),
+        account_id=ACCOUNT_ID, quota_subject=expected.quota_subject,
+        provider=expected.provider, model=expected.model, endpoint=expected.endpoint,
+        evidence_fingerprint=fingerprint(FREE_SERVICE_POLICY), decision="ALLOW",
+        legal_free_entitlement=True, enforced_non_chargeable=True, revoked=False,
+        observed_at=now, expires_at=expected.expires_at)

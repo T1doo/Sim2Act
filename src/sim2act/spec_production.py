@@ -1,10 +1,11 @@
-"""Explicit SPEC production controller binding; no source or credentials installed.
+"""Explicit SPEC production controller bound to the configured free Intern account.
 
 The existing model settings and exact trial approval are both required. Account
-facts come only from the fixed server resolver, which currently fails closed.
+facts come only from the fixed server resolver; missing configuration fails closed.
 This module neither issues synthetic permits nor accepts caller-supplied facts.
 """
 
+import secrets
 import time
 from dataclasses import dataclass, field
 
@@ -37,6 +38,7 @@ class ProductionTrialBinding:
 def environment(store, settings, transport):
     from .config import Settings
     from .db import Store
+    from .production_trial_admission import canonical_quota_subject
 
     if not (
         type(store) is Store and not store.test_only and not store.sqlite
@@ -44,6 +46,8 @@ def environment(store, settings, transport):
         and settings.live_enabled is True and settings.token
         and settings.application_generation_activation_enabled is True
         and settings.goal_planner_provider == settings.model == "intern-s2"
+        and secrets.compare_digest(settings.token, evidence.configured_token())
+        and settings.quota_subject == canonical_quota_subject(evidence.ACCOUNT_ID)
         and transport is None
     ):
         raise DomainError("LIVE_BLOCKED", "SPEC production controller is disabled")

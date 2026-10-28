@@ -20,6 +20,12 @@ from sim2act.db import fingerprint, grants
 from sim2act.errors import DomainError
 
 
+@pytest.fixture(autouse=True)
+def no_configured_credentials(monkeypatch):
+    monkeypatch.delenv("SIM2ACT_INTERN_TOKEN", raising=False)
+    monkeypatch.delenv("INTERN_API_TOKEN", raising=False)
+
+
 def pair():
     now = time.time()
     requirements = evidence.EvidenceRequirements(principal_id="user_" + "1" * 32,
@@ -223,7 +229,7 @@ def test_actual_production_routes_missing_source_authorize_first_and_never_write
             response = post(path + suffix, payload)
             assert response.status_code == 400
             assert response.json()["error"]["code"] == "LIVE_BLOCKED"
-            assert response.json()["error"]["message"] == evidence.SOURCE_MISSING
+            assert response.json()["error"]["message"].startswith(evidence.SOURCE_MISSING)
             assert response.json()["error"]["safe_retry"] is False
         for key in ("source", "evidence", "registry", "sender", "fee_authority", "free", "usage"):
             assert post(path + suffix, payload | {key: True}).status_code == 422

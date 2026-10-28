@@ -88,7 +88,7 @@ def prepare_pb(env, out):
     return data, SimpleNamespace(contract=contract, approval_key=consent.request_key, account_id=account)
 
 
-def test_pb_production_default_source_and_exact_software_stay_closed(env, tmp_path, monkeypatch):
+def test_pb_production_default_source_configuration_stays_closed(env, tmp_path, monkeypatch):
     data, selected = prepare_pb(env, tmp_path)
     binding = controller.ProductionTrialBinding(selected.contract, selected.approval_key, selected.account_id)
     before = snapshot(data[0])
@@ -97,14 +97,12 @@ def test_pb_production_default_source_and_exact_software_stay_closed(env, tmp_pa
     with pytest.raises(DomainError):
         trial.JournalTrialBinding(selected.contract, selected.approval_key, selected.account_id)
     monkeypatch.setattr(controller, "environment", lambda *args: None)
-    with pytest.raises(DomainError, match="No reviewed production account evidence source"):
+    with pytest.raises(DomainError, match="Configured Intern credential missing"):
         Worker(data[0], data[1], pa_trial=binding)
-    with pytest.raises(DomainError) as software:
-        admission._qualified()
-    assert software.value.code == "VERSION_CONFLICT"
+    admission._qualified()
     assert snapshot(data[0]) == before
     (tmp_path / "default-boundaries.json").write_text(json.dumps(dict(
-        missing_source="LIVE_BLOCKED", software="VERSION_CONFLICT", changed_tables=0,
+        missing_source="LIVE_BLOCKED", software="QUALIFIED", changed_tables=0,
         real_models=0, live_authorized=False), indent=2))
     data[2].close()
 
