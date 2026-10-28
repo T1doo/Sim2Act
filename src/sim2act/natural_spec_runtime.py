@@ -1188,6 +1188,9 @@ def _counters(c, job, manifest, *, _facts=None):
     _counter_checkpoint(c, job, _facts)
     if _facts is not None:
         _facts.pin_manifest(manifest)
+        selected = _cold_counter_loaded(c, job, manifest, _facts)
+        if selected is not _RAW_READ_MISS:
+            return selected
     rows = _facts.attempt_rows() if _facts is not None else (
         c.execute(
             select(attempts)
@@ -2836,6 +2839,412 @@ def _raw_read_eligible(facts, name):
     except DomainError:
         return False
     return _raw_seed_eligible(facts, guard)
+
+
+
+class _CounterPacket:
+    """Private full inputs for one original counter calculation, never a verdict."""
+
+    def __init__(self, facts, job, manifest, raw):
+        self.facts, self.job, self.manifest, self.raw = facts, job, manifest, raw
+        self.dynamic_count = 4 if vars(facts).get("_raw_seed") is not None else 1
+
+    def _dynamic(self, count):
+        for _ in range(count):
+            _ColdGraphRead._check_dynamic(self.facts.guard, self.facts.store, self.facts.connection)
+
+    def checkpoint(self):
+        self._dynamic(self.dynamic_count)
+
+    def _read(self, name):
+        self._dynamic(1 + self.dynamic_count)
+        return self.raw[name]
+
+    def attempt_rows(self):
+        self._dynamic(2 * self.dynamic_count)
+        return sorted(self.raw["attempts"], key=_cold_attempt_order)
+
+    def association(self):
+        return self._read("association")
+
+    def model_reserved(self):
+        return self._read("model-reserved")
+
+    def anchor_ids(self, kind):
+        return self._read("anchor-ids:" + kind)
+
+    def mode(self):
+        return self._read("mode")
+
+    def reservation(self, aid):
+        return self._read("reservation:" + aid)
+
+    def model_operations(self):
+        return self._read("model-operations")
+
+    def anchor(self, rid, kind, aid):
+        self.checkpoint()
+        require(rid == self.job["id"])
+        rows = self._read("anchor:" + kind + ":" + aid)
+        require(len(rows) == 1, "Missing/duplicate natural model anchor")
+        return rows[0]
+
+
+def _counter_packet_core(packet):
+    from .natural_trial_runs import MARKER
+
+    job, manifest = (packet.job, packet.manifest)
+    rows = packet.attempt_rows()
+    ctx = job["context"]
+    require(
+        all(
+            (
+                isinstance(r["parameters"], dict)
+                and isinstance(r["parameters"].get("natural_spec"), dict)
+                and (type(r["parameters"]["natural_spec"].get("ordinal")) is int)
+                for r in rows
+            )
+        )
+    )
+    rows.sort(key=lambda r: r["parameters"]["natural_spec"]["ordinal"])
+    context_keys = {
+        "kind",
+        "messages",
+        "requests",
+        "repairs",
+        "reserved_tokens",
+        "tools",
+        "spec_family",
+    }
+    associated = packet.association() if MARKER in ctx else None
+    packet.checkpoint()
+    if associated is not None:
+        stage = associated["stage"]
+        require(stage in {"source", "cold"})
+        context_keys.add(MARKER)
+    require(
+        set(ctx) == context_keys
+        and ctx["spec_family"] == codec.VERSION
+        and (ctx["kind"] == "INTERNAL_APPRUN")
+        and isinstance(ctx["messages"], list)
+        and (
+            not rows
+            and ctx["messages"] == []
+            or (
+                bool(rows)
+                and fingerprint(dict(messages=ctx["messages"], tools=[], model="intern-s2"))
+                == rows[-1]["parameters"]["request_fingerprint"]
+            )
+        )
+        and all(
+            (type(ctx.get(k)) is int for k in ("requests", "repairs", "reserved_tokens", "tools"))
+        )
+        and (ctx["repairs"] == 0)
+        and (ctx["requests"] == len(rows) <= manifest.runtime_limits.max_requests)
+        and (ctx["reserved_tokens"] == sum((r["reserved_tokens"] for r in rows)))
+        and (0 <= ctx["tools"] <= manifest.runtime_limits.max_tools)
+    )
+    reserved_events = packet.model_reserved()
+    require(
+        sorted(reserved_events, key=lambda x: x["attempt_id"])
+        == sorted(
+            [dict(attempt_id=r["id"], mode=r["mode"].lower()) for r in rows],
+            key=lambda x: x["attempt_id"],
+        )
+    )
+    for kind in ("NS_RESERVED", "NS_RECEIVED", "NS_SETTLED", "NS_REJECTED"):
+        ids = packet.anchor_ids(kind)
+        require(len(ids) == len(set(ids)) and set(ids) <= {r["id"] for r in rows})
+        accepted_states = {
+            "NS_RESERVED": {"STARTED", "RECEIVED", "VERIFIED", "REJECTED_KNOWN"},
+            "NS_RECEIVED": {"RECEIVED", "VERIFIED", "REJECTED_KNOWN"},
+            "NS_SETTLED": {"VERIFIED"},
+            "NS_REJECTED": {"REJECTED_KNOWN"},
+        }[kind]
+        require(set(ids) == {r["id"] for r in rows if r["status"] in accepted_states})
+    ordinals, opids, steps = (set(), set(), set())
+    for row in rows:
+        meta = row["parameters"].get("natural_spec")
+        require(
+            isinstance(meta, dict)
+            and row["status"] in {"STARTED", "RECEIVED", "VERIFIED", "REJECTED_KNOWN"}
+            and (row["mode"] == packet.mode())
+            and (row["request_model"] == "intern-s2")
+            and (type(meta.get("ordinal")) is int)
+            and (meta["ordinal"] not in ordinals)
+            and (meta["operation_id"] not in opids)
+            and (meta["step_id"] not in steps)
+        )
+        ordinals.add(meta["ordinal"])
+        opids.add(meta["operation_id"])
+        steps.add(meta["step_id"])
+        slots = packet.reservation(row["id"])
+        require(
+            len(slots) == 1
+            and slots[0]["run_id"] == job["id"]
+            and (slots[0]["created_at"] == row["created_at"])
+        )
+        stored = packet.anchor(job["id"], "NS_RESERVED", row["id"])
+        require(
+            stored
+            == dict(
+                attempt_id=row["id"],
+                parameters_fingerprint=fingerprint(row["parameters"]),
+                reserved_tokens=row["reserved_tokens"],
+                request_model=row["request_model"],
+                mode=row["mode"],
+                created_at=row["created_at"],
+                operation_id=meta["operation_id"],
+                step_id=meta["step_id"],
+                fence=meta["fence"],
+                reservation_fingerprint=fingerprint(dict(slots[0])),
+            )
+        )
+    require(ordinals == set(range(len(rows))))
+    ops = packet.model_operations()
+    require(set(ops) == opids and len(ops) == len(rows))
+    packet.checkpoint()
+    return rows
+
+
+_COUNTER_PACKET_CLASS = _CounterPacket
+_COUNTER_PACKET_CLASS_ITEMS = tuple(vars(_CounterPacket).items())
+_COUNTER_PACKET_CLASS_MRO = type.__getattribute__(_CounterPacket, "__mro__")
+_COUNTER_PACKET_FACTS = tuple(
+    (name, getattr(_ColdRunFacts, name))
+    for name in (
+        "pin_manifest",
+        "attempt_rows",
+        "association",
+        "mode",
+        "model_reserved",
+        "anchor_ids",
+        "reservation",
+        "anchor_rows",
+        "model_operations",
+        "_read_loaded",
+    )
+)
+_COUNTER_PACKET_FUNCTIONS = (
+    _counters,
+    _counter_checkpoint,
+    _anchor,
+    _anchor_from_facts,
+    _check_run_facts,
+    _cold_attempt_order,
+    _cold_sqlite_order,
+    fingerprint,
+    _counter_packet_core,
+    *[fn for _, fn in _COUNTER_PACKET_FACTS],
+    *[value for _, value in _COUNTER_PACKET_CLASS_ITEMS if type(value).__name__ == "function"],
+)
+_COUNTER_PACKET_CODE = tuple(
+    (fn, fn.__code__, fn.__defaults__, fn.__kwdefaults__, tuple((fn.__kwdefaults__ or {}).items()))
+    for fn in _COUNTER_PACKET_FUNCTIONS
+)
+_COUNTER_PACKET_BINDINGS = tuple((fn.__name__, fn) for fn in _COUNTER_PACKET_FUNCTIONS[:9])
+_COUNTER_PACKET_JSON = (
+    json.dumps,
+    json.JSONEncoder,
+    json.encoder._make_iterencode,
+    json.encoder.c_make_encoder,
+    json.encoder.encode_basestring,
+    json.encoder.encode_basestring_ascii,
+)
+_COUNTER_PACKET_JSON_METHODS = tuple(
+    (name, _counter_getattr_static(json.JSONEncoder, name))
+    for name in (
+        "__init__",
+        "__new__",
+        "__getattribute__",
+        "__setattr__",
+        "encode",
+        "iterencode",
+        "default",
+    )
+)
+_COUNTER_PACKET_JSON_CODE = tuple(
+    (fn, fn.__code__, fn.__defaults__, fn.__kwdefaults__, tuple((fn.__kwdefaults__ or {}).items()))
+    for fn in (
+        json.dumps,
+        json.encoder._make_iterencode,
+        *[fn for _, fn in _COUNTER_PACKET_JSON_METHODS],
+    )
+    if hasattr(fn, "__code__")
+)
+_COUNTER_PACKET_JSON_ITEMS = tuple(vars(json.JSONEncoder).items())
+_COUNTER_PACKET_JSON_MRO = type.__getattribute__(json.JSONEncoder, "__mro__")
+_COUNTER_PACKET_VERSION = codec.VERSION
+_COUNTER_PACKET_COPY_ALIASES = tuple(
+    (name, getattr(_policy_segments, name))
+    for name in ("_Comparison", "_trial_typed_nested_classes", "_trial_pure_mapping", "require")
+)
+_COUNTER_PACKET_COPY_STANDARD = _counter_getattr_static(
+    _RAW_READ_COMPARISON, "standard_serializers"
+)
+_COUNTER_PACKET_COPY_CODE = tuple(
+    (fn, fn.__code__) for _, fn in _COUNTER_PACKET_COPY_ALIASES if hasattr(fn, "__code__")
+)
+_COUNTER_PACKET_COPY_STANDARD_CODE = _COUNTER_PACKET_COPY_STANDARD.__code__
+from . import natural_trial_runs as _counter_trial_runs  # noqa: E402
+
+_COUNTER_PACKET_MARKER = _counter_trial_runs.MARKER
+
+
+def _counter_native_keys(value):
+    return type(value) is dict and all(
+        type(key) is str or type(key) is _ColdGraphQuotedName for key in value
+    )
+
+
+_COUNTER_NATIVE_KEYS = _counter_native_keys
+_COUNTER_NATIVE_KEYS_CODE = _counter_native_keys.__code__
+
+
+def _cold_counter_loaded(c, job, manifest, facts):
+    """Only complete already-loaded inputs; miss never issues a query or core call."""
+    if (
+        not _raw_read_eligible(facts, "attempts")
+        or _counter_native_keys is not _COUNTER_NATIVE_KEYS
+        or _counter_native_keys.__code__ is not _COUNTER_NATIVE_KEYS_CODE
+        or any(
+            _counter_getattr_static(kind, name, _RAW_READ_MISS) is not original
+            for kind, original, name in _RAW_SEED_SCHEMA
+        )
+        or _CounterPacket is not _COUNTER_PACKET_CLASS
+        or type.__getattribute__(_CounterPacket, "__mro__") is not _COUNTER_PACKET_CLASS_MRO
+        or len(vars(_CounterPacket)) != len(_COUNTER_PACKET_CLASS_ITEMS)
+        or any(
+            key is not old_key or value is not old_value
+            for (key, value), (old_key, old_value) in zip(
+                vars(_CounterPacket).items(), _COUNTER_PACKET_CLASS_ITEMS, strict=True
+            )
+        )
+        or any(globals().get(name) is not fn for name, fn in _COUNTER_PACKET_BINDINGS)
+        or any(_counter_getattr_static(facts, name) is not fn for name, fn in _COUNTER_PACKET_FACTS)
+        or any(
+            fn.__code__ is not code
+            or fn.__defaults__ is not defaults
+            or fn.__kwdefaults__ is not kwdefaults
+            or len(fn.__kwdefaults__ or {}) != len(items)
+            or any(
+                key is not old_key or value is not old_value
+                for (key, value), (old_key, old_value) in zip(
+                    (fn.__kwdefaults__ or {}).items(), items, strict=True
+                )
+            )
+            for fn, code, defaults, kwdefaults, items in _COUNTER_PACKET_CODE
+        )
+        or json.dumps is not _COUNTER_PACKET_JSON[0]
+        or json.JSONEncoder is not _COUNTER_PACKET_JSON[1]
+        or json.encoder._make_iterencode is not _COUNTER_PACKET_JSON[2]
+        or json.encoder.c_make_encoder is not _COUNTER_PACKET_JSON[3]
+        or json.encoder.encode_basestring is not _COUNTER_PACKET_JSON[4]
+        or json.encoder.encode_basestring_ascii is not _COUNTER_PACKET_JSON[5]
+        or _raw_seed_db.json is not json
+        or _raw_seed_db.hashlib is not hashlib
+        or type.__getattribute__(json.JSONEncoder, "__mro__") is not _COUNTER_PACKET_JSON_MRO
+        or len(vars(json.JSONEncoder)) != len(_COUNTER_PACKET_JSON_ITEMS)
+        or any(
+            key is not old_key or value is not old_value
+            for (key, value), (old_key, old_value) in zip(
+                vars(json.JSONEncoder).items(), _COUNTER_PACKET_JSON_ITEMS, strict=True
+            )
+        )
+        or any(
+            _counter_getattr_static(json.JSONEncoder, name) is not fn
+            for name, fn in _COUNTER_PACKET_JSON_METHODS
+        )
+        or any(
+            fn.__code__ is not code
+            or fn.__defaults__ is not defaults
+            or fn.__kwdefaults__ is not kwdefaults
+            or len(fn.__kwdefaults__ or {}) != len(items)
+            or any(
+                key is not old_key or value is not old_value
+                for (key, value), (old_key, old_value) in zip(
+                    (fn.__kwdefaults__ or {}).items(), items, strict=True
+                )
+            )
+            for fn, code, defaults, kwdefaults, items in _COUNTER_PACKET_JSON_CODE
+        )
+        or codec.VERSION is not _COUNTER_PACKET_VERSION
+        or any(
+            _policy_segments.__dict__.get(name) is not fn
+            for name, fn in _COUNTER_PACKET_COPY_ALIASES
+        )
+        or any(fn.__code__ is not code for fn, code in _COUNTER_PACKET_COPY_CODE)
+        or _counter_getattr_static(_RAW_READ_COMPARISON, "standard_serializers")
+        is not _COUNTER_PACKET_COPY_STANDARD
+        or _COUNTER_PACKET_COPY_STANDARD.__code__ is not _COUNTER_PACKET_COPY_STANDARD_CODE
+        or _counter_trial_runs.MARKER is not _COUNTER_PACKET_MARKER
+        or _COUNTER_SNAPSHOT is not _COUNTER_VALUE_CODE[1][0]
+        or _policy_segments._snapshot is not _COUNTER_SNAPSHOT
+        or _raw_seed_db.fingerprint is not fingerprint
+    ):
+        return _RAW_READ_MISS
+    namespace = vars(facts)
+    if type(manifest) is not AppManifest or not any(
+        current is manifest for current, _ in namespace["_manifests"]
+    ):
+        return _RAW_READ_MISS
+    raw, rows = namespace["_raw"], namespace["_raw"].get("attempts")
+    if (
+        type(rows) is not list
+        or job is not namespace["job"]
+        or not _counter_native_keys(job)
+        or not _counter_native_keys(job.get("context"))
+    ):
+        return _RAW_READ_MISS
+    required = [
+        "attempts",
+        "model-reserved",
+        "model-operations",
+        *[
+            "anchor-ids:" + kind
+            for kind in ("NS_RESERVED", "NS_RECEIVED", "NS_SETTLED", "NS_REJECTED")
+        ],
+    ]
+    if _COUNTER_PACKET_MARKER in job["context"]:
+        required.append("association")
+    if rows:
+        required.append("mode")
+    for row in rows:
+        if (
+            not _counter_native_keys(row)
+            or type(row.get("id")) is not str
+            or not _counter_native_keys(row.get("parameters"))
+            or not _counter_native_keys(row["parameters"].get("natural_spec"))
+            or type(row["parameters"]["natural_spec"].get("ordinal")) is not int
+            or not (
+                type(row.get("created_at")) is float
+                or type(row.get("created_at")) is int
+                or row.get("created_at") is None
+            )
+        ):
+            return _RAW_READ_MISS
+        required.extend(("reservation:" + row["id"], "anchor:NS_RESERVED:" + row["id"]))
+    if any(name not in raw for name in required):
+        return _RAW_READ_MISS
+    complete = dict(job=job, raw={name: raw[name] for name in required})
+    if not _raw_seed_plain(complete):
+        return _RAW_READ_MISS
+    # Exact ordinal/int and native storage eligibility precedes either sort.
+    # Retain original rows for the old caller's node proof and alias checks.
+    originals = sorted(rows, key=_cold_attempt_order)
+    originals.sort(key=lambda row: row["parameters"]["natural_spec"]["ordinal"])
+    snapshot = _COUNTER_SNAPSHOT([complete, manifest])
+    if snapshot is _policy_segments._UNSUITABLE:
+        return _RAW_READ_MISS
+    private, private_manifest = snapshot
+    packet = _CounterPacket(facts, private["job"], private_manifest, private["raw"])
+    try:
+        _counter_packet_core(packet)
+        _ColdRunFacts.check(facts, facts.store, c, job)
+        return originals
+    except BaseException:
+        _invalidate_cold_run_facts(facts)
+        raise
 
 
 @dataclass(frozen=True)

@@ -198,7 +198,7 @@ def test_internal_bookkeeping_cannot_run_foreign_callbacks(local_origin, monkeyp
             assert not runtime._raw_read_eligible(facts, "model-reserved")
 
 
-def seeded_reader(f, c, guard):
+def seeded_reader(f, c, guard, *, job_values=None, attempt_values=None, reserved_values=None):
     from sim2act.db import runs
     from sim2act.text_workflows import RunScopeInput
 
@@ -212,6 +212,7 @@ def seeded_reader(f, c, guard):
     guard.add(prefix.key + ":native", native)
     job = {str(key): None for key in runs.c.keys()}
     job.update(id=rid, principal_id=user, project_id=pid)
+    job.update(job_values or {})
     rows = {
         key: None
         for key in (
@@ -237,14 +238,14 @@ def seeded_reader(f, c, guard):
             "current_goal_versions",
         )
     }
-    rows.update(run=[job], attempts=[], operations=[])
+    rows.update(run=[job], attempts=[] if attempt_values is None else attempt_values, operations=[])
     audit = pb._ColdSourceAuditFacts(
         prefix, prefix.key + ":complete", native, rows, "synthetic-digest"
     )
     guard.add(audit.key, audit.fields())
     seed = runtime._cold_run_raw_seed(f.store, c, guard, audit)
     facts = runtime._ColdRunFacts(f.store, c, seed.job, guard, raw_seed=seed)
-    facts._put("model-reserved", [])
+    facts._put("model-reserved", [] if reserved_values is None else reserved_values)
     return facts, seed
 
 
