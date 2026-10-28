@@ -7,13 +7,18 @@ permission or postwrite proof can be transferred by it. Original G1 is untouched
 from __future__ import annotations
 
 import ast
+import builtins
+import dis
 import functools
+import hashlib
 import inspect
+import importlib.util
 import signal
 import sys
 import threading
 import time
 import types
+from collections import deque
 from contextlib import contextmanager
 from pathlib import Path
 from sqlite3 import Connection as SQLiteConnection
@@ -67,8 +72,120 @@ _SQL_CODE = tuple(
 )
 
 
+_SQL_INSTANCE_FIELDS = tuple(
+    (
+        owner,
+        {
+            name: value
+            for kind in reversed(owner.__mro__)
+            if kind is not object
+            for name, value in vars(kind).items()
+            if callable(value) or type(value) in (property, classmethod, staticmethod)
+        },
+    )
+    for owner in (Connection, Engine, SQLiteDialect_pysqlite)
+)
+
 # Test harness supplies an explicit, reviewed fixture callback list. It never
 # installs an entitlement resolver or changes production environment selection.
+
+
+# This finite synthetic fixture catalogue is code provenance, never entitlement.
+# The product default does not accept callbacks. New fixtures require review.
+_FIXTURE_CATALOG = {
+    "test_spec_production_controller.py": (
+        "916b1d5593fd84fed5037927bb3ae311f5caf65a1d3937c5a02cd0bdf4027cae",
+        {
+            "configured.<locals>.environment": ("data",),
+            "configured.<locals>.source": ("binding", "data", "fixture"),
+            "configured.<locals>.<lambda>": (),
+        },
+    ),
+    "test_pb_spec_production_controller.py": (
+        "e27ed65f3a2ec2fc752cf6fbc93c78b9408e6e1b7a5dd8a3a13f71bf73b34cba",
+        {
+            "observe_original_lease_failures.<locals>.record": ("observation_failures", "tmp_path"),
+            "observe_original_lease_failures.<locals>.observed_guard": ("guard", "record"),
+            "observe_reservation_reads.<locals>.check_token": ("local",),
+            "observe_reservation_reads.<locals>.observed_preflight": ("check_token", "local", "preflight"),
+            "observe_reservation_reads.<locals>.observed_guard": ("guard", "local"),
+            "observe_reservation_reads.<locals>.observed_check": ("check_token", "reservation_check"),
+            "observe_reservation_reads.<locals>.observed_reads": ("journal_reads", "local", "tokens"),
+            "test_pb_production_original_source_extraction_explicit_use_and_cold.<locals>.cold_environment": ("cold_store", "data", "original_environment"),
+        },
+    ),
+    "test_owned_g0_full_controller.py": (
+        "1158c7a4af2c073d05cee61ec2b7be4246db28ba84c8a3be457f5499a9c1693f",
+        {
+            "test_owned_g0_full_original_controller.<locals>.measured_after": ("g1", "original_after", "save", "stages"),
+            "test_owned_g0_full_original_controller.<locals>.save": ("candidates", "g1", "stages", "tmp_path"),
+        },
+    ),
+}
+
+
+def _catalog_current(expected, actual):
+    if type(expected) is not type(actual):
+        return False
+    if type(expected) is str:
+        return expected == actual
+    if type(expected) is tuple:
+        return len(expected) == len(actual) and all(_catalog_current(a, b)
+            for a, b in zip(expected, actual, strict=True))
+    if type(expected) is dict:
+        return (len(expected) == len(actual) and all(type(key) is str for key in actual)
+            and all(key in actual and _catalog_current(value, actual[key])
+                for key, value in expected.items()))
+    return False
+
+
+def _fixture_code(fn):
+    path = Path(fn.__code__.co_filename)
+    if path.name == "contextlib.py" and fn.__code__.co_qualname == "contextmanager.<locals>.helper":
+        import contextlib
+        expected = next(code for code in _codes(compile(path.read_bytes(), str(path),
+            "exec", dont_inherit=True, optimize=sys.flags.optimize))
+            if code.co_qualname == "contextmanager.<locals>.helper")
+        cells = fn.__closure__ or ()
+        if (fn.__globals__ is not vars(contextlib) or fn.__code__ != expected
+                or len(cells) != 1 or type(cells[0].cell_contents) is not types.FunctionType):
+            raise UnsupportedPlan("Changed fixture contextmanager wrapper")
+        _fixture_code(cells[0].cell_contents)
+        return
+    entry = _FIXTURE_CATALOG.get(path.name)
+    module = sys.modules.get(fn.__module__)
+    if (entry is None or type(module) is not types.ModuleType
+            or fn.__globals__ is not vars(module)
+            or Path(module.__file__).resolve() != path.resolve()
+            or hashlib.sha256(path.read_bytes()).hexdigest() != entry[0]
+            or entry[1].get(fn.__code__.co_qualname) != fn.__code__.co_freevars):
+        raise UnsupportedPlan("Unreviewed synthetic callback source or closure")
+    expected = tuple(_codes(compile(path.read_bytes(), str(path), "exec",
+        dont_inherit=True, optimize=sys.flags.optimize)))
+    if not any(fn.__code__ == code for code in expected):
+        raise UnsupportedPlan("Changed reviewed synthetic callback code")
+
+
+
+def _fixture_slot(fn, owner, qualname):
+    module = owner.__name__ if type(owner) is types.ModuleType else owner.__module__ + "." + owner.__qualname__
+    if fn.__code__.co_qualname == "contextmanager.<locals>.helper":
+        fn = fn.__closure__[0].cell_contents
+    expected = {
+        ("sim2act.db.Store", "Store.guard"): (
+            "observe_reservation_reads.<locals>.observed_guard",
+            "observe_original_lease_failures.<locals>.observed_guard"),
+        ("sim2act.spec_production", "environment"): ("configured.<locals>.environment",
+            "test_pb_production_original_source_extraction_explicit_use_and_cold.<locals>.cold_environment"),
+        ("sim2act.production_evidence", "resolve_account"): ("configured.<locals>.source",),
+        ("sim2act.production_trial_admission", "_qualified"): ("configured.<locals>.<lambda>",),
+        ("sim2act.pa_trial_dispatch", "preflight"): ("observe_reservation_reads.<locals>.observed_preflight",),
+        ("sim2act.pa_trial_dispatch", "_journal_reads"): ("observe_reservation_reads.<locals>.observed_reads",),
+        ("sim2act.natural_spec_runtime", "reservation_check"): ("observe_reservation_reads.<locals>.observed_check",),
+        ("sim2act.natural_spec_runtime", "_model_settlement_read"): ("test_owned_g0_full_original_controller.<locals>.measured_after",),
+    }.get((module, qualname), ())
+    if fn.__code__.co_qualname not in expected:
+        raise UnsupportedPlan("Reviewed fixture in wrong target slot")
 
 
 def _codes(root):
@@ -105,6 +222,20 @@ class _Code:
         self.schema = schema
         self.shape, self.matches = schema._schema_shape, schema._schema_matches
         self.keep = []
+        self.default_headers = {}
+        self.fixture_globals = []
+        self.fixture_attributes = []
+        self.import_roles = []
+        self.schema_roles = tuple((sys.modules[kind.__module__], kind.__name__, kind)
+            for kind, *_ in schema._SCHEMAS)
+        if any(vars(owner).get(name) is not kind for owner, name, kind in self.schema_roles):
+            raise UnsupportedPlan("Changed original schema constructor role")
+        self.catalog_key = ast.literal_eval(next(node.value
+            for node in ast.parse(Path(__file__).read_bytes()).body
+            if type(node) is ast.Assign and any(type(target) is ast.Name
+                and target.id == "_FIXTURE_CATALOG" for target in node.targets)))
+        if not _catalog_current(self.catalog_key, _FIXTURE_CATALOG):
+            raise UnsupportedPlan("Changed synthetic callback catalogue")
         self.ast_files = {}
         self.node_indexes = {}
         seen = set()
@@ -115,8 +246,62 @@ class _Code:
             seen.add(id(fn))
             code = fn.__code__
             path = Path(code.co_filename)
+            namespace = fn.__globals__
+            module = sys.modules.get(namespace.get("__name__"))
+            if (type(module) is not types.ModuleType or namespace is not vars(module)
+                    or Path(module.__file__).resolve() != path.resolve()):
+                raise UnsupportedPlan("Foreign function global namespace")
+            self.fixture_globals.append((fn, namespace, tuple((name, namespace[name])
+                for name in code.co_names if name in namespace)))
+            if str(path) not in self.ast_files:
+                self.ast_files[str(path)] = ast.parse(path.read_bytes())
+            nodes = self.ast_files[str(path)].body
+            for node in nodes:
+                if type(node) is not ast.ImportFrom:
+                    continue
+                package = importlib.util.resolve_name("." * node.level + (node.module or ""),
+                    namespace.get("__package__")) if node.level else node.module
+                if package is None or not (package == "sim2act" or package.startswith("sim2act.")):
+                    continue
+                for alias in node.names:
+                    name = alias.asname or alias.name
+                    if name not in code.co_names:
+                        continue
+                    child = sys.modules.get(package + "." + alias.name)
+                    imported = sys.modules.get(package)
+                    expected = child if child is not None else vars(imported).get(alias.name)
+                    if namespace.get(name) is not expected:
+                        raise UnsupportedPlan("Changed imported function or schema role: " + name)
+                    self.import_roles.append((namespace, name, expected))
             if any(fn is allowed for allowed in callbacks):
-                pass  # Exact caller-supplied synthetic fixture object only.
+                _fixture_code(fn)
+                from . import production_evidence as fixture_evidence
+                from . import production_trial_policy as fixture_policy
+                from . import pb_natural_specs as fixture_pb
+                if fn.__builtins__ is not vars(builtins) or any(
+                        name in vars(builtins) and name in namespace
+                        and namespace[name] is not vars(builtins)[name]
+                        for name in code.co_names):
+                    raise UnsupportedPlan("Shadowed fixture builtin effect")
+                roles = {"evidence": fixture_evidence, "policy": fixture_policy,
+                    "fingerprint": db.fingerprint, "pb": fixture_pb,
+                    "time": time, "sys": sys}
+                for name in code.co_names:
+                    if name in roles and namespace.get(name) is not roles[name]:
+                        raise UnsupportedPlan("Changed fixture global role: " + name)
+                source_kind = next(kind for kind, *_ in schema._SCHEMAS
+                    if kind.__module__ == fixture_policy.__name__
+                    and kind.__name__ == "SourceVerificationResult")
+                effects = ((fixture_policy, "SourceVerificationResult", source_kind),
+                    (fixture_evidence, "requirements_for", fixture_evidence.requirements_for),
+                    (fixture_pb, "_source_reads_current", fixture_pb._source_reads_current))
+                for owner, key, value in effects:
+                    if vars(owner).get(key) is not value:
+                        raise UnsupportedPlan("Changed fixture effect attribute")
+                    self.fixture_attributes.append((owner, key, value))
+                self.fixture_globals.append((fn, fn.__globals__, tuple(
+                    (name, fn.__globals__[name]) for name in code.co_names
+                    if name in fn.__globals__)))
             else:
                 if path.parent.name != "sim2act" and not (
                     path.name == "contextlib.py"
@@ -141,6 +326,13 @@ class _Code:
                     raise UnsupportedPlan(
                         "Changed callback code: " + fn.__module__ + "." + fn.__qualname__
                     )
+            if fn.__kwdefaults__ is not None and type(fn.__kwdefaults__) is not dict:
+                raise UnsupportedPlan("Exact function keyword defaults required")
+            self.default_headers[id(fn)] = (
+                fn.__defaults__,
+                fn.__kwdefaults__,
+                tuple((fn.__kwdefaults__ or {}).items()),
+            )
             defaults = self.shape((fn.__defaults__, fn.__kwdefaults__), self.keep)
             self.functions.append(
                 (
@@ -158,6 +350,8 @@ class _Code:
 
         def target(owner, name, fn, qualname):
             if any(fn is allowed for allowed in callbacks):
+                _fixture_code(fn)
+                _fixture_slot(fn, owner, qualname)
                 return
             path = Path(
                 owner.__file__
@@ -296,6 +490,17 @@ class _Code:
                     self.slots.append((module, key, value))
         from . import natural_spec_runtime as runtime
         from . import pa_spec_apps as spec
+        self.writer_function = runtime._model_settlement_writer
+        self.writer_code = self.writer_function.__wrapped__.__code__
+        self.writer_yields = frozenset(item.offset for item in dis.get_instructions(self.writer_code)
+            if item.opname == "YIELD_VALUE")
+        self.writer_table = runtime._OWNED_WRITER_LIFETIMES
+        self.serializer_slots = tuple({(kind, name): value
+            for model, *_ in schema._SCHEMAS
+            for kind in model.__mro__
+            for name in ("model_dump",)
+            for value in (type.__getattribute__(kind, "__dict__").get(name),)
+        }.items())
 
         for owner, keys in (
             (spec, ("bound", "commit_guard", "receipts", "receipt_for", "compile_candidate")),
@@ -343,7 +548,76 @@ class _Code:
                 )
             )
 
-    def current(self):
+    def fixture_function_role(self, name, fn):
+        if name == "func":
+            return True  # _fixture_code already pins the standard wrapper's target.
+        expected = {
+            "guard": (("sim2act.db", "Store.guard"),
+                ("test_pb_spec_production_controller", "observe_original_lease_failures.<locals>.observed_guard")),
+            "preflight": (("sim2act.pa_trial_dispatch", "preflight"),),
+            "reservation_check": (("sim2act.natural_spec_runtime", "reservation_check"),),
+            "check_token": (("test_pb_spec_production_controller", "observe_reservation_reads.<locals>.check_token"),),
+            "record": (("test_pb_spec_production_controller", "observe_original_lease_failures.<locals>.record"),),
+            "save": (("test_owned_g0_full_controller", "test_owned_g0_full_original_controller.<locals>.save"),),
+            "original_environment": (("test_spec_production_controller", "configured.<locals>.environment"),),
+            "journal_reads": (("sim2act.pa_trial_dispatch", "_journal_reads"),),
+            "original_after": (("sim2act.natural_spec_runtime", "_model_settlement_read"),),
+        }.get(name, ())
+        if fn.__code__.co_qualname == "contextmanager.<locals>.helper":
+            cells = fn.__closure__ or ()
+            if len(cells) != 1 or type(cells[0].cell_contents) is not types.FunctionType:
+                return False
+            fn = cells[0].cell_contents
+        return any(fn.__globals__ is vars(sys.modules[module]) and fn.__code__.co_qualname == qualname
+            for module, qualname in expected)
+
+    def fixture_current(self, worker, current):
+        from .config import Settings
+        from .spec_production import ProductionTrialBinding
+        for fn in self.callbacks:
+            values = dict(zip(fn.__code__.co_freevars,
+                (cell.cell_contents for cell in fn.__closure__ or ()), strict=True))
+            for name, value in values.items():
+                if type(value) is types.FunctionType:
+                    if not self.fixture_function_role(name, value):
+                        return False
+                    continue
+                if name == "fixture":
+                    if (type(value) is not dict or type(value.get("revoked")) is not bool
+                            or type(value.get("source_reads")) is not int):
+                        return False
+                elif name == "data":
+                    if (type(value) is not tuple or len(value) < 4
+                            or type(value[0]) is not _gate_db.Store
+                            or not value[0].test_only or not value[0].sqlite
+                            or type(value[1]) is not Settings or value[1] is not worker.s
+                            or type(value[3]) is not str or value[3] != current["principal_id"]):
+                        return False
+                elif name == "binding":
+                    if type(value) is not ProductionTrialBinding or value is not worker.pa_trial:
+                        return False
+                elif name == "cold_store":
+                    if value is not worker.store:
+                        return False
+                elif name == "local":
+                    if (type(value) is not threading.local
+                            or set(vars(value)) - {"record"}
+                            or vars(value).get("record") is not None):
+                        return False
+                elif name in {"tokens", "candidates", "g1", "observation_failures"}:
+                    if type(value) is not list:
+                        return False
+                elif name == "stages":
+                    if type(value) is not dict:
+                        return False
+                elif name == "tmp_path":
+                    if type(value) is not type(Path()):
+                        return False
+                else:
+                    return False
+        return True
+
+    def current(self, *, full=True):
         from . import _immutable_settlement as owned
         from . import natural_spec_runtime as runtime
 
@@ -365,7 +639,13 @@ class _Code:
                 for fn, code in (*_CANDIDATE_CODE, *owned._OWNED_CODE, *_private_sql._SQLITE_CODE)
             )
             or any(fn.__code__ is not code for fn, code in self.schema._PAIR_CODE)
-            or not runtime._base_segments.serializers_current()
+            or any(type.__getattribute__(kind, "__dict__").get(name) is not value
+                for (kind, name), value in self.serializer_slots)
+            or any(type.__getattribute__(kind, "__dict__").get("__pydantic_serializer__") is not serializer
+                for kind, _, serializer, *_ in self.models)
+            or runtime._model_settlement_writer is not self.writer_function
+            or self.writer_function.__wrapped__.__code__ is not self.writer_code
+            or runtime._OWNED_WRITER_LIFETIMES is not self.writer_table
             or runtime._raw_read_settlement.time.time is not runtime._RAW_DYNAMIC_CLOCKS[0]
             or runtime._raw_read_settlement.time.monotonic is not runtime._RAW_DYNAMIC_CLOCKS[1]
         ):
@@ -391,11 +671,48 @@ class _Code:
                 or type(dict.get(fixture, "source_reads")) is not int
             ):
                 return False
+        if any(vars(owner).get(name) is not value
+                for owner, name, value in (*self.fixture_attributes, *self.schema_roles)):
+            return False
+        if full and any(namespace.get(name) is not value
+                for namespace, name, value in self.import_roles):
+            return False
+        if not full:
+            return True
+        if not _catalog_current(self.catalog_key, _FIXTURE_CATALOG) or any(
+            fn.__globals__ is not namespace or any(namespace.get(name) is not value
+                for name, value in items)
+            for fn, namespace, items in self.fixture_globals
+        ):
+            return False
         if any(
-            inspect.getattr_static(owner, name) is not value for owner, name, value in self.slots
+            (
+                type.__getattribute__(owner, "__dict__")
+                if isinstance(owner, type)
+                else object.__getattribute__(owner, "__dict__")
+            ).get(name)
+            is not value
+            for owner, name, value in self.slots
         ):
             return False
         for fn, code, defaults, cells, contents in self.functions:
+            positional, keywords, items = self.default_headers[id(fn)]
+            if (
+                fn.__defaults__ is not positional
+                or fn.__kwdefaults__ is not keywords
+                or (
+                    keywords is not None
+                    and (
+                        len(keywords) != len(items)
+                        or any(type(key) is not str for key in keywords)
+                        or any(
+                            key not in keywords or keywords[key] is not value
+                            for key, value in items
+                        )
+                    )
+                )
+            ):
+                return False
             if (
                 fn.__code__ is not code
                 or fn.__closure__ is not cells
@@ -403,7 +720,7 @@ class _Code:
                     cell.cell_contents is not value
                     for cell, value in zip(cells or (), contents, strict=True)
                 )
-                or not self.matches((fn.__defaults__, fn.__kwdefaults__), defaults)
+                or (full and not self.matches((fn.__defaults__, fn.__kwdefaults__), defaults))
             ):
                 return False
         for kind, validator, serializer, shape, items in self.models:
@@ -412,12 +729,12 @@ class _Code:
                 namespace.get(key) is not value for key, value in items
             ):
                 return False
-            if not self.schema._fixed_schema(kind):
+            if full and not self.schema._fixed_schema(kind):
                 return False
             if (
                 namespace.get("__pydantic_validator__") is not validator
                 or namespace.get("__pydantic_serializer__") is not serializer
-                or not self.matches(namespace.get("__pydantic_core_schema__"), shape)
+                or (full and not self.matches(namespace.get("__pydantic_core_schema__"), shape))
             ):
                 return False
         return True
@@ -445,7 +762,10 @@ def _sql_current(worker, c, own_listeners=()):
         or c.connection.driver_connection.text_factory is not str
         or c.engine.dialect._json_serializer is not None
         or c.engine.dialect._json_deserializer is not None
-        or any(inspect.getattr_static(kind, name) is not value for kind, name, value in _SQL_SLOTS)
+        or any(
+            type.__getattribute__(kind, "__dict__").get(name) is not value
+            for kind, name, value in _SQL_SLOTS
+        )
         or any(fn.__code__ is not code for fn, code in _SQL_CODE)
     ):
         return False
@@ -453,13 +773,9 @@ def _sql_current(worker, c, own_listeners=()):
         raw = object.__getattribute__(owner, "__dict__")
         if type(raw) is not dict or any(type(key) is not str for key in raw):
             return False
-        for kind, key, value in _SQL_SLOTS:
-            if (
-                any(kind is base for base in type(owner).__mro__)
-                and key in raw
-                and raw[key] is not value
-            ):
-                return False
+        methods = next(fields for kind, fields in _SQL_INSTANCE_FIELDS if type(owner) is kind)
+        if any(key in methods and value is not methods[key] for key, value in raw.items()):
+            return False
     for table in db.attempts.metadata.tables.values():
         for column in table.c:
             if not any(
@@ -512,6 +828,8 @@ class MockCandidate:
             type(fn) is types.FunctionType for fn in fixture_callbacks
         ):
             raise UnsupportedPlan("Exact synthetic callbacks required")
+        for fn in fixture_callbacks:
+            _fixture_code(fn)
         self.code = _Code(fixture_callbacks)
         self.selected = 0
         self.fallback = 0
@@ -556,7 +874,7 @@ class MockCandidate:
     def prepare(self, worker, binding, call, platform):
         if not worker.store.test_only or not worker.store.sqlite:
             raise DomainError("PERMISSION_DENIED", "Owned G0 candidate requires synthetic SQLite")
-        if not self.code.current() or not _execution_current(worker):
+        if not self.code.current(full=True) or not _execution_current(worker):
             self.fallback += 1
             return None
         try:
@@ -572,8 +890,50 @@ class MockCandidate:
             return None
 
 
-def _execution_current(worker=None):
+_LOCK_TYPE = type(threading.Lock())
+_EVENT_CLASSES = tuple((kind, tuple(vars(kind).items()))
+    for kind in (threading.Event, threading.Condition))
+_EVENT_CODE = tuple((fn, fn.__code__) for kind, items in _EVENT_CLASSES
+    for _, fn in items if type(fn) is types.FunctionType)
+_THREAD_ITEMS = tuple(vars(threading.Thread).items())
+_THREAD_CODE = tuple((fn, fn.__code__) for _, fn in _THREAD_ITEMS
+    if type(fn) is types.FunctionType)
+_THREAD_FRAMES = sys._current_frames
+
+
+def _event_current(value):
+    if type(value) is not threading.Event:
+        return False
+    raw = vars(value)
+    if set(raw) != {"_cond", "_flag"} or type(raw["_flag"]) is not bool:
+        return False
+    cond = raw["_cond"]
+    if type(cond) is not threading.Condition:
+        return False
+    fields = vars(cond)
+    if set(fields) != {"_lock", "acquire", "release", "_waiters"}:
+        return False
+    lock = fields["_lock"]
+    if type(lock) is not _LOCK_TYPE or type(fields["_waiters"]) is not deque:
+        return False
+    if any(type(waiter) is not _LOCK_TYPE for waiter in fields["_waiters"]):
+        return False
+    return all(type(fields[name]) is types.BuiltinMethodType
+        and fields[name].__self__ is lock and fields[name].__name__ == name
+        for name in ("acquire", "release"))
+
+
+def _execution_current(worker=None, writer_epoch=None):
     if sys.gettrace() is not None or sys.getprofile() is not None:
+        return False
+    if (sys._current_frames is not _THREAD_FRAMES
+            or len(vars(threading.Thread)) != len(_THREAD_ITEMS)
+            or any(vars(threading.Thread).get(key) is not value for key, value in _THREAD_ITEMS)
+            or any(fn.__code__ is not code for fn, code in _THREAD_CODE)
+            or any(len(vars(kind)) != len(items) or any(vars(kind).get(key) is not value
+            for key, value in items) for kind, items in _EVENT_CLASSES)
+            or any(fn.__code__ is not code for fn, code in _EVENT_CODE)
+            or (worker is not None and not _event_current(worker.stop))):
         return False
     monitoring = getattr(sys, "monitoring", None)
     if monitoring is not None and any(monitoring.get_tool(i) is not None for i in range(6)):
@@ -589,6 +949,8 @@ def _execution_current(worker=None):
     for thread in threading.enumerate():
         if thread is current:
             continue
+        if type(thread) is not threading.Thread or "run" in vars(thread):
+            return False
         target = vars(thread).get("_target")
         from . import text_workflows
 
@@ -605,16 +967,47 @@ def _execution_current(worker=None):
         )
         if values.get("worker") is not worker or type(values.get("state")) is not dict:
             return False
+        if writer_epoch is not None:
+            frame = _THREAD_FRAMES().get(thread.ident)
+            seen_beat = False
+            allowed = (expected, *(code for _, code in _EVENT_CODE), *(code for _, code in _THREAD_CODE))
+            while frame is not None:
+                if not any(frame.f_code is code for code in allowed):
+                    return False
+                if frame.f_code is expected:
+                    if any(frame.f_locals.get(key) is not value for key, value in values.items()):
+                        return False
+                    seen_beat = True
+                frame = frame.f_back
+            if not seen_beat or vars(values["stopped"]).get("_flag") is not False:
+                return False
+        if writer_epoch is not None and (
+            target.__globals__ is not vars(text_workflows)
+            or not _event_current(values.get("stopped"))
+            or not _event_current(values.get("failed"))
+            or values.get("atomic_metadata") is not True
+            or values.get("state") is not writer_epoch[3]
+            or values.get("run") is not writer_epoch[2]
+            or values["state"].get("sync_contention_recovery") is not True
+            or values["state"].get("renewal_lock") is not writer_epoch[4]
+        ):
+            return False
     return True
 
 
 class _Scope:
     """One read-only writer epoch, bounded by original finite deadlines."""
 
-    def __init__(self, candidate, plan, worker, c, current, original_call, platform):
+    def __init__(self, candidate, plan, worker, c, current, original_call, platform, writer_epoch=None):
         from .natural_spec_runtime import _cold_graph_bytes
         from .pb_natural_specs import _source_reads_current
 
+        from . import natural_spec_runtime as runtime
+        self.writer_epoch = writer_epoch
+        self.writer_epochs = runtime._OWNED_WRITER_LIFETIMES
+        self.settlement_interval = vars(worker).get("_settlement_interval")
+        self.reduced = False
+        self.sql_calls = 0
         self.candidate, self.plan = candidate, plan
         self.owned_writer = _private_sql._ISSUED.get(id(c))
         self.worker, self.store, self.settings = worker, worker.store, worker.s
@@ -667,9 +1060,45 @@ class _Scope:
         )
         self.own_listeners = ()
         self.active = True
-        self.check()
+        self.check(full_code=True)
 
-    def check(self, *unused):
+    def writer_current(self):
+        if self.writer_epoch is None:
+            return True
+        from . import natural_spec_runtime as runtime
+        token = self.writer_epoch
+        if (type(token) is not tuple or len(token) != 8
+                or runtime._OWNED_WRITER_LIFETIMES is not self.writer_epochs
+                or self.writer_epochs.get((self.thread, id(self.worker))) is not token
+                or token[0] is not self.worker or token[2] is not self.roots["call"]["call_run"]
+                or token[6] != threading.get_ident()
+                or vars(self.worker).get("_settlement_lock") is not token[5]
+                or type(token[4]) is not _LOCK_TYPE or type(token[5]) is not _LOCK_TYPE
+                or not token[4].locked() or not token[5].locked()
+                or self.settlement_interval is None
+                or vars(self.worker).get("_settlement_interval") is not self.settlement_interval):
+            return False
+        frame = token[7]
+        if (type(frame) is not types.FrameType
+                or frame.f_code is not self.candidate.code.writer_code
+                or frame.f_globals is not vars(runtime)
+                or frame.f_lasti not in self.candidate.code.writer_yields):
+            return False
+        local = frame.f_locals
+        if any(local.get(key) is not value for key, value in (
+            ("token", token), ("worker", self.worker), ("job", token[1]),
+            ("_original_run", token[2]), ("state", token[3]),
+            ("renewal_lock", token[4]), ("settlement_lock", token[5]))):
+            return False
+        if token[3] is not None and (type(token[3]) is not dict
+                or token[3].get("renewal_lock") is not token[4]
+                or token[3].get("sync_contention_recovery") is not True
+                or type(token[3].get("lock")) is not _LOCK_TYPE):
+            return False
+        return all(self.current[key] == token[1][key]
+            for key in ("id", "fence", "worker_id", "version"))
+
+    def check(self, *unused, full_code=True):
         if self.owned_writer is not None:
             try:
                 self.owned_writer.check()
@@ -678,11 +1107,14 @@ class _Scope:
         from .model_settlement import checkpoint
 
         w, c = self.worker, self.c
+        if not (self.candidate.code.current(full=full_code)
+                and self.candidate.code.fixture_current(w, self.current)
+                and _execution_current(w, self.writer_epoch) and self.writer_current()):
+            self.active = False
+            raise DomainError("VERSION_CONFLICT", "Owned code, fixture or writer lifetime changed")
         checkpoint(w)
         valid = (
             self.active
-            and self.candidate.code.current()
-            and _execution_current(w)
             and _sql_current(w, c, self.own_listeners)
             and w.store is self.store
             and w.s is self.settings
@@ -741,7 +1173,7 @@ class _Scope:
             )
 
     def hold(self, name, value):
-        self.check()
+        self.check(full_code=True)
         if type(name) is not str or name in self.outputs:
             raise DomainError("VERSION_CONFLICT", "Owned G0 output cannot be rebound")
         self.outputs[name] = value
@@ -753,38 +1185,88 @@ class _Scope:
                 outputs=self.outputs,
             )
         )
-        self.check()
+        self.check(full_code=True)
         return value
 
+    def original_call(self, fn, args, kwargs):
+        """Only the original run's fixed SQL callees/parameter roles qualify."""
+        if self.writer_epoch is None or not self.writer_current():
+            return False
+        from . import natural_spec_runtime as runtime
+        from . import pa_spec_apps as spec
+        call, current = self.private["call"], self.current
+        binding, limits = self.outputs.get("binding"), self.outputs.get("limits")
+        expected, options = None, {}
+        if fn is spec.bound:
+            expected = (self.store, self.c, current["principal_id"], current, limits)
+        elif fn is spec.commit_guard:
+            expected = (self.worker, self.c, call["call_run"], binding)
+            if kwargs:
+                out = kwargs.get("_model_out")
+                if set(kwargs) != {"_model_out"} or type(out) is not dict or out:
+                    return False
+                options = {"_model_out": out}
+        elif fn is spec.receipts:
+            expected = (self.store, self.c, current, binding)
+            options = {"pending_id": call["meta"]["operation_id"]}
+        elif fn is _received_attempt:
+            expected = (self.c, call["aid"], current["id"])
+        elif (type(fn) is types.MethodType and fn.__self__ is self.store
+                and fn.__func__ is _gate_db.Store._frozen_contract_after_scope):
+            expected = (self.c, current)
+        return (expected is not None and len(args) == len(expected)
+            and all(a is b for a, b in zip(args, expected, strict=True))
+            and set(kwargs) == set(options)
+            and all(kwargs[key] is value for key, value in options.items()))
+
     def call(self, fn, *args, **kwargs):
-        self.check()
-        if not self.candidate.code.current():
-            raise DomainError("VERSION_CONFLICT", "Owned G0 code configuration changed")
+        self.check(full_code=True)
+        reduced = self.original_call(fn, args, kwargs)
         started = time.monotonic()
+        start_sql = self.sql_calls
+        prior, self.reduced = self.reduced, reduced
         try:
             result = fn(*args, **kwargs)
         finally:
+            self.reduced = prior
             self.candidate.timings.append(
-                dict(stage=fn.__name__, seconds=time.monotonic() - started)
+                dict(stage=fn.__name__, reduced_sql=reduced,
+                    sql_calls=self.sql_calls-start_sql, seconds=time.monotonic() - started)
             )
-        self.check()
+        self.check(full_code=True)
+        if reduced and "_model_out" in kwargs:
+            out = kwargs["_model_out"]
+            import math
+            if (set(out) != {"source_deadline"}
+                    or type(out["source_deadline"]) not in (int, float)
+                    or not math.isfinite(out["source_deadline"]) or out["source_deadline"] <= 0):
+                raise DomainError("VERSION_CONFLICT", "Unexpected fixed admission output")
+            self.hold("admission_output", out)
         return result
 
 
+def _received_attempt(c, aid, run_id):
+    from sqlalchemy import select
+    from .db import attempts
+    return dict(c.execute(select(attempts).where(attempts.c.id == aid,
+        attempts.c.run_id == run_id)).mappings().one())
+
+
 @contextmanager
-def prewrite(candidate, plan, worker, c, current, original_call, platform):
+def prewrite(candidate, plan, worker, c, current, original_call, platform, *, _writer_epoch=None):
     """No fallback/replay after selection and no scope survives the five writes."""
     if type(candidate) is not MockCandidate or type(plan) is not ContentPlan:
         raise DomainError("PERMISSION_DENIED", "Explicit owned G0 candidate required")
     if not worker.store.test_only or not worker.store.sqlite:
         raise DomainError("PERMISSION_DENIED", "Synthetic SQLite candidate only")
-    scope = _Scope(candidate, plan, worker, c, current, original_call, platform)
+    scope = _Scope(candidate, plan, worker, c, current, original_call, platform, _writer_epoch)
 
     def before(*args):
-        scope.check()
+        scope.check(full_code=not scope.reduced)
+        scope.sql_calls += 1
 
     def after(*args):
-        scope.check()
+        scope.check(full_code=not scope.reduced)
 
     event.listen(c, "before_cursor_execute", before)
     event.listen(c, "after_cursor_execute", after)
@@ -792,23 +1274,21 @@ def prewrite(candidate, plan, worker, c, current, original_call, platform):
     candidate.selected += 1
     try:
         yield scope
-        scope.check()
+        scope.check(full_code=True)
     finally:
         scope.active = False
         event.remove(c, "before_cursor_execute", before)
         event.remove(c, "after_cursor_execute", after)
 
 
-def run(candidate, plan, worker, c, current, original_call, platform):
+def run(candidate, plan, worker, c, current, original_call, platform, *, _writer_epoch=None):
     """Complete original public prewrite chain; return no authority or proof."""
-    from sqlalchemy import select
-
     from . import natural_spec_runtime as runtime
     from . import pa_spec_apps as spec
     from .contracts import Limits, validate_value
-    from .db import attempts
 
-    with prewrite(candidate, plan, worker, c, current, original_call, platform) as scope:
+    with prewrite(candidate, plan, worker, c, current, original_call, platform,
+            _writer_epoch=_writer_epoch) as scope:
         current = scope.current
         call = scope.private["call"]
         limits = Limits(**scope.private["platform"])
@@ -826,17 +1306,7 @@ def run(candidate, plan, worker, c, current, original_call, platform):
             binding,
             pending_id=call["meta"]["operation_id"],
         )
-        row = scope.call(
-            lambda: (
-                c.execute(
-                    select(attempts).where(
-                        attempts.c.id == call["aid"], attempts.c.run_id == current["id"]
-                    )
-                )
-                .mappings()
-                .one()
-            )
-        )
+        row = scope.call(_received_attempt, c, call["aid"], current["id"])
         scope.hold("attempt", row)
         runtime.require(
             row["status"] == "RECEIVED"
@@ -916,7 +1386,7 @@ _CANDIDATE_CLASSES = tuple(
 )
 _CANDIDATE_FUNCTIONS = tuple(
     (name, globals()[name])
-    for name in ("_codes", "_sql_current", "_execution_current", "prewrite", "run")
+    for name in ("_codes", "_fixture_slot", "_catalog_current", "_fixture_code", "_received_attempt", "_event_current", "_sql_current", "_execution_current", "prewrite", "run")
 )
 _CANDIDATE_CODE = tuple(
     (fn, fn.__code__)

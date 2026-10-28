@@ -1,0 +1,17 @@
+# Owned G0 fixed-effect gates — source freeze
+
+Status at source freeze: explicit synthetic SQLite candidate only, default OFF; original B2/9a acceptance remains separate. New full controller NOT_RUN at this checkpoint. Source/current complete typed data, grants/revocation, Run version/fence, stop, transaction/epoch and finite wall/monotonic bounds remain fresh. Both original commit guards, five writes and complete original G1 remain required.
+
+The source plan contains owned bytes, never a Graph/permission/PASS. Actual original writer creates a lifetime record only inside its held renewal/settlement locks and original finite interval. It binds fresh job, original Run, worker, heartbeat state, native locks, thread and actual suspended original generator frame; registry/frame/yield/locals are checked and record erased before unlock. Actual heartbeat's original code, state/run/worker and blocked standard thread/event/lock path are checked.
+
+Reduced code scanning is limited to original bound/commit_guard/receipts/frozen-contract/read-attempt callees with fixed actual argument roles. Public entry/exit, held data, scope closure and unknown callees retain full function/default/schema checks. Every SQL retains complete joint mutable input/output pins, dynamic predicates and exact SQL/driver ownership. Only immutable code qualification within these fixed effect sections is reused; no authorization or prior PASS is reused.
+
+Synthetic substitutions have a finite source-hash/qualname/code catalogue, exact placement/global/constructor/import/builtin/closure roles. Unsupported callbacks/arguments keep original full behavior or fail before business. Original 30s is NOT claimed passed; original explicit signed120s interval is unchanged.
+
+Evidence: 58 directed tests PASS110.52s on the safety gates before observational SQL counters. After counters, the actual guarded SELECT counter regression PASS4.51s and diagnostic cost test PASS6.03s on final source. Costs from the small synthetic fixture: code full22.10ms; fixed code witness0.0493ms; SQL dispatch0.5055ms; complete SQL boundary2.9004ms (previous fast2 boundary6.2914ms). These are NOT complete large-bound or controller timings. Final exact production software pin0e89a74952c744111d98a5aa24c28e0ff52979b00ed577b4ab80e4d6684d1820 PASS.
+
+Read-only review found/drove fixes for arbitrary callback provenance, preconstructor alias/factory substitution, closure/slot mismatch, raw tuple origin, writer/beat lock identity, and unknown callee/argument fallback. Final narrow review permits frozen large-bound profiling, not whole acceptance. SQL method inventory uses actual MRO; root full-check calls are explicit.
+
+Earlier run2 frozen2a8897710b0c857fa902f9a15faebb2f443da395 genuinely selected the old candidate: G0 bound119.7696s, transaction120.0112s ROLLED_BACK, no Cold G1;6finiteMock calls/0real. Dataset/logs remain under /workspace/scratch/owned-full-real-clock-round2-20261028 and owned-full-chain-round2.log. Harness run1 PY_UNWIND local-mask error is separate and retained. A slow directed run was interrupted intentionally after11PASS130.90s in repeated ast.parse; corrected one-time source AST reuse resolved that setup overhead. Incorrect test filenames collected0 and are not counted.
+
+No PG/live execution, Windows model acceptance, PR/release/main merge or deployment is supplied here. Desktop frozen674281 remains separate from this candidate.

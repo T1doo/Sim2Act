@@ -35,6 +35,7 @@ def test_plan_private_data_and_read_scope_complete_inputs(sql_facts):
             assert scope.private["call"] is not call
             assert scope.private["call"]["values"] is not call["values"]
             scope.call(lambda: c.execute(select(runs.c.id)).all())
+            assert scope.sql_calls == 1
             scope.hold("public_return", {"large": ["synthetic" * 1000] * 200})
             scope.check()
         assert not scope.active

@@ -21,6 +21,7 @@ from inspect import getattr_static as _counter_getattr_static
 from io import BytesIO as _ColdGraphBytesIO
 from pickle import Pickler as _ColdGraphPicklerBase
 from sqlite3 import Connection as SQLiteConnection
+from sys import _getframe as _writer_getframe
 from threading import Event, Lock, get_ident
 from time import monotonic as _cold_diagnostic_clock
 from types import BuiltinFunctionType as _ColdNativeFunctionType
@@ -145,8 +146,13 @@ def renew(worker, job, deadline, *, _heartbeat_state=None):
             publish_sync_renewal(worker, job, _heartbeat_state, renewed)
 
 
+# Metadata only: issued inside the actual locked writer and erased before unlock.
+# No authorization, graph or validation result is stored here.
+_OWNED_WRITER_LIFETIMES = {}
+
+
 @contextmanager
-def _model_settlement_writer(worker, job, deadline, state, *, attempt_id=None):
+def _model_settlement_writer(worker, job, deadline, state, *, attempt_id=None, _original_run=None):
     """Renew immediately before the settlement transaction, with one writer.
 
     SQLite cannot commit a background heartbeat while this transaction owns
@@ -176,7 +182,19 @@ def _model_settlement_writer(worker, job, deadline, state, *, attempt_id=None):
             if extended:
                 from .model_settlement import interval
                 with interval(worker, job, attempt_id, deadline, state):
-                    yield
+                    token = None
+                    key = (get_ident(), id(worker))
+                    if vars(worker).get("_owned_g0_candidate") is not None and _original_run is not None:
+                        require(key not in _OWNED_WRITER_LIFETIMES, "Owned writer lifetime cannot reenter")
+                        token = (worker, job, _original_run, state, renewal_lock, settlement_lock,
+                            get_ident(), _writer_getframe())
+                        _OWNED_WRITER_LIFETIMES[key] = token
+                    try:
+                        yield token
+                    finally:
+                        if token is not None:
+                            require(_OWNED_WRITER_LIFETIMES.pop(key, None) is token,
+                                "Owned writer lifetime changed before unlock")
             else:
                 _renew_sync_locked(worker, job, state, deadline=deadline)
                 yield
@@ -5273,7 +5291,8 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                     and run["runtime_id"] != selected_binding.contract.runtime_id
                     and run["resource_refs"] == [selected_binding.contract.bindings[1].resource_id]):
                 plan = candidate.prepare(worker, binding, graph_call, limits)
-        with _model_settlement_writer(worker, job, meta["deadline"], _heartbeat_state, attempt_id=aid), \
+        with _model_settlement_writer(worker, job, meta["deadline"], _heartbeat_state,
+                attempt_id=aid, _original_run=run) as writer_epoch, \
                 _model_writer_connection(worker, candidate, plan) as (c, owned_plan), _journal_reads(worker, c):
             current = lock_live(store, c, run)
             require(
@@ -5286,7 +5305,7 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                 require(_cold_model_eligible(worker, c, current), "Original PB Cold eligibility required")
                 from ._owned_g0_candidate import run as owned_prewrite
                 current_binding, receipt = owned_prewrite(candidate, owned_plan, worker, c,
-                    current, graph_call, limits)
+                    current, graph_call, limits, _writer_epoch=writer_epoch)
             else:
                 with _cold_model_before(worker, c, current, graph_call, limits) as cold:
                     current_binding = (cold.platform.binding if cold is not None else
