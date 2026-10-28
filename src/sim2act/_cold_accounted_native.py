@@ -421,10 +421,18 @@ class _Frontier:
                      and type(self.mode._native) is _NativeCandidate
                      and self.mode._native.graph is self.graph and self.mode._native.mode is self.mode
                      and self.mode._native.frontier is self and self.graph._accounted_frontier is self)
-        gate.require(self.mode.active and self.key() == self.expected,
-                     'Native mutable frontier changed')
+        # Keep the original active short-circuit and final require value.
+        active = self.mode.active
+        if active:
+            from ._cold_graph_structure_guard import select_frontier
+            selected = select_frontier(self)
+            current = self.key() == self.expected if selected is None else selected
+        else:
+            current = active
+        gate.require(current, 'Native mutable frontier changed')
 
     def added(self, name, *, run_facts=None):
+        vars(self).pop('_structure_state', None)
         gate.require(name in self.mode._native.future_roots and name not in self.projected,
                      'Unexpected native continuation root')
         from ._cold_accounted_receipts import _receipt_for_frontier
@@ -668,6 +676,9 @@ class _NativeCandidate:
         self.completed.clear()
 
     def release(self):
+        frontier = getattr(self, 'frontier', None)
+        if type(frontier) is _Frontier:
+            vars(frontier).pop('_structure_state', None)
         arena = getattr(self, 'arena', None)
         if arena is not None:
             arena.release()

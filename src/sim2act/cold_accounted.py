@@ -599,6 +599,10 @@ class _OwnedPrewriteMode:
 
     def close(self):
         self.active = False
+        from ._cold_accounted_native import _Frontier
+        frontier = getattr(self.graph, '_accounted_frontier', None)
+        if type(frontier) is _Frontier:
+            vars(frontier).pop('_structure_state', None)
         if self._native is not None and getattr(self.graph, "_accounted_frontier", None) is not None:
             self.graph.invalidate()
         self.scope.close()

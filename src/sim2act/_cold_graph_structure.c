@@ -121,7 +121,60 @@ static PyObject*matches_fast(PyObject*self,PyObject*args){
  int result=compare_node(&c,0,v,0);PyObject*error=PyErr_GetRaisedException();for(size_t i=0;i<t->count;i++)Py_XDECREF(c.actual[i]);PyMem_Free(c.actual);PyMem_Free(c.assigned);PyMem_Free(c.changed.entries);if(error)PyErr_SetRaisedException(error);
  if(result<0){if(PyErr_ExceptionMatches(unsupported_error)){PyErr_Clear();return Py_NewRef(unsupported);}return NULL;}return PyBool_FromLong(result);
 }
-static PyMethodDef methods[]={{"snapshot",snapshot,METH_VARARGS,"Bounded independent complete structure for one qualified scope."},{"matches_fast",matches_fast,METH_VARARGS,"Fresh complete structure and alias comparison in the same scope."},{NULL,NULL,0,NULL}};
+static int same_namespace(PyTypeObject *kind, PyObject *items, size_t *work) {
+    /* 3.12 static builtin namespaces are interpreter-local. Public GetDict
+     * returns a NEW reference; direct tp_dict is only valid for heap types. */
+    PyObject *dictionary = PyType_GetDict(kind);
+    if (!dictionary) return PyErr_Occurred() ? -1 : 0;
+    int result = 0;
+    if (!PyTuple_CheckExact(items) || !PyDict_CheckExact(dictionary)
+            || PyDict_Size(dictionary) != PyTuple_GET_SIZE(items)) goto done;
+    Py_ssize_t position = 0, ordinal = 0;
+    PyObject *key, *value;
+    while (PyDict_Next(dictionary, &position, &key, &value)) {
+        if (++*work > 100000) goto done;
+        if (ordinal >= PyTuple_GET_SIZE(items)
+                || PyDict_Size(dictionary) != PyTuple_GET_SIZE(items)) goto done;
+        PyObject *pair = PyTuple_GET_ITEM(items, ordinal++);
+        if (!PyTuple_CheckExact(pair) || PyTuple_GET_SIZE(pair) != 2
+                || PyTuple_GET_ITEM(pair, 0) != key || PyTuple_GET_ITEM(pair, 1) != value) goto done;
+    }
+    result = 1;
+done:
+    Py_DECREF(dictionary);
+    return result;
+}
+
+static PyObject *same_classes(PyObject *self, PyObject *args) {
+    (void)self;
+    PyObject *metas, *classes;
+    size_t work = 0;
+    if (!PyArg_ParseTuple(args, "OO", &metas, &classes)) return NULL;
+    /* Dispatch pending signals before borrowing namespace entries. The bounded
+     * comparison itself invokes no Python callbacks and keeps the GIL. */
+    if (PyErr_CheckSignals() < 0) return NULL;
+    if (!PyTuple_CheckExact(metas) || !PyTuple_CheckExact(classes)
+            || PyTuple_GET_SIZE(metas) > 256 || PyTuple_GET_SIZE(classes) > 256) Py_RETURN_FALSE;
+    for (int group = 0; group < 2; group++) {
+        PyObject *entries = group ? classes : metas;
+        for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(entries); i++) {
+            PyObject *entry = PyTuple_GET_ITEM(entries, i);
+            if (!PyTuple_CheckExact(entry) || PyTuple_GET_SIZE(entry) != (group ? 4 : 3)) Py_RETURN_FALSE;
+            PyObject *kind = PyTuple_GET_ITEM(entry, 0);
+            PyObject *meta = group ? PyTuple_GET_ITEM(entry, 1) : (PyObject *)&PyType_Type;
+            PyObject *mro = PyTuple_GET_ITEM(entry, group ? 2 : 1);
+            if (!PyType_Check(kind) || (PyObject *)Py_TYPE(kind) != meta
+                    || ((PyTypeObject *)kind)->tp_mro != mro) Py_RETURN_FALSE;
+            int same = same_namespace((PyTypeObject *)kind,
+                PyTuple_GET_ITEM(entry, group ? 3 : 2), &work);
+            if (same < 0) return NULL;
+            if (!same) Py_RETURN_FALSE;
+        }
+    }
+    Py_RETURN_TRUE;
+}
+
+static PyMethodDef methods[]={{"same_classes",same_classes,METH_VARARGS,"Fresh complete class namespace and MRO identity comparison without callbacks."},{"snapshot",snapshot,METH_VARARGS,"Bounded independent complete structure for one qualified scope."},{"matches_fast",matches_fast,METH_VARARGS,"Fresh complete structure and alias comparison in the same scope."},{NULL,NULL,0,NULL}};
 static struct PyModuleDef module={PyModuleDef_HEAD_INIT,"_cold_graph_structure",NULL,-1,methods};
 PyMODINIT_FUNC PyInit__cold_graph_structure(void){
  PyObject*m=PyModule_Create(&module);if(!m)return NULL;

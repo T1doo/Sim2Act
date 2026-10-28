@@ -1,0 +1,336 @@
+..........FFFFFFFFFFFF                                                   [100%]
+=================================== FAILURES ===================================
+_________ test_complete_graph_match_drops_encoding_but_dynamic_is_live _________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f12708c2120>, worker=<sim2act.worker.Worker object at 0x7f1271198350>, ...'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}], 'structure-content': {'deep': [[1]]}}, trace=[])
+
+    def test_complete_graph_match_drops_encoding_but_dynamic_is_live(local_origin):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), rejecting_scope(f, c) as graph:
+            graph.add('structure-content', dict(deep=[[1]]))
+>           warm(f, c, graph)
+
+tests/test_cold_graph_structure.py:138: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=<sim2act.db.Store object at 0x7f12708c2120>, worker=<sim2act.worker.Worker object at 0x7f1271198350>, ...'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}], 'structure-content': {'deep': [[1]]}}, trace=[])
+c = <sqlalchemy.engine.base.Connection object at 0x7f12708c3b60>
+graph = <sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f1270007800>
+
+    def warm(f, c, graph):
+>       assert guard_code._qualified(graph)
+E       assert False
+E        +  where False = <function _qualified at 0x7f1270978040>(<sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f1270007800>)
+E        +    where <function _qualified at 0x7f1270978040> = guard_code._qualified
+
+tests/test_cold_graph_structure.py:117: AssertionError
+__________ test_current_dynamic_or_content_changes_still_reject[stop] __________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f1270955160>, worker=<sim2act.worker.Worker object at 0x7f126e951f40>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+change = 'stop'
+
+    @pytest.mark.parametrize('change', ['stop', 'epoch', 'scope', 'role', 'contract'])
+    def test_current_dynamic_or_content_changes_still_reject(local_origin, change):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), rejecting_scope(f, c) as graph:
+            # A synthetic unit token exercises the original active-interval stop gate.
+            f.worker._settlement_interval = (time.monotonic() + 120, time.time() + 120)
+>           warm(f, c, graph)
+
+tests/test_cold_graph_structure.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=<sim2act.db.Store object at 0x7f1270955160>, worker=<sim2act.worker.Worker object at 0x7f126e951f40>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+c = <sqlalchemy.engine.base.Connection object at 0x7f127095ffe0>
+graph = <sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f12708c4fb0>
+
+    def warm(f, c, graph):
+>       assert guard_code._qualified(graph)
+E       assert False
+E        +  where False = <function _qualified at 0x7f1270978040>(<sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f12708c4fb0>)
+E        +    where <function _qualified at 0x7f1270978040> = guard_code._qualified
+
+tests/test_cold_graph_structure.py:117: AssertionError
+_________ test_current_dynamic_or_content_changes_still_reject[epoch] __________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f126fe54230>, worker=<sim2act.worker.Worker object at 0x7f126e6c4980>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+change = 'epoch'
+
+    @pytest.mark.parametrize('change', ['stop', 'epoch', 'scope', 'role', 'contract'])
+    def test_current_dynamic_or_content_changes_still_reject(local_origin, change):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), rejecting_scope(f, c) as graph:
+            # A synthetic unit token exercises the original active-interval stop gate.
+            f.worker._settlement_interval = (time.monotonic() + 120, time.time() + 120)
+>           warm(f, c, graph)
+
+tests/test_cold_graph_structure.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=<sim2act.db.Store object at 0x7f126fe54230>, worker=<sim2act.worker.Worker object at 0x7f126e6c4980>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+c = <sqlalchemy.engine.base.Connection object at 0x7f126e973110>
+graph = <sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f12702bfbc0>
+
+    def warm(f, c, graph):
+>       assert guard_code._qualified(graph)
+E       assert False
+E        +  where False = <function _qualified at 0x7f1270978040>(<sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f12702bfbc0>)
+E        +    where <function _qualified at 0x7f1270978040> = guard_code._qualified
+
+tests/test_cold_graph_structure.py:117: AssertionError
+_________ test_current_dynamic_or_content_changes_still_reject[scope] __________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f126ea27890>, worker=<sim2act.worker.Worker object at 0x7f12700ff530>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+change = 'scope'
+
+    @pytest.mark.parametrize('change', ['stop', 'epoch', 'scope', 'role', 'contract'])
+    def test_current_dynamic_or_content_changes_still_reject(local_origin, change):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), rejecting_scope(f, c) as graph:
+            # A synthetic unit token exercises the original active-interval stop gate.
+            f.worker._settlement_interval = (time.monotonic() + 120, time.time() + 120)
+>           warm(f, c, graph)
+
+tests/test_cold_graph_structure.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=<sim2act.db.Store object at 0x7f126ea27890>, worker=<sim2act.worker.Worker object at 0x7f12700ff530>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+c = <sqlalchemy.engine.base.Connection object at 0x7f12704e75c0>
+graph = <sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f1270200ce0>
+
+    def warm(f, c, graph):
+>       assert guard_code._qualified(graph)
+E       assert False
+E        +  where False = <function _qualified at 0x7f1270978040>(<sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f1270200ce0>)
+E        +    where <function _qualified at 0x7f1270978040> = guard_code._qualified
+
+tests/test_cold_graph_structure.py:117: AssertionError
+__________ test_current_dynamic_or_content_changes_still_reject[role] __________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f1270503320>, worker=<sim2act.worker.Worker object at 0x7f126e224800>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+change = 'role'
+
+    @pytest.mark.parametrize('change', ['stop', 'epoch', 'scope', 'role', 'contract'])
+    def test_current_dynamic_or_content_changes_still_reject(local_origin, change):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), rejecting_scope(f, c) as graph:
+            # A synthetic unit token exercises the original active-interval stop gate.
+            f.worker._settlement_interval = (time.monotonic() + 120, time.time() + 120)
+>           warm(f, c, graph)
+
+tests/test_cold_graph_structure.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=<sim2act.db.Store object at 0x7f1270503320>, worker=<sim2act.worker.Worker object at 0x7f126e224800>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+c = <sqlalchemy.engine.base.Connection object at 0x7f126e8bcb00>
+graph = <sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f126e20e300>
+
+    def warm(f, c, graph):
+>       assert guard_code._qualified(graph)
+E       assert False
+E        +  where False = <function _qualified at 0x7f1270978040>(<sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f126e20e300>)
+E        +    where <function _qualified at 0x7f1270978040> = guard_code._qualified
+
+tests/test_cold_graph_structure.py:117: AssertionError
+________ test_current_dynamic_or_content_changes_still_reject[contract] ________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f12701896a0>, worker=<sim2act.worker.Worker object at 0x7f126e9fecc0>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+change = 'contract'
+
+    @pytest.mark.parametrize('change', ['stop', 'epoch', 'scope', 'role', 'contract'])
+    def test_current_dynamic_or_content_changes_still_reject(local_origin, change):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), rejecting_scope(f, c) as graph:
+            # A synthetic unit token exercises the original active-interval stop gate.
+            f.worker._settlement_interval = (time.monotonic() + 120, time.time() + 120)
+>           warm(f, c, graph)
+
+tests/test_cold_graph_structure.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=<sim2act.db.Store object at 0x7f12701896a0>, worker=<sim2act.worker.Worker object at 0x7f126e9fecc0>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+c = <sqlalchemy.engine.base.Connection object at 0x7f126e7d92b0>
+graph = <sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f126e08bdd0>
+
+    def warm(f, c, graph):
+>       assert guard_code._qualified(graph)
+E       assert False
+E        +  where False = <function _qualified at 0x7f1270978040>(<sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f126e08bdd0>)
+E        +    where <function _qualified at 0x7f1270978040> = guard_code._qualified
+
+tests/test_cold_graph_structure.py:117: AssertionError
+________ test_add_rebuilds_and_unknown_configuration_uses_original_sha _________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f126e58a330>, worker=<sim2act.worker.Worker object at 0x7f126e250e00>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f126e923710>
+
+    def test_add_rebuilds_and_unknown_configuration_uses_original_sha(local_origin, monkeypatch):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as graph:
+>           warm(f, c, graph)
+
+tests/test_cold_graph_structure.py:173: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=<sim2act.db.Store object at 0x7f126e58a330>, worker=<sim2act.worker.Worker object at 0x7f126e250e00>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+c = <sqlalchemy.engine.base.Connection object at 0x7f126e106c30>
+graph = <sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f126e7d9a00>
+
+    def warm(f, c, graph):
+>       assert guard_code._qualified(graph)
+E       assert False
+E        +  where False = <function _qualified at 0x7f1270978040>(<sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f126e7d9a00>)
+E        +    where <function _qualified at 0x7f1270978040> = guard_code._qualified
+
+tests/test_cold_graph_structure.py:117: AssertionError
+______________ test_native_original_reducer_error_is_not_replayed ______________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f126e095670>, worker=<sim2act.worker.Worker object at 0x7f12704c76e0>, ...ginal bytes'}, {'id': 'one', 'body': b'duplicate retained'}], 'structure-row': {'row': {'id': 'synthetic'}}}, trace=[])
+
+    def test_native_original_reducer_error_is_not_replayed(local_origin):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), rejecting_scope(f, c) as graph:
+            row = RowMapping(SimpleResultMetaData(['id']), None, {'id': 0}, ('synthetic',))
+            value = dict(row=row)
+            graph.add('structure-row', value)
+>           warm(f, c, graph)
+
+tests/test_cold_graph_structure.py:207: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=<sim2act.db.Store object at 0x7f126e095670>, worker=<sim2act.worker.Worker object at 0x7f12704c76e0>, ...ginal bytes'}, {'id': 'one', 'body': b'duplicate retained'}], 'structure-row': {'row': {'id': 'synthetic'}}}, trace=[])
+c = <sqlalchemy.engine.base.Connection object at 0x7f126e4aeff0>
+graph = <sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f126e095c70>
+
+    def warm(f, c, graph):
+>       assert guard_code._qualified(graph)
+E       assert False
+E        +  where False = <function _qualified at 0x7f1270978040>(<sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f126e095c70>)
+E        +    where <function _qualified at 0x7f1270978040> = guard_code._qualified
+
+tests/test_cold_graph_structure.py:117: AssertionError
+___ test_unknown_graph_binding_and_row_lookup_getters_deopt_before_callbacks ___
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f126e9d1310>, worker=<sim2act.worker.Worker object at 0x7f1270088350>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f126e9d0dd0>
+
+    def test_unknown_graph_binding_and_row_lookup_getters_deopt_before_callbacks(local_origin, monkeypatch):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as graph:
+>           warm(f, c, graph)
+
+tests/test_cold_graph_structure.py:219: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=<sim2act.db.Store object at 0x7f126e9d1310>, worker=<sim2act.worker.Worker object at 0x7f1270088350>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+c = <sqlalchemy.engine.base.Connection object at 0x7f12705d50d0>
+graph = <sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f1270502ff0>
+
+    def warm(f, c, graph):
+>       assert guard_code._qualified(graph)
+E       assert False
+E        +  where False = <function _qualified at 0x7f1270978040>(<sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f1270502ff0>)
+E        +    where <function _qualified at 0x7f1270978040> = guard_code._qualified
+
+tests/test_cold_graph_structure.py:117: AssertionError
+______ test_pre_scope_fresh_complete_walk_and_original_frontier_selection ______
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f126e9d0b60>, worker=<sim2act.worker.Worker object at 0x7f1270fe88c0>, ...ne', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}], 'pre-structure': [[1]]}, trace=[])
+
+    def test_pre_scope_fresh_complete_walk_and_original_frontier_selection(local_origin):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), r._cold_graph_read(
+            f.worker, c, f.inputs, f.roles, 'pre'
+        ) as graph:
+            graph.add('pre-structure', [[1]])
+>           warm(f, c, graph)
+
+tests/test_cold_graph_structure.py:245: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=<sim2act.db.Store object at 0x7f126e9d0b60>, worker=<sim2act.worker.Worker object at 0x7f1270fe88c0>, ...ne', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}], 'pre-structure': [[1]]}, trace=[])
+c = <sqlalchemy.engine.base.Connection object at 0x7f126ebff6e0>
+graph = <sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f126ea27bf0>
+
+    def warm(f, c, graph):
+>       assert guard_code._qualified(graph)
+E       assert False
+E        +  where False = <function _qualified at 0x7f1270978040>(<sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f126ea27bf0>)
+E        +    where <function _qualified at 0x7f1270978040> = guard_code._qualified
+
+tests/test_cold_graph_structure.py:117: AssertionError
+_______________ test_pre_scope_content_change_still_invalidates ________________
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f126e6f9c40>, worker=<sim2act.worker.Worker object at 0x7f126e977d10>, ...ne', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}], 'pre-structure': [[1]]}, trace=[])
+
+    def test_pre_scope_content_change_still_invalidates(local_origin):
+        f = local_origin
+        finished = False
+        with f.store.tx() as c, pb._source_reads(f.store, c):
+            with pytest.raises(DomainError):
+                with r._cold_graph_read(f.worker, c, f.inputs, f.roles, 'pre') as graph:
+                    graph.add('pre-structure', [[1]])
+>                   warm(f, c, graph)
+
+tests/test_cold_graph_structure.py:276: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=<sim2act.db.Store object at 0x7f126e6f9c40>, worker=<sim2act.worker.Worker object at 0x7f126e977d10>, ...ne', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}], 'pre-structure': [[1]]}, trace=[])
+c = <sqlalchemy.engine.base.Connection object at 0x7f126e35c260>
+graph = <sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f126e6aa330>
+
+    def warm(f, c, graph):
+>       assert guard_code._qualified(graph)
+E       assert False
+E        +  where False = <function _qualified at 0x7f1270978040>(<sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f126e6aa330>)
+E        +    where <function _qualified at 0x7f1270978040> = guard_code._qualified
+
+tests/test_cold_graph_structure.py:117: AssertionError
+______ test_frontier_branch_clears_snapshot_and_keeps_original_rejection _______
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f126e1671a0>, worker=<sim2act.worker.Worker object at 0x7f126eb53320>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+
+    def test_frontier_branch_clears_snapshot_and_keeps_original_rejection(local_origin):
+        from sim2act._cold_accounted_native import _Frontier
+    
+        f = local_origin
+        finished = False
+        with f.store.tx() as c, pb._source_reads(f.store, c):
+            with pytest.raises(DomainError):
+                with r._cold_graph_read(f.worker, c, f.inputs, f.roles, 'pre') as graph:
+>                   warm(f, c, graph)
+
+tests/test_cold_graph_structure.py:293: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=<sim2act.db.Store object at 0x7f126e1671a0>, worker=<sim2act.worker.Worker object at 0x7f126eb53320>, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+c = <sqlalchemy.engine.base.Connection object at 0x7f126e42cfe0>
+graph = <sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f126e283410>
+
+    def warm(f, c, graph):
+>       assert guard_code._qualified(graph)
+E       assert False
+E        +  where False = <function _qualified at 0x7f1270978040>(<sim2act.natural_spec_runtime._ColdGraphRead object at 0x7f126e283410>)
+E        +    where <function _qualified at 0x7f1270978040> = guard_code._qualified
+
+tests/test_cold_graph_structure.py:117: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cold_graph_structure.py::test_complete_graph_match_drops_encoding_but_dynamic_is_live
+FAILED tests/test_cold_graph_structure.py::test_current_dynamic_or_content_changes_still_reject[stop]
+FAILED tests/test_cold_graph_structure.py::test_current_dynamic_or_content_changes_still_reject[epoch]
+FAILED tests/test_cold_graph_structure.py::test_current_dynamic_or_content_changes_still_reject[scope]
+FAILED tests/test_cold_graph_structure.py::test_current_dynamic_or_content_changes_still_reject[role]
+FAILED tests/test_cold_graph_structure.py::test_current_dynamic_or_content_changes_still_reject[contract]
+FAILED tests/test_cold_graph_structure.py::test_add_rebuilds_and_unknown_configuration_uses_original_sha
+FAILED tests/test_cold_graph_structure.py::test_native_original_reducer_error_is_not_replayed
+FAILED tests/test_cold_graph_structure.py::test_unknown_graph_binding_and_row_lookup_getters_deopt_before_callbacks
+FAILED tests/test_cold_graph_structure.py::test_pre_scope_fresh_complete_walk_and_original_frontier_selection
+FAILED tests/test_cold_graph_structure.py::test_pre_scope_content_change_still_invalidates
+FAILED tests/test_cold_graph_structure.py::test_frontier_branch_clears_snapshot_and_keeps_original_rejection
+12 failed, 10 passed, 1 warning in 5.18s

@@ -2266,6 +2266,10 @@ class _ColdGraphRead:
             if type(owner) is _NativeModels and owner.graph is self:
                 owner.close()
         frontier = getattr(self, '_accounted_frontier', None)
+        if frontier is not None:
+            from ._cold_accounted_native import _Frontier
+            if type(frontier) is _Frontier:
+                vars(frontier).pop('_structure_state', None)
         if was_active and frontier is not None:
             from ._cold_accounted_native import _Frontier
             from .cold_accounted import _OwnedPrewriteMode

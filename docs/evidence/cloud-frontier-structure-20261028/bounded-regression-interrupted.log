@@ -1,0 +1,124 @@
+.FFF.................................................................... [ 84%]
+..F.........
+=================================== FAILURES ===================================
+___ test_actual_owned_frontier_unknown_destination_and_instance_shadow_deopt ___
+
+sql_facts = namespace(store=<sim2act.db.Store object at 0x7fda33252720>, settings=Settings(database_url='sqlite:////workspace/scra...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=<sim2act.worker.Worker object at 0x7fda3477b890>)
+
+    def test_actual_owned_frontier_unknown_destination_and_instance_shadow_deopt(sql_facts):
+        f = sql_facts
+        with f.store.tx() as c, native_segment(f, c) as s:
+            frontier = s.graph._accounted_frontier
+            for _ in range(5):
+                s.graph.check(f.store, c)
+            calls = []
+    
+            class Unknown(dict):
+                def __len__(self):
+                    calls.append('len')
+                    raise ValueError('unknown projection callback')
+    
+            original = frontier.projected
+            frontier.projected = Unknown(original)
+            try:
+                assert structure.select_frontier(frontier) is None
+                assert calls == []
+>               with pytest.raises(ValueError, match='unknown projection callback'):
+                     ^^^^^^
+E               NameError: name 'pytest' is not defined
+
+tests/test_cold_frontier_structure.py:103: NameError
+______ test_frontier_active_short_circuit_preserves_original_falsey_value ______
+
+sql_facts = namespace(store=<sim2act.db.Store object at 0x7fda32fc8860>, settings=Settings(database_url='sqlite:////workspace/scra...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=<sim2act.worker.Worker object at 0x7fda3208a6f0>)
+
+    def test_frontier_active_short_circuit_preserves_original_falsey_value(sql_facts):
+        f = sql_facts
+        with f.store.tx() as c, native_segment(f, c) as s:
+            frontier = s.graph._accounted_frontier
+            calls = []
+    
+            class Falsey:
+                def __bool__(self):
+                    calls.append('active')
+                    return False
+    
+            s.mode.active = Falsey()
+            frontier.key = lambda: calls.append('key')
+            try:
+>               with pytest.raises(DomainError, match='Native mutable frontier changed'):
+                     ^^^^^^
+E               NameError: name 'pytest' is not defined
+
+tests/test_cold_frontier_structure.py:131: NameError
+_____________ test_frontier_fresh_content_rekey_and_owner_binding ______________
+
+sql_facts = namespace(store=<sim2act.db.Store object at 0x7fda3237c260>, settings=Settings(database_url='sqlite:////workspace/scra...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=<sim2act.worker.Worker object at 0x7fda325a2cf0>)
+
+    def test_frontier_fresh_content_rekey_and_owner_binding(sql_facts):
+        f = sql_facts
+        value = dict(items=[1])
+    
+        def background(graph, source, generated, candidate):
+            graph.add('synthetic-mutable-projection', value)
+    
+        with f.store.tx() as c, native_segment(f, c, before_choose=background) as s:
+            frontier = s.graph._accounted_frontier
+            for _ in range(5):
+                s.graph.check(f.store, c)
+            old_capsule = vars(frontier)['_structure_state'].capsule
+            value['items'].append(2)
+            try:
+>               with pytest.raises(DomainError, match='Native mutable frontier changed'):
+                     ^^^^^^
+E               NameError: name 'pytest' is not defined
+
+tests/test_cold_frontier_structure.py:153: NameError
+_____________ test_default_parent_order_and_exact_three_callsites ______________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fda32f33200>
+
+    def test_default_parent_order_and_exact_three_callsites(monkeypatch):
+        calls = []
+        monkeypatch.setattr(gate, "_graph_trial_pin", lambda *args: calls.append("pin"))
+        monkeypatch.setattr(
+            gate, "_graph_trial_stage_raw", lambda *args, **kwargs: calls.append(("stage", kwargs))
+        )
+>       gate._graph_trial_stage_parent_pin(None, None, None, None)
+
+tests/test_cold_accounted_stage_pin.py:220: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+graph = None, store = None, c = None, stage_facts = None, _owned = None
+
+    def _graph_trial_stage_parent_pin(graph, store, c, stage_facts, *, _owned=None):
+        """Fixed composite for stage parents; independent readers still self-pin."""
+        if _owned is not None:
+            from ._cold_accounted_native import _NativeCandidate
+            from .cold_accounted import _OwnedPrewriteMode
+            if (type(_owned) is _OwnedPrewriteMode and type(_owned._native) is _NativeCandidate
+                    and _owned._native.owned_ready is True):
+                _owned._pin_stage(graph, store, c, stage_facts)
+                return
+        _graph_trial_pin(graph, store, c)
+        if _owned is None:
+>           candidate = vars(graph).get('_producer_segment_candidate')
+                        ^^^^^^^^^^^
+E           TypeError: vars() argument must have __dict__ attribute
+
+src/sim2act/natural_live_admission.py:961: TypeError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cold_frontier_structure.py::test_actual_owned_frontier_unknown_destination_and_instance_shadow_deopt
+FAILED tests/test_cold_frontier_structure.py::test_frontier_active_short_circuit_preserves_original_falsey_value
+FAILED tests/test_cold_frontier_structure.py::test_frontier_fresh_content_rekey_and_owner_binding
+FAILED tests/test_cold_accounted_stage_pin.py::test_default_parent_order_and_exact_three_callsites
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+/workspace/Sim2Act/src/sim2act/natural_spec_runtime.py:2056: KeyboardInterrupt
+(to show a full traceback on KeyboardInterrupt use --full-trace)
+4 failed, 80 passed, 1 warning in 369.77s (0:06:09)
