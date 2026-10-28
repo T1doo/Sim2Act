@@ -54,12 +54,13 @@ try:
     from ._raw_snapshot import UNSUPPORTED as _RAW_UNSUPPORTED
     from ._raw_snapshot import copy_snapshot as _RAW_COPY
     from ._raw_snapshot import equal_values as _RAW_EQUAL
+    from ._raw_snapshot import row_lookup as _RAW_ROW_LOOKUP
     if hashlib.sha256(_RawPath(__file__).with_name("_raw_snapshot.c").read_bytes()).hexdigest() != _RAW_SOURCE_SHA:
         raise ImportError("Raw capture source/build mismatch")
     _RAW_BINARY_PATH = _RawPath(_RAW_MODULE.__file__).resolve()
     _RAW_BINARY_SHA = hashlib.sha256(_RAW_BINARY_PATH.read_bytes()).hexdigest()
 except (ImportError, OSError):
-    _RAW_COPY = _RAW_EQUAL = None
+    _RAW_COPY = _RAW_EQUAL = _RAW_ROW_LOOKUP = None
 
 def require(ok, message="Exact natural trial changed"):
     if not ok:

@@ -34,6 +34,7 @@ from sqlalchemy.sql.elements import quoted_name as _ColdGraphQuotedName
 from . import _cold_base_segment as _base_segments
 from . import _cold_policy_segment as _policy_segments
 from . import _cold_typed_native_candidate as _typed_native_code
+from . import natural_live_admission as _row_native_code
 from . import natural_specs as codec
 from .config import Settings
 from .contracts import Limits, strict_json, validate_value
@@ -1653,16 +1654,27 @@ def fail_owned(worker, run, error):
         store.event(c, header["id"], "STATE", dict(status=state, error=error.public()))
 
 
-def _model_value(value):
+def _model_value(value, *, _byte_digests=None, _byte_seen=None):
     """Retain every field of actual SQL row mappings and exact Limits."""
     if type(value) is Limits:
-        return _model_value(value.model_dump())
+        return _model_value(value.model_dump(), _byte_digests=_byte_digests, _byte_seen=_byte_seen)
     if isinstance(value, Mapping):
         require(all(isinstance(k, str) for k in value), "Model proof mapping keys changed")
-        return {k: _model_value(v) for k, v in value.items()}
+        return {k: _model_value(v, _byte_digests=_byte_digests, _byte_seen=_byte_seen)
+            for k, v in value.items()}
     if type(value) in (list, tuple):
-        return [_model_value(v) for v in value]
+        return [_model_value(v, _byte_digests=_byte_digests, _byte_seen=_byte_seen) for v in value]
     if type(value) is bytes:
+        if _byte_digests is not None:
+            if _byte_seen is not None:
+                _byte_seen.add(id(value))
+            prior = _byte_digests.get(id(value))
+            if prior is None or prior[0] is not value:
+                # Strong reference prevents id reuse. Only exact immutable
+                # bytes reuse arithmetic; every mutable ancestor is revisited.
+                prior = (value, hashlib.sha256(value).hexdigest(), len(value))
+                _byte_digests[id(value)] = prior
+            return dict(sha256=prior[1], bytes=prior[2])
         return dict(sha256=hashlib.sha256(value).hexdigest(), bytes=len(value))
     require(type(value) in (str, int, float, bool, type(None)), "Unsupported model proof value")
     return value
@@ -1746,6 +1758,10 @@ def _cold_graph_limit_values(value):
     # Never invoke instance model_dump, __reduce__, or a Pydantic serializer.
     return tuple((name, raw[name]) for name in names)
 
+_COLD_ROW_REQUIRE = require
+_COLD_ROW_LEAF = codec.require
+_COLD_ROW_LOOKUP = _row_native_code._RAW_ROW_LOOKUP
+
 def _cold_graph_row_storage(value):
     """Fresh controlled raw storage; never touch foreign-key hash/equality.
 
@@ -1759,6 +1775,13 @@ def _cold_graph_row_storage(value):
     require((type(parent) is _ColdGraphCursorMeta or type(parent) is _ColdGraphSimpleMeta)
         and type(data) is tuple and type(index) is dict, "Exact Cold graph SQL row storage required")
     keys = object.__getattribute__(parent, "_keys")
+    native = _COLD_ROW_LOOKUP
+    if (native is not None and _row_native_code._RAW_ROW_LOOKUP is native
+            and require is _COLD_ROW_REQUIRE and codec.require is _COLD_ROW_LEAF
+            and type(keys) is list):
+        lookup = native(keys, data, index, _ColdGraphQuotedName, require)
+        if lookup is not _row_native_code._RAW_UNSUPPORTED:
+            return keys, data, lookup
     require(type(keys) is list and all(type(key) is str or type(key) is _ColdGraphQuotedName for key in keys),
         "Complete Cold graph SQL row keys required")
     lookup = {}
@@ -3442,6 +3465,7 @@ class _ModelSettlementRead:
     source_deadline: float = float("inf")
     post_graph: Any = None
     _post_graph_initial: Any = None
+    _byte_digests: dict = field(default_factory=dict, repr=False)
     state: str = "BUILDING"
     active: bool = True
 
@@ -3456,8 +3480,17 @@ class _ModelSettlementRead:
         self.driver = cast(SQLiteConnection, c.connection.driver_connection)
         self.changes, self.thread = self.driver.total_changes, get_ident()
         self.binding_fingerprint = self.binding_key()
-        self.input_fingerprint = _model_inputs(self.inputs)
+        self.input_fingerprint = self._inputs_key()
         self.check()
+
+    def _inputs_key(self):
+        seen = set()
+        result = fingerprint(_model_value(self.inputs, _byte_digests=self._byte_digests,
+            _byte_seen=seen))
+        # Keep strong references while walking; release removed immutable leaves
+        # only after a complete fresh walk, so replacements cannot accumulate.
+        self._byte_digests = {key: entry for key, entry in self._byte_digests.items() if key in seen}
+        return result
 
     def binding_key(self):
         b = self.binding
@@ -3481,7 +3514,7 @@ class _ModelSettlementRead:
             and self.driver.total_changes == self.changes and self.thread == get_ident()
             and _source_reads_current(self.store, c, self.token)
             and self.binding_key() == self.binding_fingerprint
-            and _model_inputs(self.inputs) == self.input_fingerprint,
+            and self._inputs_key() == self.input_fingerprint,
             "Model settlement read segment or complete inputs changed")
         if self.post_graph is not None:
             require(type(self.post_graph) is _ColdTrialGraph
@@ -3498,7 +3531,7 @@ class _ModelSettlementRead:
                 "trial_limits", "frozen_limits", "declared", "action_limits", "full_admission",
                 "current_journal", "post_graph"}, "Model proof inputs cannot be rebound")
         self.inputs.update(values)
-        self.input_fingerprint = _model_inputs(self.inputs)
+        self.input_fingerprint = self._inputs_key()
 
     def live(self):
         from . import natural_live_admission as gate
@@ -3607,6 +3640,7 @@ class _ModelSettlementRead:
     def invalidate(self):
         self.active, self.state = False, "INVALID"
         self.authorities.clear()
+        self._byte_digests.clear()
 
 
 @contextmanager
@@ -3753,6 +3787,7 @@ def _model_settlement_read(worker, c, inputs):
             if proof is not None:
                 proof.active = False
                 proof.authorities.clear()
+                proof._byte_digests.clear()
             if c.info.get("_model_settlement_scope") is nonce:
                 c.info.pop("_model_settlement_scope", None)
 

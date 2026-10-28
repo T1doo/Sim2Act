@@ -6,7 +6,11 @@ Only the fixed original policy cores consume those private copies. SQL, clocks,
 source resolution, new graph roots and publication remain in the coordinator.
 """
 
+import hashlib
+import math
 from inspect import getattr_static
+from io import BytesIO
+from pickle import PickleBuffer, Pickler
 from typing import Any
 
 from pydantic import BaseModel
@@ -110,12 +114,71 @@ _SCHEMAS = tuple((kind, type.__getattribute__(kind, '__pydantic_core_schema__'),
     for kind in _trial_typed_nested_classes())
 
 
+def _schema_identity_marker(*args):
+    raise TypeError('Schema witnesses must never be loaded')
+
+
+class _SchemaPickler(Pickler):
+    def reducer_override(self, value):
+        if value is _schema_identity_marker:
+            return NotImplemented
+        # Unknown leaves are code identities, never their serializers/equality.
+        return _schema_identity_marker, (id(value),)
+
+
+def _schema_bytes(value):
+    output = BytesIO()
+    encoder = _SchemaPickler(output, protocol=5)
+    # Visit every occurrence of a shared mutable subtree, as the old matcher
+    # does. This is a fresh encoding, without a completed-value/PASS memo.
+    encoder.fast = True
+    encoder.dump(value)
+    return output.getvalue()
+
+
+def _has_nan(value):
+    if type(value) is float:
+        return math.isnan(value)
+    return type(value) is tuple and any(_has_nan(v) for v in value)
+
+
+# Bootstrap code-configuration pins only. NaN identity semantics and any exact
+# builtin that pickle would encode by value but our schema treats as an opaque
+# code leaf retain the complete old matcher. Retained leaves prevent id reuse.
+_SCHEMA_PINS = tuple(None if _has_nan(entry[2]) or any(
+    type(v) in (bytes, bytearray, set, frozenset, PickleBuffer) for v in _CODE_LEAVES)
+    else hashlib.sha256(_schema_bytes(entry[1])).digest() for entry in _SCHEMAS)
+
+
+def _schema_current(trusted):
+    pin = next((pin for entry, pin in zip(_SCHEMAS, _SCHEMA_PINS, strict=True)
+        if entry is trusted), None)
+    if pin is not None:
+        try:
+            if hashlib.sha256(_schema_bytes(trusted[1])).digest() == pin:
+                return True
+        except (ValueError, RecursionError):
+            pass  # The original complete key/cycle gate owns rejection.
+    return _schema_matches(trusted[1], trusted[2])
+
+
+_SCHEMA_CURRENT = _schema_current
+_SCHEMA_BYTES = _schema_bytes
+_SCHEMA_ENCODER = _SchemaPickler
+_SCHEMA_REDUCER = getattr_static(_SchemaPickler, 'reducer_override')
+_SCHEMA_MARKER = _schema_identity_marker
+
+
 def _fixed_schema(kind):
     namespace = type.__getattribute__(kind, '__dict__')
     validator = namespace.get('__pydantic_validator__')
     trusted = next((entry for entry in _SCHEMAS if entry[0] is kind), None)
     return (trusted is not None and namespace.get('__pydantic_core_schema__') is trusted[1]
-        and _schema_matches is _SCHEMA_MATCHER and _schema_matches(trusted[1], trusted[2])
+        and _schema_current is _SCHEMA_CURRENT and _schema_bytes is _SCHEMA_BYTES
+        and _SchemaPickler is _SCHEMA_ENCODER
+        and getattr_static(_SchemaPickler, 'reducer_override') is _SCHEMA_REDUCER
+        and _schema_identity_marker is _SCHEMA_MARKER
+        and _schema_matches is _SCHEMA_MATCHER and _schema_current(trusted)
         and validator is trusted[3] and namespace.get('__pydantic_serializer__') is trusted[4]
         and getattr_static(kind, 'model_validate') is _VALIDATE
         and getattr_static(kind, '__init__') is _INIT
