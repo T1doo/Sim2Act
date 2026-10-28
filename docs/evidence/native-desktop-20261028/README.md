@@ -1,0 +1,13 @@
+# Native desktop source handoff
+
+Status: source/build inputs ready; native Windows compile/window/lifecycle NOT_RUN. No EXE is claimed built by cloud. The product entry is Sim2Act.exe; a browser entry requires explicit developer preview.
+
+Host: C#5/net462 WinForms + Microsoft WebView2 SDK1.0.4314.35, existing stable Runtime only, asInvoker, private profile/temp/exports. SDK official archive9818548 bytes / SHA25690778deb1b77e36292828b4b5833c9255c27533f40e0ddd55891ae718944edc4. No browser fallback or system installer. Packager binds host/build/docs inputs to the exact candidate manifest. Build script checks exact backend source commit, every runtime manifest byte and the actual invoked host/build input hashes before invoking existing csc; new EXE and SDK outputs require a new candidate directory.
+
+Ready worker identity + loopback origin bind the existing synthetic backend. Startup init/backend deadlines are separate finite30s bounds. User close sends same-worker STOP then EOF through its own child stdin. Success needs original STOPPED clean/worker_stopped/data_preserved, matching worker, process exit0 and drained stdout/stderr EOF. Failure/unknown preserve data/log/claim. No kill, unknown lock deletion or restart. UI queue is bounded256 records/8192chars, drained at most64 records/5ms per100ms tick; overflow is sticky failure, EOF cannot overtake STOPPED. Navigation/frame/newwindows/permissions stay constrained to backend origin and exports stay inside application directory.
+
+Actual cloud checks: 54PASS/6.67s, command `python -m pytest tests/test_windows_portable_delivery.py tests/test_portable_revision_binding.py tests/test_candidate_wheel_platform.py tests/test_desktop_control.py tests/test_cold_import_bootstrap.py -q`. Includes real consoleless-ready service child -> private EOF -> original STOPPED -> exit0+EOF+preserved DB; this is Linux child protocol evidence, not native GUI evidence. Prior invocation had a nonexistent test filename and collected no tests; corrected command/log are recorded.
+
+Original B2/9a complete Mock+SQLite evidence stays separate. Default-off owned plan's full2 selected then G0publicbound119.77s / transaction120.01s ROLLED_BACK; no third unchanged full run. Performance work remains uncommitted and is excluded from this host handoff. No real model call, PG deployment, main merge, PR, release or external deployment in this host task.
+
+Independent read-only review found and drove fixes for modal initialization reentrancy and host/backend source provenance. Final delta review permits source handoff with native Windows NOT_RUN; no cloud compiler/window proof is inferred.

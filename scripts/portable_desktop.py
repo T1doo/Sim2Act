@@ -220,6 +220,8 @@ def main():
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] != ["--browser-preview"]:
+        raise SystemExit("This is an explicit developer browser preview. Start Sim2Act.exe for the desktop application; use --browser-preview only for development.")
     try:
         result = main()
     except Exception as error:

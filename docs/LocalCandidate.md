@@ -61,7 +61,7 @@ python scripts/package_windows_portable.py \
 
 装配前核对完整提交、wheel 摘要、全部已打包 Python/网页/数据文件字节及文件集合，拒绝混入、遗漏和重复项；新profile包含全部受软件资格约束的C源码；两份实验C只作源码资源，不自动启用。原生输出按单独白名单与摘要核对，Windows拒绝Linux `.so` 或标签不符的wheel。新版清单摘要写入包内 manifest。候选清单须来自已核实的精确 Git 构建：这些校验只证明包与清单一致，不会把任意手写清单认证成可信源码。未传清单只允许原固定旧提交及旧 wheel，不能借旧 wheel 改标新版本。
 
-这一步只装配、不下载、不安装、不执行 Windows，也不授予正式软件、账户或模型资格。现有运行库仍是已标记 superseded 的 Python 3.12.10；只能保留其原隔离合成预览边界，不能据此称长期正式交付。实际 Windows 启动/退出、像素、真实账户、G0及人工语义仍须各自有效证据，装配状态始终为 `BUILT_NOT_WINDOWS_EXECUTED`。
+这一步只装配、不下载、不安装、不执行 Windows，也不授予正式软件、账户或模型资格。现有运行库仍是已标记 superseded 的 Python 3.12.10；只能保留其原隔离合成预览边界，不能据此称长期正式交付。实际 Windows 启动/退出、像素、真实账户、G0及人工语义仍须各自有效证据，装配状态为 `NATIVE_HOST_BUILD_REQUIRED_NOT_WINDOWS_EXECUTED`；默认入口是待构建的 `Sim2Act.exe`，不回退浏览器。构建与原生窗口验收参见 `scripts/windows/README.md`，只有显式开发预览保留浏览器。
 
 
 构建命令现在从同一干净Git提交包含 `setup.py`，仅使用已安装 `setuptools==82.0.1`，以 `--no-index --no-build-isolation --no-deps` 禁止隐式后端/依赖下载。默认原生候选必须实际含两份受支持扩展，缺少任一则拒绝成包；只做回退预览需显式 `--python-preview`。清单记录实际文件名、Tag、Root-Is-Purelib、构建平台及原生文件SHA；构建不等于运行验收，重建产生的新二进制仍需验证。本轮已验原生字节只属于云端Linux/CPython3.12，Windows需自行有界构建/测试已有工具，不下载新工具或改权限。

@@ -1,35 +1,27 @@
-# Sim2Act · 2026-10-27 合成工程预发布候选
+# Sim2Act · 当前合成工程桌面候选
 
-这份候选供体验现有暖橙工作台、资源/目标卡/应用/实例与持久结果流程，不是完整 P-A/P-B、G0 或 R0 验收。发布到 GitHub 不等于在产品中批准应用，也不会打开 LIVE 或正式业务发布。候选的精确源码和文件 SHA256 见随包清单与 GitHub Release。
+本候选保留已认可的紧凑工作台、资源、目标卡、应用、实例及持久结果流程。精确应用提交与文件摘要以 `candidate-manifest.json`、`portable-manifest.json` 为准；桌面 EXE 和 SDK 摘要另见 `desktop-manifest.json`。构建、实际运行、业务验收分别记录，不互相替代。
 
-## 下载后开始
+## 桌面入口
 
-普通体验请选择 `Sim2Act-preview-win64-*.zip`，不要把 local-candidate 源码包当免环境成品。
+完成 Windows 构建后，双击 `Sim2Act.exe`，显示独立窗口及任务栏入口。原后端实际 READY 后才显示工作台；关闭窗口通过私有控制管道请求原停止路径，核对同 worker 的 STOPPED、子进程真实退出和输出 EOF。失败保留数据与日志，退出未知保留运行锁，不强制终止或删除锁来重试。
 
-1. 在 Windows x64 将 ZIP **完整解压到一个新的普通目录**，保留全部文件；不要覆盖旧数据目录。
-2. 双击 `Start-Sim2Act.cmd`。包内已有私有 Python 及运行依赖，无需手工安装 Python、SDK、编译器、Node 或 PostgreSQL。需要电脑原有 Google Chrome 和 Windows UCRT；缺少时停止，不绕过系统安全提示。
-3. 等待本机服务与 Worker 就绪后自动打开单独的 Chrome 测试窗口。页面明确标为合成工程，连接身份为 `public-synthetic-blank-workspace`。只能输入无隐私的合成练习材料。
-4. 创建项目，保存并明确授权 CSV 等资源，建立目标卡，再使用界面内支持的固定工具、应用和实例流程。每项审批、授权和版本确认仍须明确操作；未连接的自然模型能力不会变成可用状态。
-5. 控制台保持打开。结束时按一次 Ctrl+C，等服务清理报告，再关闭单独的测试 Chrome。数据留在同目录，下次启动可重新打开。仅在自有服务与浏览器退出后删除解压目录；异常时保留原错误、数据和运行声明，不删锁或清库来重试。
+新装配 ZIP 当前是桌面构建输入，状态为 `NATIVE_HOST_BUILD_REQUIRED_NOT_WINDOWS_EXECUTED`，尚未含新 EXE；须由维护者按照 `desktop-build/README.md`，用已有编译器、固定应用 SDK 和已有 WebView2 Runtime 在新候选目录构建。未构建时入口明确报缺项，不打开浏览器。最终交付须补当前 EXE 的实际 Windows 窗口、操作、关闭和重开数据证据。
 
-`workspace data`、`temp`、`chrome-profile`、`chrome-cache` 位于解压目录。不能承诺操作系统、Defender 或浏览器产生的系统记录绝不出现在目录外。不要放入私人材料或复用公开合成身份处理真实项目。
+依赖 Windows x64、已有 .NET Framework 4.6.2+、已有 WebView2 Runtime、Windows UCRT；不自动安装系统组件，不绕过安全拒绝。`Developer-Browser-Preview.cmd` 仅供显式开发预览。旧 Chrome 包及其截图属于旧版本，不是当前桌面软件验收。
 
-## 包与当前证据
+## 本地数据与功能
 
-- Windows 便携 ZIP：内置 CPython 3.12.10 与锁定依赖，省去用户开发环境安装；**最新包尚未在 Windows 执行**。该 Python 版本已被后续版本取代，仅短期隔离预览，不承诺长期生产运行。
-- local-candidate ZIP / wheel：供开发复现，需要 Python 3.12 与锁定依赖；不是另一份免环境安装器。wheel 项目版本仍为 `0.1.0`，本次预发布标签和 manifest 的完整提交才是修订标识。
-- 云端回归仅按发布说明列出的实际节点计数，不能替代完整历史套件、真实模型任务、人工语义或设备验收。此前受保护 Edge 的有限页面证据不能改签为本包 Windows 启动证据。
-- 已封存的受限真实模型连通/只读反馈诊断与这个不连接模型的预览包相互独立；用户确认现有模型无消费，不等于官方账户权益/零收费强制证据。
+将完整包解压到新的普通目录，不覆盖旧目录。使用公开合成身份 `public-synthetic-blank-workspace` 登录，只输入无隐私的合成材料。项目、资源授权、目标卡、应用与实例的审批和版本确认继续走原流程。`workspace data`、`webview-profile`、`temp`、`exports` 和日志位于应用目录；不能承诺操作系统、Defender 的系统记录绝不出现在目录外。不要复用公开合成身份处理真实项目。
 
-## 仍未通过的交付门
+已有 Windows 8210 源码回归通过两个全新进程的 P-A prepare/verify，使用5次固定 Mock，保留两份新材料及冷读结果；这不是新 EXE 或真实模型整链验收。当前宿主后端的真实 READY→控制管道 EOF→原 STOPPED→数据保留在云端已验，原生 Windows 窗口仍待实测。
 
-| 项目 | 当前事实与影响 |
-| --- | --- |
-| P-B Cold G0 | 原完整生成到结算窗口仍 UNKNOWN，第二次 commit 的原租约检查拒绝；全流程不能声称完成。不是 Windows 缺口。 |
-| 生产账户来源 | `production_evidence.resolve_account()` 仍 SOURCE_MISSING；缺可绑定账户身份、权益、不可收费执行约束及当前撤权/有效期的可信读源。普通免费声明不能伪造成已核证据。 |
-| 隔离优化 | 默认关闭。Source/Generate 联合 pre 覆盖同投影共享与隐藏 RowMapping sidecar，但完整 post 旧证明字节等价未闭合；局部收益不足，不启用替换。 |
-| 平台与语义 | 最新便携包 Windows 启动/退出/像素、最新完整 PG 组合、真实任务与 owner 人工语义验收未完成。UNKNOWN、PENDING 和未发布继续如实呈现。 |
+## 模型、保存链与剩余边界
 
-G0 的下一步只能是有完整 post 协议兼容证明且净收益可信的工程修复，或单独决定具体内部协议迁移；当前没有成熟的小优化可承诺过门。不会延长 30 秒租约、放宽 fence/授权/撤权/时钟/epoch 或删除完整检查来制造成功。10 月 31 日整体交付有实质风险；候选可用范围不能替代原计划整体完成。
+固定免费 `intern-s2` 与原 Intern endpoint 已有可信账户来源和有限执行门，用户零费用授权有效。已有真实提取成功记录，和 Mock 完整结算证据分开记载。本包不含 token，不自动打开 LIVE，不以合成身份代替正式主体。
 
-包不含用户数据库、私人设置、凭据、历史日志或大证据。保留原 Python LICENSE 和依赖许可证，第三方来源见便携包内的 `THIRD-PARTY-SOURCES.json`。本次不部署任何线上服务。
+已封存 B2/9a 工程链使用7次有限 Mock、真实 SQLite 事务保存成功；两次 Cold 事务118.04/115.48秒接近其明确120秒界限，旧30秒条件未通过。新的拥有数据计划候选默认关闭，最近整链因120秒边界回滚，不能替代原通过版或声称稳定性已修完。详见 `docs/evidence/cloud-frontier-structure-20261028/README.md` 与新候选证据。
+
+正式外部执行仍缺实际 PostgreSQL应用角色配置、选定 principal/project/trial 及对应精确软件、材料、预算审批；不凭空建立凭据或部署。完整真实模型链、正式 PG、自然语义和 owner 人工验收尚未完成，正式发布继续关闭。
+
+包不含用户数据库、私人设置或模型凭据。保留 Python 与依赖许可证；运行库原件见 `THIRD-PARTY-SOURCES.json`，桌面 SDK 来源与许可证另随构建记录。已锁定 Python3.12.10 已被后续版本取代，此工程候选不能据此认定长期生产部署完成。

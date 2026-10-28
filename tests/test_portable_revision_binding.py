@@ -54,6 +54,8 @@ def candidate(tmp_path):
         python="3.12",
         files={"src/" + name: record(value) for name, value in files.items()},
     )
+    for name in ["scripts/portable_desktop.py", "scripts/package_windows_portable.py", "docs/PreviewRelease.md"] + ["scripts/windows/" + name for name in ("Sim2ActDesktop.cs", "Build-Desktop.ps1", "desktop.manifest", "README.md")]:
+        data["files"][name] = record((ROOT / name).read_bytes())
     data["files"]["wheels/" + wheel.name] = record(wheel.read_bytes())
     manifest.write_text(json.dumps(data))
     return wheel, manifest, data, files
@@ -127,7 +129,13 @@ def test_full_local_assembly_binds_revision_and_preserves_existing_output(candid
     assert result["product_commit"] == COMMIT and result["windows_execution"] == "NOT_RUN"
     with zipfile.ZipFile(output) as z:
         m = json.loads(z.read("Sim2Act-preview/portable-manifest.json"))
-        assert m["status"] == "BUILT_NOT_WINDOWS_EXECUTED"
+        assert m["status"] == "NATIVE_HOST_BUILD_REQUIRED_NOT_WINDOWS_EXECUTED"
+        assert m["desktop_entry"] == "Sim2Act.exe"
+        start = z.read("Sim2Act-preview/Start-Sim2Act.cmd").decode("ascii")
+        assert "Sim2Act.exe" in start and "desktop.py" not in start
+        preview = z.read("Sim2Act-preview/Developer-Browser-Preview.cmd").decode("ascii")
+        assert "--browser-preview" in preview
+        assert "Sim2Act-preview/desktop-build/Sim2ActDesktop.cs" in z.namelist()
         assert m["app_candidate_manifest_sha256"] == record(manifest.read_bytes())["sha256"]
         for name, expected in m["files"].items():
             assert record(z.read("Sim2Act-preview/" + name)) == expected
@@ -147,3 +155,15 @@ def test_source_mismatch_leaves_no_output(candidate, tmp_path):
             inputs, tmp_path / "missing-assets", wheel, output, candidate_manifest=manifest
         )
     assert not output.exists()
+
+
+def test_host_inputs_cannot_mix_with_other_source_candidate(candidate):
+    wheel, manifest, data, _ = candidate
+    data["files"]["scripts/windows/Sim2ActDesktop.cs"]["sha256"] = "0" * 64
+    manifest.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="Frozen input mismatch"):
+        builder.checked_desktop_inputs(manifest)
+    del data["files"]["scripts/windows/Sim2ActDesktop.cs"]
+    manifest.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="candidate input missing"):
+        builder.checked_desktop_inputs(manifest)

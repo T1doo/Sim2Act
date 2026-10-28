@@ -115,6 +115,21 @@ def checked_app(app_wheel, specification, candidate_manifest=None):
     return data, digest(record_bytes)
 
 
+def checked_desktop_inputs(candidate_manifest):
+    if candidate_manifest is None:
+        raise ValueError("Native host stage requires an exact current candidate manifest")
+    records = json.loads(candidate_manifest.read_bytes())["files"]
+    root = Path(__file__).resolve().parents[1]
+    names = ["scripts/portable_desktop.py", "scripts/package_windows_portable.py", "docs/PreviewRelease.md"]
+    names += ["scripts/windows/" + name for name in ("Sim2ActDesktop.cs", "Build-Desktop.ps1", "desktop.manifest", "README.md")]
+    result = {}
+    for name in names:
+        if type(records.get(name)) is not dict:
+            raise ValueError("Native host candidate input missing: " + name)
+        result[name] = read_asset(root / name, records[name])
+    return result
+
+
 def build(inputs, assets, app_wheel, output, *, candidate_manifest=None):
     if output.exists():
         raise ValueError("Output already exists; do not overwrite a candidate")
@@ -122,6 +137,7 @@ def build(inputs, assets, app_wheel, output, *, candidate_manifest=None):
     # Complete app/version qualification before reading or assembling runtime
     # archives. A mismatch cannot produce a partially relabelled output.
     app, candidate_digest = checked_app(app_wheel, specification, candidate_manifest)
+    desktop_inputs = checked_desktop_inputs(candidate_manifest)
     files = {}
     runtime = specification["python"]
     merge_archive(files, read_asset(assets / runtime["filename"], runtime), "runtime/")
@@ -157,39 +173,38 @@ def build(inputs, assets, app_wheel, output, *, candidate_manifest=None):
         b"Only python312._pth adds private Lib/site-packages. Binaries and packages are unchanged.\n"
         b"This isolated synthetic SQLite preview omits PostgreSQL drivers.\n"
     )
-    files["desktop.py"] = Path(__file__).with_name("portable_desktop.py").read_bytes()
-    files["使用说明.md"] = (
-        Path(__file__).resolve().parents[1] / "docs/PreviewRelease.md"
-    ).read_bytes()
+    files["desktop.py"] = desktop_inputs["scripts/portable_desktop.py"]
+    files["使用说明.md"] = desktop_inputs["docs/PreviewRelease.md"]
+    # Native desktop is the product entry. Browser access is explicit developer preview.
+    for name in ("Sim2ActDesktop.cs", "Build-Desktop.ps1", "desktop.manifest", "README.md"):
+        files["desktop-build/" + name] = desktop_inputs["scripts/windows/" + name]
     files["Start-Sim2Act.cmd"] = (
         '@echo off\r\nsetlocal\r\ncd /d "%~dp0"\r\n'
-        'set "TEMP=%~dp0temp"\r\nset "TMP=%~dp0temp"\r\n'
-        'set "PYTHONPATH="\r\nset "PYTHONNOUSERSITE=1"\r\n'
-        'if not exist "%~dp0temp" mkdir "%~dp0temp"\r\n'
-        '"%~dp0runtime\\python.exe" -I -B -X utf8 "%~dp0desktop.py"\r\n'
-        'set "SIM2ACT_PREVIEW_EXIT=%ERRORLEVEL%"\r\n'
-        "echo.\r\necho Preview stopped. Close the test Chrome window before deleting this folder.\r\n"
-        "pause\r\nexit /b %SIM2ACT_PREVIEW_EXIT%\r\n"
+        'if not exist "%~dp0Sim2Act.exe" (echo Native desktop build required. See desktop-build/README.md & exit /b 1)\r\n'
+        '"%~dp0Sim2Act.exe"\r\nexit /b %ERRORLEVEL%\r\n'
+    ).encode("ascii")
+    files["Developer-Browser-Preview.cmd"] = (
+        '@echo off\r\nsetlocal\r\ncd /d "%~dp0"\r\n'
+        '"%~dp0runtime\\python.exe" -I -B -X utf8 "%~dp0desktop.py" --browser-preview\r\n'
+        'exit /b %ERRORLEVEL%\r\n'
     ).encode("ascii")
     files["READ-ME-FIRST.txt"] = (
-        "Sim2Act Windows x64 - OFFLINE SYNTHETIC PREVIEW\n\n"
-        "Unzip to a new ordinary folder. Double-click Start-Sim2Act.cmd.\n"
-        "No Python, SDK, compiler, Node, pip or database install is needed.\n"
-        "An existing Google Chrome and the Windows Universal C Runtime are required.\n"
+        "Sim2Act Windows x64 - NATIVE DESKTOP BUILD INPUT\n\n"
+        "This assembled stage needs the pinned application WebView2 SDK and existing C# compiler.\n"
+        "See desktop-build/README.md. Build in this new candidate folder; do not reuse an old EXE.\n"
+        "After building, Sim2Act.exe owns its independent window and taskbar entry.\n"
+        "No Chrome/Edge browser fallback and no system runtime installation.\n"
+        "Existing Windows x64, .NET Framework 4.6.2+ and WebView2 Runtime are required.\n"
         "Do not bypass SmartScreen/signature/security refusals or install missing system components.\n"
-        "The browser opens only after the local API and Worker are ready.\n"
-        "Synthetic login: public-synthetic-blank-workspace\n"
-        "Use non-sensitive synthetic data only. No real model, production account, PostgreSQL or formal publication.\n"
-        "Keep the console open; Ctrl+C once stops the server. Wait for clean:true.\n"
-        "Close the separate test Chrome window. Start again to reopen the same local data.\n"
-        "Delete this folder only after its own server and browser have exited.\n"
-        "If startup fails, preserve the error; do not reset the database or delete a running claim.\n"
-        "Application data, temp and browser profile/cache stay in this folder.\n"
-        "Windows/Defender/browser OS traces outside it cannot be prevented or promised absent.\n\n"
-        "This is an engineering preview, not completed P-A/P-B/G0/R0 production acceptance.\n"
-        "Bundled Python 3.12.10 is superseded; short isolated test only, not long-term deployment.\n"
-        "License notices remain in runtime/LICENSE.txt and package *.dist-info/licenses.\n"
-        "See THIRD-PARTY-SOURCES.json for exact original archives and source links.\n"
+        "The native view loads only after actual API/Worker READY. Close the window to stop its own backend.\n"
+        "Data, WebView profile, temp, exports and logs stay in this ordinary application folder.\n"
+        "An unconfirmed exit retains data/claim/logs; do not delete a running claim or reset the database.\n"
+        "Synthetic login: public-synthetic-blank-workspace. Use non-sensitive synthetic data only.\n"
+        "This local SQLite workspace is not formal PG/live-model acceptance.\n"
+        "Windows/Defender OS traces outside this folder cannot be promised absent.\n"
+        "Developer-Browser-Preview.cmd is an explicit development aid, not the product entry.\n"
+        "Bundled Python 3.12.10 is superseded; engineering candidate, not long-term deployment.\n"
+        "Exact archive/license/source records remain in THIRD-PARTY-SOURCES.json and runtime notices.\n"
     ).encode("utf-8")
     files["THIRD-PARTY-SOURCES.json"] = (
         json.dumps(dict(python=runtime, wheels=selected), indent=2) + "\n"
@@ -198,7 +213,8 @@ def build(inputs, assets, app_wheel, output, *, candidate_manifest=None):
         format="sim2act-offline-windows-sqlite-preview.v1",
         product_commit=specification["product_commit"],
         python=runtime["version"],
-        status="BUILT_NOT_WINDOWS_EXECUTED",
+        status="NATIVE_HOST_BUILD_REQUIRED_NOT_WINDOWS_EXECUTED",
+        desktop_entry="Sim2Act.exe",
         installed_runtime_wheels=len(selected),
         omitted=["psycopg", "psycopg-binary"],
         app_wheel_sha256=digest(app),
