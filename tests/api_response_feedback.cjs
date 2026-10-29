@@ -23,6 +23,18 @@ const response=(status,data,broken=false)=>({status,ok:status>=200&&status<300,h
  check(requests.length===2&&requests[1].body===JSON.stringify({request_key:'fixed-original-key',input:{term:'sample'}}),'no retry, added field, or replacement key');
  reply=response(403,{error:{code:'PERMISSION_DENIED',message:'denied',submission_rejection:'CONFIRMED'}});
  await assert.rejects(request('/synthetic-denial'),e=>e.message==='PERMISSION_DENIED'&&e.httpStatus===403&&e.detail==='denied'&&(protocolMode?e.submissionRejection===undefined:e.submissionRejection==='CONFIRMED'));check(true,'existing structured rejection semantics unchanged');
+ if(!protocolMode){
+  const reason='Configured Intern credential missing: set the existing SIM2ACT_INTERN_TOKEN or INTERN_API_TOKEN';
+  reply=response(403,{error:{code:'PERMISSION_DENIED',message:reason}});
+  await w.eval('safe')(async()=>{await w.api('/synthetic-configuration-denial');})();
+  check(w.document.getElementById('error').textContent==='PERMISSION_DENIED：'+reason,'visible feedback includes the actual configuration reason without changing machine error semantics');
+  reply=response(409,{error:{code:'VERSION_CONFLICT',message:'<img src=x onerror="throw 1">'}});
+  await w.eval('safe')(async()=>{await w.api('/synthetic-text-denial');})();
+  check(w.document.getElementById('error').textContent==='VERSION_CONFLICT：<img src=x onerror="throw 1">'&&!w.document.getElementById('error').querySelector('img'),'server reason is text only, never HTML');
+  reply=response(403,{error:{code:'PERMISSION_DENIED',message:{private:'not a public reason'}}});
+  await w.eval('safe')(async()=>{await w.api('/synthetic-invalid-reason');})();
+  check(w.document.getElementById('error').textContent==='PERMISSION_DENIED','nonstring reason is not serialized into visible feedback');
+ }
  reply=response(200,{natural_deadline:123});reply.headers.get=()=> '42';const data=await request('/synthetic-ok');
  check(data.natural_deadline===123&&(protocolMode?data.naturalServerTime===undefined:data.naturalServerTime===42),'valid result and original server clock metadata unchanged');
  if(process.argv[3]){

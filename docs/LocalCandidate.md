@@ -66,6 +66,6 @@ python scripts/package_windows_portable.py \
 
 构建命令现在从同一干净Git提交包含 `setup.py`，仅使用已安装 `setuptools==82.0.1`，以 `--no-index --no-build-isolation --no-deps` 禁止隐式后端/依赖下载。默认原生候选必须实际含两份受支持扩展，缺少任一则拒绝成包；只做回退预览需显式 `--python-preview`。清单记录实际文件名、Tag、Root-Is-Purelib、构建平台及原生文件SHA；构建不等于运行验收，重建产生的新二进制仍需验证。本轮已验原生字节只属于云端Linux/CPython3.12，Windows需自行有界构建/测试已有工具，不下载新工具或改权限。
 
-完整云端通过仍余量很窄：两次Cold结算118.04/115.48秒，分别在120秒界限内；G0 41.39/43.64秒超过旧30秒。自然语义NOT_RUN、owner PENDING，正式发布关闭；不能将一次工程通过扩大为生产稳健性或跨平台验收。
+较早封存的B2/9a通过版余量很窄：两次Cold结算118.04/115.48秒，分别在120秒界限内；G0 41.39/43.64秒超过旧30秒。自然语义NOT_RUN、owner PENDING，正式发布关闭；不能将一次工程通过扩大为生产稳健性或跨平台验收。
 
 2026-10-28 新冻结源码72c523608004244d0be94df0ecaf4e4f7f0b00b5的完整合成P-B控制链已在真实时钟SQLite上以7次Mock保存最终结果，两次事务103.84/98.38秒，完整G1 67.32/62.07秒；参见 [新完整证据](evidence/cloud-raw-mapping-20261028/README.md)。G0 owned公共链仍为显式实验候选；G1新路径每次完整比较当前输入并保留原canonical回退。新包身份和Windows宿主生命周期须单独验收，不能沿用旧6742包称新版本已运行；旧30秒、正式PG/live与语义/owner仍未通过。

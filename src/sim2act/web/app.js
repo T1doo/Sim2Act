@@ -86,7 +86,14 @@ async function api(path, method = "GET", body) {
   if (!response.ok) {const error=new Error(data.error?.code || data.detail?.[0]?.msg || "请求失败");error.detail=data.error?.message;error.httpStatus=response.status;error.submissionRejection=data.error?.submission_rejection||data.submission_rejection;throw error;}
   return data;
 }
-const safe = (fn) => async (event) => { event?.preventDefault(); $("error").textContent = ""; try {await fn(event);} catch (e) {$("error").textContent = e.message;} };
+function errorFeedback(error) {
+  // Error.message remains the machine code used by authorization/recovery
+  // predicates. Only presentation adds the server's existing public reason.
+  const message = error.message || "请求失败";
+  return typeof error.detail === "string" && error.detail.trim() && error.detail !== message
+    ? `${message}：${error.detail}` : message;
+}
+const safe = (fn) => async (event) => { event?.preventDefault(); $("error").textContent = ""; try {await fn(event);} catch (e) {$("error").textContent = errorFeedback(e);} };
 function row(text, action, label) {
   const div = document.createElement("div"); div.className = "row"; div.textContent = text;
   if (action) {const b = document.createElement("button"); b.textContent = label; b.onclick = safe(action); div.append(" ", b);}
@@ -196,7 +203,7 @@ async function previewResource(resource, context) {
   } catch (error) {
     if (!current()) return;
     invalidateResourcePreview();
-    $("error").textContent = error.message;
+    $("error").textContent = errorFeedback(error);
   }
 }
 function resourceMaterialRow(resource) {
@@ -813,7 +820,7 @@ setInterval(async () => {
   try {
     if (!await sampleHealth(() => api("/health"))) return;
     if(token){await refresh();if(activeRun)await showRun(activeRun,false);}
-  } catch(e) {$("error").textContent=e.message;}
+  } catch(e) {$("error").textContent=errorFeedback(e);}
   finally {backgroundRefreshInFlight=false;}
 },2500);
 

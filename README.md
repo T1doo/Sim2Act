@@ -1,10 +1,10 @@
 # Sim2Act
 
-> **2026-10-28 已冻结通过基线 b2bc048d／9a9bedc2交付**：完整 Generate→Source→提取→新 Store Cold→保存结果已在真实时钟、合成 SQLite/7 次有限 Mock 下跑通；[原始结果与限制](docs/evidence/cloud-frontier-structure-20261028/README.md)。当前验证的是明确签署的 120 秒 settlement 协议，旧 30 秒协议、Windows、真实模型整链和自然语义尚未验收。既有免费 Intern Source/Cold 提取的独立实测见 [云端模型证据](docs/evidence/cloud-settlement-20261028/README.md)。历史包与历史阶段说明仍按原版本保留。
-> 后续已补齐[正式连接与原试运行选择](docs/ProductionConnection.md)，保留已有凭据及原审批。两次性能候选整链未通过，均已撤回，现恢复原通过核心；后续配置接线仅有定向验证，不能将其新字节冒称完整整链已验。具体失败与架构缺口见[最新性能证据](docs/evidence/cloud-original-map-20261028/README.md)。
+> **已封存的最新完整链：72c52360／证据版本 a140d37a**。Generate→Source→提取→fresh Cold Store→两次完整校验→保存结果，在真实时钟、合成SQLite/7次有限Mock下通过，两次Cold事务103.844/98.383秒，独立进程只读重开一致。[精确版本、原件与限制](docs/evidence/cloud-raw-mapping-20261028/README.md)。明确120秒SQLite协议保持原样，旧30秒、真实模型整链、PG及自然语义未通过；单次余量不构成稳定性保证。以前失败及B2/9a通过证据保留，不改签为新版本通过。
+> 可独立使用的[空白合成桌面工作台与首次CSV流程](docs/PreviewRelease.md)不需要PG或模型密钥。固定免费Intern已有[独立真实提取证据](docs/evidence/cloud-settlement-20261028/README.md)，免费授权有效；[正式连接及精确试运行选择](docs/ProductionConnection.md)仍须使用已有应用连接、身份和原审批。桌面源包、EXE实编、窗口出现、完整操作及关闭重开分别验收，不互相替代。后续源码修补的验证范围各自记录。
 
 
-让想法成为会行动的应用。当前接续开发分支 `dev/production-trial-stages-20261018`，F1 底座之上正推进有限 F2 工程；F1/F2/R0 整体验收尚未通过。
+让想法成为会行动的应用。当前接续开发分支 `dev/cloud-g0-live-20261028`，F1 底座之上正推进有限 F2 工程；F1/F2/R0 整体验收尚未通过。
 
 [动态计划](docs/Plan.md) · [F1 任务](docs/F1/Plan.md) · [实际日志](docs/F1/Log.md) · [V5 产品设计](docs/平台产品设计.md)
 
@@ -33,7 +33,7 @@
 已成功内部 CSV 任务的有界复用入口：[最短上手说明](docs/F2/RegisteredRunQuickstart.md)。保持本机 MOCK，不代表完整 P-B 或正式发布。
 
 本增量支持：本地身份、三个工作区、项目内文本材料、异步持久任务、独立 API/worker、受控工具与回执、幂等提交、租约/fencing、暂停/取消、授权撤回、有限模型循环和跨进程配额账本。
-默认 **MOCK 工程模式**，没有真实书生运行证据。工具链完成显示 `PARTIAL`，不代表目标语义、应用生成或 R0 验收通过。P-A、P-B、发布、增量修改在 F2 实现；不会用空按钮冒充。
+默认 **MOCK 工程模式**；固定免费Intern的独立提取已有真实运行证据，正式真实模型整链尚未验收。工具链完成显示 `PARTIAL`，不代表目标语义、应用生成或 R0 验收通过。P-A、P-B、发布、增量修改在 F2 实现；不会用空按钮冒充。
 
 ## 运行边界
 
