@@ -381,7 +381,7 @@ async function showKnownInternalRunStop(scope){
   });
   await read.onclick();
 }
-async function showInternalRun(id,view=engineering,instance=view?.instance,acceptedCommandStatus=null) {
+async function showInternalRun(id,view=engineering,instance=view?.instance,acceptedCommandStatus=null,expectedReceipt=null) {
   if(!instance || !engineeringCurrent(view) || view.instance?.id!==instance.id)return;
   if(!acceptedCommandStatus&&view.runRead?.id===id&&view.runRead.current())return view.runRead.done;
   clearNaturalTaskExtraction();
@@ -410,6 +410,7 @@ async function showInternalRun(id,view=engineering,instance=view?.instance,accep
     }
     if(!current())return;
     if(run.instance_id!==instance.id)throw Error("运行绑定与实例不符");
+    if(expectedReceipt && run.content_access!==false && (run.namespace!=="INTERNAL_APPRUN" || run.id!==id || run.app_run_id!==expectedReceipt.app_run_id || run.release_id!==expectedReceipt.release_id))throw Error("运行接受回执与原实例或版本不符；原请求键保留，请恢复原回执。");
     renderRegisteredExtraction(view,instance,run);
     view.run=run;$("internal-run-status").textContent=`${run.status} · 取消意图 ${run.cancel_intent ? "已保留" : "无"} · ${run.result ? JSON.stringify(run.result) : run.error?.code || "等待后台状态"}`;
     $("internal-run-detail").textContent=JSON.stringify(run,null,2);
@@ -439,10 +440,11 @@ async function showInternalRun(id,view=engineering,instance=view?.instance,accep
     }));
     if(run.content_access!==false && previousStatus && previousStatus!==run.status && ["SUCCEEDED","PARTIAL","FAILED","CANCELLED"].includes(run.status)){
       await showInternalInstance(instance.id,view);
-      if(engineeringCurrent(view) && view.instance?.id===instance.id)await showInternalRun(id,view,view.instance);
+      if(engineeringCurrent(view) && view.instance?.id===instance.id)return showInternalRun(id,view,view.instance,null,expectedReceipt);
       return;
     }
     if(current()&&(view.spec||view.workflow)&&typeof selectOwnerRun==="function")await selectOwnerRun(run.status==="SUCCEEDED"&&(view.workflow||run.content_access!==false)?id:"",view);
+    if(current() && (!expectedReceipt || run.content_access!==false))return run;
   } catch(error){if(current()){if(["PERMISSION_DENIED","GRANT_REVOKED","VERSION_CONFLICT"].includes(error.message))invalidateInternalContent(view);engineeringStatus(view,error.message,"error");view.run=null;$("internal-controls").replaceChildren();$("internal-run-detail").textContent="";$("internal-run-status").textContent=(acceptedCommandStatus?acceptedCommandStatus+" · ":"")+"当前运行详情尚未确认；请只读重新读取，不表示运行执行失败。";}}
   finally {if(view.runRead===read)view.runRead=null;finishRead();}
 }
@@ -458,12 +460,18 @@ async function submitInternal(view,retry=false) {
   const generation=view.instanceGeneration;
   $("internal-run-status").textContent="正在提交持久任务…";
   const accepted=view.workflow && retry ? await api(`/api/internal/instances/${instance.id}/text-workflow-run-requests/${encodeURIComponent(pending.request_key)}`) : await api(`/api/internal/instances/${instance.id}/runs`,"POST",pending);
-  if(view.workflow && retry){accepted.run_id=accepted.id;}
-  if(engineeringPending.get(instance.id)===pending && pending.request_key===requestKey)engineeringPending.delete(instance.id);
+  const readReceipt=view.workflow && retry,runId=readReceipt ? accepted?.id : accepted?.run_id;
+  // A readable 2xx JSON body can still hide an accepted Run. Keep the exact
+  // original intent until both its receipt and the scoped detail are confirmed.
+  if(!accepted || typeof accepted!=="object" || Array.isArray(accepted) || !/^run_[a-f0-9]{32}$/.test(runId) || !/^iapprun_[a-f0-9]{32}$/.test(accepted.app_run_id) || accepted.namespace!==(readReceipt?"INTERNAL_APPRUN":"INTERNAL_ENGINEERING_ONLY") || !Number.isSafeInteger(accepted.version) || accepted.version<1 || (!readReceipt && typeof accepted.cached!=="boolean") || typeof accepted.status!=="string" || !accepted.status)throw Error("运行接受回执尚未确认；原请求键保留，请恢复原回执，不要新建运行。");
   if(!engineeringCurrent(view) || generation!==view.instanceGeneration)return;
-  $("internal-run-status").textContent=`已接受 ${accepted.run_id}，关闭页面不取消。`;
-  await showInternalInstance(instance.id,view);
-  if(engineeringCurrent(view) && view.instance?.id===instance.id)await showInternalRun(accepted.run_id,view,view.instance);
+  $("internal-run-status").textContent=`已接受 ${runId}，关闭页面不取消。正在只读核对原实例与版本。`;
+  const instanceRead=showInternalInstance(instance.id,view),readGeneration=view.instanceGeneration;
+  await instanceRead;
+  if(engineeringCurrent(view) && readGeneration===view.instanceGeneration && view.instance?.id===instance.id){
+    const confirmed=await showInternalRun(runId,view,view.instance,null,{app_run_id:accepted.app_run_id,release_id:instance.release_id});
+    if(confirmed && engineeringCurrent(view) && view.instance?.id===instance.id && engineeringPending.get(instance.id)===pending && pending.request_key===requestKey)engineeringPending.delete(instance.id);
+  }
 }
 async function internalSubmissionRejected(error,view,instance,pending,endpoint,body){
   const proof=error.submissionRejection;

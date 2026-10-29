@@ -28,7 +28,7 @@ from sim2act.db import (
 from sim2act.worker import Worker
 
 
-@pytest.mark.parametrize("case", ["business", "guards", "lost-save", "read-after-save", "manual", "save-ABA", "uncertain-response", "read-ABA"])
+@pytest.mark.parametrize("case", ["business", "run-receipt", "guards", "lost-save", "read-after-save", "manual", "save-ABA", "uncertain-response", "read-ABA"])
 def test_local_csv_file_actual_http(env, tmp_path, case):
     store, settings, _, owner, other_owner, project, _ = env
     if not shutil.which("node") or subprocess.run(
@@ -90,7 +90,7 @@ def test_local_csv_file_actual_http(env, tmp_path, case):
                 for t in (resources, grants, principals, internal_app_runs, internal_instance_data)
             }
             saved = c.execute(select(resources).where(resources.c.name == "真实 合成.csv")).mappings().all()
-            if case == "business":
+            if case in ("business", "run-receipt"):
                 assert len(saved) == 1 and saved[0]["content"].encode() == fixture_bytes
                 assert saved[0]["hash"] == hashlib.sha256(fixture_bytes).hexdigest()
                 parsed = list(csv.DictReader(io.StringIO(fixture)))
@@ -99,10 +99,14 @@ def test_local_csv_file_actual_http(env, tmp_path, case):
                 runs = c.execute(select(internal_app_runs).where(
                     internal_app_runs.c.instance_id == result["instance_id"]
                 ).order_by(internal_app_runs.c.result_version)).mappings().all()
-                assert len(runs) == 2 and [r["output"]["sum"] for r in runs] == expected
-                assert all(r["status"] == "SUCCEEDED" for r in runs)
-                assert [r["result_version"] for r in runs] == [1, 2]
-                assert len({r["id"] for r in runs}) == 2
+                successful = [r for r in runs if r["status"] == "SUCCEEDED"]
+                stopped = [r for r in runs if r["status"] == "CANCELLED"]
+                assert len(successful) == 2 and [r["output"]["sum"] for r in successful] == expected
+                assert [r["result_version"] for r in successful] == [1, 2]
+                assert len(stopped) == (4 if case == "run-receipt" else 0)
+                assert all(r["output"] is None and r["result_version"] is None for r in stopped)
+                assert len(runs) == len(successful) + len(stopped)
+                assert len({r["id"] for r in runs}) == len(runs)
                 release = c.execute(select(internal_releases).where(
                     internal_releases.c.id == result["release_id"]
                 )).mappings().one()

@@ -32,6 +32,19 @@ async function setup(){
       if(mode==='hold-read-loss' && method==='GET' && target.pathname.endsWith('/resources')){mode='normal';await new Promise(r=>heldRead=r);heldRead=null;throw TypeError('Synthetic late list read failure');}
       if(mode==='read-after-save' && method==='GET' && target.pathname.endsWith('/resources')){mode='normal';throw TypeError('Synthetic accepted-save subsequent read loss');}
       const response=await fetch(target,opts),data=await response.arrayBuffer();
+      if(method==='POST' && /\/api\/internal\/instances\/[^/]+\/runs$/.test(target.pathname)){
+        assert.equal(response.status,202);req.accepted=JSON.parse(Buffer.from(data).toString());
+        if(mode.startsWith('run-receipt-')){
+          const kind=mode.slice(12);mode='normal';
+          if(kind==='missing')return new Response('{}',{status:202});
+          if(kind==='invalid')return new Response(JSON.stringify({...req.accepted,run_id:'not-a-run'}),{status:202});
+          if(kind==='wrong-target')return new Response(JSON.stringify({...req.accepted,run_id:'run_'+'0'.repeat(32)}),{status:202});
+          if(kind==='read-loss')mode='lose-run-read';else throw Error('Unknown injected receipt fault');
+        }
+      }
+      if(mode==='lose-run-read' && method==='GET' && /\/api\/internal\/instances\/[^/]+\/runs\/run_[a-f0-9]{32}$/.test(target.pathname)){
+        mode='normal';throw TypeError('Synthetic lost accepted Run detail response');
+      }
       if(method==='POST' && target.pathname.endsWith('/resources')){
         assert.equal(response.status,201);req.accepted=JSON.parse(Buffer.from(data).toString());
         if(mode==='lost-save'){mode='normal';throw TypeError('Synthetic lost successful resource acceptance');}
@@ -59,7 +72,7 @@ const work=async()=>{const r=await fetch(info.base+'/test-only-worker',{method:'
 function clear(){ $('resource-file-clear').click(); }
 (async()=>{try{
   await setup();const initialPosts=posts().length;check($('resource-file').type==='file'&&!$('resource-file').multiple,'single native file picker exists');
-  if(info.case==='business'){
+  if(['business','run-receipt'].includes(info.case)){
     $('project-name').value='文件导入 合成闭环';submit('project-form');await wait(()=>[...$('project-select').options].some(o=>o.textContent==='文件导入 合成闭环'),'fresh project created');await idle();const pid=[...$('project-select').options].find(o=>o.textContent==='文件导入 合成闭环').value;await project(pid);
     check($('app-resource').options.length===0,'fresh project has no seeded material or app');const beforeFile=posts().length;
     choose();await selected();check(posts().length===beforeFile,'file choice creates no network write');
@@ -75,6 +88,28 @@ function clear(){ $('resource-file-clear').click(); }
     check($('internal-approval-detail').textContent.includes(saved.accepted.id),'approval binds actually imported resource');
     $('internal-approval-ack').checked=true;$('internal-approval-ack').dispatchEvent(new w.Event('change'));$('internal-commit').click();await wait(()=>$('internal-releases').querySelector('button'),'explicit internal release');await idle();
     $('internal-releases').querySelector('button').click();await wait(()=>!$('internal-run-form').hidden,'explicit instance');await idle();const instance=w.eval('engineering.instance.id'),release=w.eval('engineering.instance.release_id'),results=[];
+    const cancelled=[];
+    if(info.case==='run-receipt')for(const fault of ['missing','invalid','wrong-target','read-loss']){
+      $('internal-column').value='amount';const before=posts().length;mode='run-receipt-'+fault;
+      submit('internal-run-form');submit('internal-run-form');await idle();
+      const original=posts().at(-1),pending=w.eval(`engineeringPending.get(${JSON.stringify(instance)})`);
+      check(posts().length===before+1&&!!pending&&pending.request_key===original.body.request_key,fault+' accepted Run keeps original pending key');
+      if(fault==='wrong-target'){
+        check(w.eval('engineering.instance')===null,'unreadable wrong target clears protected previous instance view');
+        [...$('app-list').querySelectorAll('.row')].find(r=>r.textContent.includes('本地材料 汇总')).querySelector('button').click();await idle();
+        [...$('internal-instances').querySelectorAll('.row')].find(r=>r.textContent.includes(instance)).querySelector('button').click();await idle();
+      }
+      check($('internal-run-submit').disabled&&!$('internal-retry').hidden,fault+' uncertain acceptance blocks new Run');
+      $('internal-retry').click();await idle();
+      const recovered=posts().at(-1);
+      check(recovered.body.request_key===original.body.request_key&&JSON.stringify(recovered.body)===JSON.stringify(original.body),fault+' explicit recovery reuses exact original request');
+      check(recovered.accepted.run_id===original.accepted.run_id&&recovered.accepted.cached===true,fault+' recovery returns same actual accepted Run');
+      check(w.eval('engineering.run?.id')===original.accepted.run_id&&!w.eval('engineeringPending.has(engineering.instance.id)'),fault+' scoped detail confirms original accepted Run');
+      const cancel=[...$('internal-controls').querySelectorAll('button')].find(b=>b.textContent==='取消后台任务');check(!!cancel,'queued recovered Run has explicit cancel');cancel.click();cancel.click();await idle();
+      const commands=posts().filter(r=>r.path===`/api/internal/instances/${instance}/runs/${original.accepted.run_id}/commands`);
+      check(commands.length===1&&commands[0].body.command==='cancel'&&w.eval('engineering.run?.status')==='CANCELLED',fault+' double cancel sends one command and reads actual terminal state');
+      cancelled.push(original.accepted.run_id);
+    }
     for(const [column,expected,version] of [['amount','20.25',1],['quantity','9',2]]){
       $('internal-column').value=column;submit('internal-run-form');await wait(()=>w.eval('engineering.run?.status')==='QUEUED','new persistent queued AppRun');await idle();const id=w.eval('engineering.run.id');await work();$('internal-refresh').click();await idle();
       const reply=await fetch(info.base+`/api/internal/instances/${instance}/runs/${id}`,{headers:{Authorization:'Bearer synthetic-test-A'}}),r=await reply.json();assert.equal(reply.status,200);
@@ -82,9 +117,11 @@ function clear(){ $('resource-file-clear').click(); }
       check($('internal-data').textContent.includes('v'+version),'version visible through actual product GET');
     }
     check(results[0].id!==results[1].id,'new numeric input creates a different actual run');const coldPosts=posts().length;await setup();$('project-select').value=pid;$('project-select').dispatchEvent(new w.Event('change'));await idle();
-    await wait(()=>$('use-list').querySelector('button'),'cold saved instance');$('use-list').querySelector('button').click();await wait(()=>$('use-history').textContent.includes('v2'),'cold results');await idle();
-    check($('use-history').textContent.includes('v1')&&posts().length===coldPosts,'cold page retains both durable results with zero POST');check($('use-info').textContent.includes('未发布内部版本'),'formal publication remains closed');
-    Object.assign(info,{project_id:pid,app_id:aid,resource_id:saved.accepted.id,instance_id:instance,release_id:release,results});
+    const savedInstance=()=>$("use-list").querySelector(`[data-use-family="CSV"][data-instance-id="${instance}"] button`);
+    await wait(savedInstance,'cold exact saved instance');savedInstance().click();await wait(()=>$('use-history').textContent.includes('结果版本 2'),'cold results');await idle();
+    check($('use-history').textContent.includes('结果版本 1')&&posts().length===coldPosts,'cold page retains both durable results with zero POST');check($('use-info').textContent.includes('未发布内部版本'),'formal publication remains closed');
+    if(cancelled.length)check(cancelled.every(id=>$('use-history').textContent.includes(id.slice(0,18))),'cold read retains all cancelled Runs without resubmission');
+    Object.assign(info,{project_id:pid,app_id:aid,resource_id:saved.accepted.id,instance_id:instance,release_id:release,results,cancelled});
   } else if(info.case==='guards'){
     for(const [data,name,count,prompt] of [[Buffer.from([0xc3,0x28]),'bad.csv',1,'UTF-8'],[Buffer.concat([Buffer.from([0xef,0xbb,0xbf]),bytes]),'bom.csv',1,'BOM'],[Buffer.alloc(32769,97),'big.csv',1,'32768'],[bytes,'x.bin',1,'.csv'],[bytes,'two.csv',2,'一个'],[Buffer.alloc(0),'empty.csv',1,'32768'],[Buffer.from('a\0,b'),'nul.csv',1,'空字节']]){
       choose(data,name,count);await idle();check(!w.eval('resourceFileSnapshot')&&$('resource-file-status').textContent.includes(prompt)&&!$('content').value,'invalid '+name+' rejected before Save');
@@ -132,7 +169,7 @@ function clear(){ $('resource-file-clear').click(); }
     choose();await selected();$('resource-name').value='manual.csv';$('content').value='amount,quantity\n3,8\n';$('content').dispatchEvent(new w.Event('input'));
     check(!w.eval('resourceFileSnapshot')&&$('resource-file-status').textContent.includes('手工文本模式'),'manual edit explicitly removes original file binding');submit('resource-form');await idle();check(posts().at(-1).body.content==='amount,quantity\n3,8\n','existing text Save uses edited input');
   }
-  await close();const result={status:'PASS',case:info.case,checks,pages,requests,real_model_requests:0,browser:'NOT_RUN',windows:'NOT_RUN',...(info.case==='business'?{project_id:info.project_id,app_id:info.app_id,resource_id:info.resource_id,release_id:info.release_id,instance_id:info.instance_id,results:info.results}:{})};fs.writeFileSync(path.join(root,'results.json'),JSON.stringify(result,null,2));console.log(JSON.stringify({status:result.status,case:info.case,checks:checks.length,pages:pages.length}));
+  await close();const result={status:'PASS',case:info.case,checks,pages,requests,real_model_requests:0,browser:'NOT_RUN',windows:'NOT_RUN',...(['business','run-receipt'].includes(info.case)?{project_id:info.project_id,app_id:info.app_id,resource_id:info.resource_id,release_id:info.release_id,instance_id:info.instance_id,results:info.results,cancelled:info.cancelled}:{})};fs.writeFileSync(path.join(root,'results.json'),JSON.stringify(result,null,2));console.log(JSON.stringify({status:result.status,case:info.case,checks:checks.length,pages:pages.length}));
 }catch(e){fs.writeFileSync(path.join(root,'failure.json'),JSON.stringify({checks,error:e.stack},null,2));console.error(e.stack);process.exitCode=1;}finally{heldSave?.();heldRead?.();while(heldFiles.length)heldFiles.shift()();try{await close();}catch(e){console.error(e.stack);process.exitCode=1;}}})();
 async function selectedExceptHeld(){await wait(()=>w.eval('resourceFileSnapshot?.name')==='replacement.csv','replacement read');await wait(()=>page.requests===0&&page.actions.size===0,'replacement actions');}
 async function projectExceptHeld(id){$('project-select').value=id;$('project-select').dispatchEvent(new w.Event('change'));const held=heldSave||heldRead ? 1 : 0;await wait(()=>page.requests===held&&page.actions.size===held,'navigation completes while original I/O remains held');}
