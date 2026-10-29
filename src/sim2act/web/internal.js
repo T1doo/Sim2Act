@@ -239,8 +239,8 @@ async function engineeringAction(view,fn) {
 }
 async function openInternal(app,appGeneration,selectionCurrent=null) {
   const view={app:app.id,project:app.project_id,token,appGeneration,selectionCurrent,generation:++engineeringGeneration,draft:app,busy:false,approval:null,instance:null,run:null,instanceGeneration:0,runGeneration:0,releases:[],switchGeneration:0,switchApproval:null,agent:app.input_guidance.mode === "OFFLINE_REPLAY_ONLY",literal:app.input_guidance.mode === "REGISTERED_LITERAL",spec:app.input_guidance.mode === "MODEL_SPEC_CHECKLIST",offlineReplay:null,inputGeneration:0,workflow:app.input_guidance.mode === "CLOSED_TEXT_WORKFLOW"};
-  engineering=view;$("apps").append($("internal-panel"));$("internal-panel").hidden=false;
-  $("internal-title").textContent="内部版本与实例 · 只读运行";
+  engineering=view;$("app-workbench").append($("internal-panel"));$("internal-panel").hidden=false;
+  $("internal-title").textContent="版本、实例与运行";
   $("internal-agent").hidden=!view.agent;
   $("internal-replay-status").textContent=view.agent ? "尚未加载离线响应；审批与新运行暂不可提交。" : "";
   $("internal-prepare-hint").textContent=view.agent ? "使用上方样例字面检索词与已加载的离线响应核查当前材料。先查看精确快照，再手动确认保存内部版本；语义仍为 UNKNOWN。" : "使用当前选定数值列重新核查固定可信计算；先查看精确快照，再确认保存。仅内部版本，不是正式发布。";
@@ -560,6 +560,20 @@ $("internal-refresh").onclick=()=>engineeringAction(engineering,async()=>{
   }
 });
 $("internal-back").onclick=()=>{clearInternal();};
+// Reading-area navigation never replaces the trial recovery hash, issues a
+// request or changes an approval/input. Existing hidden gates remain owned by
+// their original controllers.
+document.querySelectorAll("#internal-section-nav a").forEach(link=>link.addEventListener("click",event=>{
+  event.preventDefault();
+  const target=$(link.hash.slice(1));
+  if(!target || target.hidden || $("internal-panel").hidden)return;
+  const region=$("internal-result-scroll");
+  if(getComputedStyle(region).overflowY === "auto"){
+    region.scrollTop+=target.getBoundingClientRect().top-region.getBoundingClientRect().top;
+  }else target.scrollIntoView?.({block:"nearest"});
+  const heading=target.querySelector("h3,h4");
+  if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});}
+}));
 $("internal-run-form").onsubmit=event=>{event.preventDefault();const view=engineering;return engineeringAction(view,()=>submitInternal(view));};
 $("internal-new-intent").onclick=()=>{const view=engineering,id=view?.instance?.id;return engineeringAction(view,async()=>{
   if(view.spec)return;
@@ -1439,7 +1453,7 @@ async function renderPBUse(view,freshRelease=null){
   const instance=view.instance,scope=goalRunCanonical([token,view.project,view.app,instance.id,instance.release_id,mode.route]);
   const panel=document.createElement("section");panel.id="pb-use-panel";
   panel.innerHTML='<h3>使用同一保存逻辑处理新材料</h3><p>每个运行单独选择材料和自己的 Goal，核对精确预览后确认。原应用、版本和历史保持；自然规范模型默认关闭，语义 UNKNOWN，人工 PENDING。</p><button type="button" id="pb-use-prepare">准备本次新材料与 Goal</button><label>本次材料<select id="pb-use-material"></select></label><label>本次 Goal<select id="pb-use-goal"></select></label><button type="button" id="pb-use-preview">预览本次绑定</button><pre id="pb-use-proof"></pre><label><input type="checkbox" id="pb-use-ack">确认上述材料、Goal、逻辑、预算与仅本次材料读取授权</label><button type="button" id="pb-use-submit">确认并运行</button><button type="button" id="pb-use-recover">仅读原 key 回执</button><p id="pb-use-status" role="status"></p>';
-  $("internal-panel").append(panel);
+  $("internal-new-inputs").append(panel);
   const s={view,instance,scope,panel,edit:0,review:null,busy:false,workspace:workspaceSelectionGeneration,connection:identityConnectionGeneration,selection:view.instanceGeneration};pbUseView=s;
   const current=()=>pbUseView===s&&panel.isConnected&&engineeringCurrent(view)&&view.instance===instance&&view.instanceGeneration===s.selection&&s.workspace===workspaceSelectionGeneration&&s.connection===identityConnectionGeneration;
   const material=panel.querySelector('#pb-use-material'),goal=panel.querySelector('#pb-use-goal'),preview=panel.querySelector('#pb-use-preview'),ack=panel.querySelector('#pb-use-ack'),submit=panel.querySelector('#pb-use-submit'),recover=panel.querySelector('#pb-use-recover'),status=panel.querySelector('#pb-use-status'),proof=panel.querySelector('#pb-use-proof');
