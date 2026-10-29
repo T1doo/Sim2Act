@@ -11,7 +11,9 @@ import os
 import re
 import signal
 import socket
+import stat
 import sys
+import tempfile
 import threading
 import traceback
 from contextlib import contextmanager
@@ -32,6 +34,8 @@ VERSION = "sim2act-blank-synthetic-workspace.v1"
 TOKEN = "public-synthetic-blank-workspace"
 DATABASE = "synthetic-workspace.db"
 MARKER = "synthetic-workspace.json"
+DESKTOP_ORIGIN = "desktop-origin.json"
+DESKTOP_ORIGIN_VERSION = "sim2act-desktop-origin.v1"
 BANNER = ('<section id="synthetic-workspace-banner" role="status">'
           '<strong>合成工程 · 仅供非敏感练习材料</strong> '
           '从空白项目开始，数据保留在本机。仅确定性工具；自然模型生成、LIVE和正式发布关闭。 '
@@ -83,6 +87,97 @@ def checked_path(path):
     require("?" not in str(root), "AMBIGUOUS_DIRECTORY")
     require(not any(part.is_symlink() for part in [root, *root.parents]), "LINKED_DIRECTORY")
     return root
+
+
+def _origin_path(root):
+    path = root / DESKTOP_ORIGIN
+    require(not any(part.is_symlink() or part.is_junction()
+                    for part in [path, *path.parents]), "LINKED_DESKTOP_ORIGIN")
+    return path
+
+
+def _origin_bytes(record):
+    return (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+def _read_desktop_origin(root):
+    """Startup metadata only, never an authorization or a substitute for READY."""
+    path = _origin_path(root)
+    if not path.exists():
+        return None
+    require(path.is_file(), "INVALID_DESKTOP_ORIGIN")
+    try:
+        before = path.stat()
+        require(before.st_size <= 4096, "INVALID_DESKTOP_ORIGIN")
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        fd = os.open(path, flags)
+        with os.fdopen(fd, "rb") as stream:
+            actual = os.fstat(stream.fileno())
+            require(stat.S_ISREG(actual.st_mode)
+                    and (before.st_dev, before.st_ino) == (actual.st_dev, actual.st_ino),
+                    "DESKTOP_ORIGIN_CHANGED")
+            raw = stream.read(4097)
+        require(len(raw) <= 4096, "INVALID_DESKTOP_ORIGIN")
+        record = json.loads(raw)
+        require(type(record) is dict and set(record) == {
+            "version", "host", "port", "principal_id", "workspace_fingerprint"},
+            "INVALID_DESKTOP_ORIGIN")
+        require(record["version"] == DESKTOP_ORIGIN_VERSION and record["host"] == "127.0.0.1"
+                and type(record["port"]) is int and 1 <= record["port"] <= 65535
+                and type(record["principal_id"]) is str
+                and re.fullmatch(r"user_[a-f0-9]{32}", record["principal_id"])
+                and type(record["workspace_fingerprint"]) is str
+                and re.fullmatch(r"[a-f0-9]{64}", record["workspace_fingerprint"])
+                and raw == _origin_bytes(record), "INVALID_DESKTOP_ORIGIN")
+        after = _origin_path(root).stat()
+        require((after.st_dev, after.st_ino, after.st_size) ==
+                (actual.st_dev, actual.st_ino, len(raw)), "DESKTOP_ORIGIN_CHANGED")
+        return record, raw, (actual.st_dev, actual.st_ino)
+    except (OSError, ValueError, TypeError) as error:
+        raise WorkspaceError("INVALID_DESKTOP_ORIGIN") from error
+
+
+def _bind_desktop_origin(root, marker, port, prior):
+    record = dict(version=DESKTOP_ORIGIN_VERSION, host="127.0.0.1", port=port,
+                  principal_id=marker["principal_id"],
+                  workspace_fingerprint=hashlib.sha256(_origin_bytes(marker)).hexdigest())
+    if prior is not None:
+        require(prior[0] == record and _read_desktop_origin(root) == prior,
+                "DESKTOP_ORIGIN_CHANGED")
+        return prior
+    # Publish complete bytes without replacing a winner of a concurrent startup.
+    # The listener remains bound throughout. No Worker or UI exists yet.
+    pending = None
+    try:
+        fd, pending = tempfile.mkstemp(prefix=".desktop-origin-pending-", dir=root)
+        with os.fdopen(fd, "wb") as stream:
+            original = os.fstat(stream.fileno())
+            identity = original.st_dev, original.st_ino
+            stream.write(_origin_bytes(record))
+            stream.flush()
+            os.fsync(stream.fileno())
+        if os.name == "nt":
+            # Windows rename refuses an existing destination. Use its atomic
+            # no-replace move instead of requiring hard-link support there.
+            os.rename(pending, _origin_path(root))
+        else:
+            os.link(pending, _origin_path(root), follow_symlinks=False)
+            directory = os.open(root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+    except FileExistsError as error:
+        raise WorkspaceError("DESKTOP_ORIGIN_CHANGED") from error
+    except OSError as error:
+        raise WorkspaceError("DESKTOP_ORIGIN_UNAVAILABLE") from error
+    finally:
+        if pending is not None:
+            Path(pending).unlink(missing_ok=True)
+    saved = _read_desktop_origin(root)
+    require(saved is not None and saved[0] == record and saved[2] == identity,
+            "DESKTOP_ORIGIN_CHANGED")
+    return saved
 
 
 def settings_for(root):
@@ -207,14 +302,28 @@ def serve(path, *, new=False, port=0, control_stdin=False):
     require(type(port) is int and 0 <= port <= 65535, "INVALID_PORT")
     require(type(control_stdin) is bool, "INVALID_CONTROL_MODE")
     require(not control_stdin or (sys.stdin is not None and not sys.stdin.isatty()), "OWNED_STDIN_PIPE_REQUIRED")
-    # Reserve the actual socket before touching a data directory; no port scan.
+    origin_root = checked_path(path)
+    prior_origin = _read_desktop_origin(origin_root) if control_stdin else None
+    if prior_origin is not None:
+        require(port in (0, prior_origin[0]["port"]), "DESKTOP_ORIGIN_PORT_MISMATCH")
+        port = prior_origin[0]["port"]
+    # Reserve the actual socket before mutating a data directory; no port scan,
+    # reuse option, fallback address, or request to a process occupying the port.
     with socket.socket() as listener:
         try:
+            if control_stdin and os.name == "nt":
+                listener.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
             listener.bind(("127.0.0.1", port))
             listener.listen(128)
         except OSError as error:
             raise WorkspaceError("PORT_UNAVAILABLE") from error
         root, store, marker = open_workspace(path, new=new)
+        try:
+            desktop_origin = (_bind_desktop_origin(root, marker, listener.getsockname()[1], prior_origin)
+                              if control_stdin else None)
+        except Exception:
+            store.engine.dispose()
+            raise
         settings = settings_for(root)
         worker = Worker(store, settings, NeverModel())
         gate = threading.Lock()
@@ -229,6 +338,8 @@ def serve(path, *, new=False, port=0, control_stdin=False):
             announced = False
             try:
                 while not stopped.is_set():
+                    if desktop_origin is not None:
+                        require(_read_desktop_origin(root) == desktop_origin, "DESKTOP_ORIGIN_CHANGED")
                     # A continuous sequence of API reads must not starve the
                     # original Worker. Once waiting, it gets the next turn;
                     # lock waits remain bounded and observe owned shutdown.
@@ -246,6 +357,8 @@ def serve(path, *, new=False, port=0, control_stdin=False):
                     finally:
                         gate.release()
                     if server.started and not announced:
+                        if desktop_origin is not None:
+                            require(_read_desktop_origin(root) == desktop_origin, "DESKTOP_ORIGIN_CHANGED")
                         print(json.dumps(dict(event="SYNTHETIC_WORKSPACE_READY", url=address,
                             data_dir=str(root), public_token=TOKEN, worker_id=worker.id,
                             principal_id=marker["principal_id"], mode="SYNTHETIC_TEST_ONLY", control_stdin=control_stdin)), flush=True)

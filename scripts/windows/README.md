@@ -13,3 +13,9 @@ powershell -NoProfile -File scripts/windows/Build-Desktop.ps1 -CandidateRoot 'E:
 构建不下载或安装任何东西。官方 SDK 包 URL、固定字节数/SHA256 写在脚本与输出 manifest 中。窗口/生命周期尚须在 Windows 对当前精确应用包验收，`BUILT_NOT_WINDOWS_EXECUTED` 不能当 READY。
 
 后台继续使用包内 `runtime/python.exe`，数据沿用 `workspace data`，WebView2 profile、缓存、temp、exports 与日志均在应用目录下。旧 Chrome profile 不修改。当前入口明确是合成 SQLite 工作台，不等于正式 PG/真实模型资格；原后端权限与安全门不变。
+
+桌面私有控制入口现在在 `workspace data/desktop-origin.json` 保存已实际绑定的回环端口。完整关闭重开后只重绑此端口，保留同一 WebView2 profile 时，规范运行的原请求键可继续按原协议只读核对，不会因随机端口丢失同源存储。记录绑定已认证工作区身份，只是启动元数据，不授予材料、模型或审批权限。
+
+若端口已占用，后台报告 `PORT_UNAVAILABLE`，不会扫描、换端口或访问占用者。先核是否有此软件原窗口/后台仍未安全退出；保留数据、原键与日志，不删除 origin 记录或强杀不明进程。记录损坏、路径链接或身份变化也停止启动，不自动覆盖。Windows 使用独占监听及无覆盖原子移动，真实 WebView2 存储与窗口生命周期仍须目标机验收。
+
+升级旧工作区时若尚无此记录，只会在首次成功启动建立新的稳定 origin，保障之后建立的键；不能找回旧随机端口中的历史意图，不能扫描旧 profile 或凭空迁移旧键。遇旧未知回执应先核对已有任务历史，不能将本次稳定 origin 当作旧请求已核验。移动/复制工作区时还须保留配套 profile；启动元数据不是身份凭据。
