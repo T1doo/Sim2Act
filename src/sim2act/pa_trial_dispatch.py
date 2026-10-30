@@ -1826,7 +1826,18 @@ _OWNED_ARCHIVE_CONSUMERS = _owned_archive_code.witness(globals(),
 
 
 from . import _cold_source_packet as _source_owned_code
-_source_owned_code.register(2,globals(),tuple(name for name,value in globals().copy().items()
-    if type(value) is _source_owned_code.FunctionType and value.__module__==__name__)
-    + ('normalize_usage','response_archive','strict_json','fingerprint'),
+# Exact independently reviewed Source fact-family closure. Reservation preflight
+# and the outer Worker/runtime read-scope factory are different lifecycle
+# boundaries; they retain their original checks and are not callee substitutes
+# inside this ownership transfer.
+_source_owned_code.register(2,globals(),(
+    '_graph_stage_accounted','_graph_journal_state','_graph_pb_accounting',
+    '_graph_pb_archive_chain','_archive_chain_values','_archive_chain_from_facts',
+    '_binding_mode','_graph_journal_chain','_journal_attempt_from_facts',
+    '_journal_body_from_facts','_journal_canonical_from_facts','_journal_capture_from_facts',
+    '_journal_owner','_journal_owner_from_facts','_journal_slot_identity_from_facts',
+    '_journal_source','_journal_stage_header','_journal_state','_metadata',
+    '_pb_markers_from_facts','_pb_prefix_source_from_facts','_production_binding',
+    '_stage','_stage_slots_from_facts','_stage_source_archive_from_facts',
+    '_stage_usage_from_facts','normalize_usage','response_archive','strict_json','fingerprint'),
     constants=('_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_SOURCE_OWNED_ENABLED','_SOURCE_CAPACITY'))

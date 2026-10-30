@@ -153,3 +153,22 @@ def test_first_handoff_preserves_original_domain_and_current_roots(sql_facts,dam
    if original_keys is not None:original_keys.pop()
    if parsed is not None:parsed.pop('__raw_set_probe__')
    assert owned.KEY not in graph.inputs
+
+
+def test_original_reservation_observers_do_not_change_source_callee_closure(monkeypatch):
+ from test_pb_spec_production_controller import observe_reservation_reads
+ owned.current()
+ observe_reservation_reads(monkeypatch)
+ # The original observer retains its token/read/write assertions unchanged.
+ owned.current()
+
+
+@pytest.mark.parametrize('name',['_graph_stage_accounted','_graph_journal_chain','_journal_source',
+    '_journal_capture_from_facts','_stage_usage_from_facts','_archive_chain_values'])
+def test_each_selected_source_callee_change_is_refused(monkeypatch,name):
+ from sim2act.errors import DomainError
+ original=getattr(dispatch,name)
+ def bad(*args,**kwargs):return None
+ monkeypatch.setattr(dispatch,name,bad)
+ with pytest.raises(DomainError):owned.current()
+ assert getattr(dispatch,name) is not original
