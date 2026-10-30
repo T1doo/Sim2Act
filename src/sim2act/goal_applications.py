@@ -763,31 +763,34 @@ class _ColdGenerationRawSeed:
                 raise DomainError("VERSION_CONFLICT", "Exact Generation raw seed scope required")
             _cold_read_checkpoint(store, c, self.guard)
             rows = self.rows
-            if type(rows) is not dict or set(rows) != {
+            immutable = _generation_owned.image.is_kind(rows,'d')
+            if (type(rows) is not dict and not immutable) or set(rows) != {
                     "run", "contract", "original", "attempts", "operations", "intents", "events",
                     "confirmation", "goal_head", "goal_version"}:
                 raise DomainError("VERSION_CONFLICT", "Complete native audit rows required")
             for name, table in (("run", runs), ("contract", run_contracts), ("original", app_drafts)):
-                if type(rows[name]) is not dict or set(rows[name]) != set(table.c.keys()):
+                if not (type(rows[name]) is dict or (immutable and _generation_owned.image.is_kind(rows[name],'d'))) or set(rows[name]) != set(table.c.keys()):
                     raise DomainError("VERSION_CONFLICT", "Complete native audit scalar row required")
             for name, table in (("attempts", attempts), ("operations", operations),
                     ("intents", operation_intents), ("events", events),
                     ("confirmation", goal_application_candidates), ("goal_head", goal_cards),
                     ("goal_version", goal_card_versions)):
-                if type(rows[name]) is not list or any(type(row) is not dict
+                if not (type(rows[name]) is list or (immutable and _generation_owned.image.is_kind(rows[name],'l'))) or any(not (type(row) is dict or (immutable and _generation_owned.image.is_kind(row,'d')))
                         or set(row) != set(table.c.keys()) for row in rows[name]):
                     raise DomainError("VERSION_CONFLICT", "Complete native audit raw row list required")
             original, raw_run, raw_contract = rows["original"], rows["run"], rows["contract"]
             name = "original-native-audit:" + original["id"]
             if ((self.name is not None and self.name != name)
-                    or self.guard.inputs.get(name) is not rows
+                    or (not _generation_owned.image.same(_generation_owned.fact(self.guard,name),rows)
+                        if immutable else self.guard.inputs.get(name) is not rows)
                     or user != self.guard.binding.contract.principal_id
                     or raw_run["principal_id"] != user
                     or raw_run["project_id"] != self.guard.binding.contract.project_id
                     or original["project_id"] != raw_run["project_id"]
                     or raw_contract["run_id"] != raw_run["id"]):
                 raise DomainError("VERSION_CONFLICT", "Generation raw seed binding changed")
-            if run is not None and dict(run) != raw_run:
+            from .natural_live_admission import _trial_pure_mapping
+            if run is not None and (_trial_pure_mapping(dict(run)) if immutable else dict(run)) != raw_run:
                 raise DomainError("VERSION_CONFLICT", "Generation raw seed complete Run changed")
             if contract is not None:
                 if (type(contract) is not FrozenRunContract
@@ -1018,7 +1021,7 @@ class _GenerationFactsReader:
                 from .natural_spec_runtime import _cold_attempt_order
                 # Native audit is id-ordered. Preserve SQLite storage-class order
                 # only at the original history read edge, including corrupt values.
-                value = sorted(copy.deepcopy(self.raw_seed.rows["attempts"]),
+                value = sorted(copy.deepcopy(_generation_plain(self,self.raw_seed.rows["attempts"])),
                     key=_cold_attempt_order)
             self.check()
             return self._raw_put(key, "attempts", value)
@@ -1036,7 +1039,7 @@ class _GenerationFactsReader:
                 value = self.c.execute(select(operations).where(operations.c.run_id == self.run["id"])).mappings().all()
             else:
                 self.raw_seed.check(self.store, self.c, self.run["principal_id"], self.run, self.contract)
-                value = copy.deepcopy(self.raw_seed.rows["operations"])
+                value = copy.deepcopy(_generation_plain(self,self.raw_seed.rows["operations"]))
             self.check()
             return self._raw_put(key, "counter-operations", value)
         except BaseException:

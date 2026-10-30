@@ -494,10 +494,15 @@ def _cold_source_audit_from_original(store, c, user, prefix, original_audit_rows
             raise DomainError("VERSION_CONFLICT", "Exact Cold graph read scope required")
         _cold_fields(store, c, guard, prefix.key, prefix.fields())
         require(user == prefix.user and (source_reader is None or type(source_reader) is _ColdRunFacts))
-        require(type(original_audit_rows) is dict and set(original_audit_rows) == {
+        owned=_source_fact_code
+        immutable_native=owned.image.is_kind(original_audit_rows,'d')
+        require((type(original_audit_rows) is dict or immutable_native) and set(original_audit_rows) == {
             "run", "contract", "original", "attempts", "operations", "intents", "events",
             "confirmation", "goal_head", "goal_version"}, "Complete original native audit rows required")
-        owned=_source_fact_code
+        if immutable_native:
+            native_key='original-native-audit:'+original_audit_rows['original']['id']
+            require(owned.image.same(owned.fact(guard,native_key),original_audit_rows),
+                'Original native audit must be the first registered complete fact')
         native_rows=(owned.own_fact(guard,prefix.key+':native',original_audit_rows)
             if _owned_source_enabled() else None)
         if native_rows is None:

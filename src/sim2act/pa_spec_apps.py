@@ -2482,11 +2482,12 @@ def mount(app, store, limits, identity):
 # original fully checked interface and is not inferred to be immutable.
 from . import _cold_source_packet as _source_fact_code
 _source_fact_code.register(7,globals(),(
+    '_native_audit_facts','scope_gate','pair',
     '_receipt_checkpoint','_cold_receipt_phase','_cold_receipts','_receipts',
     '_cold_verify_job_from_receipts','_verify_job_from_receipts','_receipt_output',
     '_receipt_data','_receipt_has_unknown','intent_for','receipt_for','output_for',
     'resolve','validate_value','fingerprint','require'),
-    constants=('_source_values','natural'),helpers=((vars(natural),(
+    constants=('_source_values','natural','_source_fact_code','copy'),helpers=((vars(natural),(
         'is_candidate','pure','bounded_source','schemas','collected','report',
         'citation_feedback','verify_saved','expand','compile_candidate','preview',
         'fingerprint','validate_value','object_schema','require')),))

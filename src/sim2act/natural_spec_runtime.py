@@ -3461,6 +3461,17 @@ class _ColdBindingGraph:
     use_audit_prefix: _ColdUseAuditPrefix
 
 
+def _cold_native_audit_fact(guard, rows):
+    """Transfer the original complete audit before any mutable publication."""
+    require(type(guard) is _ColdGraphRead and type(rows) is dict)
+    key = 'original-native-audit:' + rows['original']['id']
+    if _SOURCE_VIEW_TYPE is not None:
+        _source_owned_code.current()
+        return _source_owned_code.own_fact(guard, key, rows)
+    guard.add(key, rows)
+    return rows
+
+
 @dataclass(frozen=True)
 class _ColdAuditSeed:
     """The original postwrite audit edge's complete raw rows, not a proof of use."""
@@ -3507,7 +3518,7 @@ def _cold_audit_seed(worker, c, guard, draft):
         sp = pb._cold_source_audit_prefix(store, c, user, xp.draft['project_id'],
             xp.meta.source_run_id, guard)
         native = spec._native_audit_facts(store, c, user, sp.original, _graph_read=guard)
-        guard.add('original-native-audit:' + native['original']['id'], native)
+        native = _cold_native_audit_fact(guard, native)
         source_audit = pb._cold_source_audit_from_original(store, c, user, sp, native)
         extraction_audit = pb._cold_audit_from_source(store, c, user, xp, source_audit)
         audit = use._cold_audit_from_base(store, c, user, up, extraction_audit)
@@ -3574,7 +3585,7 @@ def _cold_first_binding(worker, c, guard, current, limits, *, audit_seed=None):
         if audit_seed is None:
             native_rows = spec._native_audit_facts(store, c, user, source_draft,
                 _graph_read=guard, _generation_reader=gen_reader)
-            guard.add('original-native-audit:' + source_draft['id'], native_rows)
+            native_rows = _cold_native_audit_fact(guard, native_rows)
         else:
             audit_seed.check(store, c, guard)
             native_rows = audit_seed.native
@@ -3583,7 +3594,7 @@ def _cold_first_binding(worker, c, guard, current, limits, *, audit_seed=None):
             # Compare every frozen field without discarding either raw record.
             native_original = native_rows['original']
             require(set(source_draft) <= set(native_original)
-                and _trial_typed_equal({name: native_original[name] for name in source_draft},
+                and _trial_typed_equal(_source_owned_code.image.compat({name: native_original[name] for name in source_draft}),
                     source_draft))
         source_binding = spec._cold_bound_from_audit(store, c, user, source_bound_prefix, fingerprint(native_rows))
         source_outputs, source_proved = spec._cold_receipts(store, c, source_job, source_binding,
@@ -3855,7 +3866,7 @@ def _cold_generated_model_facet(worker, c, completed):
         _cold_read_checkpoint(store, c, guard)
         completed.generation_reader.source()
         raw, metadata = spec._cold_original_model_source(store, c, user,
-            completed.generation_reader.run, current, completed.generation_marker,
+            completed.generation_reader.run, _source_owned_code.image.compat(current), completed.generation_marker,
             completed.generation_raw, completed.generation_reader)
         guard.add('trial-generated-model-facet', dict(original=current, candidate=raw,
             metadata=metadata, limits=completed.binding_prefix.limits,
@@ -5677,6 +5688,7 @@ def advance_model(worker, run, *, _heartbeat_state=None):
 from . import goal_applications as _generation_fact_code
 
 _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_limit_values',
+    '_cold_native_audit_fact','_cold_audit_seed','_cold_first_binding','_cold_generated_model_facet',
     '_source_data_kind','_source_fields_equal','_cold_seed_audit_rows','_cold_seed_fixed_rows','_cold_seed_fixed_check',
     '_cold_run_raw_seed','_cold_run_facts','_check_run_facts','_cold_read_checkpoint',
     '_cold_sqlite_order','_cold_attempt_order','_model_value','_model_inputs',
@@ -5685,16 +5697,16 @@ _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_
     '_prove_node_from_facts','_prove_node','_prove_pending_from_facts','_prove_pending',
     'messages','parse','_anchor','strict_json','response_archive'),
     (_ColdGraphRead,_ColdTrialGraph,_ColdRunRawSeed,_ColdRunFacts,_ColdAuditSeed,
-        _generation_fact_code._GenerationFactsReader),
+        _generation_fact_code._GenerationFactsReader,_generation_fact_code._ColdGenerationRawSeed),
     constants=('_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_source_owned_code','_SOURCE_VIEW_TYPE','_SOURCE_VIEW_PIN','_SOURCE_OWNER_TYPE','_SOURCE_OWNER_PIN'),
     helpers=((vars(_generation_fact_code),('_generation_plain','_generation_mapping',
         '_history_core','_cold_generation_reader','_cold_generation_source','_cold_history_from_source',
         '_cold_candidate_from_history','_parse_candidate_core','_read_receipt_core',
         '_check_counters_core','_check_counter_rows','_check_counters_from_facts',
         '_candidate_attempt_from_history','_candidate_validation_seal','_candidate_from_checked_facts',
-        '_source_scope_gate','_source_body','_initial_messages_from_facts','stage_tools','parse_generation',
+        '_source_scope_gate','source_scope_gate','_source_body','_initial_messages_from_facts','stage_tools','parse_generation',
         'checked_usage','normalize_usage','returned_model_identity','require_returned_model',
         'fingerprint','strict_json','response_archive','body','parse_response','authorized_read')),
         (vars(_generation_fact_code.copy),('deepcopy',))),
-    constant_helpers=((vars(_generation_fact_code),('_generation_owned','_GenerationFactsReader',
+    constant_helpers=((vars(_generation_fact_code),('_generation_owned','_GenerationFactsReader','_ColdGenerationRawSeed',
         'FrozenRunContract','copy','json','httpx')),))

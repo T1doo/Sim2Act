@@ -211,7 +211,12 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                             assert graph.source_outputs == outputs and graph.source_proved == proved
                             assert graph.source_facts.proof == expected_source_proof
                             assert graph.source_audit.digest == expected_source_audit
-                            assert graph.native_audit == expected_native
+                            from sim2act import _cold_source_packet as native_owned
+                            assert native_owned.image.compat(graph.native_audit) == expected_native
+                            if native_owned.available():
+                                assert native_owned.image.is_kind(graph.native_audit,'d')
+                                native_key='original-native-audit:'+graph.native_audit['original']['id']
+                                assert native_owned.image.same(native_owned.fact(guard,native_key),graph.native_audit)
                             assert graph.extraction_origin == expected_extraction_origin
                             assert graph.extraction_audit == expected_extraction_audit
                             assert graph.use_value == expected_use
@@ -237,7 +242,7 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                             assert any(kind is FrozenRunContract and model is graph.generation_contract
                                 and raw is graph.generation_reader.contract_pin for kind,model,raw in typed)
                             admission._trial_typed_values(typed)
-                            assert graph.native_audit["attempts"] == sorted(generation_attempts, key=lambda row: row["id"])
+                            assert generation_image.compat(graph.native_audit["attempts"]) == sorted(generation_attempts, key=lambda row: row["id"])
                             assert dict(graph.source_facts.typed.typed) == next(row
                                 for row in before["internal_instance_data"]
                                 if row["instance_id"] == graph.source_binding["snapshot"]["instance_id"]
@@ -271,7 +276,7 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                             assert seed_guard.token is not first_guard.token
                             audit_seed = runtime._cold_audit_seed(worker, c, seed_guard, expected_cold["draft"])
                             assert audit_seed.guard is seed_guard and seed_guard.active
-                            assert audit_seed.native == expected_native
+                            assert generation_image.compat(audit_seed.native) == expected_native
                             assert audit_seed.source_audit.digest == expected_source_audit
                             assert audit_seed.extraction_audit == expected_extraction_audit
                             assert audit_seed.audit == expected_cold["audit_fingerprint"]
@@ -285,7 +290,7 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                             assert seeded_graph.source_outputs == outputs and seeded_graph.source_proved == proved
                             assert seeded_graph.source_facts.proof == expected_source_proof
                             assert seeded_graph.source_audit.digest == expected_source_audit
-                            assert seeded_graph.native_audit == expected_native
+                            assert generation_image.compat(seeded_graph.native_audit) == expected_native
                             assert seeded_graph.extraction_origin == expected_extraction_origin
                             assert seeded_graph.extraction_audit == expected_extraction_audit
                             assert seeded_graph.use_value == expected_use
@@ -295,7 +300,7 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                             assert seeded_graph.source_binding["snapshot"]["run_id"] == source_rid
                             assert len(seeded_graph.generation_history[1]) == 3
                             assert generation_image.compat(seeded_graph.generation_history[1]) == generation_attempts
-                            assert seeded_graph.native_audit["attempts"] == sorted(generation_attempts, key=lambda row: row["id"])
+                            assert generation_image.compat(seeded_graph.native_audit["attempts"]) == sorted(generation_attempts, key=lambda row: row["id"])
                             assert dict(seeded_graph.source_facts.typed.typed) == next(row
                                 for row in before["internal_instance_data"]
                                 if row["instance_id"] == seeded_graph.source_binding["snapshot"]["instance_id"]
