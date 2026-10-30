@@ -81,6 +81,25 @@ static PyObject*snapshot(PyObject*self,PyObject*args){
  PyObject*cap=PyCapsule_New(t,"sim2act.cold-graph-structure.v1",close_tree);if(!cap)free_tree(t);return cap;
 }
 typedef struct {Tree*t;PyObject**actual;size_t*assigned;Map changed;size_t work;} Compare;
+
+static int compare_node(Compare*c,size_t id,PyObject*v,int depth);
+/* Only leaf/current-call memo work is inlined. First mutable/reducer visits
+ * still enter the original full walker. Signal/work/depth order is retained. */
+static inline int compare_edge(Compare*c,size_t id,PyObject*v,int depth){
+ Node*n=c->t->nodes+id;int k=n->kind;
+ int cached=c->actual[id]==v&&(k=='m'||k=='l'||k=='q'||k=='s'||k=='b'||k=='p');
+ int scalar=v==n->original&&(k=='n'||k=='t'||k=='f'||k=='i'||k=='d');
+ int text=v==n->original&&(k=='s'||k=='b');
+ if(!cached&&!scalar&&!text)return compare_node(c,id,v,depth);
+ if((c->work++&1023)==0&&PyErr_CheckSignals()<0)return -1;
+ if(c->work>1000000||depth>64){PyErr_SetString(unsupported_error,"Cold graph compare bounds");return -1;}
+ if(scalar)return 1;
+ if(c->actual[id])return c->actual[id]==v;
+ /* Only the immutable text identity path can first-register here. */
+ size_t*assigned=c->assigned+id;if(*assigned&&*assigned!=id+1)return 0;
+ *assigned=id+1;c->actual[id]=v;return 1;
+}
+
 static int compare_node(Compare*c,size_t id,PyObject*v,int depth){
  if((c->work++&1023)==0&&PyErr_CheckSignals()<0)return -1;
  if(c->work>1000000||depth>64){PyErr_SetString(unsupported_error,"Cold graph compare bounds");return -1;}
@@ -105,7 +124,7 @@ static int compare_node(Compare*c,size_t id,PyObject*v,int depth){
  size_t edge=0;int result=1;PyObject*keys=NULL,*data=NULL,*index=NULL,*payload=NULL;
  if(k=='m'){
   if((size_t)PyDict_Size(v)*2!=n->count)return 0;Py_ssize_t pos=0;PyObject*a,*b;
-  while(PyDict_Next(v,&pos,&a,&b)){if(edge+1>=n->count||(size_t)PyDict_Size(v)*2!=n->count){result=0;break;}Py_INCREF(a);Py_INCREF(b);result=compare_node(c,n->edges[edge++],a,depth+1);if(result>0)result=compare_node(c,n->edges[edge++],b,depth+1);Py_DECREF(a);Py_DECREF(b);if(result<=0)break;}
+  while(PyDict_Next(v,&pos,&a,&b)){if(edge+1>=n->count||(size_t)PyDict_Size(v)*2!=n->count){result=0;break;}Py_INCREF(a);Py_INCREF(b);result=compare_edge(c,n->edges[edge++],a,depth+1);if(result>0)result=compare_edge(c,n->edges[edge++],b,depth+1);Py_DECREF(a);Py_DECREF(b);if(result<=0)break;}
  }else{
   PyObject*seq=v;
   if(k=='p'){
@@ -115,7 +134,7 @@ static int compare_node(Compare*c,size_t id,PyObject*v,int depth){
    if(!PyTuple_CheckExact(payload)||PyTuple_GET_SIZE(payload)!=2||PyTuple_GET_ITEM(payload,0)!=c->t->types.marker||!PyTuple_CheckExact(PyTuple_GET_ITEM(payload,1))){PyErr_SetString(unsupported_error,"Cold graph reducer result");result=-1;goto done;}seq=payload;
   }
   size_t count=(size_t)(k=='l'?PyList_GET_SIZE(seq):PyTuple_GET_SIZE(seq));if(count!=n->count){result=0;goto done;}
-  for(size_t i=0;i<count;i++){if(k=='l'&&(size_t)PyList_GET_SIZE(seq)!=count){result=0;break;}PyObject*x=k=='l'?PyList_GET_ITEM(seq,i):PyTuple_GET_ITEM(seq,i);Py_INCREF(x);result=compare_node(c,n->edges[edge++],x,depth+1);Py_DECREF(x);if(result<=0)break;}
+  for(size_t i=0;i<count;i++){if(k=='l'&&(size_t)PyList_GET_SIZE(seq)!=count){result=0;break;}PyObject*x=k=='l'?PyList_GET_ITEM(seq,i):PyTuple_GET_ITEM(seq,i);Py_INCREF(x);result=compare_edge(c,n->edges[edge++],x,depth+1);Py_DECREF(x);if(result<=0)break;}
  }
  done:Py_XDECREF(keys);Py_XDECREF(data);Py_XDECREF(index);Py_XDECREF(payload);return result>0?edge==n->count:result;
 }
