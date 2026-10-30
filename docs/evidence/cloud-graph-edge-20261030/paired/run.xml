@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="557.295" timestamp="2026-10-30T08:29:05.311075+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_cold_snapshot_profile" name="test_original_large_cold_scoped_profile" time="556.908"><failure message="AssertionError: {&quot;namespace&quot;:&quot;INTERNAL_APPRUN&quot;,&quot;formal_publication_enabled&quot;:false,&quot;id&quot;:&quot;run_780a240c2bf042558d5d8223a2c10336&quot;,&quot;app_run_id&quot;:&quot;iapprun_b4f739d9967841d2b8272629936761c3&quot;,&quot;instance_id&quot;:&quot;iinstance_2a978cb52af57f444e95504b5efb704f&quot;,&quot;release_id&quot;:&quot;irelease_498ca0787bd4440e8fd74bdce7cc25b7&quot;,&quot;status&quot;:&quot;RUNNING&quot;,&quot;version&quot;:1,&quot;cancel_intent&quot;:false,&quot;result&quot;:null,&quot;result_version&quot;:null,&quot;error&quot;:null,&quot;known_effects&quot;:[],&quot;events&quot;:[{&quot;id&quot;:&quot;event_d2714f141ded49499398c727f8d93150&quot;,&quot;run_id&quot;:&quot;run_780a240c2b...&#10;[truncated; full report in element text]">env = (&lt;sim2act.db.Store object at 0x7fe01d552de0&gt;, Settings(database_url='sqlite:////workspace/scratch/cold-edge-paired-202...50d0112b8e40519a12617116ec726d', 'user_32dcbbdc49d1482f942116b4a76ed1a3', 'proj_9a958f4282644658b6d3c66c1926e973', ...)
+tmp_path = PosixPath('/workspace/scratch/cold-edge-paired-20261030/test_original_large_cold_scope0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fe01d552570&gt;
+
+    def test_original_large_cold_scoped_profile(env,tmp_path,monkeypatch):
+        opened=snapshots(monkeypatch,env[1].database_url)
+        try:
+            with profile(opened,tmp_path) as measured:
+&gt;               large_flow(env,tmp_path,monkeypatch,False)
+
+tests/test_cold_snapshot_profile.py:155: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (&lt;sim2act.db.Store object at 0x7fe01d552de0&gt;, Settings(database_url='sqlite:////workspace/scratch/cold-edge-paired-202...50d0112b8e40519a12617116ec726d', 'user_32dcbbdc49d1482f942116b4a76ed1a3', 'proj_9a958f4282644658b6d3c66c1926e973', ...)
+tmp_path = PosixPath('/workspace/scratch/cold-edge-paired-20261030/test_original_large_cold_scope0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fe01d552570&gt;
+cancel = False, cancel_phase = 'G0'
+
+    @pytest.mark.parametrize('cancel', [True, False], ids=['owner-cancel-during-large-g0','uninterrupted-original-large-cold'])
+    def test_original_large_cold_control(env, tmp_path, monkeypatch, cancel, *, cancel_phase="G0"):
+        assert cancel_phase in ("G0", "G1")
+        assert env[0].test_only and env[0].sqlite
+        stopped = threading.Event()
+        errors, tracked, result = [], [], dict(classification='REAL_CLOCK_MOCK_DEFINITION_FILE_SQLITE_NOT_LIVE_NOT_PG', cancel=cancel)
+        server = listener = server_thread = None
+        def save():
+            result['epochs'] = [dict(run_id=e.header['id'], phase=e.phase, checks=e.checks,
+                closed=e.closed, finished_normally=e.finished_normally, seconds=e.seconds,
+                complete_g0_seconds=e.g0_seconds, observed_max_checkpoint_gap=e.max_check_gap,
+                settlement_lease_margin=e.lease_margin) for _,e in tracked]
+            (tmp_path/'large-control-result.json').write_text(json.dumps(result,indent=2)+'\n')
+        def observer():
+            nonlocal server, listener, server_thread
+            handled = False
+            eligibility = {}
+            try:
+                end = time.monotonic()+850
+                while not stopped.is_set() and time.monotonic()&lt;end:
+                    for store, epoch in active_epochs():
+                        binding = getattr(epoch.worker,'pa_trial',None)
+                        if (binding is None or epoch.header['runtime_id']==binding.contract.runtime_id
+                                or store.engine.url.database != env[0].engine.url.database):
+                            continue
+                        if epoch not in eligibility:
+                            refs=read_db(store,'SELECT resource_refs FROM runs WHERE id=?',(epoch.header['id'],))
+                            eligibility[epoch]=bool(refs and json.loads(refs[0][0]) == [binding.contract.bindings[1].resource_id])
+                        if not eligibility[epoch]:
+                            continue
+                        if not any(old is epoch for _,old in tracked):
+                            tracked.append((store,epoch)); save()
+                        # Demand actual large validation activity before control,
+                        # rather than cancelling a queued/not-yet-started Run.
+                        if (not cancel or handled or epoch.phase!=cancel_phase or epoch.closed
+                                or epoch.checks&lt;1000 or time.monotonic()-epoch.started&lt;3):
+                            continue
+                        if cancel_phase == 'G1':
+                            assert epoch is tracked[0][1], 'The first target epoch escaped before cancellation'
+                            assert epoch.g0_seconds is not None
+                            if time.monotonic()-epoch.started-epoch.g0_seconds &lt; 3:
+                                continue
+                        handled = True
+                        rid=epoch.header['id']
+                        iid=read_db(store,'SELECT instance_id FROM internal_app_runs a JOIN internal_run_bindings b ON b.app_run_id=a.id WHERE b.run_id=?',(rid,))[0][0]
+                        aid=read_db(store,"SELECT id FROM attempts WHERE run_id=? AND status='RECEIVED'",(rid,))[0][0]
+                        prior=read_db(store,'SELECT * FROM attempts WHERE id&lt;&gt;? ORDER BY id',(aid,))
+                        target_attempt=read_db(store,'SELECT * FROM attempts WHERE id=?',(aid,))
+                        data_before=read_db(store,'SELECT * FROM internal_instance_data ORDER BY instance_id,version')
+                        resources_before=read_db(store,'SELECT * FROM resources ORDER BY id')
+                        archive_before=read_db(store,'SELECT * FROM delivery_graph_requests ORDER BY app_id,principal_id,kind,request_key')
+                        result.update(target_run=rid,target_attempt=aid,g0_seconds_before_request=time.monotonic()-epoch.started,
+                            prior_attempts_sha256=digest_rows(prior),prior_attempt_count=len(prior),typed_history_sha256=digest_rows(data_before),
+                            received_attempt_sha256=digest_rows(target_attempt),resources_sha256=digest_rows(resources_before),archive_sha256=digest_rows(archive_before),
+                            committed_lease_margin_before_control=read_db(store,'SELECT lease_until FROM runs WHERE id=?',(rid,))[0][0]-time.time())
+                        if cancel_phase == 'G1':
+                            probe=sqlite3.connect(store.engine.url.database,timeout=0,isolation_level=None)
+                            probe_started=time.monotonic()
+                            try:
+                                try:
+                                    probe.execute('BEGIN IMMEDIATE')
+                                except sqlite3.OperationalError as error:
+                                    assert error.sqlite_errorcode == sqlite3.SQLITE_BUSY
+                                    result['writer_lock_probe']=dict(sqlite_errorcode=error.sqlite_errorcode,
+                                        seconds=time.monotonic()-probe_started,no_mutation=True)
+                                else:
+                                    raise AssertionError('G1 did not hold the actual SQLite writer lock')
+                            finally:
+                                if probe.in_transaction:probe.rollback()
+                                probe.close()
+                            assert epoch is tracked[0][1] and epoch.phase == 'G1' and not epoch.closed
+                            result['cancel_phase']='G1'
+                            result['g0_seconds_before_request']=epoch.g0_seconds
+                            result['validation_seconds_before_request']=time.monotonic()-epoch.started
+                            result['g1_seconds_before_request']=time.monotonic()-epoch.started-epoch.g0_seconds
+                        listener=socket.socket();listener.bind(('127.0.0.1',0));listener.listen(128)
+                        base='http://127.0.0.1:'+str(listener.getsockname()[1])
+                        server=uvicorn.Server(uvicorn.Config(create_app(store,epoch.worker.s),log_level='error',access_log=False))
+                        server_thread=threading.Thread(target=server.run,kwargs={'sockets':[listener]},daemon=True);server_thread.start()
+                        deadline=time.monotonic()+5
+                        while not server.started and time.monotonic()&lt;deadline:stopped.wait(.01)
+                        assert server.started
+                        def request(method,path,body=None):
+                            raw=None if body is None else json.dumps(body).encode()
+                            req=Request(base+path,data=raw,method=method,headers={'Authorization':'Bearer synthetic-test-A','Content-Type':'application/json'})
+                            started=time.monotonic()
+                            try:
+                                with urlopen(req,timeout=8) as response:
+                                    return response.status,json.loads(response.read()),time.monotonic()-started
+                            except HTTPError as error:
+                                return error.code,json.loads(error.read()),time.monotonic()-started
+                        path=f'/api/internal/instances/{iid}/runs/{rid}'
+                        status,progress,elapsed=request('GET',path+'/control-progress')
+                        assert status==200 and progress['status']=='RUNNING' and progress['content_access'] is False,progress
+                        if cancel_phase == 'G0':
+                            assert epoch.phase=='G0' and not epoch.closed
+                        else:
+                            assert epoch is tracked[0][1] and epoch.phase=='G1' and not epoch.closed
+                        result['progress']=dict(http=status,seconds=elapsed,metadata=progress)
+                        status,reply,elapsed=request('POST',path+'/commands',dict(command='cancel',version=progress['version']))
+                        result['cancel_reply']=dict(http=status,seconds=elapsed,metadata=reply)
+                        assert status==200 and reply['status']=='RECONCILING',reply
+                        if cancel_phase == 'G0':
+                            result['g0_interrupt_closed']=epoch.closed
+                        else:
+                            result['validation_interrupt_closed']=epoch.closed
+                        # Subsequent original fail_owned is allowed to reconcile
+                        # only after the original command committed its version.
+                        result['_store']=store;result['_prior']=prior;result['_data']=data_before;result['_resources']=resources_before
+                        result['_target_attempt']=target_attempt;result['_archive']=archive_before
+                        save()
+                    stopped.wait(.01)
+            except BaseException as error:
+                errors.append(error);result['observer_error']=traceback.format_exc();save()
+        # Do not serialize Store handles into the evidence file.
+        original_save=save
+        def save():
+            private={key:result.pop(key) for key in list(result) if key.startswith('_')}
+            try:original_save()
+            finally:result.update(private)
+        thread=threading.Thread(target=observer,daemon=True);thread.start()
+        caught=None
+        try:
+            try:
+                original_flow(env,tmp_path,monkeypatch)
+            except AssertionError as error:
+                caught=error
+            if not cancel:
+&gt;               assert caught is None, str(caught)
+                       ^^^^^^^^^^^^^^
+E               AssertionError: {"namespace":"INTERNAL_APPRUN","formal_publication_enabled":false,"id":"run_780a240c2bf042558d5d8223a2c10336","app_run_id":"iapprun_b4f739d9967841d2b8272629936761c3","instance_id":"iinstance_2a978cb52af57f444e95504b5efb704f","release_id":"irelease_498ca0787bd4440e8fd74bdce7cc25b7","status":"RUNNING","version":1,"cancel_intent":false,"result":null,"result_version":null,"error":null,"known_effects":[],"events":[{"id":"event_d2714f141ded49499398c727f8d93150","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349219.322968,"kind":"ACCEPTED","data":{"namespace":"INTERNAL_APPRUN","app_run_id":"iapprun_b4f739d9967841d2b8272629936761c3","instance_id":"iinstance_2a978cb52af57f444e95504b5efb704f","release_id":"irelease_498ca0787bd4440e8fd74bdce7cc25b7","input_fingerprint":"3da1424b3af2167cefe8384eea364fe373a701148450aecaaf1a9f368206e4f9"}},{"id":"event_7c180e7ee35a4c999b61c9ee1f119676","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349224.7025359,"kind":"CLAIMED","data":{"fence":1}},{"id":"event_e162b031f4894061933c8c9c96a4df33","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349226.5123866,"kind":"SPEC_STEP_VERIFIED","data":{"step_id":"read_pick","operation_id":"op_7dd6910948434c54bd2cd3d1118d27c7","fence":1}},{"id":"event_82ca7102666e47ab82aa54ad4d2e68a4","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349255.1165652,"kind":"NS_RESERVED","data":{"attempt_id":"attempt_53cbe035f84e4bb8b8a9c640807ebd20","parameters_fingerprint":"2e22f61733d426c52a7d096635c3d806b3fe7f57d7a46513d5d86489b07a42e6","reserved_tokens":6307,"request_model":"intern-s2","mode":"LIVE","created_at":1793349255.1145003,"operation_id":"op_6029279168df49dabfbf678ee36e3b95","step_id":"duties_pick","fence":1,"reservation_fingerprint":"509c203822de34bae155c3d20b7bbdce03261bbd0c0df8b562d0234b98b63512"}},{"id":"event_9fe2cc23088b4717aca92b6362f097c2","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349255.120227,"kind":"NS_WIRE_ARCHIVED","data":{"attempt_id":"attempt_53cbe035f84e4bb8b8a9c640807ebd20","archive_fingerprint":"43c7960c3b6c9778f3e02532d341c38d67dcf550ef3dd4dc41eede081f53c96a"}},{"id":"event_796af64a77f44bc68a654f0d04f4717e","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349255.12059,"kind":"MODEL_RESERVED","data":{"attempt_id":"attempt_53cbe035f84e4bb8b8a9c640807ebd20","mode":"live"}},{"id":"event_b4efb4df18a54a839f0fc6fbd2137c25","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349255.1252623,"kind":"PA_TRIAL_BODY","data":{"attempt_id":"attempt_53cbe035f84e4bb8b8a9c640807ebd20","family":"pa_trial_request_body.v1","body_fingerprint":"43c7960c3b6c9778f3e02532d341c38d67dcf550ef3dd4dc41eede081f53c96a","decoded_sha256":"bd53c895427a1aa988ee1422cc0edff256fd880a5fe9dd2cef49f8703138afcf","canonical_sha256":null,"byte_count":5283,"complete":true,"omission":"NONE"}},{"id":"event_ae97e68435924fdd9a07e96108be4ce4","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349263.0313413,"kind":"PA_TRIAL_BODY","data":{"attempt_id":"attempt_53cbe035f84e4bb8b8a9c640807ebd20","family":"pa_trial_response_body.v1","body_fingerprint":"9a4b9e3930eec9cf9aebe2f968f02c09b76e5b807e31dc82eb9d5680f6aa3c9c","decoded_sha256":"458107e7f73e7ae7103b9c02a2cb0fe28a0e55aad8839cd8319da9a5e0309aa4","canonical_sha256":"458107e7f73e7ae7103b9c02a2cb0fe28a0e55aad8839cd8319da9a5e0309aa4","byte_count":476,"complete":true,"omission":"NONE"}},{"id":"event_69db1ff1f01145b5ba26366bd3d869ce","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349263.0342913,"kind":"NS_BODY_ARCHIVED","data":{"attempt_id":"attempt_53cbe035f84e4bb8b8a9c640807ebd20","archive_fingerprint":"9a4b9e3930eec9cf9aebe2f968f02c09b76e5b807e31dc82eb9d5680f6aa3c9c"}},{"id":"event_78c326b79696491f8867bdf51925926d","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349263.0880494,"kind":"NS_RECEIVED","data":{"attempt_id":"attempt_53cbe035f84e4bb8b8a9c640807ebd20","response_fingerprint":"f761425be4033844ab9cadff6db4674f4b253ac0028de8f7fdc833c4b955e02a","reception_fingerprint":"f91e371cf585dc6eeb5bae29db696175d8d978387424f6702648d8f2bb10277c"}},{"id":"event_c6b3e5127f4f40fcac6374768fb9392c","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349263.1645937,"kind":"NS_SETTLEMENT_LEASE_RESERVED","data":{"attempt_id":"attempt_53cbe035f84e4bb8b8a9c640807ebd20","protocol":"sqlite-exclusive-settlement.v1","seconds":120,"contract_fingerprint":"4bef2e44433ab36a3661973a42220cff84f755c0cf5461b591f032f2b2e87c27","worker_id":"worker_4765365e58ac426ea5ed489defba27ef","fence":1,"version":1,"previous_lease_until":1793349293.0848079,"lease_until":1793349383.163858,"deadline":1793349519.3184848}},{"id":"event_84c743b4c443403d835b9f0220efb514","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349302.1070478,"kind":"NS_SETTLED","data":{"attempt_id":"attempt_53cbe035f84e4bb8b8a9c640807ebd20","attempt_fingerprint":"cc94e855448ae4e4cf78eec539319473d33beca9f7dbdbbbea13d133019f1cc7","operation_id":"op_6029279168df49dabfbf678ee36e3b95"}},{"id":"event_8e4c39c6ee774e28abf7216370144716","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349302.107914,"kind":"SPEC_STEP_VERIFIED","data":{"step_id":"duties_pick","operation_id":"op_6029279168df49dabfbf678ee36e3b95","fence":1}},{"id":"event_71c33ce9d0414081a2b319a50e624753","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349367.0911596,"kind":"NS_SETTLEMENT_LEASE_RELEASED","data":{"attempt_id":"attempt_53cbe035f84e4bb8b8a9c640807ebd20","fence":1,"lease_until":1793349383.163858}},{"id":"event_54c1fc8c35d74556ac6c7dbbcd1cf372","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349372.3573542,"kind":"NS_RESERVED","data":{"attempt_id":"attempt_317fee9fec5d4546bbc8112ab02cc018","parameters_fingerprint":"393c9821173b8326b32eceb355c6fb10df0849b4b2c987210cbc9d6310a22e03","reserved_tokens":6341,"request_model":"intern-s2","mode":"LIVE","created_at":1793349372.3551178,"operation_id":"op_9e09aefa60734aeeb072adf05ce6826b","step_id":"qualifiers_pick","fence":1,"reservation_fingerprint":"e441e9bc9bba625e4a712b7087dfd76d08913ab156d9066e2a0e6143942cdbc6"}},{"id":"event_0503e56f611741ca934015443f956f76","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349372.3598337,"kind":"NS_WIRE_ARCHIVED","data":{"attempt_id":"attempt_317fee9fec5d4546bbc8112ab02cc018","archive_fingerprint":"1456139844e34379cbff0a9cc957bb560e957b85f71d8df2f243226492499808"}},{"id":"event_51596d2ec744435286c9eb3976ba892e","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349372.3601298,"kind":"MODEL_RESERVED","data":{"attempt_id":"attempt_317fee9fec5d4546bbc8112ab02cc018","mode":"live"}},{"id":"event_4f4b85c4b9aa4bb8bfc43a35bd144122","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349372.3635545,"kind":"PA_TRIAL_BODY","data":{"attempt_id":"attempt_317fee9fec5d4546bbc8112ab02cc018","family":"pa_trial_request_body.v1","body_fingerprint":"1456139844e34379cbff0a9cc957bb560e957b85f71d8df2f243226492499808","decoded_sha256":"b8dc53e8358e39b022a5aba197e235438d0b136359706bc170cf231d8d635035","canonical_sha256":null,"byte_count":5317,"complete":true,"omission":"NONE"}},{"id":"event_721b26fac3224d8aad5fd97f6340bf87","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349381.0247214,"kind":"PA_TRIAL_BODY","data":{"attempt_id":"attempt_317fee9fec5d4546bbc8112ab02cc018","family":"pa_trial_response_body.v1","body_fingerprint":"61e34c6084e035e01437dd586e33b46870bdd23585aaf808cb28f10790358969","decoded_sha256":"e86a70f515622717020b2352d8c6f9be4afde037d8306a0fee5e3227cc7d828b","canonical_sha256":"e86a70f515622717020b2352d8c6f9be4afde037d8306a0fee5e3227cc7d828b","byte_count":887,"complete":true,"omission":"NONE"}},{"id":"event_57ccc4d2821d47a59ec14a96cae73028","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349381.0271266,"kind":"NS_BODY_ARCHIVED","data":{"attempt_id":"attempt_317fee9fec5d4546bbc8112ab02cc018","archive_fingerprint":"61e34c6084e035e01437dd586e33b46870bdd23585aaf808cb28f10790358969"}},{"id":"event_6295a2dc0d6645478899fba8cd2d12ad","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349381.0807104,"kind":"NS_RECEIVED","data":{"attempt_id":"attempt_317fee9fec5d4546bbc8112ab02cc018","response_fingerprint":"c3cedef04d36515b546fedae451137c2d4388d493058c4c790036ca44c9a3112","reception_fingerprint":"38f16593d06c9b2e85c4ed04cec3c7cc91c3ccbf03bbf169cbc80c8d41a2f550"}},{"id":"event_85904ecf68064a66b94704cd1bd1a757","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349381.1494205,"kind":"NS_SETTLEMENT_LEASE_RESERVED","data":{"attempt_id":"attempt_317fee9fec5d4546bbc8112ab02cc018","protocol":"sqlite-exclusive-settlement.v1","seconds":120,"contract_fingerprint":"4bef2e44433ab36a3661973a42220cff84f755c0cf5461b591f032f2b2e87c27","worker_id":"worker_4765365e58ac426ea5ed489defba27ef","fence":1,"version":1,"previous_lease_until":1793349411.076869,"lease_until":1793349501.1490064,"deadline":1793349519.3184848}},{"id":"event_6ee3b75a0a8f4459af3d7a57770823fd","run_id":"run_780a240c2bf042558d5d8223a2c10336","created_at":1793349501.16882,"kind":"NS_REJECTED","data":{"attempt_id":"attempt_317fee9fec5d4546bbc8112ab02cc018","attempt_fingerprint":"68ee991c38bdc2f5a4b37cc7a456b7460c9019af2047f0d657a3573594b4a16a","operation_id":"op_9e09aefa60734aeeb072adf05ce6826b","error":"BUDGET_EXHAUSTED"}}],"steps":[{"step_id":"read_pick","status":"VERIFIED","fingerprint":"d530dc25796dd7a56ecff96ba2c0e8794da986a7323053a2a7b47178e65a67ee"},{"step_id":"duties_pick","status":"VERIFIED","fingerprint":"e093039f67319d0d9ac4a928605b5223de71e8c57eeff547ac6e166012cc4efe"}],"semantic_status":"UNKNOWN","owner_acceptance":"PENDING","citation_status":"NOT_RUN","semantic_goal_acceptance":"NOT_RUN","markdown_view":null}
+
+tests/test_cold_control_full_flow.py:173: AssertionError</failure></testcase></testsuite></testsuites>
