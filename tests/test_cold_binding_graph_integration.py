@@ -217,6 +217,17 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                                 assert native_owned.image.is_kind(graph.native_audit,'d')
                                 native_key='original-native-audit:'+graph.native_audit['original']['id']
                                 assert native_owned.image.same(native_owned.fact(guard,native_key),graph.native_audit)
+                                assert native_owned.image.is_kind(graph.use_prefix.frozen,'d')
+                                assert native_owned.image.is_kind(graph.use_audit_prefix.frozen,'d')
+                                # Each actual paired SQL/deepcopy read remains a
+                                # distinct data domain; no cached response reuse.
+                                assert not native_owned.image.same(graph.use_prefix.frozen,graph.use_audit_prefix.frozen)
+                                assert native_owned.image.same(graph.use_review.prefix.approved_grants,
+                                    graph.use_prefix.frozen['reviewed']['approved_grant_state'])
+                                assert type(graph.use_prefix.body) is use.CommitInput
+                                assert type(graph.use_prefix.body.review) is use.ReviewInput
+                                assert type(guard.inputs[graph.use_prefix.key+':pair']['request']) is dict
+                                assert type(graph.use_audit_prefix.seal_meta) is dict
                             assert graph.extraction_origin == expected_extraction_origin
                             assert graph.extraction_audit == expected_extraction_audit
                             assert graph.use_value == expected_use
@@ -308,6 +319,11 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                             assert seeded_graph.source_counter_reader._raw_seed is audit_seed.source_seed
                             assert seeded_graph.generation_reader.raw_seed is audit_seed.generation_seed
                             assert seeded_graph.native_audit is audit_seed.native
+                            if native_owned.available():
+                                assert native_owned.image.is_kind(seeded_graph.use_prefix.frozen,'d')
+                                assert native_owned.image.is_kind(audit_seed.use_prefix.frozen,'d')
+                                assert not native_owned.image.same(seeded_graph.use_prefix.frozen,
+                                    audit_seed.use_prefix.frozen)
                             assert seeded_graph.source_audit is audit_seed.source_audit
                             assert seeded_graph.extraction_audit_prefix is audit_seed.extraction_prefix
                             assert seeded_graph.use_audit_prefix is audit_seed.use_prefix

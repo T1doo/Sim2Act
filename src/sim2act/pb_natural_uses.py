@@ -74,6 +74,18 @@ PB = Family("pb_use", VERSION, USE, META, CONSENT, CommitInput, "pb-use")
 PA = Family("pa_use", "pa-natural-per-run.v1", "pa_natural_use", "pa_natural_use_scope",
     PA_CONSENT, PACommitInput, "pa-use")
 FAMILIES = (PB, PA)
+_USE_FAMILY_STATES=tuple((value,vars(value),tuple(vars(value).items())) for value in FAMILIES)
+
+
+def _use_family_current():
+    """Fresh fixed routing configuration, never historical permissions."""
+    for value,storage,items in _USE_FAMILY_STATES:
+        require(type(value) is Family, 'Exact per-use family configuration required')
+        current=object.__getattribute__(value,'__dict__')
+        require(current is storage and type(current) is dict and len(current)==len(items)
+            and all(key is old_key and value is old_value
+                for (key,value),(old_key,old_value) in zip(current.items(),items,strict=True)),
+            'Per-use family configuration changed')
 
 # Reuse immutable SQL syntax, never query results or per-use authorities.
 _HINT_LEDGER = select(delivery_graph_requests.c.app_id).where(
@@ -139,6 +151,7 @@ def _use_read_checkpoint(store, c, guard):
         if guard is not None:
             from .natural_spec_runtime import _cold_read_checkpoint
             _cold_read_checkpoint(store, c, guard)
+            _use_family_current()
     except BaseException:
         _invalidate_use_reads(guard)
         raise
@@ -235,7 +248,14 @@ def _use_pair(c, user, lid, kind, key, expected, *, _graph_read=None):
         _use_read_checkpoint(store, c, _graph_read)
         require(all(row["request_fingerprint"] == fingerprint(_use_dump(expected, body, _graph_read))
             for row in rows))
-        return body, left["response"]
+        response=left['response']
+        if expected is CommitInput and pb._owned_source_enabled():
+            # Each original paired read has its own checked/deepcopy domain.
+            # Transfer before :pair/:paired publishes any old mutable alias;
+            # neither a prior response nor a permission result is reused.
+            name='pb-use-response:'+str(len(vars(_graph_read).get('_source_fact_bindings',{})))
+            response=_use_fact_code.own_fact(_graph_read,name,response)
+        return body, response
     except BaseException:
         _invalidate_use_reads(_graph_read)
         raise
@@ -1366,3 +1386,17 @@ def mount(app, store, limits, identity, *, family=PB):
                 instance_id=iid, release_id=binding["release"]["id"], status=job["status"],
                 effective_fingerprint=binding["draft"]["fingerprint"], new_model_requests=0,
                 semantic_status="UNKNOWN", owner_acceptance="PENDING", formal_publication_enabled=False)
+
+
+# Register only the fixed private graph path and its actual public forwarding
+# leaves. Public no-Graph review/bound/audit retain their original protocol.
+from types import FunctionType as _UseFunctionType
+from . import _cold_source_packet as _use_fact_code
+from . import delivery_graph_apps as _use_pair_code
+_use_fact_code.register(8,globals(),tuple(name for name,value in tuple(globals().items())
+    if type(value) is _UseFunctionType and value.__module__==__name__
+    and (name.startswith('_') or name in ('scope_gate','use_hint','saved_family')))+('fingerprint','require'),
+    (_ColdUseReviewPrefix,_ColdUseReviewFacts,_ColdUseBoundPrefix,_ColdUseAuditPrefix,Family),
+    constants=('PB','PA','FAMILIES','_USE_FAMILY_STATES','Family','CommitInput','ReviewInput','RunScopeInput',
+        'GoalCardRunSource','Limits','natural','pb','spec','copy','_use_fact_code','_use_pair_code'),
+    helpers=((vars(_use_pair_code),('lookup','checked')),))

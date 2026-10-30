@@ -1,5 +1,6 @@
 /* Import-time code configuration, never model data or a cached verdict. */
-static PyObject*source_code[8]={NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL};
+#define SOURCE_CODE_FAMILIES 9
+static PyObject*source_code[SOURCE_CODE_FAMILIES]={NULL};
 static int code_items(PyObject*dict,PyObject*items){
  if(!PyDict_CheckExact(dict)||!PyTuple_CheckExact(items)||PyDict_GET_SIZE(dict)!=PyTuple_GET_SIZE(items))return 0;
  Py_ssize_t pos=0,i=0;PyObject*k,*v;
@@ -43,12 +44,12 @@ static int code_function(PyObject*entry,PyObject*namespace){
 static PyObject*register_code(PyObject*self,PyObject*args){
  (void)self;int index;PyObject*record;
  if(!PyArg_ParseTuple(args,"iO",&index,&record))return NULL;
- if(index<0||index>=8||source_code[index]||!PyTuple_CheckExact(record)||PyTuple_GET_SIZE(record)!=3){PyErr_SetString(PyExc_RuntimeError,"Source code registration is one-time and complete");return NULL;}
+ if(index<0||index>=SOURCE_CODE_FAMILIES||source_code[index]||!PyTuple_CheckExact(record)||PyTuple_GET_SIZE(record)!=3){PyErr_SetString(PyExc_RuntimeError,"Source code registration is one-time and complete");return NULL;}
  source_code[index]=Py_NewRef(record);Py_RETURN_NONE;
 }
 static PyObject*verify_code(PyObject*self,PyObject*unused){
  (void)self;(void)unused;int prior=PyGC_Disable(),ok=1;
- for(int index=0;ok&&index<8;index++){
+ for(int index=0;ok&&index<SOURCE_CODE_FAMILIES;index++){
   PyObject*record=source_code[index];if(!record){ok=0;break;}
   PyObject*witnesses=PyTuple_GET_ITEM(record,0),*classes=PyTuple_GET_ITEM(record,1);
   if(!PyTuple_CheckExact(witnesses)||!PyTuple_CheckExact(classes)){ok=0;break;}
