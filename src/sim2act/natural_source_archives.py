@@ -501,7 +501,9 @@ def _graph_resolve_trial_source(graph, store, c, user, contract, approval_key, l
             else:
                 from . import _cold_source_packet as source_owned
                 require(source_owned.image.business_equal(source_owned.facts(graph,source_facts)[0],job)
-                    if (_SOURCE_BINDING_TYPE is not None and type(source_facts) is _SOURCE_BINDING_TYPE) else source_facts[0] == job)
+                    if (_SOURCE_BINDING_TYPE is not None and type(source_facts) is _SOURCE_BINDING_TYPE) else
+                    (source_owned.image.business_equal(source_facts[0],job)
+                     if source_owned.image.is_kind(job,'d','r') else source_facts[0] == job))
             accepted = gate._trial_result(gate._saved(c, user, gate._trial_result(gate.entity(contract, **{'_guard': _guard} if _guard is not None else {}), _guard), gate.PHASE, 'source', gate.StageApproveInput, **{'_guard': _guard} if _guard is not None else {}), _guard)
             gate._graph_trial_produced(graph, store, c, _models, gate.StageApproveInput, accepted)
             gate._trial_result(_source_accepted_from_facts(approval_key, accepted, current, job, _guard=_guard), _guard)

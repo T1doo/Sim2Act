@@ -7,23 +7,25 @@ from sim2act import natural_source_archives as archive,natural_live_admission as
 from sim2act import pa_trial_dispatch as dispatch
 
 
-def test_post_source_producer_and_all_direct_consumers(sql_facts):
+@pytest.mark.parametrize('phase',['pre','post'])
+def test_post_source_producer_and_all_direct_consumers(sql_facts,phase):
  f=sql_facts
  assert owned.available()
- with f.store.tx() as c,segment(f,c,phase='post') as s:
-  assert owned.is_packet(s.source)
-  assert owned.pin(s.graph,s.source) is s.graph.inputs[owned.KEY]
-  facts=owned.facts(s.graph,s.source)
+ with f.store.tx() as c,segment(f,c,phase=phase) as s:
+  assert owned.is_packet(s.source)==(phase=='post')
+  if phase=='post':assert owned.pin(s.graph,s.source) is s.graph.inputs[owned.KEY]
+  facts=owned.facts(s.graph,s.source) if phase=='post' else s.source
   assert facts[0]['id']==f.source_id
   source_job=owned.own_fact(s.graph,'source-owned-consumer:job',s.stage[0])
   source_stage=(source_job,*s.stage[1:])
-  phase,checked_job=gate._graph_stage_current(s.graph,f.store,c,f.user,f.contract,'source',source_stage)
-  assert phase==f.phase.authority and checked_job is source_job
+  authority,checked_job=gate._graph_stage_current(s.graph,f.store,c,f.user,f.contract,'source',source_stage)
+  assert authority==f.phase.authority and checked_job is source_job
   models=[]
   gate._graph_trial_accounted_models(s.graph,f.store,c,models,s.source,'source')
-  assert models==[]
+  if phase=='post':assert models==[]
+  else:gate._trial_typed_values(models)
   guard=lambda: s.graph.check(f.store,c)
-  owned.stage_usage(s.graph,s.source,guard)
+  if phase=='post':owned.stage_usage(s.graph,s.source,guard)
   requests,responses,proofs=archive._graph_source_bodies(s.graph,f.store,c,f.user,f.contract,s.state,s.source)
   assert len(requests)==len(responses)==len(proofs)==2
   resolved=archive._graph_resolve_trial_source(s.graph,f.store,c,f.user,f.contract,
