@@ -71,3 +71,29 @@ def test_sql_row_alias_and_quoted_name_hidden_storage_stay_in_boundary():
             assert any(node[0]=='u' for node in data[1])
             assert data[3] and data[5]
     finally:engine.dispose()
+
+
+@pytest.mark.parametrize('shape',['row','limits','float'])
+def test_outside_helper_failure_retains_original_exception(monkeypatch,shape):
+    from sim2act import natural_spec_runtime as runtime
+    from sim2act.contracts import Limits
+    original=ValueError('outside helper original failure')
+    def fail(*args,**kwargs):raise original
+    engine=None
+    try:
+        if shape=='row':
+            engine=create_engine('sqlite://')
+            with engine.connect() as connection:
+                value=connection.execute(text('select 1 as number')).mappings().one()
+            monkeypatch.setattr(runtime,'_cold_graph_row_storage',fail)
+        elif shape=='limits':
+            value=Limits(max_requests=1,max_tools=1,max_repairs=0,
+                max_total_tokens=100,max_output_tokens=20,run_seconds=60)
+            monkeypatch.setattr(runtime,'_cold_graph_limit_values',fail)
+        else:
+            value=1.25
+            monkeypatch.setattr(image,'_PACK',fail)
+        with pytest.raises(ValueError) as caught:image.capture(None,[value])
+        assert caught.value is original
+    finally:
+        if engine is not None:engine.dispose()

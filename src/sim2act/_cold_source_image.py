@@ -138,10 +138,78 @@ def capture(incoming, outside, *, _parents=None):
         if mode=='source':nodes[ref]=(tag,payload,edges)
         active.remove(ident)
         return ref
+    def outside_visit(recur,value,depth=0,synthetic_leaf=False):
+        # No child closure or per-call closure cells on this discovery-only
+        # path. Keep the original complete walk and its shared state/order.
+        nonlocal work,size
+        work+=1
+        if work>_MAX_EDGES or depth>64 or len(nodes)+len(outside_kinds)>=_MAX_NODES:raise Bounds('capture')
+        kind=type(value);ident=id(value);parent=None
+        if View is not None and kind is View:
+            if _parents is None:raise Unsupported('immutable parent not admitted by caller')
+            parent=value.owner();ident=('owned-node',id(parent),value.ref())
+        tag=('n' if value is None else 't' if value is True else 'f' if value is False else
+            'i' if kind is int else 'v' if kind is float else 's' if kind is str else
+            'b' if kind is bytes else 'd' if kind is dict else 'l' if kind is list else
+            'q' if kind is tuple else 'r' if kind is RowMapping else 'u' if kind is quoted_name else
+            'c' if kind is Limits else 'o' if parent is not None else
+            'a' if kind is native.Owned else None)
+        if tag is None:raise Unsupported('unsupported kind')
+        if ident in active:raise Unsupported('cycle')
+        scalar=tag in ('n','t','f','i','v')
+        if not scalar and ident in memo:
+            ref=memo[ident]
+            if tag in ('s','b'):(virtual_leaves if synthetic_leaf else real_leaves).add(ref)
+            prior=nodes[ref][0] if ref>=0 else outside_kinds[-ref-1]
+            if prior!=tag:raise Unsupported('typed/raw interpretation conflict')
+            if ref>=0 and ref not in external:mark_external(ref)
+            return ref
+        ref=-len(outside_kinds)-1;outside_kinds.append(tag)
+        if not scalar:memo[ident]=ref;held.append(value)
+        active.add(ident)
+        if tag=='o':
+            ordinal=None
+            for i,p in enumerate(_parents):
+                if p is parent:ordinal=i;break
+            if ordinal is None:
+                if len(_parents)>=256:raise Bounds('immutable parents')
+                _parents.append(parent)
+            value.ref()
+        elif tag in ('s','b'):
+            (virtual_leaves if synthetic_leaf else real_leaves).add(ref)
+            size+=len(value)*(4 if tag=='s' else 1)
+            if size>_MAX_LEAF:raise Bounds('leaf bytes')
+            leaves.append(value)
+        elif tag=='i':
+            if not -(1<<63)<=value<(1<<63):raise Unsupported('integer range')
+        elif tag=='v':_PACK(value)
+        elif tag=='d':
+            if not all(type(k) is str or type(k) is quoted_name for k in value):raise Unsupported('dict keys')
+            for k,v in dict.items(value):
+                recur(recur,k,depth+1,id(value) in virtual_containers and id(k) in virtual_ids)
+                recur(recur,v,depth+1)
+        elif tag in ('q','l'):
+            for v in value:recur(recur,v,depth+1)
+        elif tag=='r':
+            storage=rt._cold_graph_row_storage(value);synthetic.append(storage)
+            virtual_containers.add(id(storage[2]))
+            rawindex=object.__getattribute__(value,'_key_to_index')
+            originals={id(k) for k in (*storage[0],*tuple(rawindex)) if type(k) is str}
+            for k in storage[2]:
+                if id(k) not in originals:virtual_ids.add(id(k))
+            for v in storage:recur(recur,v,depth+1)
+        elif tag=='u':
+            text=str.__str__(value);synthetic.append(text)
+            recur(recur,text,depth+1,True)
+        elif tag=='c':
+            storage=rt._cold_graph_limit_values(value);synthetic.append(storage)
+            recur(recur,storage,depth+1)
+        active.remove(ident)
+        return ref
     # Explicit recursion avoids a function->closure->function cycle retaining
     # every temporary outside record/reference until a later GC collection.
     root=visit(visit,incoming)
-    visit(visit,outside,mode='outside')
+    outside_visit(outside_visit,outside)
     def reachable(start):
         seen=set();todo=[start]
         while todo:
