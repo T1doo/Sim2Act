@@ -43,7 +43,8 @@ def digest_rows(rows):
 
 
 @pytest.mark.parametrize('cancel', [True, False], ids=['owner-cancel-during-large-g0','uninterrupted-original-large-cold'])
-def test_original_large_cold_control(env, tmp_path, monkeypatch, cancel):
+def test_original_large_cold_control(env, tmp_path, monkeypatch, cancel, *, cancel_phase="G0"):
+    assert cancel_phase in ("G0", "G1")
     assert env[0].test_only and env[0].sqlite
     stopped = threading.Event()
     errors, tracked, result = [], [], dict(classification='REAL_CLOCK_MOCK_DEFINITION_FILE_SQLITE_NOT_LIVE_NOT_PG', cancel=cancel)
@@ -75,9 +76,14 @@ def test_original_large_cold_control(env, tmp_path, monkeypatch, cancel):
                         tracked.append((store,epoch)); save()
                     # Demand actual large validation activity before control,
                     # rather than cancelling a queued/not-yet-started Run.
-                    if (not cancel or handled or epoch.phase!='G0' or epoch.closed
+                    if (not cancel or handled or epoch.phase!=cancel_phase or epoch.closed
                             or epoch.checks<1000 or time.monotonic()-epoch.started<3):
                         continue
+                    if cancel_phase == 'G1':
+                        assert epoch is tracked[0][1], 'The first target epoch escaped before cancellation'
+                        assert epoch.g0_seconds is not None
+                        if time.monotonic()-epoch.started-epoch.g0_seconds < 3:
+                            continue
                     handled = True
                     rid=epoch.header['id']
                     iid=read_db(store,'SELECT instance_id FROM internal_app_runs a JOIN internal_run_bindings b ON b.app_run_id=a.id WHERE b.run_id=?',(rid,))[0][0]
@@ -91,6 +97,26 @@ def test_original_large_cold_control(env, tmp_path, monkeypatch, cancel):
                         prior_attempts_sha256=digest_rows(prior),prior_attempt_count=len(prior),typed_history_sha256=digest_rows(data_before),
                         received_attempt_sha256=digest_rows(target_attempt),resources_sha256=digest_rows(resources_before),archive_sha256=digest_rows(archive_before),
                         committed_lease_margin_before_control=read_db(store,'SELECT lease_until FROM runs WHERE id=?',(rid,))[0][0]-time.time())
+                    if cancel_phase == 'G1':
+                        probe=sqlite3.connect(store.engine.url.database,timeout=0,isolation_level=None)
+                        probe_started=time.monotonic()
+                        try:
+                            try:
+                                probe.execute('BEGIN IMMEDIATE')
+                            except sqlite3.OperationalError as error:
+                                assert error.sqlite_errorcode == sqlite3.SQLITE_BUSY
+                                result['writer_lock_probe']=dict(sqlite_errorcode=error.sqlite_errorcode,
+                                    seconds=time.monotonic()-probe_started,no_mutation=True)
+                            else:
+                                raise AssertionError('G1 did not hold the actual SQLite writer lock')
+                        finally:
+                            if probe.in_transaction:probe.rollback()
+                            probe.close()
+                        assert epoch is tracked[0][1] and epoch.phase == 'G1' and not epoch.closed
+                        result['cancel_phase']='G1'
+                        result['g0_seconds_before_request']=epoch.g0_seconds
+                        result['validation_seconds_before_request']=time.monotonic()-epoch.started
+                        result['g1_seconds_before_request']=time.monotonic()-epoch.started-epoch.g0_seconds
                     listener=socket.socket();listener.bind(('127.0.0.1',0));listener.listen(128)
                     base='http://127.0.0.1:'+str(listener.getsockname()[1])
                     server=uvicorn.Server(uvicorn.Config(create_app(store,epoch.worker.s),log_level='error',access_log=False))
@@ -110,12 +136,18 @@ def test_original_large_cold_control(env, tmp_path, monkeypatch, cancel):
                     path=f'/api/internal/instances/{iid}/runs/{rid}'
                     status,progress,elapsed=request('GET',path+'/control-progress')
                     assert status==200 and progress['status']=='RUNNING' and progress['content_access'] is False,progress
-                    assert epoch.phase=='G0' and not epoch.closed
+                    if cancel_phase == 'G0':
+                        assert epoch.phase=='G0' and not epoch.closed
+                    else:
+                        assert epoch is tracked[0][1] and epoch.phase=='G1' and not epoch.closed
                     result['progress']=dict(http=status,seconds=elapsed,metadata=progress)
                     status,reply,elapsed=request('POST',path+'/commands',dict(command='cancel',version=progress['version']))
                     result['cancel_reply']=dict(http=status,seconds=elapsed,metadata=reply)
                     assert status==200 and reply['status']=='RECONCILING',reply
-                    result['g0_interrupt_closed']=epoch.closed
+                    if cancel_phase == 'G0':
+                        result['g0_interrupt_closed']=epoch.closed
+                    else:
+                        result['validation_interrupt_closed']=epoch.closed
                     # Subsequent original fail_owned is allowed to reconcile
                     # only after the original command committed its version.
                     result['_store']=store;result['_prior']=prior;result['_data']=data_before;result['_resources']=resources_before
@@ -169,7 +201,11 @@ def test_original_large_cold_control(env, tmp_path, monkeypatch, cancel):
         assert read_db(store,'SELECT * FROM resources ORDER BY id')==result.pop('_resources')
         assert read_db(store,'SELECT * FROM delivery_graph_requests ORDER BY app_id,principal_id,kind,request_key')==result.pop('_archive')
         result['final']=dict(run='RECONCILING',attempt='RECEIVED',prior_history_unchanged=True,received_row_unchanged=True,archive_rows_unchanged=True,no_settled_or_rejected=True,no_new_typed_data=True,all_resource_rows_unchanged=True)
-        assert not tracked[-1][1].finished_normally and tracked[-1][1].g0_seconds is None
+        if cancel_phase == 'G0':
+            assert not tracked[-1][1].finished_normally and tracked[-1][1].g0_seconds is None
+        else:
+            assert len(tracked)==1 and not tracked[0][1].finished_normally and tracked[0][1].g0_seconds > 0
+            assert result['writer_lock_probe']['sqlite_errorcode']==sqlite3.SQLITE_BUSY
     else:
         assert len(tracked)==2 and all(epoch.finished_normally and epoch.g0_seconds is not None and epoch.lease_margin>0 for _,epoch in tracked)
         result['final']=dict(original_full_flow='PASS',cold_model_intervals=2)

@@ -144,3 +144,19 @@ def test_same_large_cold_conflict_cannot_settle_old_snapshot(env,tmp_path,monkey
         concurrent_commit_seconds=observed['concurrent_commit_seconds'],committed_while_g0_open=True,
         final_state=state,received_attempt_unchanged=True,typed_history_unchanged=True,
         archive_unchanged=True,no_settled_or_rejected=True,mock_provider_requests=6,records=records),indent=2)+'\n')
+
+
+def test_same_large_cold_snapshot_cancel_during_actual_g1_writer(env,tmp_path,monkeypatch):
+    opened=snapshots(monkeypatch,env[1].database_url)
+    try:
+        large_control_flow(env,tmp_path,monkeypatch,True,cancel_phase='G1')
+        assert len(opened)==1
+        records=list(opened[0]._local_model_snapshot_records)
+        assert len(records)==1 and records[0]['outcome']=='ROLLED_BACK'
+        assert records[0]['writer_seconds'] is not None and records[0]['writer_seconds']>0
+        control=json.loads((tmp_path/'large-control-result.json').read_text())
+        assert control['cancel_phase']=='G1' and control['writer_lock_probe']['no_mutation'] is True
+    finally:
+        (tmp_path/'snapshot-writer-timings.json').write_text(json.dumps(dict(
+            classification='ORIGINAL_LARGE_COLD_REAL_CLOCK_FILE_SQLITE_WAL_FIXED_MOCK_G1_CANCEL',
+            records=[r for s in opened for r in s._local_model_snapshot_records]),indent=2)+'\n')
