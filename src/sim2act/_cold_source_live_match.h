@@ -190,7 +190,7 @@ static int source_match(LiveMatch*s,Py_ssize_t ref,PyObject*v,int depth){
  return source_match_context(s,ref,v,depth,0);
 }
 static int source_config(PyObject*c){
- if(!PyTuple_CheckExact(c)||PyTuple_GET_SIZE(c)!=6)return 0;
+ if(!PyTuple_CheckExact(c)||PyTuple_GET_SIZE(c)!=7)return 0;
  PyObject*models=PyTuple_GET_ITEM(c,0),*ds=PyTuple_GET_ITEM(c,2),*parents=PyTuple_GET_ITEM(c,3);
  if(!PyTuple_CheckExact(models)||!PyTuple_CheckExact(ds)||PyTuple_GET_SIZE(ds)!=3||!PyTuple_CheckExact(parents)
   ||!PyType_Check(PyTuple_GET_ITEM(c,1))||!PyType_Check(PyTuple_GET_ITEM(c,4)))return 0;
@@ -203,6 +203,8 @@ static int source_config(PyObject*c){
  for(Py_ssize_t i=0;i<PyTuple_GET_SIZE(parents);i++){
   PyObject*e=PyTuple_GET_ITEM(parents,i);if(!PyTuple_CheckExact(e)||PyTuple_GET_SIZE(e)!=2||!PyType_Check(PyTuple_GET_ITEM(e,0))||Py_TYPE(PyTuple_GET_ITEM(e,1))!=&PyMemberDescr_Type)return 0;
  }
+ PyObject*ledger=PyTuple_GET_ITEM(c,6);
+ if(!PyTuple_CheckExact(ledger)||PyTuple_GET_SIZE(ledger)!=2||!PyType_Check(PyTuple_GET_ITEM(ledger,0))||Py_TYPE(PyTuple_GET_ITEM(ledger,1))!=&PyGetSetDescr_Type)return 0;
  return 1;
 }
 

@@ -150,7 +150,10 @@ def business_equal(left,right,*,models_as_dict=False):
             if tag in ('d','r'):return 'dict',value
             if tag in ('q','l'):return ('tuple' if tag=='q' else 'list'),value
             return tag,value
-        if type(value) in (dict,RowMapping):return 'dict',value
+        if type(value) is RowMapping:
+            from .natural_live_admission import _trial_pure_mapping
+            return 'dict',_trial_pure_mapping(value)
+        if type(value) is dict:return 'dict',value
         if type(value) in (tuple,list):return ('tuple' if type(value) is tuple else 'list'),value
         return None,value
     lk,lv=shape(left);rk,rv=shape(right)

@@ -101,7 +101,7 @@ static PyObject*make_binding(PyObject*self,PyObject*args){
  (void)self;PyObject*owner,*nonce,*epoch,*phase,*anchors,*scope;
  if(!PyArg_ParseTuple(args,"OOOOOO",&owner,&nonce,&epoch,&phase,&anchors,&scope))return NULL;
  if(Py_TYPE(owner)!=&OwnedType||Py_TYPE(nonce)!=&PyBaseObject_Type||!PyLong_CheckExact(epoch)
-  ||!PyUnicode_CheckExact(phase)||!PyTuple_CheckExact(anchors)||!PyTuple_CheckExact(scope)||PyTuple_GET_SIZE(scope)!=6)return Py_NewRef(unsupported);
+  ||!PyUnicode_CheckExact(phase)||!PyTuple_CheckExact(anchors)||!PyTuple_CheckExact(scope)||PyTuple_GET_SIZE(scope)!=7)return Py_NewRef(unsupported);
  unsigned long long e=PyLong_AsUnsignedLongLong(epoch);if(PyErr_Occurred())return NULL;
  if(PyUnicode_CompareWithASCIIString(phase,"post")!=0)return Py_NewRef(unsupported);
  if(binding_serial>=INT64_MAX){PyErr_SetString(PyExc_RuntimeError,"Binding identity exhausted");return NULL;}
@@ -114,10 +114,10 @@ static PyObject*make_binding(PyObject*self,PyObject*args){
 static PyObject*binding_current(PyObject*self,PyObject*args){
  (void)self;PyObject*v,*owner,*nonce,*epoch,*phase,*scope;
  if(!PyArg_ParseTuple(args,"OOOOOO",&v,&owner,&nonce,&epoch,&phase,&scope))return NULL;
- if(Py_TYPE(v)!=&BindingType||!PyLong_CheckExact(epoch)||!PyUnicode_CheckExact(phase)||!PyTuple_CheckExact(scope)||PyTuple_GET_SIZE(scope)!=6)Py_RETURN_FALSE;
+ if(Py_TYPE(v)!=&BindingType||!PyLong_CheckExact(epoch)||!PyUnicode_CheckExact(phase)||!PyTuple_CheckExact(scope)||PyTuple_GET_SIZE(scope)!=7)Py_RETURN_FALSE;
  Binding*b=(Binding*)v;if(!b->owner||!b->nonce||!b->phase||!b->anchors||!b->scope||!b->pin)Py_RETURN_FALSE;
  unsigned long long e=PyLong_AsUnsignedLongLong(epoch);if(PyErr_Occurred())return NULL;
- for(int i=0;i<6;i++)if(PyTuple_GET_ITEM(b->scope,i)!=PyTuple_GET_ITEM(scope,i))Py_RETURN_FALSE;
+ for(int i=0;i<7;i++)if(PyTuple_GET_ITEM(b->scope,i)!=PyTuple_GET_ITEM(scope,i))Py_RETURN_FALSE;
  return PyBool_FromLong(b->owner==owner&&b->nonce==nonce&&b->epoch==e&&PyUnicode_Compare(b->phase,phase)==0);
 }
 static PyObject*binding_pin(PyObject*self,PyObject*v){
@@ -131,6 +131,7 @@ static PyObject*binding_owner(PyObject*self,PyObject*v){
 #include "_cold_source_code.h"
 #include "_cold_source_view.h"
 static PyMethodDef methods[]={
+ {"match_ledger",match_ledger,METH_VARARGS,"Select and fully compare current source slots inside the same bounded interval."},
  {"read_owner",read_owner,METH_O,"Read a static immutable view of complete owned data."},
  {"register_code",register_code,METH_VARARGS,"One-time import code configuration; no data."},
  {"verify_code",verify_code,METH_NOARGS,"Fresh complete registered code and class metadata."},

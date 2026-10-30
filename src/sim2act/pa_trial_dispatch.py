@@ -20,6 +20,11 @@ from .db import attempts, events, fingerprint, runs
 from .db import delivery_graph_requests as rows
 from .delivery_graph_apps import controlled
 from .errors import DomainError
+from . import _cold_source_packet as _source_owned_code
+_SOURCE_OWNED_CHECK = _source_owned_code.CHECK
+_SOURCE_BINDING_TYPE = _source_owned_code._BINDING
+_SOURCE_OWNED_ENABLED = _source_owned_code._SOURCE_OK
+_SOURCE_CAPACITY = _source_owned_code.Capacity
 from . import _cold_archive_packet as _owned_archive_code
 _OWNED_ARCHIVE_CHECK = _owned_archive_code.CHECK
 from .goal_applications import response_archive
@@ -1591,6 +1596,13 @@ def _graph_stage_accounted(graph, store, c, b, state, cursor, rid, stage, *, _ow
     ordered NS reads). No stage Authority is accepted as a substitute.
     """
 
+    if stage=='source' and graph.phase=='post' and _owned is None and _SOURCE_OWNED_ENABLED:
+        checker,code,defaults=_SOURCE_OWNED_CHECK
+        if (_source_owned_code.current is not checker or checker.__code__ is not code
+                or checker.__defaults__ is not defaults):
+            raise DomainError('VERSION_CONFLICT','Source producer code changed')
+        checker()
+
     def _parent_pin():
         gate._graph_trial_pin(graph, store, c)
     _models: list[tuple[type, object, dict]] = []
@@ -1641,15 +1653,22 @@ def _graph_stage_accounted(graph, store, c, b, state, cursor, rid, stage, *, _ow
         completed_raw = gate._graph_trial_accounted_raw(graph, store, c, completed_value, _models)
         key = 'cold-trial:accounted-' + stage
         from . import _cold_source_packet as source_owned
-        if stage=='source' and graph.phase=='post' and _owned is None and source_owned.available():
+        if stage=='source' and graph.phase=='post' and _owned is None and _SOURCE_OWNED_ENABLED:
+            checker,code,defaults=_SOURCE_OWNED_CHECK
+            if (source_owned.current is not checker or checker.__code__ is not code
+                    or checker.__defaults__ is not defaults):
+                raise DomainError('VERSION_CONFLICT','Source publisher code changed')
+            checker()
             # The complete producer is finished. No legacy Source node escaped.
             try:
                 return source_owned.publish(graph,completed_value,completed_raw,_guard)
-            except source_owned.Capacity:
+            except _SOURCE_CAPACITY:
                 # Bounded capacity failure before publication only retains all
                 # original full checks; errors after publication invalidate.
+                checker()
                 gate.require(key not in graph.inputs)
                 _guard()
+                checker()
         if key in graph.inputs:
             gate.require(completed_raw == graph.inputs[key])
         else:
@@ -1765,7 +1784,7 @@ def _archive_chain_from_facts(b, state, resolved, source_facts, *, _guard=None):
 def _archive_chain_values(b, state, receipt, requests, responses, source_facts, *, _guard=None, _source_graph=None):
     """Same complete joins; owned consumers read only immutable node views."""
     from . import _cold_source_packet as source_owned
-    source_packet=source_facts if source_owned.is_packet(source_facts) else None
+    source_packet=source_facts if (_SOURCE_BINDING_TYPE is not None and type(source_facts) is _SOURCE_BINDING_TYPE) else None
     source, actual, chains, ns_reads = (source_owned.facts(_source_graph,source_packet)
         if source_packet is not None else source_facts)
     slots = [s for s in state.slots if s.identity.stage == 'source']
@@ -1807,5 +1826,7 @@ _OWNED_ARCHIVE_CONSUMERS = _owned_archive_code.witness(globals(),
 
 
 from . import _cold_source_packet as _source_owned_code
-_source_owned_code.register(2,globals(),('_graph_stage_accounted','_graph_pb_archive_chain',
-    '_archive_chain_values','_archive_chain_from_facts'))
+_source_owned_code.register(2,globals(),tuple(name for name,value in globals().copy().items()
+    if type(value) is _source_owned_code.FunctionType and value.__module__==__name__)
+    + ('normalize_usage','response_archive','strict_json','fingerprint'),
+    constants=('_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_SOURCE_OWNED_ENABLED','_SOURCE_CAPACITY'))

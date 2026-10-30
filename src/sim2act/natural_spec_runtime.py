@@ -52,6 +52,7 @@ from . import _cold_typed_native_candidate as _typed_native_code
 from . import db as _raw_seed_db
 from . import _cold_source_packet as _source_owned_code
 _SOURCE_OWNED_CHECK = _source_owned_code.CHECK
+_SOURCE_BINDING_TYPE = _source_owned_code._BINDING
 from . import _cold_archive_packet as _owned_archive_code
 _OWNED_ARCHIVE_CHECK = _owned_archive_code.CHECK
 _OWNED_ARCHIVE_KEY = _owned_archive_code.KEY
@@ -2215,8 +2216,9 @@ class _ColdGraphRead:
                 and (type(self.inputs['cold-trial:accounted-source']) is tuple
                      or vars(self).get('_source_owned_binding') is not None)):
             checker,code,defaults=_SOURCE_OWNED_CHECK
-            require(_source_owned_code.current is checker and checker.__code__ is code
-                and checker.__defaults__ is defaults)
+            if (_source_owned_code.current is not checker or checker.__code__ is not code
+                    or checker.__defaults__ is not defaults):
+                raise DomainError('VERSION_CONFLICT','Source checker code changed')
             checker()
             _source_owned_code.bound(self)
         w = self.worker
@@ -4014,7 +4016,7 @@ class _ColdTrialGraph:
         if self.source_accounted is not None and 'cold-trial:accounted-source' in inputs:
             if owned is None:
                 gate._graph_trial_accounted_models_from_raw(models, self.source_accounted,
-                    (inputs['cold-trial:accounted-source'] if _source_owned_code.is_packet(self.source_accounted)
+                    (inputs['cold-trial:accounted-source'] if (_SOURCE_BINDING_TYPE is not None and type(self.source_accounted) is _SOURCE_BINDING_TYPE)
                         else raw_slot('cold-trial:accounted-source')), _graph=g)
             else:
                 if native_base:
@@ -4191,7 +4193,7 @@ class _ColdTrialGraph:
 
     def _accounted_fields(self, value):
         """Concrete complete per-aid models/rows/bytes; preserves multiplicity."""
-        if _source_owned_code.is_packet(value):
+        if (_SOURCE_BINDING_TYPE is not None and type(value) is _SOURCE_BINDING_TYPE):
             return _source_owned_code.pin(self.guard,value)
         owned = getattr(self, 'accounted_prewrite', None)
         if owned is not None:
@@ -4362,7 +4364,7 @@ class _ColdTrialGraph:
         pin()
         if self.accounted_prewrite is None:
             require(self._accounted_fields(self.generate_accounted) == g.inputs['cold-trial:accounted-generate'])
-            require((_source_owned_code.facts(g,self.source_accounted)[0] if _source_owned_code.is_packet(self.source_accounted) else self.source_accounted[0])['id'] == t.source_counter_reader.job['id'] and self.generate_accounted[0]['id'] == generation['id'])
+            require((_source_owned_code.facts(g,self.source_accounted)[0] if (_SOURCE_BINDING_TYPE is not None and type(self.source_accounted) is _SOURCE_BINDING_TYPE) else self.source_accounted[0])['id'] == t.source_counter_reader.job['id'] and self.generate_accounted[0]['id'] == generation['id'])
         else:
             self.accounted_prewrite.assert_family(g, self.generate_accounted, 'generate')
             self.accounted_prewrite.assert_upstream_run('source', t.source_counter_reader.job)
@@ -4541,7 +4543,7 @@ class _ColdTrialGraph:
                     with diagnostic.stage('_graph_pb_accounting'):
                         source_id = dispatch._graph_pb_accounting(g, store, c, b, self.generate_accounted.run if self.accounted_prewrite is not None else self.trial.generation_reader.run, self.journal[0], **{'_owned': self.accounted_prewrite} if self.accounted_prewrite is not None else {})
                     pin()
-                    require(source_id == (self.source_accounted.run.id if self.accounted_prewrite is not None else self.source_accounted[0]['id']))
+                    require(source_id == (self.source_accounted.run.id if self.accounted_prewrite is not None else (_source_owned_code.facts(self.guard,self.source_accounted)[0]['id'] if (_SOURCE_BINDING_TYPE is not None and type(self.source_accounted) is _SOURCE_BINDING_TYPE) else self.source_accounted[0]['id'])))
                     source_bound = self.trial.source_binding
                     manifest, _, _ = codec.compile_candidate(source_bound['draft']['candidate'], g.role_limits['trial'])
                     manifest = self._produced(_models, AppManifest, manifest)
@@ -5554,4 +5556,5 @@ def advance_model(worker, run, *, _heartbeat_state=None):
 
 
 _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_limit_values'),
-    (_ColdGraphRead,_ColdTrialGraph))
+    (_ColdGraphRead,_ColdTrialGraph),
+    constants=('_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE'))

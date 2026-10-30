@@ -25,6 +25,11 @@ from .db import (
 )
 from .delivery_graph_apps import controlled
 from .errors import DomainError
+from . import _cold_source_packet as _source_owned_code
+_SOURCE_OWNED_CHECK = _source_owned_code.CHECK
+_SOURCE_BINDING_TYPE = _source_owned_code._BINDING
+_SOURCE_OWNED_ENABLED = _source_owned_code._SOURCE_OK
+_SOURCE_CAPACITY = _source_owned_code.Capacity
 from . import _cold_archive_packet as _owned_archive_code
 _OWNED_ARCHIVE_CHECK = _owned_archive_code.CHECK
 _OWNED_ARCHIVE_CAPACITY = _owned_archive_code.Capacity
@@ -416,7 +421,7 @@ def _graph_source_bodies(graph, store, c, user, contract, ledger, source_facts, 
             from . import cold_accounted
             owned = cold_accounted._source_test_family(_accounted_test, graph)
         from . import _cold_source_packet as source_owned
-        source_packet=source_facts if source_owned.is_packet(source_facts) else None
+        source_packet=source_facts if (_SOURCE_BINDING_TYPE is not None and type(source_facts) is _SOURCE_BINDING_TYPE) else None
         job, rows, chains, ns_reads = (source_owned.facts(graph,source_packet)
             if source_packet is not None else source_facts)
         require(type(ledger) is Ledger and gate._trial_result(evidence_mode(c, job), _guard) == 'LIVE')
@@ -496,7 +501,7 @@ def _graph_resolve_trial_source(graph, store, c, user, contract, approval_key, l
             else:
                 from . import _cold_source_packet as source_owned
                 require(source_owned.image.business_equal(source_owned.facts(graph,source_facts)[0],job)
-                    if source_owned.is_packet(source_facts) else source_facts[0] == job)
+                    if (_SOURCE_BINDING_TYPE is not None and type(source_facts) is _SOURCE_BINDING_TYPE) else source_facts[0] == job)
             accepted = gate._trial_result(gate._saved(c, user, gate._trial_result(gate.entity(contract, **{'_guard': _guard} if _guard is not None else {}), _guard), gate.PHASE, 'source', gate.StageApproveInput, **{'_guard': _guard} if _guard is not None else {}), _guard)
             gate._graph_trial_produced(graph, store, c, _models, gate.StageApproveInput, accepted)
             gate._trial_result(_source_accepted_from_facts(approval_key, accepted, current, job, _guard=_guard), _guard)
@@ -559,5 +564,7 @@ _OWNED_ARCHIVE_PRODUCERS = _owned_archive_code.witness(globals(),
 
 
 from . import _cold_source_packet as _source_owned_code
-_source_owned_code.register(3,globals(),('_graph_source_bodies','_graph_resolve_trial_source',
-    '_source_slots_from_facts','_source_row_from_facts','_source_exchange_from_facts'))
+_source_owned_code.register(3,globals(),tuple(name for name,value in globals().copy().items()
+    if type(value) is _source_owned_code.FunctionType and value.__module__==__name__)
+    + ('strict_json','fingerprint','pair','remember'),
+    constants=('_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_SOURCE_OWNED_ENABLED','_SOURCE_CAPACITY'))

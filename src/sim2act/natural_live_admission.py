@@ -30,6 +30,11 @@ from .db import (
 )
 from .delivery_graph_apps import controlled, lookup
 from .errors import DomainError
+from . import _cold_source_packet as _source_owned_code
+_SOURCE_OWNED_CHECK = _source_owned_code.CHECK
+_SOURCE_BINDING_TYPE = _source_owned_code._BINDING
+_SOURCE_OWNED_ENABLED = _source_owned_code._SOURCE_OK
+_SOURCE_CAPACITY = _source_owned_code.Capacity
 from .goals import GoalCardInput, validate_card_version
 from .natural_specs import Recipe
 from .text_logic_reuse import pair, remember
@@ -1009,7 +1014,7 @@ def _graph_stage_current(graph, store, c, user, contract, stage, stage_facts, *,
             require(type(extraction) is tuple and len(extraction) == 4)
             extraction_draft, body, extraction_target, extraction_goal = extraction
             from . import _cold_source_packet as source_owned
-            source_packet = source if source_owned.is_packet(source) else None
+            source_packet = source if (_SOURCE_BINDING_TYPE is not None and type(source) is _SOURCE_BINDING_TYPE) else None
             if _owned is None:
                 source_run, source_actual, source_chains, source_ns = (
                     source_owned.facts(graph,source_packet) if source_packet is not None else source)
@@ -1044,7 +1049,7 @@ def _graph_stage_current(graph, store, c, user, contract, stage, stage_facts, *,
             accepted = _trial_result(_saved(c, user, _trial_result(entity(contract, **{'_guard': _guard} if _guard is not None else {}), _guard), PHASE, 'source', StageApproveInput, **{'_guard': _guard} if _guard is not None else {}), _guard)
             _graph_trial_produced(graph, store, c, _models, StageApproveInput, accepted)
             _trial_result(_stage_source_phase_from_facts(contract, approval, gen_id, accepted, _guard=_guard), _guard)
-            require(accepted.authority.run_id == (source.run.id if _owned is not None else source[0]['id']))
+            require(accepted.authority.run_id == (source.run.id if _owned is not None else source_run['id']))
         timing = _trial_result(_stage_deadlines(c, user, contract, stage, gen_id, _guard=_guard), _guard)
         fields = _trial_result(_stage_authority_fields_from_facts(contract, stage, timing, job, bound, inst, draft, release, gen_id, raw, target, _guard=_guard), _guard)
         authority = _trial_result(StageAuthority(**fields, authorization_fingerprint=_trial_result(authorization_fingerprint(c, user, contract.project_id, job['runtime_id'], [x.resource_id for x in contract.bindings], **{'_guard': _guard} if _guard is not None else {}), _guard)), _guard)
@@ -1556,7 +1561,7 @@ def _graph_trial_accounted_models_from_raw(models, value, saved, *, _graph=None)
     from . import production_trial_sender as sender
 
     from . import _cold_source_packet as source_owned
-    if source_owned.is_packet(value):
+    if (_SOURCE_BINDING_TYPE is not None and type(value) is _SOURCE_BINDING_TYPE):
         require(_graph is not None and saved is source_owned.pin(_graph,value))
         return
     saved = _trial_pure_mapping(saved)
@@ -1744,12 +1749,6 @@ def raw_snapshot_backend():
 
 
 from . import _cold_source_packet as _source_owned_code
-_source_owned_code.register(1,globals(),(
-    '_graph_trial_accounted_models_from_raw','_graph_trial_stage_models_from_raw',
-    '_graph_trial_stage_raw_from_raw','_graph_trial_accounted_models','_graph_trial_stage_models',
-    '_graph_trial_stage_raw','_graph_stage_current','_graph_trial_accounted_raw',
-    '_graph_trial_stage_parent_pin','_trial_typed_guard','_trial_typed_values',
-    '_graph_trial_pin','require','_trial_typed_storage','_trial_typed_nested_classes',
-    '_trial_pure_mapping','_trial_pure_data','_trial_typed_equal','_trial_typed_hold',
-    '_graph_trial_journal_models','_graph_trial_journal_models_from_raw',
-    '_graph_trial_contract_models','_graph_trial_produced','_graph_trial_produced_legacy'))
+_source_owned_code.register(1,globals(),tuple(name for name,value in globals().copy().items()
+    if type(value) is _source_owned_code.FunctionType and value.__module__==__name__),
+    constants=('_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_SOURCE_OWNED_ENABLED','_SOURCE_CAPACITY'))

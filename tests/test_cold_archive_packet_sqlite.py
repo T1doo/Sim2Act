@@ -45,7 +45,8 @@ def test_actual_post_producer_complete_consumers_and_legacy_equivalence(sql_fact
         assert shown(requests)==old.request_bodies and shown(responses)==old.response_bodies
         dispatch._graph_pb_archive_chain(post.graph,f.store,c,f.binding,post.state,new,post.source)
         assert packet.read(new)[0]['source_run_id']==f.source_id
-        # All legacy source raw/model facts still receive the original checks.
+        # Source now has its own complete immutable producer/consumer closure;
+        # the unconverted graph and Journal/Generate facts keep full checks.
         post.graph.check(f.store,c)
         values=post.graph.input_bytes(_snapshot_values=True)
         old_values=dict(values,inputs=dict(values['inputs']))
@@ -87,7 +88,7 @@ def test_owned_archive_does_not_exempt_other_data_or_lifecycle(sql_facts,change)
     f.worker._settlement_interval=(time.monotonic()+120,time.time()+120)
     with pytest.raises(DomainError),f.store.tx() as c,segment(f,c,phase='post') as post:
         new=resolve(post)
-        if change=='unmigrated-alias':post.source[1][0]['usage']['tokens']['total_tokens']+=1
+        if change=='unmigrated-alias':post.generated[1][0]['usage']['tokens']['total_tokens']+=1
         if change=='stop':f.worker.stop.set()
         if change=='transaction':c.rollback()
         dispatch._graph_pb_archive_chain(post.graph,f.store,c,f.binding,post.state,new,post.source)
@@ -110,4 +111,6 @@ def test_callback_cannot_change_view_semantics_after_entry_guard(sql_facts,monke
                 frame=frame.f_back
         monkeypatch.setattr(gate,'_graph_trial_pin',callback)
         dispatch._graph_pb_archive_chain(post.graph,f.store,c,f.binding,post.state,new,post.source)
-    assert changed and events==[]
+    # The now-closed Source caller code registry refuses this unknown pin
+    # callback before it can reach the later archive-view mutation.
+    assert not changed and events==[]

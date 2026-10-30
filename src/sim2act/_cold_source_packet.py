@@ -21,7 +21,7 @@ _SOURCE_OK = native is not None and native.SOURCE_SHA256 == hashlib.sha256(
     b''.join(Path(__file__).with_name(name).read_bytes() for name in _FILES)).hexdigest()
 _ENTRIES = (() if not _SOURCE_OK else tuple((name,getattr(native,name)) for name in
     ('Owned','Binding','View','read_owner','UNSUPPORTED','make_owned','owned_data','owned_pin','make_binding',
-     'binding_owner','binding_current','binding_pin','match_live','match_node','match_nodes','register_code','verify_code')))
+     'binding_owner','binding_current','binding_pin','match_live','match_node','match_nodes','match_ledger','register_code','verify_code')))
 _BINDING = None if not _SOURCE_OK else native.Binding
 if _SOURCE_OK:image.View=native.View
 
@@ -30,15 +30,33 @@ def require(value):
     if not value:raise DomainError('VERSION_CONFLICT','Complete owned Source changed')
 
 
+def _function_state(fn,active=None):
+    if active is None:active=set()
+    active.add(id(fn))
+    closure=fn.__closure__
+    cells=[]
+    for cell in closure or ():
+        value=cell.cell_contents
+        child=(_function_state(value,active) if type(value) is FunctionType and id(value) not in active else None)
+        cells.append((cell,value,child))
+    active.remove(id(fn))
+    return (fn,fn.__code__,fn.__defaults__,fn.__kwdefaults__,
+        tuple((fn.__kwdefaults__ or {}).items()),closure,tuple(cells))
+
+
 def _witness(namespace,names):
-    return (namespace,tuple((name,namespace[name],namespace[name].__code__,
-        namespace[name].__defaults__,namespace[name].__kwdefaults__,
-        tuple((namespace[name].__kwdefaults__ or {}).items())) for name in names))
+    return (namespace,tuple((name,namespace[name],(_function_state(namespace[name]),)) for name in names))
 
 
 def _class(cls):
-    return (cls,type(cls),cls.__mro__,tuple(vars(cls).items()),
-        _witness(vars(cls),tuple(name for name,value in vars(cls).items() if type(value) is FunctionType))[1])
+    methods=[]
+    for name,value in vars(cls).items():
+        functions=((value,) if type(value) is FunctionType else
+            (value.__func__,) if type(value) in (classmethod,staticmethod) else
+            tuple(v for v in (value.fget,value.fset,value.fdel) if type(v) is FunctionType)
+                if type(value) is property else ())
+        if functions:methods.append((name,value,tuple(_function_state(fn) for fn in functions)))
+    return (cls,type(cls),cls.__mro__,tuple(vars(cls).items()),tuple(methods))
 
 
 def register(index, namespace, names, classes=(), constants=()):
@@ -69,7 +87,7 @@ def is_packet(value):
 
 
 def _scope(graph):
-    return (graph.inputs,graph.role_limits,graph.binding,graph.connection,graph.transaction,graph.scope)
+    return (graph,graph.inputs,graph.role_limits,graph.binding,graph.connection,graph.transaction,graph.scope)
 
 
 def _scope_current(graph,scope):
@@ -109,7 +127,7 @@ def _config(graph):
     from .natural_source_archives import BodyArchive
     require(structure._qualified(graph))
     models=(policy.Slot,policy.ReservationIdentity,policy.Outcome,sender.Capture,BodyArchive)
-    require(all(schema._fixed_schema(cls) for cls in models))
+    require(all(schema._fixed_schema(cls) for cls in (*models,policy.Ledger)))
     def descriptor(cls,name):
         return next(vars(base)[name] for base in cls.__mro__ if name in vars(base))
     model_config=tuple((cls,cls.__module__+'.'+cls.__qualname__,
@@ -120,7 +138,8 @@ def _config(graph):
     return (model_config,rt._ColdGraphRowMapping,
         tuple(descriptor(rt._ColdGraphRowMapping,k) for k in ('_parent','_data','_key_to_index')),
         tuple((cls,descriptor(cls,'_keys')) for cls in (rt._ColdGraphCursorMeta,rt._ColdGraphSimpleMeta)),
-        rt._ColdGraphQuotedName,(rt.Limits,descriptor(rt.Limits,'__dict__'),limit_names))
+        rt._ColdGraphQuotedName,(rt.Limits,descriptor(rt.Limits,'__dict__'),limit_names),
+        (policy.Ledger,descriptor(policy.Ledger,'__dict__')))
 
 
 def publish(graph,value,raw,guard):
@@ -129,6 +148,14 @@ def publish(graph,value,raw,guard):
     require(type(graph) is _ColdGraphRead and graph.phase=='post' and KEY not in graph.inputs
         and vars(graph).get('_source_owned_binding') is None)
     current();scope=_scope(graph);config=_config(graph)
+    # Ownership representation is broader than the original raw domain (for
+    # model field sets and hidden row storage). Preserve the entire original
+    # facts<->raw and schema/storage gate ONCE, before dropping the old cohort.
+    from . import natural_live_admission as gate
+    initial_models=[]
+    gate._graph_trial_accounted_models_from_raw(initial_models,value,raw)
+    gate._trial_typed_values(initial_models)
+    guard();current()
     _scope_current(graph,scope)
     outside=graph.input_bytes(_snapshot_values=True)
     try:
@@ -186,32 +213,20 @@ def slot_join(graph,packet,state,owned_slot,aid,guard):
     from . import natural_live_admission as gate, production_trial_policy as policy
     bound(graph,packet)
     require(type(state) is policy.Ledger)
-    matches=tuple(slot for slot in state.slots if slot.identity.attempt_id==aid)
-    require(len(matches)==1 and type(matches[0]) is policy.Slot
-        and matches[0].identity.stage=='source' and type(owned_slot) is image.View
-        and owned_slot.node()[0]=='m' and dict(owned_slot.data()[7]).get(owned_slot.ref())==0)
-    current_slot=matches[0]
+    require(type(owned_slot) is image.View
+        and owned_slot.node()[0]=='m' and dict(owned_slot.data()[7]).get(owned_slot.ref())==0
+        and owned_slot.data() is native.owned_data(native.binding_owner(packet))
+        and owned_slot.identity.attempt_id==aid)
     config=_config(graph)
-    original_slots=object.__getattribute__(state,'__dict__')['slots']
-    roots=[]
-    for chain in facts(graph,packet)[2]:
-        expected=chain[0]
-        candidates=tuple(slot for slot in original_slots
-            if type(slot) is policy.Slot
-            and object.__getattribute__(slot,'__dict__')['identity'].attempt_id==expected.identity.attempt_id)
-        require(len(candidates)==1)
-        roots.append((expected.ref(),candidates[0]))
-    roots=tuple(roots)
+    refs=tuple(chain[0].ref() for chain in facts(graph,packet)[2])
     owner=native.binding_owner(bound(graph,packet))
     guard();current()
-    require(object.__getattribute__(state,'__dict__')['slots'] is original_slots
-        and native.match_nodes(owner,roots,config))
-    # All source slots share one native comparison memo. Cross-slot field-set
-    # and nested-container aliases cannot split/merge through per-slot checks.
+    require(native.match_ledger(owner,refs,state,config))
+    # Original post-callback dynamic/typed checks remain. C then reselects from
+    # the actual Ledger and compares all source slots with one alias memo.
     guard();current()
-    require(object.__getattribute__(state,'__dict__')['slots'] is original_slots
-        and native.match_nodes(owner,roots,config))
-    return matches[0]
+    require(native.match_ledger(owner,refs,state,config))
+    return None
 
 
 # Source's own functions, view semantics and bounded capture are fixed before
