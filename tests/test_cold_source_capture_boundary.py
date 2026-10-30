@@ -5,6 +5,30 @@ from sqlalchemy.sql.elements import quoted_name
 from sim2act import _cold_source_image as image
 
 
+def test_completed_capture_releases_recursive_walker_without_later_gc():
+    import gc,sys,types,weakref
+    code=next(c for c in image.capture.__code__.co_consts
+        if isinstance(c,types.CodeType) and c.co_name=='visit')
+    monitor=sys.monitoring
+    slot=next(i for i in (3,5,4) if monitor.get_tool(i) is None)
+    walkers=[]
+    def entered(target,offset):
+        if walkers:return
+        frame=sys._getframe(1)
+        walkers.append(weakref.ref(frame.f_locals['recur']))
+        gc.collect()  # Reset prior garbage; never disable or alter GC policy.
+    monitor.use_tool_id(slot,'Capture temporary lifetime regression')
+    try:
+        monitor.register_callback(slot,monitor.events.PY_START,entered)
+        monitor.set_local_events(slot,code,monitor.events.PY_START)
+        image.capture({'kept':['synthetic']},{'outside':[1,2,3]})
+        assert len(walkers)==1 and walkers[0]() is None
+    finally:
+        monitor.set_local_events(slot,code,0)
+        monitor.register_callback(slot,monitor.events.PY_START,None)
+        monitor.free_tool_id(slot)
+
+
 def test_shared_parent_marks_all_incoming_descendants_and_leaf_identity():
     leaf=''.join(('shared ', 'carrier'))
     child={'leaf':leaf}

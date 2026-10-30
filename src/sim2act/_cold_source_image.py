@@ -27,6 +27,10 @@ def capture(incoming, outside, *, _parents=None):
     from sim2act.contracts import Limits
     models=(policy.Slot,policy.ReservationIdentity,policy.Outcome,sender.Capture,BodyArchive)
     nodes=[];origins=[];memo={};held=[];active=set();synthetic=[];leaves=[];kinds=[]
+    # Outside-only nodes need identity/type/budget state, never an emitted
+    # record or an anchor. Negative refs keep their joint alias domain apart
+    # from the unchanged incoming table. Held refs still prevent ID reuse.
+    outside_kinds=[]
     work=size=0
     virtual_leaves=set();real_leaves=set();virtual_ids=set();virtual_containers=set()
     external=set()
@@ -39,10 +43,10 @@ def capture(incoming, outside, *, _parents=None):
             ref=todo.pop()
             if ref in external:continue
             external.add(ref);todo.extend(nodes[ref][2])
-    def visit(value,depth=0,mode='source',synthetic_leaf=False):
+    def visit(recur,value,depth=0,mode='source',synthetic_leaf=False):
         nonlocal work,size
         work+=1
-        if work>_MAX_EDGES or depth>64 or len(nodes)>=_MAX_NODES:raise Bounds('capture')
+        if work>_MAX_EDGES or depth>64 or len(nodes)+len(outside_kinds)>=_MAX_NODES:raise Bounds('capture')
         kind=type(value);ident=id(value)
         parent=None
         if View is not None and kind is View:
@@ -61,14 +65,17 @@ def capture(incoming, outside, *, _parents=None):
         if not scalar and ident in memo:
             ref=memo[ident]
             if tag in ('s','b'):(virtual_leaves if synthetic_leaf else real_leaves).add(ref)
-            if nodes[ref][0]!=tag:raise Unsupported('typed/raw interpretation conflict')
-            if mode=='outside' and ref not in external:mark_external(ref)
+            prior=nodes[ref][0] if ref>=0 else outside_kinds[-ref-1]
+            if prior!=tag:raise Unsupported('typed/raw interpretation conflict')
+            if mode=='outside' and ref>=0 and ref not in external:mark_external(ref)
             return ref
-        ref=len(nodes);nodes.append(None);origins.append(value);kinds.append(tag)
-        if mode=='outside':external.add(ref)
+        if mode=='source':
+            ref=len(nodes);nodes.append(None);origins.append(value);kinds.append(tag)
+        else:
+            ref=-len(outside_kinds)-1;outside_kinds.append(tag)
         if not scalar:memo[ident]=ref;held.append(value)
         active.add(ident)
-        def child(v,virtual=False):return visit(v,depth+1,mode,virtual)
+        def child(v,virtual=False):return recur(recur,v,depth+1,mode,virtual)
         if tag=='a':payload=None;edges=()
         elif tag=='o':
             ordinal=next((i for i,p in enumerate(_parents) if p is parent),None)
@@ -128,11 +135,13 @@ def capture(incoming, outside, *, _parents=None):
             if type(raw) is not dict or type(selected) is not set or extra is not None or private is not None:raise Unsupported('model storage')
             schema=kind.__module__+'.'+kind.__qualname__;synthetic.append(schema)
             payload=(child(schema,True),child(raw),child(selected),child(extra),child(private));edges=payload
-        nodes[ref]=(tag,payload,edges) if mode=='source' else (tag,None,())
+        if mode=='source':nodes[ref]=(tag,payload,edges)
         active.remove(ident)
         return ref
-    root=visit(incoming)
-    visit(outside,mode='outside')
+    # Explicit recursion avoids a function->closure->function cycle retaining
+    # every temporary outside record/reference until a later GC collection.
+    root=visit(visit,incoming)
+    visit(visit,outside,mode='outside')
     def reachable(start):
         seen=set();todo=[start]
         while todo:
