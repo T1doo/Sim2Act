@@ -500,6 +500,11 @@ def schema_check(schema: dict, depth=0):
 
 
 def validate_value(schema: dict, value, path="input"):
+    from ._cold_source_image import View,plain
+    if View is not None and type(value) is View:
+        if value.node()[0] not in ('d','l','q'):
+            raise DomainError('INVALID_INPUT',path+' has wrong type')
+        value=plain(value)
     kind = schema["type"]
     if value is None and schema.get("nullable") is True:
         if "enum" not in schema or any(x is None for x in schema["enum"]):

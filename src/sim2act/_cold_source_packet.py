@@ -15,13 +15,14 @@ except ImportError:
     native = None
 
 KEY = 'cold-trial:accounted-source'
+FACT_TAG = 'sim2act:owned-source-fact.v1'
 _MODULE = native
 _FILES = ('_cold_source_owned_impl.c','_cold_source_live_match.h','_cold_source_code.h','_cold_source_view.h','_cold_source_shape.h')
 _SOURCE_OK = native is not None and native.SOURCE_SHA256 == hashlib.sha256(
     b''.join(Path(__file__).with_name(name).read_bytes() for name in _FILES)).hexdigest()
 _ENTRIES = (() if not _SOURCE_OK else tuple((name,getattr(native,name)) for name in
     ('Owned','Binding','View','read_owner','UNSUPPORTED','make_owned','owned_data','owned_pin','make_binding',
-     'binding_owner','binding_current','binding_pin','match_live','match_node','match_nodes','match_ledger','register_code','verify_code')))
+     'binding_owner','binding_current','binding_pin','match_live','match_node','match_nodes','match_ledger','register_code','verify_code','make_composite','view_pin')))
 _BINDING = None if not _SOURCE_OK else native.Binding
 if _SOURCE_OK:image.View=native.View
 
@@ -95,6 +96,70 @@ def _scope_current(graph,scope):
         raise DomainError('VERSION_CONFLICT','Source publication roots were rebound')
 
 
+def fact_current(graph):
+    """Fresh scoped registry/root identity checks; contains no cached PASS."""
+    registry=vars(graph).get('_source_fact_bindings',{})
+    require(type(registry) is dict and type(graph.inputs) is dict)
+    require(all(type(name) is str for name in registry))
+    marked={name for name,value in graph.inputs.items() if type(value) is tuple
+        and len(value)==2 and type(value[0]) is str and value[0]==FACT_TAG}
+    require(set(registry)==marked)
+    if not marked:return
+    current()
+    for name,entry in registry.items():
+        require(type(name) is str and type(entry) is tuple and len(entry)==2)
+        packet,view=entry
+        require(type(packet) is _BINDING and type(view) is image.View
+            and native.binding_current(packet,native.binding_owner(packet),graph.nonce,graph.epoch,graph.phase,_scope(graph))
+            and graph.inputs[name][1] is native.binding_pin(packet)
+            and image.same(view,native.read_owner(native.binding_owner(packet))))
+
+
+def fact(graph,name):
+    registry=vars(graph).get('_source_fact_bindings',{})
+    if name not in registry:return graph.inputs[name]
+    fact_current(graph)
+    return registry[name][1]
+
+
+def own_fact(graph,name,value):
+    """First-producer transfer, before returning a fact to any consumer.
+
+    Same complete native live comparison and outside alias boundary as the
+    accounted Source handoff. Existing mutable boundary anchors stay checked.
+    """
+    from .natural_spec_runtime import _ColdGraphRead
+    require(type(graph) is _ColdGraphRead and graph.active and name not in graph.inputs)
+    if type(value) in (str,bytes,int,float,bool,type(None)):
+        _ColdGraphRead.add(graph,name,value)
+        return value
+    graph.check(graph.store,graph.connection);current();scope=_scope(graph)
+    from .natural_spec_runtime import _cold_graph_validate_inputs
+    _cold_graph_validate_inputs(value,_forbid_root=graph.inputs)
+    # Validate the original canonical comparison domain once at first output.
+    # Subsequent same immutable-node references have exactly that same value.
+    from .natural_spec_runtime import _model_inputs
+    _model_inputs(value)
+    outside=graph.input_bytes(_snapshot_values=True);parents=[]
+    data,anchors=image.capture(value,outside,_parents=parents)
+    owner=native.make_composite(data,tuple(parents))
+    require(type(owner) is native.Owned)
+    graph.check(graph.store,graph.connection);current();_scope_current(graph,scope)
+    require(native.match_live(owner,value,anchors,_config(graph),outside))
+    packet=native.make_binding(owner,graph.nonce,graph.epoch,graph.phase,anchors,scope)
+    require(type(packet) is _BINDING)
+    view=native.read_owner(owner)
+    require(type(view) is image.View)
+    try:
+        _scope_current(graph,scope)
+        _ColdGraphRead.add(graph,name,(FACT_TAG,native.binding_pin(packet)))
+        vars(graph).setdefault('_source_fact_bindings',{})[name]=(packet,view)
+        _ColdGraphRead.check(graph,graph.store,graph.connection)
+        return view
+    except BaseException:
+        _ColdGraphRead.invalidate(graph);raise
+
+
 def bound(graph,value=None):
     current()
     packet=vars(graph).get('_source_owned_binding')
@@ -159,11 +224,12 @@ def publish(graph,value,raw,guard):
     _scope_current(graph,scope)
     outside=graph.input_bytes(_snapshot_values=True)
     try:
-        data,anchors=image.capture((value,raw),outside)
+        parents=[]
+        data,anchors=image.capture((value,raw),outside,_parents=parents)
     except (image.Bounds,image.Unsupported):
         # Nothing was published. The caller retains the entire legacy route.
         raise Capacity('Source prepublication capacity or representation') from None
-    owner=native.make_owned(data)
+    owner=native.make_composite(data,tuple(parents))
     if owner is native.UNSUPPORTED:
         raise Capacity('Source native representation capacity')
     require(type(owner) is native.Owned)
@@ -235,7 +301,7 @@ def slot_join(graph,packet,state,owned_slot,aid,guard):
 if _SOURCE_OK:
     _own_names=tuple(k for k,v in globals().copy().items() if type(v) is FunctionType and v.__module__==__name__)
     _image_names=tuple(k for k,v in vars(image).items() if type(v) is FunctionType and v.__module__==image.__name__)
-    _constants=tuple((k,globals()[k]) for k in ('KEY','native','image','_MODULE','_SOURCE_OK','_ENTRIES','_BINDING'))
+    _constants=tuple((k,globals()[k]) for k in ('KEY','FACT_TAG','native','image','_MODULE','_SOURCE_OK','_ENTRIES','_BINDING'))
     native.register_code(0,((_witness(globals(),_own_names),_witness(vars(image),_image_names)),
         tuple(_class(c) for c in (image.Unsupported,image.Bounds,Capacity)),
         ((globals(),_constants),(vars(native),_ENTRIES),(vars(image),tuple((k,vars(image)[k]) for k in

@@ -698,9 +698,15 @@ def new_id(prefix):
 
 
 def fingerprint(value):
+    def owned_json(item):
+        from ._cold_source_image import View, plain
+        if View is not None and type(item) is View:
+            return plain(item)
+        raise TypeError(f"Object of type {type(item).__name__} is not JSON serializable")
     return hashlib.sha256(
         json.dumps(
-            value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+            value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,
+            default=owned_json,
         ).encode()
     ).hexdigest()
 
@@ -1293,7 +1299,8 @@ class Store:
         Internal callers must not cross writes, callbacks or transactions. The
         complete typed/hash/resource/Goal validation is always performed.
         """
-        if not isinstance(run["context"], dict):
+        from ._cold_source_image import is_kind
+        if not isinstance(run["context"], dict) and not is_kind(run["context"],'d'):
             raise DomainError("VERSION_CONFLICT", "Invalid persisted Run context")
         saved = (
             c.execute(select(run_contracts).where(run_contracts.c.run_id == run["id"]))

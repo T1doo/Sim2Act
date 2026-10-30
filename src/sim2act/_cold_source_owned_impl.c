@@ -7,8 +7,10 @@
 #endif
 /* Prototype immutable parsed data owner. No model/row/permission object may
  * enter data. Wire metadata is derived here, never supplied by a caller. */
-typedef struct {PyObject_HEAD PyObject *data,*pin;} Owned;
+typedef struct {PyObject_HEAD PyObject *data,*pin,*parents;unsigned int depth;} Owned;
 static PyTypeObject OwnedType;
+typedef struct {PyObject_HEAD Owned*owner;Py_ssize_t ref;} SourceView;
+static PyTypeObject SourceViewType;
 static PyObject *unsupported;
 static int immutable(PyObject*v,size_t*work,size_t*bytes,int depth){
  if(++*work>1000000||depth>64)return 0;
@@ -38,7 +40,7 @@ static int immutable(PyObject*v,size_t*work,size_t*bytes,int depth){
 }
 static void owned_free(PyObject*v){
  Owned*o=(Owned*)v;PyObject*error=PyErr_GetRaisedException();
- Py_XDECREF(o->data);Py_XDECREF(o->pin);Py_TYPE(v)->tp_free(v);
+ Py_XDECREF(o->data);Py_XDECREF(o->pin);Py_XDECREF(o->parents);Py_TYPE(v)->tp_free(v);
  if(error)PyErr_SetRaisedException(error);
 }
 static PyObject*no_new(PyTypeObject*t,PyObject*a,PyObject*k){
@@ -48,8 +50,15 @@ static PyTypeObject OwnedType={PyVarObject_HEAD_INIT(NULL,0)
  .tp_name="_cold_source_owned_impl.Owned",.tp_basicsize=sizeof(Owned),
  .tp_flags=Py_TPFLAGS_DEFAULT|Py_TPFLAGS_IMMUTABLETYPE,.tp_new=no_new,.tp_dealloc=owned_free};
 #include "_cold_source_shape.h"
-static PyObject*make_owned(PyObject*self,PyObject*data){
- (void)self;
+static PyObject*make_owned_core(PyObject*data,PyObject*parents){
+ if(!PyTuple_CheckExact(parents)||PyTuple_GET_SIZE(parents)>256)return Py_NewRef(unsupported);
+ unsigned int depth=1;
+ for(Py_ssize_t i=0;i<PyTuple_GET_SIZE(parents);i++){
+  PyObject*p=PyTuple_GET_ITEM(parents,i);
+  if(Py_TYPE(p)!=&OwnedType||((Owned*)p)->depth>=64)return Py_NewRef(unsupported);
+  if(((Owned*)p)->depth+1>depth)depth=((Owned*)p)->depth+1;
+  for(Py_ssize_t j=0;j<i;j++)if(PyTuple_GET_ITEM(parents,j)==p)return Py_NewRef(unsupported);
+ }
  if(!PyTuple_CheckExact(data)||PyTuple_GET_SIZE(data)!=8)return Py_NewRef(unsupported);
  PyObject*leaves=PyTuple_GET_ITEM(data,2);
  if(!PyTuple_CheckExact(leaves))return Py_NewRef(unsupported);
@@ -61,6 +70,16 @@ static PyObject*make_owned(PyObject*self,PyObject*data){
  if(ok<0)return NULL;
  if(!ok)return Py_NewRef(unsupported);
  if(!source_image_shape(data))return Py_NewRef(unsupported);
+ PyObject*nodes=PyTuple_GET_ITEM(data,1);
+ for(Py_ssize_t i=0;i<PyTuple_GET_SIZE(nodes);i++){
+  PyObject*node=PyTuple_GET_ITEM(nodes,i);
+  if(PyUnicode_READ_CHAR(PyTuple_GET_ITEM(node,0),0)=='o'){
+   PyObject*p=PyTuple_GET_ITEM(node,1);Py_ssize_t ordinal,ref;
+   if(!shape_ref(PyTuple_GET_ITEM(p,0),PyTuple_GET_SIZE(parents),&ordinal))return Py_NewRef(unsupported);
+   Owned*parent=(Owned*)PyTuple_GET_ITEM(parents,ordinal);
+   if(!shape_ref(PyTuple_GET_ITEM(p,1),PyTuple_GET_SIZE(PyTuple_GET_ITEM(parent->data,1)),&ref))return Py_NewRef(unsupported);
+  }
+ }
  /* All data are now exact immutable builtins. Marshal writes only metadata;
   * original leaves remain the exact original objects in the full graph pin. */
  Py_ssize_t n=PyTuple_GET_SIZE(data);PyObject*metadata=PyTuple_New(n-1);
@@ -69,9 +88,21 @@ static PyObject*make_owned(PyObject*self,PyObject*data){
  PyObject*wire=PyMarshal_WriteObjectToString(metadata,4);Py_DECREF(metadata);
  if(!wire)return NULL;
  if(PyBytes_GET_SIZE(wire)>16*1024*1024){Py_DECREF(wire);return Py_NewRef(unsupported);}
- PyObject*pin=PyTuple_Pack(2,wire,leaves);Py_DECREF(wire);if(!pin)return NULL;
+ PyObject*parent_pins=PyTuple_New(PyTuple_GET_SIZE(parents));
+ if(!parent_pins){Py_DECREF(wire);return NULL;}
+ for(Py_ssize_t i=0;i<PyTuple_GET_SIZE(parents);i++)PyTuple_SET_ITEM(parent_pins,i,Py_NewRef(((Owned*)PyTuple_GET_ITEM(parents,i))->pin));
+ PyObject*pin=PyTuple_GET_SIZE(parents)?PyTuple_Pack(3,wire,leaves,parent_pins):PyTuple_Pack(2,wire,leaves);
+ Py_DECREF(parent_pins);Py_DECREF(wire);if(!pin)return NULL;
  Owned*o=PyObject_New(Owned,&OwnedType);if(!o){Py_DECREF(pin);return NULL;}
- o->data=Py_NewRef(data);o->pin=pin;return (PyObject*)o;
+ o->data=Py_NewRef(data);o->pin=pin;o->parents=Py_NewRef(parents);o->depth=depth;return (PyObject*)o;
+}
+static PyObject*make_owned(PyObject*self,PyObject*data){
+ (void)self;PyObject*parents=PyTuple_New(0);if(!parents)return NULL;
+ PyObject*r=make_owned_core(data,parents);Py_DECREF(parents);return r;
+}
+static PyObject*make_composite(PyObject*self,PyObject*args){
+ (void)self;PyObject*data,*parents;if(!PyArg_ParseTuple(args,"OO",&data,&parents))return NULL;
+ return make_owned_core(data,parents);
 }
 static PyObject*owned_data(PyObject*self,PyObject*v){
  (void)self;if(Py_TYPE(v)!=&OwnedType){PyErr_SetString(PyExc_TypeError,"Exact immutable owner required");return NULL;}
@@ -103,7 +134,7 @@ static PyObject*make_binding(PyObject*self,PyObject*args){
  if(Py_TYPE(owner)!=&OwnedType||Py_TYPE(nonce)!=&PyBaseObject_Type||!PyLong_CheckExact(epoch)
   ||!PyUnicode_CheckExact(phase)||!PyTuple_CheckExact(anchors)||!PyTuple_CheckExact(scope)||PyTuple_GET_SIZE(scope)!=7)return Py_NewRef(unsupported);
  unsigned long long e=PyLong_AsUnsignedLongLong(epoch);if(PyErr_Occurred())return NULL;
- if(PyUnicode_CompareWithASCIIString(phase,"post")!=0)return Py_NewRef(unsupported);
+ if(PyUnicode_CompareWithASCIIString(phase,"post")!=0&&PyUnicode_CompareWithASCIIString(phase,"pre")!=0)return Py_NewRef(unsupported);
  if(binding_serial>=INT64_MAX){PyErr_SetString(PyExc_RuntimeError,"Binding identity exhausted");return NULL;}
  PyObject*serial=PyLong_FromUnsignedLongLong(++binding_serial);if(!serial)return NULL;
  PyObject*pin=PyTuple_Pack(3,serial,((Owned*)owner)->pin,anchors);Py_DECREF(serial);if(!pin)return NULL;
@@ -130,7 +161,12 @@ static PyObject*binding_owner(PyObject*self,PyObject*v){
 }
 #include "_cold_source_code.h"
 #include "_cold_source_view.h"
+static PyObject*source_view_pin(PyObject*self,PyObject*v){
+ (void)self;if(Py_TYPE(v)!=&SourceViewType){PyErr_SetString(PyExc_TypeError,"Exact immutable Source view required");return NULL;}
+ return view_pin(v,NULL);
+}
 static PyMethodDef methods[]={
+ {"view_pin",source_view_pin,METH_O,"Complete immutable owner pin and exact node reference, not a semantic fingerprint."},
  {"match_ledger",match_ledger,METH_VARARGS,"Select and fully compare current source slots inside the same bounded interval."},
  {"read_owner",read_owner,METH_O,"Read a static immutable view of complete owned data."},
  {"register_code",register_code,METH_VARARGS,"One-time import code configuration; no data."},
@@ -145,6 +181,7 @@ static PyMethodDef methods[]={
  {"binding_current",binding_current,METH_VARARGS,"Exact nonce/epoch/phase and immutable owner identity."},
  {"binding_pin",binding_pin,METH_O,"Unique binding id plus complete data and current unconverted anchors."},
  {"make_owned",make_owned,METH_O,"Bounded immutable parsed facts with internally derived metadata."},
+ {"make_composite",make_composite,METH_VARARGS,"Immutable facts with exact immutable parent owners; never a mutable parent or authority."},
  {"owned_data",owned_data,METH_O,"Read the exact immutable parsed data, never a re-decoded copy."},
  {"owned_pin",owned_pin,METH_O,"Complete metadata and every original immutable leaf."},
  {NULL,NULL,0,NULL}};

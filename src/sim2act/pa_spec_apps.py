@@ -21,6 +21,7 @@ from . import spec_checklists as oracle
 from .apps import object_schema
 from .contracts import ActionSpec, AppManifest, FieldSource, Limits, Strict, validate_value
 from .csv_dag import resolve
+from . import _cold_source_image as _source_values
 from .db import (
     app_drafts,
     delivery_graph_requests,
@@ -1749,8 +1750,8 @@ def _receipts(store, c, job, binding, *, pending_id=None, allow_pending=False, _
                 from .natural_spec_runtime import _prove_pending_from_facts, prove_pending
                 if _facts is not None:
                     _prove_pending_from_facts(store, c, job, binding, op, intent, action, _facts,
-                        _receipt_phase=copy.deepcopy(dict(pending_id=pending_id,
-                            allow_pending=allow_pending, index=index, outputs=outputs, proved=proved)))
+                        _receipt_phase=copy.deepcopy(_source_values.compat(
+                            dict(pending_id=pending_id,allow_pending=allow_pending,index=index,outputs=outputs,proved=proved))))
                 else:
                     prove_pending(store, c, job, binding, op, intent, action)
                 _receipt_checkpoint(store, c, job, _facts)
@@ -1779,11 +1780,13 @@ def _receipts(store, c, job, binding, *, pending_id=None, allow_pending=False, _
                 if action["executor"]["ref"] in natural.MODEL_KINDS:
                     from .natural_spec_runtime import _prove_node_from_facts, prove_node
                     expected = (_prove_node_from_facts(store, c, job, binding, op, intent, action, _facts,
-                        _receipt_phase=copy.deepcopy(dict(pending_id=pending_id,
-                            allow_pending=allow_pending, index=index, outputs=outputs, proved=proved)))
+                        _receipt_phase=copy.deepcopy(_source_values.compat(
+                            dict(pending_id=pending_id,allow_pending=allow_pending,index=index,outputs=outputs,proved=proved))))
                         if _facts is not None else prove_node(store, c, job, binding, op, intent, action))
                 else:
-                    expected = natural.pure(action["executor"]["ref"], intent["args"], source, plan["definition"]["goal"])
+                    expected = natural.pure(action["executor"]["ref"],
+                        _source_values.compat(intent["args"]),
+                        source,plan["definition"]["goal"])
             else:
                 expected = pure(action["executor"]["ref"], intent["args"], source)
             _receipt_checkpoint(store, c, job, _facts)

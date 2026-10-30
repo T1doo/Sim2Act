@@ -15,7 +15,7 @@ _MAX_EDGES=1000000
 _MAX_LEAF=16*1024*1024
 
 
-def capture(incoming, outside):
+def capture(incoming, outside, *, _parents=None):
     from sim2act import natural_spec_runtime as rt, natural_live_admission as gate
     from sim2act import production_trial_policy as policy, production_trial_sender as sender
     from sim2act.natural_source_archives import BodyArchive
@@ -32,12 +32,16 @@ def capture(incoming, outside):
         work+=1
         if work>_MAX_EDGES or depth>64 or len(nodes)>=_MAX_NODES:raise Bounds('capture')
         kind=type(value);ident=id(value)
+        parent=None
+        if View is not None and kind is View:
+            if _parents is None:raise Unsupported('immutable parent not admitted by caller')
+            parent=value.owner();ident=('owned-node',id(parent),value.ref())
         tag=('n' if value is None else 't' if value is True else 'f' if value is False else
             'i' if kind is int else 'v' if kind is float else 's' if kind is str else
             'b' if kind is bytes else 'd' if kind is dict else 'l' if kind is list else
             'q' if kind is tuple else 'r' if kind is RowMapping else 'u' if kind is quoted_name else
             'e' if kind is set and mode=='source' else 'm' if mode=='source' and any(kind is cls for cls in models) else
-            'c' if kind is Limits and mode=='outside' else None)
+            'c' if kind is Limits and mode=='outside' else 'o' if parent is not None else None)
         if tag is None:raise Unsupported('unsupported kind')
         if ident in active:raise Unsupported('cycle')
         scalar=tag in ('n','t','f','i','v')
@@ -50,7 +54,13 @@ def capture(incoming, outside):
         if not scalar:memo[ident]=ref;held.append(value)
         active.add(ident)
         def child(v,virtual=False):return visit(v,depth+1,mode,virtual)
-        if tag in ('s','b'):
+        if tag=='o':
+            ordinal=next((i for i,p in enumerate(_parents) if p is parent),None)
+            if ordinal is None:
+                if len(_parents)>=256:raise Bounds('immutable parents')
+                ordinal=len(_parents);_parents.append(parent)
+            payload=(ordinal,value.ref());edges=()
+        elif tag in ('s','b'):
             (virtual_leaves if synthetic_leaf else real_leaves).add(ref)
             size+=len(value)*(4 if tag=='s' else 1)
             if size>_MAX_LEAF:raise Bounds('leaf bytes')
@@ -136,6 +146,64 @@ def deep_immutable(value):
 # Installed only by the fixed native loader. No mutable Python view class is
 # used in the production path; native absence keeps the original legacy route.
 View=None
+
+
+def is_kind(value,*tags):
+    return View is not None and type(value) is View and value.node()[0] in tags
+
+
+def same(left,right):
+    """Identity of an immutable node, never business value equality."""
+    return left is right or (View is not None and type(left) is View and type(right) is View
+        and left.owner() is right.owner() and left.ref()==right.ref())
+
+
+def plain(value,*,_memo=None):
+    """Fresh compatibility input only; never put this mutable copy in Graph.
+
+    Canonical fingerprints still use their original visible dict/list protocol.
+    Ownership metadata, hidden Row storage and alias pins are a separate domain.
+    """
+    if _memo is None:_memo={}
+    if View is None or type(value) is not View:
+        return value
+    key=(id(value.owner()),value.ref())
+    if key in _memo:return _memo[key]
+    tag=value.node()[0]
+    if tag=='u':return value.label()
+    if tag in ('d','r','m'):
+        result={};_memo[key]=result
+        for name in value:result[name]=plain(value[name],_memo=_memo)
+        return result
+    if tag in ('l','q','e'):
+        result=[];_memo[key]=result
+        result.extend(plain(child,_memo=_memo) for child in value)
+        if tag!='l':result=tuple(result) if tag=='q' else set(result);_memo[key]=result
+        return result
+    raise Unsupported('unsupported compatibility view')
+
+
+def compat(value,*,_memo=None):
+    """Ephemeral old-protocol input; preserves aliases within this one copy."""
+    if _memo is None:_memo={}
+    if View is not None and type(value) is View:
+        return plain(value,_memo=_memo)
+    if type(value) not in (dict,list,tuple):return value
+    key=('builtin',id(value))
+    if key in _memo:return _memo[key]
+    if type(value) is dict:
+        result={};_memo[key]=result
+        for k,v in value.items():result[k]=compat(v,_memo=_memo)
+    else:
+        result=[];_memo[key]=result
+        result.extend(compat(v,_memo=_memo) for v in value)
+        if type(value) is tuple:result=tuple(result);_memo[key]=result
+    return result
+
+
+def json_default(value):
+    if View is not None and type(value) is View:return plain(value)
+    raise TypeError(f'Object of type {type(value).__name__} is not JSON serializable')
 
 
 def business_equal(left,right,*,models_as_dict=False):

@@ -8,7 +8,7 @@
 static PyObject *unsupported, *unsupported_error;
 typedef struct {PyObject *key;size_t ordinal;} Entry;
 typedef struct {size_t slots,count;Entry*entries;} Map;
-typedef struct {PyObject*row,*limits,*quoted,*readrow,*readlimits,*marker,*reduce;} Encoder;
+typedef struct {PyObject*row,*limits,*quoted,*readrow,*readlimits,*marker,*reduce,*view;} Encoder;
 typedef struct {PyObject*original;unsigned char kind;uint64_t bits;size_t count,*edges;int active;} Node;
 typedef struct {Node*nodes;size_t count,capacity,work,bytes;Map map;PyObject*args,*scope;Encoder types;} Tree;
 static size_t slot(PyObject*v,size_t slots){uintptr_t x=(uintptr_t)v;x>>=3;x^=x>>23;x*=UINT64_C(0x2127599bf4325c37);x^=x>>47;return (size_t)x&(slots-1);}
@@ -18,7 +18,7 @@ static int insert(Map*m,PyObject*v,size_t ordinal){
  for(size_t i=0;i<m->slots;i++)if(m->entries[i].key){size_t j=slot(m->entries[i].key,n);while(next[j].key)j=(j+1)&(n-1);next[j]=m->entries[i];}PyMem_Free(m->entries);m->entries=next;m->slots=n;}
  size_t j=slot(v,m->slots);while(m->entries[j].key)j=(j+1)&(m->slots-1);m->entries[j]=(Entry){v,ordinal};m->count++;return 0;
 }
-static int kind(Encoder*s,PyObject*v){return v==s->marker?'p':v==Py_None?'n':v==Py_True?'t':v==Py_False?'f':PyLong_CheckExact(v)?'i':PyFloat_CheckExact(v)?'d':PyUnicode_CheckExact(v)?'s':PyBytes_CheckExact(v)?'b':PyDict_CheckExact(v)?'m':PyList_CheckExact(v)?'l':PyTuple_CheckExact(v)?'q':(PyObject*)Py_TYPE(v)==s->row?'r':(PyObject*)Py_TYPE(v)==s->limits?'c':(PyObject*)Py_TYPE(v)==s->quoted?'u':0;}
+static int kind(Encoder*s,PyObject*v){return v==s->marker?'p':v==Py_None?'n':v==Py_True?'t':v==Py_False?'f':PyLong_CheckExact(v)?'i':PyFloat_CheckExact(v)?'d':PyUnicode_CheckExact(v)?'s':PyBytes_CheckExact(v)?'b':PyDict_CheckExact(v)?'m':PyList_CheckExact(v)?'l':PyTuple_CheckExact(v)?'q':(PyObject*)Py_TYPE(v)==s->row?'r':(PyObject*)Py_TYPE(v)==s->limits?'c':(PyObject*)Py_TYPE(v)==s->quoted?'u':s->view&&(PyObject*)Py_TYPE(v)==s->view?'o':0;}
 static int memoized(int k){return k!='n'&&k!='t'&&k!='f'&&k!='i'&&k!='d';}
 static int scalar_bits(PyObject*v,int k,uint64_t*bits){
  if(k=='d'){double d=PyFloat_AS_DOUBLE(v);memcpy(bits,&d,8);return 0;}
@@ -54,7 +54,7 @@ static int capture_node(Tree*t,PyObject*v,int depth,size_t*out){
    Py_INCREF(a);Py_INCREF(b);int ok=capture_node(t,a,depth+1,edges+edge++);if(ok==0)ok=capture_node(t,b,depth+1,edges+edge++);Py_DECREF(a);Py_DECREF(b);if(ok<0)goto done;
   }
  }else{
-  PyObject*seq=(k=='c'||k=='r'||k=='u'||k=='p')?payload:v;
+  PyObject*seq=(k=='c'||k=='r'||k=='u'||k=='o'||k=='p')?payload:v;
   for(size_t i=0;i<count;i++){
    if(k=='l'&&(size_t)PyList_GET_SIZE(seq)!=count){PyErr_SetString(unsupported_error,"Cold graph list changed");goto done;}
    PyObject*x=k=='l'?PyList_GET_ITEM(seq,i):PyTuple_GET_ITEM(seq,i);Py_INCREF(x);int ok=capture_node(t,x,depth+1,edges+edge++);Py_DECREF(x);if(ok<0)goto done;
@@ -68,11 +68,11 @@ static void free_tree(Tree*t){if(!t)return;PyObject*error=PyErr_GetRaisedExcepti
 static void close_tree(PyObject*cap){Tree*t=PyCapsule_GetPointer(cap,"sim2act.cold-graph-structure.v1");if(!t){PyErr_Clear();return;}free_tree(t);}
 static PyObject*snapshot(PyObject*self,PyObject*args){
  (void)self;Tree*t=PyMem_Calloc(1,sizeof(Tree));if(!t)return PyErr_NoMemory();PyObject*v;
- if(!PyArg_ParseTuple(args,"OOOOOOO",&v,&t->types.row,&t->types.limits,&t->types.quoted,&t->types.readrow,&t->types.readlimits,&t->scope)){free_tree(t);return NULL;}
+ if(!PyArg_ParseTuple(args,"OOOOOOO|O",&v,&t->types.row,&t->types.limits,&t->types.quoted,&t->types.readrow,&t->types.readlimits,&t->scope,&t->types.view)){free_tree(t);return NULL;}
  if(!PyTuple_CheckExact(t->scope)||PyTuple_GET_SIZE(t->scope)!=5){t->scope=NULL;free_tree(t);return Py_NewRef(unsupported);}Py_INCREF(t->scope);
  PyFrameObject*frame=PyThreadState_GetFrame(PyThreadState_Get());int frames=0;while(frame){PyFrameObject*back=PyFrame_GetBack(frame);Py_DECREF(frame);frame=back;frames++;}
  if(Py_GetRecursionLimit()-frames<256){free_tree(t);return Py_NewRef(unsupported);}
- t->args=PyTuple_GetSlice(args,1,6);if(!t->args){free_tree(t);return NULL;}
+ t->args=PyTuple_GetSlice(args,1,PyTuple_GET_SIZE(args));if(!t->args){free_tree(t);return NULL;}
  PyObject*g=PyFunction_GetGlobals(t->types.readrow);if(!g){free_tree(t);PyErr_SetString(unsupported_error,"Cold graph original function");return NULL;}
  PyObject*cls=PyDict_GetItemString(g,"_ColdGraphPickler");t->types.marker=Py_XNewRef(PyDict_GetItemString(g,"_cold_graph_pickle_marker"));
  if(cls)t->types.reduce=PyObject_GetAttrString(cls,"reducer_override");
@@ -129,7 +129,7 @@ static int compare_node(Compare*c,size_t id,PyObject*v,int depth){
   PyObject*seq=v;
   if(k=='p'){
    PyObject*module=PyObject_GetAttrString(v,"__module__"),*name=PyObject_GetAttrString(v,"__qualname__");if(module&&name)payload=PyTuple_Pack(2,module,name);Py_XDECREF(module);Py_XDECREF(name);if(!payload){result=-1;goto done;}seq=payload;
-  }else if(k=='c'||k=='r'||k=='u'){
+  }else if(k=='c'||k=='r'||k=='u'||k=='o'){
    payload=PyObject_CallFunctionObjArgs(c->t->types.reduce,Py_None,v,NULL);if(!payload){result=-1;goto done;}
    if(!PyTuple_CheckExact(payload)||PyTuple_GET_SIZE(payload)!=2||PyTuple_GET_ITEM(payload,0)!=c->t->types.marker||!PyTuple_CheckExact(PyTuple_GET_ITEM(payload,1))){PyErr_SetString(unsupported_error,"Cold graph reducer result");result=-1;goto done;}seq=payload;
   }

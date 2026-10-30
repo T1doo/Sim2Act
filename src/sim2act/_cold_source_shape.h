@@ -45,6 +45,12 @@ static int source_image_shape(PyObject*data){
   else if(t=='v'){if(!PyBytes_CheckExact(p)||PyBytes_GET_SIZE(p)!=8)goto done;}
   else if(t=='s'||t=='b'){Py_ssize_t index;if(!shape_ref(p,PyTuple_GET_SIZE(leaves),&index))goto done;PyObject*leaf=PyTuple_GET_ITEM(leaves,index);if(t=='s'?!PyUnicode_CheckExact(leaf):!PyBytes_CheckExact(leaf))goto done;}
   else if(t=='u'){Py_ssize_t ref;if(!shape_ref(p,n,&ref))goto done;}
+  else if(t=='o'){
+   Py_ssize_t unused;
+   if(!PyTuple_CheckExact(p)||PyTuple_GET_SIZE(p)!=2
+       ||!shape_ref(PyTuple_GET_ITEM(p,0),256,&unused)
+       ||!shape_ref(PyTuple_GET_ITEM(p,1),100000,&unused))goto done;
+  }
   else if(t=='d'||t=='l'||t=='q'||t=='e'||t=='r'||t=='m'){
    if(!PyTuple_CheckExact(p)||(t=='r'&&PyTuple_GET_SIZE(p)!=3)||(t=='m'&&PyTuple_GET_SIZE(p)!=5))goto done;
    for(Py_ssize_t j=0;j<PyTuple_GET_SIZE(p);j++){

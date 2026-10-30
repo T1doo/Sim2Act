@@ -53,6 +53,8 @@ from . import db as _raw_seed_db
 from . import _cold_source_packet as _source_owned_code
 _SOURCE_OWNED_CHECK = _source_owned_code.CHECK
 _SOURCE_BINDING_TYPE = _source_owned_code._BINDING
+_SOURCE_VIEW_TYPE = _source_owned_code.image.View
+_SOURCE_VIEW_PIN = None if _SOURCE_VIEW_TYPE is None else _source_owned_code.native.view_pin
 from . import _cold_archive_packet as _owned_archive_code
 _OWNED_ARCHIVE_CHECK = _owned_archive_code.CHECK
 _OWNED_ARCHIVE_KEY = _owned_archive_code.KEY
@@ -252,6 +254,32 @@ def _cold_attempt_order(row):
     return _cold_sqlite_order(row["created_at"]), _cold_sqlite_order(row["id"])
 
 
+def _source_data_kind(value,expected):
+    # Exact immutable native type only; arbitrary Mapping/Sequence is rejected.
+    return type(value) is expected or _source_owned_code.image.is_kind(value,
+        *({dict:('d',),list:('l',),tuple:('q',)}.get(expected,())))
+
+
+def _source_fields_equal(left,right):
+    """Original canonical protocol, with immutable-node identity reuse only.
+
+    Recurse through exact freshly built field frames. Mutable/foreign/other
+    shapes retain the original complete canonical comparison; numeric Python
+    equality is never a substitute for that protocol.
+    """
+    image=_source_owned_code.image
+    if (image.View is not None and type(left) is image.View and type(right) is image.View
+            and image.same(left,right)):return True
+    if image.is_kind(left,'d','r') and type(right) is dict:
+        keys=tuple(left)
+        if (all(type(k) is str for k in keys) and all(type(k) is str for k in right)
+                and len(set(keys))==len(keys)):
+            return set(keys)==set(right) and all(_source_fields_equal(left[k],right[k]) for k in keys)
+    if image.is_kind(left,'l','q') and type(right) in (list,tuple):
+        return len(left)==len(right) and all(_source_fields_equal(a,b) for a,b in zip(left,right,strict=True))
+    return _model_inputs(left)==_model_inputs(right)
+
+
 def _cold_seed_audit_rows(store, c, guard, audit):
     """Locate exact already-read raw rows; do not perform Source verification."""
     try:
@@ -269,28 +297,28 @@ def _cold_seed_audit_rows(store, c, guard, audit):
             and prefix.pid == guard.binding.contract.project_id
             and prefix.key == f"pb-source-audit:{prefix.user}:{prefix.pid}:{prefix.rid}"
             and audit.key == prefix.key + ":complete"
-            and guard.inputs[prefix.key] == _ColdSourceAuditPrefix.fields(prefix)
-            and guard.inputs[prefix.key + ":native"] is audit.original_audit_rows
-            and guard.inputs[audit.key] == _ColdSourceAuditFacts.fields(audit)
-            and guard.inputs[audit.key]["rows"] is audit.rows,
+            and _source_fields_equal(_source_owned_code.fact(guard,prefix.key),_ColdSourceAuditPrefix.fields(prefix))
+            and _source_owned_code.image.same(_source_owned_code.fact(guard,prefix.key + ":native"),audit.original_audit_rows)
+            and _source_fields_equal(_source_owned_code.fact(guard,audit.key),_ColdSourceAuditFacts.fields(audit))
+            and _source_owned_code.image.same(_source_owned_code.fact(guard,audit.key)["rows"],audit.rows),
             "Cold source raw audit pin changed")
         _cold_read_checkpoint(store, c, guard)
         rows = audit.rows
-        require(type(rows) is dict and set(rows) == {
+        require(_source_data_kind(rows,dict) and set(rows) == {
             "scope", "seal", "original_audit", "original", "run", "contract", "binding",
             "app_run", "typed", "release", "attempts", "operations", "intents", "effects",
             "events", "reservations", "origin_marker", "origin_seals", "current_goal",
             "current_goal_versions"}, "Complete original source audit rows required")
-        require(type(rows["run"]) is list and len(rows["run"]) == 1
-            and type(rows["run"][0]) is dict and set(rows["run"][0]) == set(runs.c.keys())
+        require(_source_data_kind(rows["run"],list) and len(rows["run"]) == 1
+            and _source_data_kind(rows["run"][0],dict) and set(rows["run"][0]) == set(runs.c.keys())
             and rows["run"][0]["id"] == prefix.rid
             and rows["run"][0]["principal_id"] == prefix.user
             and rows["run"][0]["project_id"] == prefix.pid,
             "Complete original source Run row required")
-        require(type(rows["attempts"]) is list and all(type(row) is dict
+        require(_source_data_kind(rows["attempts"],list) and all(_source_data_kind(row,dict)
             and set(row) == set(attempts.c.keys()) and row["run_id"] == prefix.rid
             for row in rows["attempts"]), "Complete source Attempt raw rows required")
-        require(type(rows["operations"]) is list and all(type(row) is dict
+        require(_source_data_kind(rows["operations"],list) and all(_source_data_kind(row,dict)
             and set(row) == set(operations.c.keys()) and row["run_id"] == prefix.rid
             for row in rows["operations"]), "Complete source Operation raw rows required")
         return rows
@@ -343,10 +371,10 @@ class _ColdRunRawSeed:
                 "Cold Run raw seed changed read scope")
             rows = _cold_seed_audit_rows(store, c, guard, self.audit)
             require(self.key == "run-raw-seed:" + self.audit.key
-                and guard.inputs[self.key] == _ColdRunRawSeed.fields(self)
-                and guard.inputs[self.key]["job"] is self.job
-                and guard.inputs[self.key]["attempts"] is self.attempt_rows
-                and guard.inputs[self.key]["operations"] is self.operation_rows,
+                and _source_fields_equal(_source_owned_code.fact(guard,self.key),_ColdRunRawSeed.fields(self))
+                and _source_owned_code.image.same(_source_owned_code.fact(guard,self.key)["job"],self.job)
+                and _source_owned_code.image.same(_source_owned_code.fact(guard,self.key)["attempts"],self.attempt_rows)
+                and _source_owned_code.image.same(_source_owned_code.fact(guard,self.key)["operations"],self.operation_rows),
                 "Cold Run raw seed pin changed")
             require(self.job == rows["run"][0] == dict(job)
                 and self.attempt_rows == rows["attempts"]
@@ -379,11 +407,15 @@ def _cold_run_raw_seed(store, c, guard, audit_facts):
         require(type(guard) is _ColdGraphRead, "Exact Cold Run raw seed scope required")
         rows = _cold_seed_audit_rows(store, c, guard, audit_facts)
         value = _ColdRunRawSeed(store, c, guard, audit_facts,
-            "run-raw-seed:" + audit_facts.key, copy.deepcopy(rows["run"][0]),
-            copy.deepcopy(rows["attempts"]),
-            copy.deepcopy(rows["operations"]))
+            "run-raw-seed:" + audit_facts.key, copy.deepcopy(_source_owned_code.image.plain(rows["run"][0])),
+            copy.deepcopy(_source_owned_code.image.plain(rows["attempts"])),
+            copy.deepcopy(_source_owned_code.image.plain(rows["operations"])))
         _cold_read_checkpoint(store, c, guard)
-        guard.add(value.key, _ColdRunRawSeed.fields(value))
+        if _source_owned_code.available():
+            saved=_source_owned_code.own_fact(guard,value.key,_ColdRunRawSeed.fields(value))
+            for name,key in (('job','job'),('attempt_rows','attempts'),('operation_rows','operations')):
+                object.__setattr__(value,name,saved[key])
+        else:guard.add(value.key, _ColdRunRawSeed.fields(value))
         _ColdRunRawSeed.check(value, store, c, value.job, guard)
         return value
     except BaseException:
@@ -410,28 +442,28 @@ def _cold_seed_fixed_rows(store, c, guard, audit):
             and prefix.pid == guard.binding.contract.project_id
             and prefix.key == f"pb-source-audit:{prefix.user}:{prefix.pid}:{prefix.rid}"
             and audit.key == prefix.key + ":complete"
-            and guard.inputs[prefix.key] == _ColdSourceAuditPrefix.fields(prefix)
-            and guard.inputs[prefix.key + ":native"] is audit.original_audit_rows
-            and guard.inputs[audit.key] == _ColdSourceAuditFacts.fields(audit)
-            and guard.inputs[audit.key]["rows"] is audit.rows,
+            and _source_fields_equal(_source_owned_code.fact(guard,prefix.key),_ColdSourceAuditPrefix.fields(prefix))
+            and _source_owned_code.image.same(_source_owned_code.fact(guard,prefix.key + ":native"),audit.original_audit_rows)
+            and _source_fields_equal(_source_owned_code.fact(guard,audit.key),_ColdSourceAuditFacts.fields(audit))
+            and _source_owned_code.image.same(_source_owned_code.fact(guard,audit.key)["rows"],audit.rows),
             "Cold source raw audit pin changed")
         _ColdGraphRead._check_dynamic(guard, store, c)
         rows = audit.rows
-        require(type(rows) is dict and set(rows) == {
+        require(_source_data_kind(rows,dict) and set(rows) == {
             "scope", "seal", "original_audit", "original", "run", "contract", "binding",
             "app_run", "typed", "release", "attempts", "operations", "intents", "effects",
             "events", "reservations", "origin_marker", "origin_seals", "current_goal",
             "current_goal_versions"}, "Complete original source audit rows required")
-        require(type(rows["run"]) is list and len(rows["run"]) == 1
-            and type(rows["run"][0]) is dict and set(rows["run"][0]) == set(runs.c.keys())
+        require(_source_data_kind(rows["run"],list) and len(rows["run"]) == 1
+            and _source_data_kind(rows["run"][0],dict) and set(rows["run"][0]) == set(runs.c.keys())
             and rows["run"][0]["id"] == prefix.rid
             and rows["run"][0]["principal_id"] == prefix.user
             and rows["run"][0]["project_id"] == prefix.pid,
             "Complete original source Run row required")
-        require(type(rows["attempts"]) is list and all(type(row) is dict
+        require(_source_data_kind(rows["attempts"],list) and all(_source_data_kind(row,dict)
             and set(row) == set(attempts.c.keys()) and row["run_id"] == prefix.rid
             for row in rows["attempts"]), "Complete source Attempt raw rows required")
-        require(type(rows["operations"]) is list and all(type(row) is dict
+        require(_source_data_kind(rows["operations"],list) and all(_source_data_kind(row,dict)
             and set(row) == set(operations.c.keys()) and row["run_id"] == prefix.rid
             for row in rows["operations"]), "Complete source Operation raw rows required")
         return rows
@@ -449,10 +481,10 @@ def _cold_seed_fixed_check(self, store, c, job, guard):
             "Cold Run raw seed changed read scope")
         rows = _cold_seed_fixed_rows(store, c, guard, self.audit)
         require(self.key == "run-raw-seed:" + self.audit.key
-            and guard.inputs[self.key] == _ColdRunRawSeed.fields(self)
-            and guard.inputs[self.key]["job"] is self.job
-            and guard.inputs[self.key]["attempts"] is self.attempt_rows
-            and guard.inputs[self.key]["operations"] is self.operation_rows,
+            and _source_fields_equal(_source_owned_code.fact(guard,self.key),_ColdRunRawSeed.fields(self))
+            and _source_owned_code.image.same(_source_owned_code.fact(guard,self.key)["job"],self.job)
+            and _source_owned_code.image.same(_source_owned_code.fact(guard,self.key)["attempts"],self.attempt_rows)
+            and _source_owned_code.image.same(_source_owned_code.fact(guard,self.key)["operations"],self.operation_rows),
             "Cold Run raw seed pin changed")
         require(self.job == rows["run"][0] == dict(job)
             and self.attempt_rows == rows["attempts"]
@@ -485,12 +517,15 @@ class _ColdRunFacts:
             self.store, self.connection, self.job, self.guard = store, c, job, guard
             self._origin_guard = guard
             self.key = f"run-facts:{job['id']}"
+            self._source_owned = (_source_owned_code.available() and (raw_seed is not None
+                or job['id'] in vars(guard).get('_source_fact_run_ids',())))
             self._raw: dict = {}
             self._receipt_proofs: list[str] = []
             self._manifests: list = []
             self._counter_proofs: list[str] = []
             self._node_proofs: list[str] = []
-            guard.add(self.key, dict(job=job))
+            if self._source_owned:_source_owned_code.own_fact(guard,self.key,dict(job=job))
+            else:guard.add(self.key,dict(job=job))
             self.check(store, c, job)
             if raw_seed is not None:
                 self._put("attempts", raw_seed.attempt_rows)
@@ -512,7 +547,7 @@ class _ColdRunFacts:
             _cold_read_checkpoint(store, c, self.guard)
             require(self.store is store and self.connection is c and self.job is job
                 and self.key == f"run-facts:{job['id']}"
-                and self.guard.inputs[self.key]["job"] is job,
+                and _source_owned_code.image.same(_source_owned_code.fact(self.guard,self.key)["job"],job),
                 "Cold Run raw facts changed identity")
             require(type(self._raw) is dict and type(self._manifests) is list
                 and type(self._receipt_proofs) is list and type(self._counter_proofs) is list
@@ -520,7 +555,7 @@ class _ColdRunFacts:
             prefix = self.key + ":"
             names = [key[len(prefix):] for key in self.guard.inputs if key.startswith(prefix)]
             require(set(self._raw) == set(names)
-                and all(self.guard.inputs[prefix + name] is value for name, value in self._raw.items()),
+                and all(_source_owned_code.image.same(_source_owned_code.fact(self.guard,prefix+name),value) for name, value in self._raw.items()),
                 "Cold Run facts cannot be forgotten or replaced")
             require(self._receipt_proofs == [name for name in names if name.startswith("receipts:")]
                 and self._counter_proofs == [name for name in names if name.startswith("counter-proof:")]
@@ -539,8 +574,8 @@ class _ColdRunFacts:
                 else:
                     _ColdRunRawSeed.check(raw_seed, store, c, job, self.guard)
                 require(self._raw["raw-seed"] == dict(key=raw_seed.key)
-                    and self._raw["attempts"] is raw_seed.attempt_rows
-                    and self._raw["receipt-operations"] is raw_seed.operation_rows,
+                    and _source_owned_code.image.same(self._raw["attempts"],raw_seed.attempt_rows)
+                    and _source_owned_code.image.same(self._raw["receipt-operations"],raw_seed.operation_rows),
                     "Cold reader raw seed attachment changed")
             else:
                 require(raw_seed is None, "Cold reader raw seed attachment changed")
@@ -575,7 +610,7 @@ class _ColdRunFacts:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
             self.check(self.store, self.connection, self.job)
             value = self._raw[name]
-            require(self.guard.inputs[f"{self.key}:{name}"] is value,
+            require(_source_owned_code.image.same(_source_owned_code.fact(self.guard,f"{self.key}:{name}"),value),
                 "Cold Run raw facts cannot be replaced")
             return value
         except BaseException:
@@ -594,7 +629,7 @@ class _ColdRunFacts:
             _ColdGraphRead._check_dynamic(self.guard, self.store, self.connection)
             _ColdRunFacts.check(self, self.store, self.connection, self.job)
             value = self._raw[name]
-            require(self.guard.inputs[f"{self.key}:{name}"] is value,
+            require(_source_owned_code.image.same(_source_owned_code.fact(self.guard,f"{self.key}:{name}"),value),
                 "Cold Run raw facts cannot be replaced")
             return value
         except BaseException:
@@ -606,7 +641,10 @@ class _ColdRunFacts:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
             self.check(self.store, self.connection, self.job)
             require(name not in self._raw, "Cold Run raw facts cannot be rebound")
-            self.guard.add(f"{self.key}:{name}", value, _run_facts=self)
+            if (self._source_owned and not name.startswith(('counter-manifest:','node-input:',
+                    'node-proof:','receipts:','receipt-binding:'))):
+                value=_source_owned_code.own_fact(self.guard,f"{self.key}:{name}",value)
+            else:self.guard.add(f"{self.key}:{name}",value,_run_facts=self)
             self._raw[name] = value
             return value
         except BaseException:
@@ -1227,8 +1265,8 @@ def _counters(c, job, manifest, *, _facts=None):
     ctx = job["context"]
     require(
         all(
-            isinstance(r["parameters"], dict)
-            and isinstance(r["parameters"].get("natural_spec"), dict)
+            (isinstance(r["parameters"],dict) or _source_owned_code.image.is_kind(r["parameters"],'d'))
+            and (isinstance(r["parameters"].get("natural_spec"),dict) or _source_owned_code.image.is_kind(r["parameters"].get("natural_spec"),'d'))
             and type(r["parameters"]["natural_spec"].get("ordinal")) is int
             for r in rows
         )
@@ -1247,7 +1285,7 @@ def _counters(c, job, manifest, *, _facts=None):
         == context_keys
         and ctx["spec_family"] == codec.VERSION
         and ctx["kind"] == "INTERNAL_APPRUN"
-        and isinstance(ctx["messages"], list)
+        and (isinstance(ctx["messages"],list) or _source_owned_code.image.is_kind(ctx["messages"],'l'))
         and (
             not rows
             and ctx["messages"] == []
@@ -1300,7 +1338,7 @@ def _counters(c, job, manifest, *, _facts=None):
     for row in rows:
         meta = row["parameters"].get("natural_spec")
         require(
-            isinstance(meta, dict)
+            (isinstance(meta,dict) or _source_owned_code.image.is_kind(meta,'d'))
             and row["status"] in {"STARTED", "RECEIVED", "VERIFIED", "REJECTED_KNOWN"}
             and row["mode"] == (_facts.mode() if _facts is not None else evidence_mode(c, job))
             and row["request_model"] == "intern-s2"
@@ -1391,6 +1429,7 @@ def messages(binding, step, action, intent, *, protocol=None):
                     ),
                 ),
                 ensure_ascii=False,
+                default=_source_owned_code.image.json_default,
                 separators=(",", ":"),
             ),
         ),
@@ -1585,7 +1624,7 @@ def _prove_node(store, c, job, binding, op, intent, action, *, _facts=None, _rec
         == dict(attempt_id=a["id"], attempt_fingerprint=fingerprint(dict(a)), operation_id=op["id"])
     )
     response = a["response"]
-    require(isinstance(response, dict) and set(response) == {"received_raw", "raw_evidence"})
+    require((isinstance(response,dict) or _source_owned_code.image.is_kind(response,'d')) and set(response) == {"received_raw", "raw_evidence"})
     raw = strict_json(response["received_raw"], 131072)
     _counter_checkpoint(c, job, _facts)
     original, evidence = response_archive(raw)
@@ -1751,7 +1790,7 @@ def _prove_pending(store, c, job, binding, op, intent, action, *, _facts=None, _
             and op["status"] in {"DISPATCHED", "REJECTED_KNOWN"}
         )
         response = row["response"]
-        require(isinstance(response, dict) and set(response) == {"received_raw", "raw_evidence"})
+        require((isinstance(response,dict) or _source_owned_code.image.is_kind(response,'d')) and set(response) == {"received_raw", "raw_evidence"})
         raw = strict_json(response["received_raw"], 131072)
         _counter_checkpoint(c, job, _facts)
         original, evidence = response_archive(raw)
@@ -1923,6 +1962,9 @@ def fail_owned(worker, run, error):
 
 def _model_value(value, *, _byte_digests=None, _byte_seen=None):
     """Retain every field of actual SQL row mappings and exact Limits."""
+    if _source_owned_code.image.View is not None and type(value) is _source_owned_code.image.View:
+        return _model_value(_source_owned_code.image.plain(value),
+            _byte_digests=_byte_digests,_byte_seen=_byte_seen)
     if type(value) is Limits:
         return _model_value(value.model_dump(), _byte_digests=_byte_digests, _byte_seen=_byte_seen)
     if isinstance(value, Mapping):
@@ -1967,6 +2009,8 @@ def _cold_graph_validate_inputs(values, *, _forbid_root=None):
         if _forbid_root is not None:
             require(value is not _forbid_root, "Incoming Cold graph reaches its input root")
         kind = type(value)
+        if _source_owned_code.image.View is not None and kind is _source_owned_code.image.View:
+            return visit(_source_owned_code.native.view_pin(value))
         if (kind is str or kind is int or kind is float or kind is bool
                 or kind is type(None)):
             return value
@@ -2079,6 +2123,8 @@ class _ColdGraphPickler(_ColdGraphPicklerBase):
     """Code-only hoist; every call still has a fresh instance and fresh C memo."""
     def reducer_override(self, value):
         kind = type(value)
+        if _SOURCE_VIEW_TYPE is not None and kind is _SOURCE_VIEW_TYPE:
+            return (_cold_graph_pickle_marker, ('source-owned-node-v1', _SOURCE_VIEW_PIN(value)))
         if value is _cold_graph_pickle_marker:
             return NotImplemented
         if kind is Limits:
@@ -2210,6 +2256,16 @@ class _ColdGraphRead:
         """
         from .pb_natural_specs import _source_reads_current
 
+        if (vars(self).get('_source_fact_bindings') is not None or
+                (type(self.inputs) is dict and any(type(v) is tuple and len(v)==2
+                 and type(v[0]) is str and v[0]=='sim2act:owned-source-fact.v1' for v in self.inputs.values()))):
+            checker,code,defaults=_SOURCE_OWNED_CHECK
+            if (_source_owned_code.current is not checker or checker.__code__ is not code
+                    or checker.__defaults__ is not defaults):
+                raise DomainError('VERSION_CONFLICT','Source fact checker code changed')
+            checker()
+            _source_owned_code.fact_current(self)
+
         # Any published Source pin requires the same scope-bound owner. This
         # does not replace the original dynamic gates or whole-graph content.
         if (type(self.inputs) is dict and 'cold-trial:accounted-source' in self.inputs
@@ -2291,6 +2347,7 @@ class _ColdGraphRead:
         was_active = self.active
         self.active = False
         vars(self).pop('_source_owned_binding',None)
+        vars(self).pop('_source_fact_bindings',None)
         vars(self).pop("_structure_state", None)
         # This opt-in selector owns no data/authority. Drop the back-reference
         # on the original scope teardown; a retained diagnostic handle stays
@@ -5555,6 +5612,10 @@ def advance_model(worker, run, *, _heartbeat_state=None):
     return True
 
 
-_source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_limit_values'),
-    (_ColdGraphRead,_ColdTrialGraph),
+_source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_limit_values',
+    '_source_data_kind','_source_fields_equal','_cold_seed_audit_rows','_cold_seed_fixed_rows','_cold_seed_fixed_check',
+    '_cold_run_raw_seed','_cold_run_facts','_check_run_facts','_cold_read_checkpoint',
+    '_cold_sqlite_order','_cold_attempt_order','_model_value','_model_inputs',
+    '_invalidate_cold_run_raw_seed','_invalidate_cold_run_facts','fingerprint'),
+    (_ColdGraphRead,_ColdTrialGraph,_ColdRunRawSeed,_ColdRunFacts,_ColdAuditSeed),
     constants=('_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE'))

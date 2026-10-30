@@ -1,7 +1,5 @@
 /* Read-only business views over an exact immutable Owner. No Python class,
  * serializer, getattr hook or module-global read callback participates. */
-typedef struct {PyObject_HEAD Owned*owner;Py_ssize_t ref;} SourceView;
-static PyTypeObject SourceViewType;
 static PyObject*view_read(Owned*,Py_ssize_t);
 static int view_node(SourceView*v,Py_UCS4*tag,PyObject**payload){
  PyObject*data=v->owner->data;
@@ -26,6 +24,11 @@ static PyObject*view_body(PyObject*o,PyObject*unused){
 }
 static PyObject*view_data(PyObject*o,PyObject*unused){(void)unused;return Py_NewRef(((SourceView*)o)->owner->data);}
 static PyObject*view_ref(PyObject*o,PyObject*unused){(void)unused;return PyLong_FromSsize_t(((SourceView*)o)->ref);}
+static PyObject*view_owner(PyObject*o,PyObject*unused){(void)unused;return Py_NewRef((PyObject*)((SourceView*)o)->owner);}
+static PyObject*view_pin(PyObject*o,PyObject*unused){
+ (void)unused;SourceView*v=(SourceView*)o;PyObject*ref=PyLong_FromSsize_t(v->ref);if(!ref)return NULL;
+ PyObject*r=PyTuple_Pack(2,v->owner->pin,ref);Py_DECREF(ref);return r;
+}
 static PyObject*view_child(PyObject*o,PyObject*r){return view_read_ref((SourceView*)o,r);}
 static PyObject*view_label(PyObject*o,PyObject*unused){
  (void)unused;SourceView*v=(SourceView*)o;Py_UCS4 tag;PyObject*p;
@@ -124,6 +127,10 @@ static PyObject*view_get(PyObject*o,PyObject*args){
  PyObject*k,*fallback=Py_None;if(!PyArg_ParseTuple(args,"O|O",&k,&fallback))return NULL;
  PyObject*v=view_getitem(o,k);if(!v&&PyErr_ExceptionMatches(PyExc_KeyError)){PyErr_Clear();return Py_NewRef(fallback);}return v;
 }
+static PyObject*view_keys(PyObject*o,PyObject*unused){
+ (void)unused;PyObject*it=view_iter(o);if(!it)return NULL;
+ PyObject*keys=PySequence_Tuple(it);Py_DECREF(it);return keys;
+}
 static int view_equal(PyObject*,PyObject*,int,size_t*);
 static int view_shape(PyObject*o,PyObject**normalized){
  *normalized=Py_NewRef(o);
@@ -148,6 +155,8 @@ static PyObject*view_value_at(PyObject*o,Py_ssize_t index){
 }
 static int view_equal(PyObject*a,PyObject*b,int depth,size_t*work){
  if(++*work>1000000||depth>64){PyErr_SetString(PyExc_ValueError,"Source business comparison bound exceeded");return -1;}
+ if(Py_TYPE(a)==&SourceViewType&&Py_TYPE(b)==&SourceViewType
+    &&((SourceView*)a)->owner==((SourceView*)b)->owner&&((SourceView*)a)->ref==((SourceView*)b)->ref)return 1;
  PyObject*x=NULL,*y=NULL;int tx=view_shape(a,&x),ty=view_shape(b,&y),equal=0;
  if(tx<0||ty<0||tx!=ty)goto done;
  if(tx=='m'){
@@ -212,6 +221,8 @@ static PyObject*view_items(PyObject*o,PyObject*unused){
 }
 static PyMethodDef view_methods[]={
  {"node",view_body,METH_NOARGS,NULL},{"read",view_child,METH_O,NULL},{"label",view_label,METH_NOARGS,NULL},
+ {"owner",view_owner,METH_NOARGS,NULL},{"pin",view_pin,METH_NOARGS,NULL},
+ {"keys",view_keys,METH_NOARGS,NULL},
  {"data",view_data,METH_NOARGS,NULL},{"ref",view_ref,METH_NOARGS,NULL},{"get",view_get,METH_VARARGS,NULL},{"items",view_items,METH_NOARGS,NULL},{NULL,NULL,0,NULL}};
 static PyMappingMethods view_mapping={.mp_length=view_length,.mp_subscript=view_getitem};
 static PySequenceMethods view_sequence={.sq_length=view_length,.sq_contains=view_contains};
@@ -223,6 +234,11 @@ static PyTypeObject SourceViewType={PyVarObject_HEAD_INIT(NULL,0)
 static PyObject*view_read(Owned*owner,Py_ssize_t ref){
  SourceView temporary={PyObject_HEAD_INIT(&SourceViewType) .owner=owner,.ref=ref};Py_UCS4 tag;PyObject*p;
  if(!view_node(&temporary,&tag,&p))return view_error();
+ if(tag=='o'){
+  Py_ssize_t ordinal=PyLong_AsSsize_t(PyTuple_GET_ITEM(p,0)),child=PyLong_AsSsize_t(PyTuple_GET_ITEM(p,1));
+  if(PyErr_Occurred()||ordinal<0||ordinal>=PyTuple_GET_SIZE(owner->parents))return view_error();
+  return view_read((Owned*)PyTuple_GET_ITEM(owner->parents,ordinal),child);
+ }
  if(tag=='s'||tag=='b'){
   PyObject*leaves=PyTuple_GET_ITEM(owner->data,2);Py_ssize_t index;
   if(!PyTuple_CheckExact(leaves)||!PyLong_CheckExact(p)||(index=PyLong_AsSsize_t(p))<0||index>=PyTuple_GET_SIZE(leaves)){if(PyErr_Occurred())return NULL;return view_error();}

@@ -5,6 +5,7 @@
 #include <descrobject.h>
 #include <string.h>
 typedef struct {
+ Owned*owner;
  PyObject *nodes,*leaves,*anchors,*virtuals,*virtual_containers,*row_provenance,*config,*reverse,*held;
  PyObject **forward; unsigned char*status; Py_ssize_t *boundary,*model_kinds; Py_ssize_t n; size_t work;
 } LiveMatch;
@@ -91,6 +92,13 @@ static int source_match_body(LiveMatch*s,Py_ssize_t ref,PyObject*v,int depth,int
  PyObject*tag=PyTuple_GET_ITEM(node,0),*value=PyTuple_GET_ITEM(node,1);
  if(!PyUnicode_CheckExact(tag)||PyUnicode_GET_LENGTH(tag)!=1){if(!source_fail_line){source_fail_ref=ref;source_fail_line=__LINE__;}return 0;}
  Py_UCS4 t=PyUnicode_READ_CHAR(tag,0);PyObject*model=NULL;
+ if(t=='o'){
+  if(Py_TYPE(v)!=&SourceViewType)return 0;
+  SourceView*view=(SourceView*)v;
+  Py_ssize_t ordinal=PyLong_AsSsize_t(PyTuple_GET_ITEM(value,0)),child=PyLong_AsSsize_t(PyTuple_GET_ITEM(value,1));
+  return !PyErr_Occurred()&&ordinal>=0&&ordinal<PyTuple_GET_SIZE(s->owner->parents)
+   &&(PyObject*)view->owner==PyTuple_GET_ITEM(s->owner->parents,ordinal)&&view->ref==child;
+ }
  if(t=='m'&&s->model_kinds[ref]>=0){
   PyObject*models=PyTuple_GET_ITEM(s->config,0);
   PyObject*entry=PyTuple_GET_ITEM(models,s->model_kinds[ref]);
@@ -240,6 +248,9 @@ static int source_mark(LiveMatch*s,Py_ssize_t ref,PyObject*seen,PyObject*shared,
 }
 static int source_outside(LiveMatch*s,PyObject*v,PyObject*seen,PyObject*active,PyObject*marked,PyObject*shared,PyObject*shared_leaves,PyObject*virtual_containers,int depth){
  if(!source_tick(s,depth))return 0;
+ /* Exact native views contain only immutable owner/node references. Their
+  * original leaf identities and complete parent metadata remain in the pin. */
+ if(Py_TYPE(v)==&SourceViewType)return 1;
  PyObject*id=PyLong_FromVoidPtr(v);if(!id)return 0;
  int ok=0;PyObject*ref=PyDict_GetItemWithError(s->reverse,id);
  if(ref){Py_ssize_t r;if(source_index(ref,s->n,&r))ok=source_mark(s,r,marked,shared,shared_leaves,virtual_containers,depth);goto done;}
@@ -339,7 +350,7 @@ static PyObject*source_match_current(PyObject*owner,PyObject*incoming,PyObject*a
  if(Py_TYPE(owner)!=&OwnedType||!PyTuple_CheckExact(anchors)||!source_config(config))Py_RETURN_FALSE;
  PyObject*data=((Owned*)owner)->data;
  if(PyTuple_GET_SIZE(data)!=8)Py_RETURN_FALSE;
- LiveMatch s={0};s.nodes=PyTuple_GET_ITEM(data,1);s.leaves=PyTuple_GET_ITEM(data,2);s.anchors=anchors;s.config=config;
+ LiveMatch s={0};s.owner=(Owned*)owner;s.nodes=PyTuple_GET_ITEM(data,1);s.leaves=PyTuple_GET_ITEM(data,2);s.anchors=anchors;s.config=config;
  if(!PyTuple_CheckExact(s.nodes)||!PyTuple_CheckExact(s.leaves))Py_RETURN_FALSE;
  s.n=PyTuple_GET_SIZE(s.nodes);if(s.n<=0||s.n>100000)Py_RETURN_FALSE;
  /* Tracked temporary allocations must not run gc.callbacks/finalizers while

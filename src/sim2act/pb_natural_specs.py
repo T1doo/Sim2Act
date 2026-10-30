@@ -151,11 +151,13 @@ def _invalidate_cold_inputs(*values):
 def _cold_fields(store, c, guard, key, value):
     """Only continuity of full explicit facts; never an authority or resolver."""
     try:
-        from .natural_spec_runtime import _model_inputs
+        from .natural_spec_runtime import _source_fields_equal
         _checkpoint_graph(store, c, guard)
         require(guard is not None and type(key) is str and key in guard.inputs,
                 "Cold extraction facts belong to a different read segment")
-        require(_model_inputs(value) == _model_inputs(guard.inputs[key]),
+        from . import _cold_source_packet as owned
+        saved=owned.fact(guard,key)
+        require(_source_fields_equal(saved,value),
                 "Cold extraction facts changed in this read segment")
     except BaseException:
         _invalidate_cold_inputs(guard)
@@ -415,8 +417,14 @@ class _ColdSourceAuditPrefix:
 
     def fields(self):
         from .text_workflows import RunScopeInput
+        boundary=self.key+':original-boundary'
+        if boundary in self.guard.inputs:
+            require(self.guard is self._origin_guard and self.guard.inputs[boundary] is self.original,
+                'Source original native boundary changed identity')
+            original=('original-native-boundary.v1',boundary)
+        else:original=dict(self.original)
         return dict(user=self.user, pid=self.pid, rid=self.rid, scope=_cold_model_dump(RunScopeInput, self.scope),
-                    seal=self.seal, original=dict(self.original), rows=self.rows)
+                    seal=self.seal, original=original, rows=self.rows)
 
 
 @dataclass(frozen=True)
@@ -439,9 +447,18 @@ def _cold_source_audit_prefix(store, c, user, pid, rid, guard):
             raise DomainError("VERSION_CONFLICT", "Exact Cold graph read scope required")
         _checkpoint_graph(store, c, guard)
         scope, seal, original, rows = _source_audit_prefix(store, c, user, pid, rid, _graph_read=guard)
+        from . import _cold_source_packet as owned
+        if owned.available():
+            # The native Generation audit still consumes this exact original
+            # RowMapping. Keep that unmigrated boundary fully pinned.
+            boundary='pb-source-audit:'+user+':'+pid+':'+rid+':original-boundary'
+            guard.add(boundary,original)
+            payload=owned.own_fact(guard,boundary+':payload',dict(seal=seal,rows=rows))
+            seal,rows=payload['seal'],payload['rows']
         prefix = _ColdSourceAuditPrefix(guard, "pb-source-audit:" + user + ":" + pid + ":" + rid,
                                         user, pid, rid, scope, seal, original, rows)
-        guard.add(prefix.key, prefix.fields())
+        if owned.available():owned.own_fact(guard,prefix.key,prefix.fields())
+        else:guard.add(prefix.key, prefix.fields())
         return prefix
     except BaseException:
         _invalidate_cold_inputs(guard)
@@ -468,14 +485,21 @@ def _cold_source_audit_from_original(store, c, user, prefix, original_audit_rows
         require(type(original_audit_rows) is dict and set(original_audit_rows) == {
             "run", "contract", "original", "attempts", "operations", "intents", "events",
             "confirmation", "goal_head", "goal_version"}, "Complete original native audit rows required")
-        guard.add(prefix.key + ":native", original_audit_rows)
+        from . import _cold_source_packet as owned
+        native_rows=(owned.own_fact(guard,prefix.key+':native',original_audit_rows)
+            if owned.available() else None)
+        if native_rows is None:
+            guard.add(prefix.key+':native',original_audit_rows)
+            native_rows=original_audit_rows
         rows = _source_audit_rows(store, c, user, prefix.pid, prefix.rid,
             prefix.scope, prefix.original, prefix.rows, fingerprint(original_audit_rows),
             _graph_read=guard, _source_reader=source_reader)
         _checkpoint_graph(store, c, guard)
-        facts = _ColdSourceAuditFacts(prefix, prefix.key + ":complete", original_audit_rows,
-                                      rows, fingerprint(rows))
-        guard.add(facts.key, facts.fields())
+        digest=fingerprint(rows)
+        if owned.available():rows=owned.own_fact(guard,prefix.key+':rows',rows)
+        facts = _ColdSourceAuditFacts(prefix, prefix.key + ":complete", native_rows,rows,digest)
+        if owned.available():owned.own_fact(guard,facts.key,facts.fields())
+        else:guard.add(facts.key, facts.fields())
         return facts
     except BaseException:
         _invalidate_cold_inputs(guard, prefix, source_reader)
@@ -668,7 +692,7 @@ class _ColdSourcePrefix:
 
     def fields(self):
         return dict(user=self.user, pid=self.pid, rid=self.rid, role=self.role,
-                    limits=_cold_model_dump(Limits, self.limits), job=dict(self.job))
+                    limits=_cold_model_dump(Limits, self.limits), job=self.job)
 
 
 @dataclass(frozen=True)
@@ -710,8 +734,14 @@ def _cold_source_prefix(store, c, user, pid, rid, limits, guard, role):
         require(type(limits) is Limits and role in {"source", "generate", "cold"})
         job = _source_prefix(store, c, user, pid, rid, _graph_read=guard)
         key = ":".join(("pb-source", role, user, pid, rid, fingerprint(limits.model_dump())))
+        from . import _cold_source_packet as owned
+        if owned.available():
+            job=owned.own_fact(guard,key+':job',job)
+            known=vars(guard).get('_source_fact_run_ids',())
+            if rid not in known:vars(guard)['_source_fact_run_ids']=(*known,rid)
         prefix = _ColdSourcePrefix(guard, key, user, pid, rid, limits, role, job)
-        guard.add(prefix.key, prefix.fields())
+        if owned.available():owned.own_fact(guard,prefix.key,prefix.fields())
+        else:guard.add(prefix.key, prefix.fields())
         return prefix
     except BaseException:
         _invalidate_cold_inputs(guard)
@@ -1548,3 +1578,18 @@ def mount(app, store, limits, identity):
             checked, _, _ = review(store, c, user, pid, body.review, limits, draft["runtime_id"])
             verify(store, c, user, draft, limits)
             return receipt(body, checked, frozen)
+
+
+# The owned Source producer/consumer closure is fixed before any read callback.
+from . import _cold_source_packet as _source_fact_code
+_source_fact_code.register(6,globals(),(
+    '_checkpoint_graph','_checkpoint_graph_owner','_cold_fields','_cold_model_dump',
+    '_cold_typed_checkpoint','_source_audit_prefix','_source_audit_rows',
+    '_cold_source_audit_prefix','_cold_source_audit_from_original',
+    '_source_prefix','_source_typed','_source_from_audit','_source_proof_fields',
+    '_cold_source_prefix','_cold_source_typed','_cold_source_from_audit',
+    '_cold_source_facet_from_source','_cold_review_from_source',
+    '_cold_verify_from_review','_cold_verify_facet_from_review','_cold_audit_from_source',
+    'source_gate','require','fingerprint'),
+    (_ColdSourcePrefix,_ColdSourceTyped,_ColdSourceFacts,_ColdSourceAuditPrefix,
+     _ColdSourceAuditFacts,_ColdExtractionReview))
