@@ -1,7 +1,7 @@
-"""Known-blocker reproducer. Exit 1 while forged synthetic flags are accepted.
+"""Preserved handoff exploit. Exit 1 if forged synthetic flags are accepted.
 
-This candidate is uninstalled. This is deliberately not a passing acceptance
-assertion, and must be closed before any production handoff can use it.
+This candidate is uninstalled. The probe passing closes this exploit only; it is not production
+acceptance or a complete Source-family handoff proof.
 """
 import json
 from source_image import capture

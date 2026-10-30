@@ -181,3 +181,21 @@ def test_gc_state_restored_on_native_storage_exception():
  finally:
   if before:gc.enable()
   else:gc.disable()
+
+
+def test_forged_virtual_and_unused_metadata_rejected():
+ from test_config import config
+ leaf=bytes(bytearray(b'non-sensitive original '+b'x'*128));clone=bytes(bytearray(leaf))
+ data,anchors=capture(leaf,());cfg=config()
+ for altered in (
+  (*data[:4],(data[0],),*data[5:]),
+  (*data[:2],(*data[2],b'unused carrier'),*data[3:]),
+  (*data[:2],(*data[2],data[2][0]),*data[3:]),
+  (*data[:7],((data[0],0),)),
+  (*data[:4],(len(data[1]),),*data[5:]),
+ ):
+  owner=native.make_owned(altered)
+  assert not native.match_live(owner,clone,anchors,cfg,())
+  assert not native.match_live(owner,leaf,anchors,cfg,())
+ assert native.match_live(native.make_owned(data),leaf,anchors,cfg,())
+ with pytest.raises(TypeError):native.match_live(native.make_owned(data),leaf,anchors,cfg)

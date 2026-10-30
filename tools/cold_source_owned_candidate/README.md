@@ -16,13 +16,15 @@ the bounded native live read and restored on all exits, preventing tracked
 temporary allocations from running GC callbacks inside that interval. Hash equality does not replace content.
 The binding is not graph liveness, SQL authority, or a cached PASS.
 
-**Known failing handoff condition:** the native verifier still trusts the
-Python-provided synthetic-leaf flags. A forged flag can make an ordinary leaf
-accept an equal clone. `probe_untrusted_virtual.py` reproduces this and exits 1
-on the current build. Native consumption positions must establish synthetic
-qualification independently; unused/invalid carrier, catalog and virtual
-metadata must also be rejected. Until closed, this is not a complete handoff
-proof even when its supported-input regressions pass.
+The initial uninstalled candidate accepted forged synthetic flags; the failing
+probe and code remain at commit `a53e721dfeb8e951203e247e72e841a6560ec3b3`.
+The verifier now derives synthetic qualification from its native consumer
+position: model schema, quoted-name text, or the actual row lookup projection.
+Ordinary leaves cannot acquire value-only comparison through metadata flags.
+Unused/duplicated carrier, catalog and virtual metadata are rejected, and the
+outside boundary argument is mandatory. `probe_untrusted_virtual.py` now exits 0
+when that original exploit is rejected. This does not qualify the caller's
+model catalog/schema/descriptors or close the production consumers.
 
 Still required before production: fixed schema/callee/config qualification;
 atomic publication/cleanup on the actual graph; fresh Ledger Slot joins; every
