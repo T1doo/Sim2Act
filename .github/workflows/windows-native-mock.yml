@@ -29,7 +29,7 @@ jobs:
       github.run_attempt == 1 &&
       contains(github.event.head_commit.message, '[desktop-recovery-once-20261030]')
     runs-on: windows-2025
-    timeout-minutes: 12
+    timeout-minutes: 8
     defaults:
       run:
         shell: pwsh
@@ -63,6 +63,7 @@ jobs:
             /tests/
             /schemas/
             /docs/evidence/bounded-agent-offline-20261006/independent-gold.json
+            /docs/evidence/g0-monitored-third-20261021/RUN/mock-exchanges.jsonl
             /docs/evidence/protocol-store-loop-20261006/evaluation/a-source.json
             /docs/evidence/protocol-store-loop-20261006/evaluation/a-cold.json
             /docs/evidence/protocol-store-loop-20261006/evaluation/b-source.json
@@ -83,7 +84,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Pinned dependency install failed; no alternate source.' }
           ./.venv/Scripts/python.exe -m pip install --no-index --no-build-isolation --no-deps -e .
           if ($LASTEXITCODE -ne 0) { throw 'Exact source build failed.' }
-          ./.venv/Scripts/python.exe -c "from sim2act import _raw_snapshot, _cold_graph_structure; from sim2act.production_trial_admission import _qualified; _qualified(); print('Both native extensions imported; full qualification checked')"
+          ./.venv/Scripts/python.exe -c "import sys; assert sys.platform == 'win32'; from sim2act import _raw_snapshot, _cold_graph_structure, _cold_source_owned_impl, natural_spec_runtime; from sim2act.production_trial_admission import _qualified; from sim2act import _cold_source_packet as owned; _qualified(); assert owned.available(), 'Owned native source/build mismatch'; owned.current(); print('Three native extensions and complete owned code registration checked; SOURCE_SHA256='+_cold_source_owned_impl.SOURCE_SHA256)"
           if ($LASTEXITCODE -ne 0) { throw 'Required native imports or qualification failed.' }
           node -e "const [a,b,c]=process.versions.node.split('.').map(Number);if(!((a===22&&(b>22||(b===22&&c>=2)))||(a===24&&b>=15)||a>=26))throw Error('Existing Node does not meet locked jsdom engines; no runtime installer');console.log('Existing compatible Node '+process.versions.node)"
           if ($LASTEXITCODE -ne 0) { throw 'Existing Node incompatible; no replacement runtime.' }
@@ -101,7 +102,7 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         timeout-minutes: 4
         run: |
-          ./.venv/Scripts/python.exe -m pytest --assert=plain tests/test_desktop_origin.py tests/test_desktop_control.py tests/test_application_use.py tests/test_csv_run_download.py tests/test_engineering_workspace.py -q --basetemp="$env:RUNNER_TEMP/sim2act-regression-$env:GITHUB_RUN_ID" --junitxml="$env:RUNNER_TEMP/sim2act-regression.xml"
+          ./.venv/Scripts/python.exe -m pytest --assert=plain tests/test_desktop_origin.py tests/test_desktop_control.py tests/test_application_use.py tests/test_csv_run_download.py tests/test_engineering_workspace.py tests/test_cold_source_native_views.py tests/test_cold_use_response_owned.py tests/test_cold_native_audit_fact.py::test_extraction_row_producer_schema_and_routing_aliases_are_fixed tests/test_cold_native_audit_fact.py::test_extraction_pair_callback_replacement_is_not_executed tests/test_cold_native_audit_fact.py::test_extraction_schema_override_is_not_executed -q --basetemp="$env:RUNNER_TEMP/sim2act-regression-$env:GITHUB_RUN_ID" --junitxml="$env:RUNNER_TEMP/sim2act-regression.xml"
           if ($LASTEXITCODE -ne 0) { throw 'Finite native regression failed; no retry or skipped failure.' }
       - name: Preserve boundary and actual test summary, no retained artifact/cache upload
         if: always()
