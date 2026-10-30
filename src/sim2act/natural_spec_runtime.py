@@ -5070,6 +5070,7 @@ def _model_writer_connection(worker, candidate, plan):
 
 
 def advance_model(worker, run, *, _heartbeat_state=None):
+    from ._sqlite_run_control import Interrupted as LocalControlInterrupted
     from . import pa_spec_apps as spec
     from .app_jobs import lock_live
     from .db import new_id
@@ -5307,6 +5308,7 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                 plan = candidate.prepare(worker, binding, graph_call, limits)
         with _model_settlement_writer(worker, job, meta["deadline"], _heartbeat_state,
                 attempt_id=aid, _original_run=run) as writer_epoch, \
+                store.local_model_settlement(worker, job, meta["deadline"]) as control_epoch, \
                 _model_writer_connection(worker, candidate, plan) as (c, owned_plan), _journal_reads(worker, c):
             current = lock_live(store, c, run)
             require(
@@ -5375,6 +5377,8 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                         cold.guard.add("settlement-parsed", dict(value=value, usage=usage, receipt=receipt))
                         cold.commit(spec._cold_commit_prefix(worker, c, run, current_binding,
                             cold.guard, "second"))
+            if control_epoch is not None:
+                control_epoch.postwrite()
             c.execute(
                 update(attempts)
                 .where(
@@ -5442,6 +5446,15 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                             **({"_model_after": model_after} if model_after is not None else {}))
             from .model_settlement import checkpoint
             checkpoint(worker)
+    except LocalControlInterrupted as interrupted:
+        # All five writes have rolled back; SQL, renewal and settlement locks
+        # are now released. Never turn a control abort into response rejection.
+        if not interrupted.wait_commands():
+            # Do not race an unfinished original command with fail_owned or
+            # change the Run version. Received/dispatched evidence and its
+            # finite lease remain available for the original fenced recovery.
+            return False
+        raise DomainError("OUTCOME_UNKNOWN", "Model settlement stopped for owner control; received evidence retained") from interrupted
     except DomainError as rejected:
         with store.tx() as c:
             # The receive transaction has already committed. A later owner,

@@ -787,6 +787,8 @@ class Store:
         self.engine = create_engine(url, pool_pre_ping=not workspace_serialized,
             **({"pool_timeout": 0} if workspace_serialized else {}))
         self._workspace_writer_gate = _WorkspaceWriterGate() if workspace_serialized else None
+        self._local_model_control = None
+        self._local_model_control_lock = threading.Lock()
 
         def proof_write_boundary(connection, cursor, statement, parameters, context, executemany):
             # Conservatively invalidate ephemeral same-call proofs for every
@@ -1699,7 +1701,32 @@ class Store:
                     "resource.read",
                 )
 
+    @contextmanager
+    def local_model_settlement(self, worker, job, deadline):
+        from ._sqlite_run_control import Registry, supported
+        if not supported(self):
+            yield None
+            return
+        with self._local_model_control_lock:
+            if self._local_model_control is None:
+                self._local_model_control = Registry(self)
+        with self._local_model_control.settlement(worker, job, deadline) as epoch:
+            yield epoch
+
+    @contextmanager
+    def local_model_command(self, principal, rid, command, version, *, iid=None):
+        control = self._local_model_control
+        if control is None:
+            yield
+        else:
+            with control.command(principal, rid, command, version, iid):
+                yield
+
     def command(self, principal, run_id, command, version):
+        with self.local_model_command(principal, run_id, command, version):
+            return self._command(principal, run_id, command, version)
+
+    def _command(self, principal, run_id, command, version):
         self.require_run_owner(principal, run_id)
         with self.tx() as c:
             from .local_record_apps import reject_legacy as reject_record_legacy

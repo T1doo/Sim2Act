@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from fastapi import Depends, Request
+from fastapi import Depends, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import Field
 from sqlalchemy import select
@@ -521,10 +521,23 @@ def mount(app, store, limits, identity):
             content_access=False,
         )
 
+    @app.get("/api/internal/instances/{iid}/runs/{rid}/control-progress")
+    def control_progress(iid: str, rid: str, authorization: str = Header(default="")):
+        from ._sqlite_run_control import authenticate, supported
+        if not authorization.startswith('Bearer '):
+            raise DomainError('PERMISSION_DENIED')
+        user = authenticate(store, authorization[7:]) if supported(store) else identity(authorization)
+        from ._sqlite_run_control import projection
+        job = projection(store, user, rid, iid=iid)
+        return envelope(id=rid, instance_id=iid, status=job['status'],
+            version=job['version'], cancel_intent=job['cancel_intent'],
+            content_access=False, consistency='COMMITTED_METADATA_ONLY')
+
     @app.post("/api/internal/instances/{iid}/runs/{rid}/commands")
     def command(iid: str, rid: str, body: ControlInput, user=user_dependency):
-        scoped = scope_run(user, iid, rid)
-        dispatch = app_jobs.command_job if scoped.get("accepted_spec_metadata") else (
-            csv_dag.command_job if csv_dag.is_job(store, rid) else app_jobs.command_job)
-        status = dispatch(store, user, rid, body.command, body.version)
+        with store.local_model_command(user, rid, body.command, body.version, iid=iid):
+            scoped = scope_run(user, iid, rid)
+            dispatch = app_jobs.command_job if scoped.get("accepted_spec_metadata") else (
+                csv_dag.command_job if csv_dag.is_job(store, rid) else app_jobs.command_job)
+            status = dispatch(store, user, rid, body.command, body.version)
         return envelope(status=status)

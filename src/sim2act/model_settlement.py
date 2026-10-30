@@ -133,6 +133,9 @@ def interval(worker, job, attempt_id, deadline, state):
 
 
 def checkpoint(worker):
+    control = getattr(getattr(worker, "store", None), "_local_model_control", None)
+    if control is not None:
+        control.checkpoint(worker)
     token = getattr(worker, "_settlement_interval", None)
     if token is not None and (worker.stop.is_set() or time.monotonic() >= token[0]
             or time.time() >= token[1]):
