@@ -56,7 +56,7 @@ class _ProducerSegment:
             self.current(graph, store, c)
             inputs = gate._trial_pure_mapping(graph.inputs)
             gate.require('cold-trial:complete' in inputs)
-            gate._graph_trial_stage_raw_from_raw(stage_facts, inputs['cold-trial:complete'])
+            gate._graph_trial_stage_raw_from_raw(stage_facts, inputs['cold-trial:complete'], _graph=graph)
             self.stage_qualified += 1
             return True
         except BaseException:

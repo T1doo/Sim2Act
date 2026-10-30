@@ -50,6 +50,8 @@ from . import _cold_base_segment as _base_segments
 from . import _cold_policy_segment as _policy_segments
 from . import _cold_typed_native_candidate as _typed_native_code
 from . import db as _raw_seed_db
+from . import _cold_source_packet as _source_owned_code
+_SOURCE_OWNED_CHECK = _source_owned_code.CHECK
 from . import _cold_archive_packet as _owned_archive_code
 _OWNED_ARCHIVE_CHECK = _owned_archive_code.CHECK
 _OWNED_ARCHIVE_KEY = _owned_archive_code.KEY
@@ -2207,6 +2209,16 @@ class _ColdGraphRead:
         """
         from .pb_natural_specs import _source_reads_current
 
+        # Any published Source pin requires the same scope-bound owner. This
+        # does not replace the original dynamic gates or whole-graph content.
+        if (type(self.inputs) is dict and 'cold-trial:accounted-source' in self.inputs
+                and (type(self.inputs['cold-trial:accounted-source']) is tuple
+                     or vars(self).get('_source_owned_binding') is not None)):
+            checker,code,defaults=_SOURCE_OWNED_CHECK
+            require(_source_owned_code.current is checker and checker.__code__ is code
+                and checker.__defaults__ is defaults)
+            checker()
+            _source_owned_code.bound(self)
         w = self.worker
         from .model_settlement import checkpoint
         checkpoint(w)
@@ -2276,6 +2288,7 @@ class _ColdGraphRead:
     def invalidate(self):
         was_active = self.active
         self.active = False
+        vars(self).pop('_source_owned_binding',None)
         vars(self).pop("_structure_state", None)
         # This opt-in selector owns no data/authority. Drop the back-reference
         # on the original scope teardown; a retained diagnostic handle stays
@@ -4001,7 +4014,8 @@ class _ColdTrialGraph:
         if self.source_accounted is not None and 'cold-trial:accounted-source' in inputs:
             if owned is None:
                 gate._graph_trial_accounted_models_from_raw(models, self.source_accounted,
-                    raw_slot('cold-trial:accounted-source'))
+                    (inputs['cold-trial:accounted-source'] if _source_owned_code.is_packet(self.source_accounted)
+                        else raw_slot('cold-trial:accounted-source')), _graph=g)
             else:
                 if native_base:
                     owned._base_family_current(g, self.source_accounted, 'source')
@@ -4047,7 +4061,7 @@ class _ColdTrialGraph:
                 gate._trial_typed_hold(models, AppManifest, release.origin[0], origin['manifest'])
         if self.cold_stage_facts is not None and 'cold-trial:complete' in inputs:
             if owned is None:
-                gate._graph_trial_stage_raw_from_raw(self.cold_stage_facts, raw_slot('cold-trial:complete'))
+                gate._graph_trial_stage_raw_from_raw(self.cold_stage_facts, raw_slot('cold-trial:complete'), _graph=g)
             else:
                 if native_base:
                     owned._base_stage_current(self.cold_stage_facts)
@@ -4056,10 +4070,10 @@ class _ColdTrialGraph:
             if native_base and owned is not None:
                 owned._base_stage_models(models, self.cold_stage_facts, inputs)
             else:
-                gate._graph_trial_stage_models_from_raw(models, self.cold_stage_facts, inputs, **{'_owned': owned} if owned is not None else {})
+                gate._graph_trial_stage_models_from_raw(models, self.cold_stage_facts, inputs, _graph=g, **{'_owned': owned} if owned is not None else {})
         if self.source_stage_facts is not None and 'cold-trial:complete' in inputs:
             if owned is None:
-                gate._graph_trial_stage_raw_from_raw(self.source_stage_facts, raw_slot('cold-trial:complete'))
+                gate._graph_trial_stage_raw_from_raw(self.source_stage_facts, raw_slot('cold-trial:complete'), _graph=g)
             else:
                 if native_base:
                     owned._base_stage_current(self.source_stage_facts)
@@ -4068,7 +4082,7 @@ class _ColdTrialGraph:
             if native_base and owned is not None:
                 owned._base_stage_models(models, self.source_stage_facts, inputs)
             else:
-                gate._graph_trial_stage_models_from_raw(models, self.source_stage_facts, inputs, **{'_owned': owned} if owned is not None else {})
+                gate._graph_trial_stage_models_from_raw(models, self.source_stage_facts, inputs, _graph=g, **{'_owned': owned} if owned is not None else {})
         if self.sealed_fields is not None:
             require(self.source_proof is raw_slot('cold-trial:complete')['source_proof'])
         if 'cold-trial:admission-prefix' in inputs:
@@ -4177,6 +4191,8 @@ class _ColdTrialGraph:
 
     def _accounted_fields(self, value):
         """Concrete complete per-aid models/rows/bytes; preserves multiplicity."""
+        if _source_owned_code.is_packet(value):
+            return _source_owned_code.pin(self.guard,value)
         owned = getattr(self, 'accounted_prewrite', None)
         if owned is not None:
             owned.assert_family(self.guard, value, value.role)
@@ -4346,7 +4362,7 @@ class _ColdTrialGraph:
         pin()
         if self.accounted_prewrite is None:
             require(self._accounted_fields(self.generate_accounted) == g.inputs['cold-trial:accounted-generate'])
-            require(self.source_accounted[0]['id'] == t.source_counter_reader.job['id'] and self.generate_accounted[0]['id'] == generation['id'])
+            require((_source_owned_code.facts(g,self.source_accounted)[0] if _source_owned_code.is_packet(self.source_accounted) else self.source_accounted[0])['id'] == t.source_counter_reader.job['id'] and self.generate_accounted[0]['id'] == generation['id'])
         else:
             self.accounted_prewrite.assert_family(g, self.generate_accounted, 'generate')
             self.accounted_prewrite.assert_upstream_run('source', t.source_counter_reader.job)
@@ -5535,3 +5551,7 @@ def advance_model(worker, run, *, _heartbeat_state=None):
             )
         raise
     return True
+
+
+_source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_limit_values'),
+    (_ColdGraphRead,_ColdTrialGraph))

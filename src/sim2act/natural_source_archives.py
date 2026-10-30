@@ -415,7 +415,10 @@ def _graph_source_bodies(graph, store, c, user, contract, ledger, source_facts, 
         if _accounted_test is not None:
             from . import cold_accounted
             owned = cold_accounted._source_test_family(_accounted_test, graph)
-        job, rows, chains, ns_reads = source_facts
+        from . import _cold_source_packet as source_owned
+        source_packet=source_facts if source_owned.is_packet(source_facts) else None
+        job, rows, chains, ns_reads = (source_owned.facts(graph,source_packet)
+            if source_packet is not None else source_facts)
         require(type(ledger) is Ledger and gate._trial_result(evidence_mode(c, job), _guard) == 'LIVE')
         slots = gate._trial_result(_source_slots_from_facts(rows, ledger, True, _guard=_guard), _guard)
         expected_ids = {r['id'] for r in rows}
@@ -431,6 +434,8 @@ def _graph_source_bodies(graph, store, c, user, contract, ledger, source_facts, 
             require(len(own_rows) == len(own_reads) == len(own_chains) == 1)
             row, read, chain = (own_rows[0], own_reads[0], own_chains[0])
             _, request, wire, response, received = read
+            if source_packet is not None:
+                source_owned.slot_join(graph,source_packet,ledger,chain[0],aid,_guard)
             gate._trial_result(_source_row_from_facts(contract, row, slot, True, _guard=_guard), _guard)
             require(chain[3] == row and chain[4] == wire and (chain[5] == received))
             canonical = gate._trial_result(_source_exchange_from_facts(contract, row, slot, request, wire, response, received, True, _guard=_guard), _guard)
@@ -489,7 +494,9 @@ def _graph_resolve_trial_source(graph, store, c, user, contract, approval_key, l
             if _owned is not None:
                 _owned.assert_run('source', job)
             else:
-                require(source_facts[0] == job)
+                from . import _cold_source_packet as source_owned
+                require(source_owned.image.business_equal(source_owned.facts(graph,source_facts)[0],job)
+                    if source_owned.is_packet(source_facts) else source_facts[0] == job)
             accepted = gate._trial_result(gate._saved(c, user, gate._trial_result(gate.entity(contract, **{'_guard': _guard} if _guard is not None else {}), _guard), gate.PHASE, 'source', gate.StageApproveInput, **{'_guard': _guard} if _guard is not None else {}), _guard)
             gate._graph_trial_produced(graph, store, c, _models, gate.StageApproveInput, accepted)
             gate._trial_result(_source_accepted_from_facts(approval_key, accepted, current, job, _guard=_guard), _guard)
@@ -549,3 +556,8 @@ def _source_row_from_facts(contract, row, slot, production, *, _guard=None):
 # Fixed producer closure, including the fresh private public/proof containers.
 _OWNED_ARCHIVE_PRODUCERS = _owned_archive_code.witness(globals(),
     ('_graph_resolve_trial_source', '_graph_source_bodies'))
+
+
+from . import _cold_source_packet as _source_owned_code
+_source_owned_code.register(3,globals(),('_graph_source_bodies','_graph_resolve_trial_source',
+    '_source_slots_from_facts','_source_row_from_facts','_source_exchange_from_facts'))

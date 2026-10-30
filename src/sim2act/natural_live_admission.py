@@ -1008,8 +1008,11 @@ def _graph_stage_current(graph, store, c, user, contract, stage, stage_facts, *,
         if stage == 'cold':
             require(type(extraction) is tuple and len(extraction) == 4)
             extraction_draft, body, extraction_target, extraction_goal = extraction
+            from . import _cold_source_packet as source_owned
+            source_packet = source if source_owned.is_packet(source) else None
             if _owned is None:
-                source_run, source_actual, source_chains, source_ns = source
+                source_run, source_actual, source_chains, source_ns = (
+                    source_owned.facts(graph,source_packet) if source_packet is not None else source)
             require(extraction_draft['id'] == draft['id'])
             if _owned is not None:
                 _owned.assert_family(graph, source, 'source')
@@ -1021,9 +1024,12 @@ def _graph_stage_current(graph, store, c, user, contract, stage, stage_facts, *,
             else:
                 _trial_result(_stage_pb_origin_from_facts(contract, body, source_run['id'], _guard=_guard), _guard)
                 require(len(source_actual) == len(source_chains) == len(source_ns) == 2)
-                for chain in source_chains:
-                    require(chain[3] in source_actual)
-                    _trial_result(_stage_usage_from_facts(chain[3], 'source', chain[0], chain[2], chain[3], _guard=_guard), _guard)
+                if source_packet is not None:
+                    source_owned.stage_usage(graph,source_packet,_guard)
+                else:
+                    for chain in source_chains:
+                        require(chain[3] in source_actual)
+                        _trial_result(_stage_usage_from_facts(chain[3], 'source', chain[0], chain[2], chain[3], _guard=_guard), _guard)
         else:
             _trial_result(_stage_plain_origin_from_facts(original, _guard=_guard), _guard)
             if 'spec_binding' in original:
@@ -1544,11 +1550,15 @@ def _graph_trial_journal_models_from_raw(models, state, cursor, raw):
         _trial_typed_hold(models, policy.AccountQuotaCursor, cursor, raw['cursor'])
 
 
-def _graph_trial_accounted_models_from_raw(models, value, saved):
+def _graph_trial_accounted_models_from_raw(models, value, saved, *, _graph=None):
     from . import natural_source_archives as archive
     from . import production_trial_policy as policy
     from . import production_trial_sender as sender
 
+    from . import _cold_source_packet as source_owned
+    if source_owned.is_packet(value):
+        require(_graph is not None and saved is source_owned.pin(_graph,value))
+        return
     saved = _trial_pure_mapping(saved)
     require(type(value) is tuple and len(value) == 4)
     run, actual, chains, ns = value
@@ -1599,7 +1609,7 @@ def _graph_trial_extraction_models_from_raw(models, extraction, raw):
     _trial_typed_hold(models, pb.ExtractInput, body, raw['request'])
 
 
-def _graph_trial_stage_models_from_raw(models, stage_facts, inputs, *, _owned=None):
+def _graph_trial_stage_models_from_raw(models, stage_facts, inputs, *, _owned=None, _graph=None):
     inputs = _trial_pure_mapping(inputs)
     require((type(stage_facts) is tuple or type(stage_facts) is list) and len(stage_facts) == 9)
     job, bound, raw, metadata, gen, frozen, generated, source, extraction = stage_facts
@@ -1612,13 +1622,13 @@ def _graph_trial_stage_models_from_raw(models, stage_facts, inputs, *, _owned=No
     else:
         _graph_trial_accounted_models_from_raw(models, generated, inputs['cold-trial:accounted-generate'])
         if source is not None:
-            _graph_trial_accounted_models_from_raw(models, source, inputs['cold-trial:accounted-source'])
+            _graph_trial_accounted_models_from_raw(models, source, inputs['cold-trial:accounted-source'], _graph=_graph)
     if extraction is not None:
         full = _trial_pure_mapping(inputs['cold-trial:complete'])
         _graph_trial_extraction_models_from_raw(models, extraction, full['extraction'])
 
 
-def _graph_trial_stage_raw_from_raw(stage_facts, full):
+def _graph_trial_stage_raw_from_raw(stage_facts, full, *, _graph=None):
     """Original complete Stage identity joins, over exact controlled storage."""
     full = _trial_pure_mapping(full)
     require((type(stage_facts) is tuple or type(stage_facts) is list) and len(stage_facts) == 9)
@@ -1629,10 +1639,13 @@ def _graph_trial_stage_raw_from_raw(stage_facts, full):
                 _trial_pure_data(_trial_pure_mapping(full['cold_job'])))
             and source is not None and extraction is not None)
     else:
-        saved_source = _trial_pure_mapping(full['source'])
+        from . import _cold_source_packet as source_owned
+        saved_source = (source_owned.raw_fields(_graph,full['source'])
+            if type(full['source']) is tuple else _trial_pure_mapping(full['source']))
         require(bound is full['source_binding']
-            and _trial_typed_equal(_trial_pure_data(_trial_pure_mapping(job)),
-                _trial_pure_data(saved_source['run']))
+            and (source_owned.image.business_equal(saved_source['run'],job)
+                if type(full['source']) is tuple else _trial_typed_equal(
+                    _trial_pure_data(_trial_pure_mapping(job)),_trial_pure_data(saved_source['run'])))
             and source is None and extraction is None)
     generation = _trial_pure_mapping(full['generation'])
     require(raw is generation['raw'] and metadata is generation['metadata']
@@ -1662,7 +1675,7 @@ def _graph_trial_accounted_models(graph, store, c, models, value, stage, *, _own
     key = 'cold-trial:accounted-' + stage
     inputs = _trial_pure_mapping(graph.inputs)
     require(key in inputs, 'Complete accounted stage raw pin required')
-    _graph_trial_accounted_models_from_raw(models, value, inputs[key])
+    _graph_trial_accounted_models_from_raw(models, value, inputs[key], _graph=graph)
 
 
 def _graph_trial_frozen_models(graph, store, c, models, frozen):
@@ -1683,7 +1696,7 @@ def _graph_trial_extraction_models(graph, store, c, models, extraction):
 
 def _graph_trial_stage_models(graph, store, c, models, stage_facts, *, _owned=None):
     _graph_trial_pin(graph, store, c)
-    _graph_trial_stage_models_from_raw(models, stage_facts, graph.inputs, **{'_owned': _owned} if _owned is not None else {})
+    _graph_trial_stage_models_from_raw(models, stage_facts, graph.inputs, _graph=graph, **{'_owned': _owned} if _owned is not None else {})
 
 
 def _graph_trial_accounted_raw(graph, store, c, value, models):
@@ -1717,7 +1730,7 @@ def _graph_trial_stage_raw(graph, stage_facts, *, _owned=None):
         return
     inputs = _trial_pure_mapping(graph.inputs)
     require('cold-trial:complete' in inputs)
-    _graph_trial_stage_raw_from_raw(stage_facts, inputs['cold-trial:complete'])
+    _graph_trial_stage_raw_from_raw(stage_facts, inputs['cold-trial:complete'], _graph=graph)
 
 
 def raw_snapshot_backend():
@@ -1728,3 +1741,15 @@ def raw_snapshot_backend():
             "Loaded raw capture binary changed on disk")
     return {"kind": "native", "source_sha256": _RAW_SOURCE_SHA,
             "binary_sha256": _RAW_BINARY_SHA, "binary": _RAW_BINARY_PATH.name}
+
+
+from . import _cold_source_packet as _source_owned_code
+_source_owned_code.register(1,globals(),(
+    '_graph_trial_accounted_models_from_raw','_graph_trial_stage_models_from_raw',
+    '_graph_trial_stage_raw_from_raw','_graph_trial_accounted_models','_graph_trial_stage_models',
+    '_graph_trial_stage_raw','_graph_stage_current','_graph_trial_accounted_raw',
+    '_graph_trial_stage_parent_pin','_trial_typed_guard','_trial_typed_values',
+    '_graph_trial_pin','require','_trial_typed_storage','_trial_typed_nested_classes',
+    '_trial_pure_mapping','_trial_pure_data','_trial_typed_equal','_trial_typed_hold',
+    '_graph_trial_journal_models','_graph_trial_journal_models_from_raw',
+    '_graph_trial_contract_models','_graph_trial_produced','_graph_trial_produced_legacy'))

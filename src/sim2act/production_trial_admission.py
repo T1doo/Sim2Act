@@ -100,7 +100,7 @@ def _qualified():
             and proof["version"] == "production-software-qualification.v1"
             and proof["baseline"] == "206153da27edb5353e7106ab52b6e5bcaad86627")
         current = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-                   for p in (*root.glob("*.py"), *root.glob("*.c")) if p.name != "config.py"}
+                   for p in (*root.glob("*.py"), *root.glob("*.c"), *root.glob("*.h")) if p.name != "config.py"}
         current["_owned_sql_catalog.json"] = hashlib.sha256((root / "_owned_sql_catalog.json").read_bytes()).hexdigest()
         source = Path(__file__).read_bytes()
         literal = ('PRODUCTION_QUALIFICATION_HASH = "' + PRODUCTION_QUALIFICATION_HASH + '"').encode()

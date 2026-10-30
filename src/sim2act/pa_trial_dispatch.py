@@ -1640,6 +1640,16 @@ def _graph_stage_accounted(graph, store, c, b, state, cursor, rid, stage, *, _ow
         completed_value = (run, actual, tuple(chains), tuple(ns_reads))
         completed_raw = gate._graph_trial_accounted_raw(graph, store, c, completed_value, _models)
         key = 'cold-trial:accounted-' + stage
+        from . import _cold_source_packet as source_owned
+        if stage=='source' and graph.phase=='post' and _owned is None and source_owned.available():
+            # The complete producer is finished. No legacy Source node escaped.
+            try:
+                return source_owned.publish(graph,completed_value,completed_raw,_guard)
+            except source_owned.Capacity:
+                # Bounded capacity failure before publication only retains all
+                # original full checks; errors after publication invalidate.
+                gate.require(key not in graph.inputs)
+                _guard()
         if key in graph.inputs:
             gate.require(completed_raw == graph.inputs[key])
         else:
@@ -1724,7 +1734,7 @@ def _graph_pb_archive_chain(graph, store, c, b, state, resolved, source_facts, *
                     and checker.__defaults__ is defaults and owned_archive._CONFIG is config)
                 checker(config, consumer_code)
             _archive_chain_values(b, state, receipt, requests, responses, source_facts,
-                _guard=owned_continuation)
+                _guard=owned_continuation, _source_graph=graph)
         elif _owned is None:
             _archive_chain_from_facts(b, state, resolved, source_facts, _guard=_guard)
         else:
@@ -1752,16 +1762,21 @@ def _archive_chain_from_facts(b, state, resolved, source_facts, *, _guard=None):
         resolved.request_bodies, resolved.response_bodies, source_facts, _guard=_guard)
 
 
-def _archive_chain_values(b, state, receipt, requests, responses, source_facts, *, _guard=None):
+def _archive_chain_values(b, state, receipt, requests, responses, source_facts, *, _guard=None, _source_graph=None):
     """Same complete joins; owned consumers read only immutable node views."""
-    source, actual, chains, ns_reads = source_facts
+    from . import _cold_source_packet as source_owned
+    source_packet=source_facts if source_owned.is_packet(source_facts) else None
+    source, actual, chains, ns_reads = (source_owned.facts(_source_graph,source_packet)
+        if source_packet is not None else source_facts)
     slots = [s for s in state.slots if s.identity.stage == 'source']
     gate.require(gate._trial_result(_production_binding(b), _guard) and (not state.halted) and (len(slots) == len(receipt['attempts']) == len(chains) == len(ns_reads) == 2) and (receipt['verification'] == 'SPEC_PRODUCTION_CONTROLLER_ARCHIVE') and (receipt['live_allowed'] is False) and (receipt['source_run_id'] == source['id']))
     for slot, proof in gate._trial_result(zip(slots, receipt['attempts'], strict=True), _guard):
         matching = tuple((chain for chain in chains if chain[3]['id'] == proof['attempt_id']))
         gate.require(len(matching) == 1)
         linked, capture, parsed, checked, wire, payload = matching[0]
-        gate.require(linked == slot and checked in actual and (slot.identity.run_id == source['id']) and (slot.identity.attempt_id == proof['attempt_id']) and (slot.identity.wire_sha256 == proof['request_sha256']) and (slot.identity.wire_bytes == proof['request_bytes']) and (capture.raw_sha256 == proof['decoded_body_sha256']) and (capture.raw_bytes == proof['decoded_body_bytes']) and (capture.canonical_sha256 == proof['canonical_ascii_sha256']) and (capture.canonical_ascii_bytes == proof['canonical_ascii_bytes']))
+        if source_packet is not None:
+            source_owned.slot_join(_source_graph,source_packet,state,linked,proof['attempt_id'],_guard)
+        gate.require((source_packet is not None or linked == slot) and checked in actual and (slot.identity.run_id == source['id']) and (slot.identity.attempt_id == proof['attempt_id']) and (slot.identity.wire_sha256 == proof['request_sha256']) and (slot.identity.wire_bytes == proof['request_bytes']) and (capture.raw_sha256 == proof['decoded_body_sha256']) and (capture.raw_bytes == proof['decoded_body_bytes']) and (capture.canonical_sha256 == proof['canonical_ascii_sha256']) and (capture.canonical_ascii_bytes == proof['canonical_ascii_bytes']))
         index = receipt['attempts'].index(proof)
         gate.require(requests[index] == wire and responses[index] == payload)
 
@@ -1789,3 +1804,8 @@ def _pb_prefix_source_from_facts(state, *, _guard=None):
 
 _OWNED_ARCHIVE_CONSUMERS = _owned_archive_code.witness(globals(),
     ('_graph_pb_archive_chain', '_archive_chain_values'))
+
+
+from . import _cold_source_packet as _source_owned_code
+_source_owned_code.register(2,globals(),('_graph_stage_accounted','_graph_pb_archive_chain',
+    '_archive_chain_values','_archive_chain_from_facts'))

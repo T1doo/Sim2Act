@@ -39,5 +39,18 @@ setup(
                 )
             ],
         ),
+        Extension(
+            "sim2act._cold_source_owned_impl",
+            ["src/sim2act/_cold_source_owned_impl.c"],
+            optional=True,
+            depends=["src/sim2act/_cold_source_live_match.h", "src/sim2act/_cold_source_code.h", "src/sim2act/_cold_source_view.h", "src/sim2act/_cold_source_shape.h"],
+            define_macros=[("SOURCE_SHA", '"' + hashlib.sha256(
+                Path(__file__).parent.joinpath("src/sim2act/_cold_source_owned_impl.c").read_bytes()
+                + Path(__file__).parent.joinpath("src/sim2act/_cold_source_live_match.h").read_bytes()
+                + Path(__file__).parent.joinpath("src/sim2act/_cold_source_code.h").read_bytes()
+                + Path(__file__).parent.joinpath("src/sim2act/_cold_source_view.h").read_bytes()
+                + Path(__file__).parent.joinpath("src/sim2act/_cold_source_shape.h").read_bytes()
+            ).hexdigest() + '"')],
+        ),
     ]
 )

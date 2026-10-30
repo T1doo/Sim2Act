@@ -831,11 +831,18 @@ def segment(f, c, phase="pre", *, prewrite=False, cohort=None):
             source = dispatch._graph_stage_accounted(
                 graph, f.store, c, f.binding, state, cursor, f.source_id, "source"
             )
+        from sim2act import _cold_source_packet as source_owned
+        source_packet = source if source_owned.is_packet(source) else None
+        # Match production's complete Source pin and independent current Run
+        # reader; do not reconstruct or thaw the owned Source family.
+        source_job = (c.execute(select(runs).where(runs.c.id==f.source_id)).mappings().one()
+            if source_packet is not None else None)
         full = dict(
             binding=getattr(f, "cold_bound", {}),
             cold_job=getattr(f, "cold_job", {}),
             source_binding=f.bound,
-            source=source if mode is not None else dict(run=source[0]),
+            source=(source_owned.pin(graph,source_packet) if source_packet is not None
+                else source if mode is not None else dict(run=source[0])),
             generated=generated if mode is not None else None,
             generation=dict(
                 raw=f.raw,
@@ -857,7 +864,7 @@ def segment(f, c, phase="pre", *, prewrite=False, cohort=None):
             mode.pin_legacy_complete(mode.complete)
         graph.add("trial-generated-model-facet", dict(frozen=f.frozen.model_dump()))
         stage = (
-            source.run if mode is not None else source[0],
+            source_job if source_packet is not None else source.run if mode is not None else source[0],
             f.bound,
             f.raw,
             f.metadata,

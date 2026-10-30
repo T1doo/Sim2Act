@@ -374,3 +374,18 @@ def _run_check_value(original, expected, approval, phase, run, at, stage,
     result = _RUN_CHECK(*values)
     pin()
     return result
+
+
+# Import-time source comparison/schema/class configuration only. These records
+# contain no runtime model instance, graph, permission or validation result.
+from . import _cold_source_packet as _source_owned_code
+_source_classes={}
+for _source_kind in (_Comparison,*(entry[0] for entry in _SCHEMAS
+        if entry[0].__name__ in ('Slot','ReservationIdentity','Outcome','Capture','BodyArchive'))):
+    for _source_base in (*_source_kind.__mro__,*type(_source_kind).__mro__):
+        if _source_base.__flags__ & (1<<9):_source_classes[id(_source_base)]=_source_base
+_source_owned_code.register(5,globals(),('_fixed_schema','_schema_current','_schema_bytes',
+    '_schema_matches','_schema_shape','_schema_identity_marker'),tuple(_source_classes.values()),
+    ('_SCHEMAS','_SCHEMA_CURRENT','_SCHEMA_BYTES','_SCHEMA_ENCODER','_SCHEMA_REDUCER',
+     '_SCHEMA_MARKER','_SCHEMA_MATCHER','_Comparison'))
+del _source_classes,_source_kind,_source_base
