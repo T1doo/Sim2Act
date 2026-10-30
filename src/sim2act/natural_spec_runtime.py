@@ -519,15 +519,23 @@ class _ColdRunFacts:
             self.store, self.connection, self.job, self.guard = store, c, job, guard
             self._origin_guard = guard
             self.key = f"run-facts:{job['id']}"
-            self._source_owned = (_source_owned_code.available() and (raw_seed is not None
+            source_job_owned = (_source_owned_code.available() and (raw_seed is not None
                 or job['id'] in vars(guard).get('_source_fact_run_ids',())))
+            current = guard.inputs.get('current')
+            # Only a freshly reread post-write epoch may transfer these detached
+            # Cold facts. G0's fixed receipt continuation/frontier stays unchanged.
+            post_facts_owned = (_source_owned_code.available() and guard.phase == 'post'
+                and type(current) is dict
+                and all(current.get(k) == job[k] for k in
+                    ('id','principal_id','project_id','runtime_id')))
+            self._source_owned = source_job_owned or post_facts_owned
             self._source_owned_origin=self._source_owned
             self._raw: dict = {}
             self._receipt_proofs: list[str] = []
             self._manifests: list = []
             self._counter_proofs: list[str] = []
             self._node_proofs: list[str] = []
-            if self._source_owned:_source_owned_code.own_fact(guard,self.key,dict(job=job))
+            if source_job_owned:_source_owned_code.own_fact(guard,self.key,dict(job=job))
             else:guard.add(self.key,dict(job=job))
             self.check(store, c, job)
             if raw_seed is not None:

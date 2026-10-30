@@ -54,7 +54,7 @@ def material_goal(store, user, resource, goal, content):
         goal_version=goal["version"], goal_fingerprint=goal["fingerprint"], goal_snapshot=saved["snapshot"])
 
 
-def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_path, monkeypatch):
+def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_path, monkeypatch, *, _post_facts_case=False):
     from test_natural_spec_apps import SOURCE
 
     mock_calls = []
@@ -157,6 +157,10 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                 worker.id, worker.stop, worker.goal_planner_transport = "synthetic-first-binding-reader", threading.Event(), None
                 worker._journal_trial_store, worker._journal_trial_binding = store, binding
                 worker._journal_trial_drift = False
+                if _post_facts_case:
+                    from test_cold_post_facts_sqlite import _actual_completed_cold_post
+                    _actual_completed_cold_post(data,worker,cold_rid,full,store)
+                    return
                 before = snapshot(store)
                 assert not any(row["kind"].startswith((journal.KIND, old_budget.KIND))
                     for row in before["delivery_graph_requests"])
