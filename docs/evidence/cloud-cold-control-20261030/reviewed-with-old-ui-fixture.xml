@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="24" time="69.742" timestamp="2026-10-30T03:34:30.081561+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_internal_stop_ui" name="test_owner_stop_remains_available_during_full_detail_read" time="1.493" /><testcase classname="tests.test_correction_run_entry_ui" name="test_verified_correction_run_entry_and_navigation_isolation" time="1.644" /><testcase classname="tests.test_application_use" name="test_application_use_actual_http[normal]" time="5.239" /><testcase classname="tests.test_application_use" name="test_application_use_actual_http[bad-receipt]" time="4.078" /><testcase classname="tests.test_application_use" name="test_application_use_actual_http[workspace-race]" time="2.715" /><testcase classname="tests.test_application_use" name="test_application_use_actual_http[entry-fence]" time="3.020"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:&#10;  &#10;    assert(b)&#10;  &#10;      at cancel (/workspace/Sim2Act/tests/application_use.cjs:101:124)&#10;      at focused (/workspace/Sim2Act/tests/application_use.cjs:104:299)&#10;      at async /workspace/Sim2Act/tests/application_use.cjs:113:31&#10;  &#10;assert 1 == 0&#10;[+1 more line; full report in element text]">env = (&lt;sim2act.db.Store object at 0x7fdabc8bb830&gt;, Settings(database_url='sqlite:////workspace/scratch/cold-control-reviewe...ea4d5031434a718deeb5e27eb1a078', 'user_1f5992d8da7d42df88f8a1277c2a591a', 'proj_eeaaa8dc082b482b91b0e3fd60726292', ...)
+tmp_path = PosixPath('/workspace/scratch/cold-control-reviewed-20261030/test_application_use_actual_ht3')
+scenario = 'entry-fence'
+
+    @pytest.mark.parametrize('scenario', ['normal', 'bad-receipt', 'workspace-race', 'entry-fence'])
+    def test_application_use_actual_http(env, tmp_path, scenario):
+        store, settings, client, owner, other_owner, project, _ = env
+        if not shutil.which('node'):
+            pytest.skip('Developer Node required')
+        if subprocess.run(['node', '-e', "require.resolve('jsdom')"], stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL, timeout=10).returncode:
+            pytest.skip('Developer jsdom required')
+        resource = client.post(f'/api/projects/{project}/resources', json={
+            'name': 'synthetic-use.csv', 'format': 'csv', 'content': 'amount,tax,memo\n5,1,x\n7,2,y\n',
+        }).json()['id']
+        app_id = client.post(f'/api/projects/{project}/apps/csv-preview', json={
+            'name': 'Saved synthetic sum', 'resource_id': resource, 'goal': 'Sum either numeric column',
+        }).json()['id']
+        with store.tx() as c:
+            fp = c.execute(select(app_drafts.c.fingerprint).where(app_drafts.c.id == app_id)).scalar_one()
+        from test_internal_lifecycle import limits
+        rel, _, _ = release(env, app_id, fp)
+        instance = create_instance(store, owner, rel['id'], rel['fingerprint'], limits(env), request_key='existing-use-instance')
+        other = store.project(owner, 'Other owned project')
+        store.project(other_owner, 'Other identity project')
+        with store.tx() as c:
+            before = {name: [dict(r) for r in c.execute(select(table)).mappings()]
+                      for name, table in [('grants', grants), ('principals', principals)]}
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1', 0))
+            port = sock.getsockname()[1]
+        (tmp_path / 'info.json').write_text(json.dumps({'base': f'http://127.0.0.1:{port}',
+            'project': project, 'other': other, 'app': app_id, 'instance': instance['id'], 'scenario': scenario}))
+        app = create_app(store, settings)
+    
+        @app.post('/test-only-worker')
+        def work():
+            class NoProvider:
+                def complete(self, *_args, **_kwargs):
+                    raise AssertionError('No model allowed')
+            assert Worker(store, settings, NoProvider()).once()
+            return {'test_only': True}
+    
+        server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=port, log_level='error'))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            end = time.time() + 10
+            while not server.started:
+                assert thread.is_alive() and time.time() &lt; end
+                time.sleep(.01)
+            outcome = subprocess.run(['node', 'tests/application_use.cjs', str(tmp_path)], capture_output=True, text=True, timeout=45)
+            (tmp_path / 'driver.log').write_text(outcome.stdout + outcome.stderr)
+&gt;           assert outcome.returncode == 0, outcome.stdout + outcome.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+E             
+E               assert(b)
+E             
+E                 at cancel (/workspace/Sim2Act/tests/application_use.cjs:101:124)
+E                 at focused (/workspace/Sim2Act/tests/application_use.cjs:104:299)
+E                 at async /workspace/Sim2Act/tests/application_use.cjs:113:31
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/application_use.cjs', '/workspace/scratch/cold-control-reviewed-20261030/test_ap...kspace/Sim2Act/tests/application_use.cjs:104:299)\n    at async /workspace/Sim2Act/tests/application_use.cjs:113:31\n').returncode
+
+tests/test_application_use.py:69: AssertionError</failure></testcase><testcase classname="tests.test_spec_run_terminals" name="test_rejection_terminal_page_protocol" time="1.670" /><testcase classname="tests.test_spec_run_terminals" name="test_original_key_permanent_terminal" time="16.207" /><testcase classname="tests.test_sqlite_run_control" name="test_current_owner_command_rolls_back_before_original_cas_and_notifies" time="5.315" /><testcase classname="tests.test_sqlite_run_control" name="test_failed_formal_command_still_notifies_but_is_not_cancel_ack" time="5.214" /><testcase classname="tests.test_sqlite_run_control" name="test_unfinished_control_does_not_authorize_early_error_settlement" time="5.221" /><testcase classname="tests.test_sqlite_run_control" name="test_unreadable_hint_is_optional_and_progress_read_fails_bounded" time="5.936" /><testcase classname="tests.test_model_settlement_interval" name="test_old_caps_serialized_contract_is_never_upgraded" time="0.861" /><testcase classname="tests.test_model_settlement_interval" name="test_one_finite_committed_interval_then_shortening" time="1.157" /><testcase classname="tests.test_model_settlement_interval" name="test_never_revives_changed_or_expired_owner[expired]" time="1.097" /><testcase classname="tests.test_model_settlement_interval" name="test_never_revives_changed_or_expired_owner[cancelled]" time="0.954" /><testcase classname="tests.test_model_settlement_interval" name="test_never_revives_changed_or_expired_owner[owner]" time="0.875" /><testcase classname="tests.test_model_settlement_interval" name="test_never_revives_changed_or_expired_owner[version]" time="0.831" /><testcase classname="tests.test_model_settlement_interval" name="test_never_revives_changed_or_expired_owner[stop]" time="0.779" /><testcase classname="tests.test_model_settlement_interval" name="test_stop_during_interval_fails_and_keeps_terminal_lease_zero" time="0.897" /><testcase classname="tests.test_model_settlement_interval" name="test_cleanup_failure_never_rejects_an_already_committed_result" time="0.863" /><testcase classname="tests.test_model_settlement_interval" name="test_monotonic_budget_survives_wall_clock_rollback" time="0.980" /><testcase classname="tests.test_model_settlement_interval" name="test_reservation_cannot_cross_original_lease_during_event" time="0.980" /><testcase classname="tests.test_model_settlement_interval" name="test_writer_reentry_rejects_before_reservation_without_deadlock" time="0.921" /></testsuite></testsuites>
