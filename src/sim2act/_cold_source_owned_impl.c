@@ -140,7 +140,7 @@ static PyObject*make_binding(PyObject*self,PyObject*args){
  if(PyUnicode_CompareWithASCIIString(phase,"post")!=0&&PyUnicode_CompareWithASCIIString(phase,"pre")!=0)return Py_NewRef(unsupported);
  if(binding_serial>=INT64_MAX){PyErr_SetString(PyExc_RuntimeError,"Binding identity exhausted");return NULL;}
  PyObject*serial=PyLong_FromUnsignedLongLong(++binding_serial);if(!serial)return NULL;
- PyObject*pin=PyTuple_Pack(3,serial,((Owned*)owner)->pin,anchors);Py_DECREF(serial);if(!pin)return NULL;
+ PyObject*pin=PyTuple_Pack(3,serial,owner,anchors);Py_DECREF(serial);if(!pin)return NULL;
  Binding*b=PyObject_GC_New(Binding,&BindingType);if(!b){Py_DECREF(pin);return NULL;}
  b->owner=Py_NewRef(owner);b->nonce=Py_NewRef(nonce);b->phase=Py_NewRef(phase);b->anchors=Py_NewRef(anchors);b->scope=Py_NewRef(scope);b->pin=pin;b->epoch=e;
  PyObject_GC_Track(b);return (PyObject*)b;

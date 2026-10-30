@@ -27,7 +27,7 @@ static PyObject*view_ref(PyObject*o,PyObject*unused){(void)unused;return PyLong_
 static PyObject*view_owner(PyObject*o,PyObject*unused){(void)unused;return Py_NewRef((PyObject*)((SourceView*)o)->owner);}
 static PyObject*view_pin(PyObject*o,PyObject*unused){
  (void)unused;SourceView*v=(SourceView*)o;PyObject*ref=PyLong_FromSsize_t(v->ref);if(!ref)return NULL;
- PyObject*r=PyTuple_Pack(2,v->owner->pin,ref);Py_DECREF(ref);return r;
+ PyObject*r=PyTuple_Pack(2,(PyObject*)v->owner,ref);Py_DECREF(ref);return r;
 }
 static PyObject*view_child(PyObject*o,PyObject*r){return view_read_ref((SourceView*)o,r);}
 static PyObject*view_label(PyObject*o,PyObject*unused){

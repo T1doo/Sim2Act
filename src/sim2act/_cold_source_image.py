@@ -18,6 +18,7 @@ _MAX_LEAF=16*1024*1024
 def capture(incoming, outside, *, _parents=None):
     if _parents is not None and type(_parents) is not list:raise Unsupported('exact parent registry required')
     from sim2act import natural_spec_runtime as rt, natural_live_admission as gate
+    from . import _cold_source_owned_impl as native
     from sim2act import production_trial_policy as policy, production_trial_sender as sender
     from sim2act.natural_source_archives import BodyArchive
     from sim2act._cold_typed_stream import _Comparison
@@ -42,7 +43,8 @@ def capture(incoming, outside, *, _parents=None):
             'b' if kind is bytes else 'd' if kind is dict else 'l' if kind is list else
             'q' if kind is tuple else 'r' if kind is RowMapping else 'u' if kind is quoted_name else
             'e' if kind is set and mode=='source' else 'm' if mode=='source' and any(kind is cls for cls in models) else
-            'c' if kind is Limits and mode=='outside' else 'o' if parent is not None else None)
+            'c' if kind is Limits and mode=='outside' else 'o' if parent is not None else
+            'a' if mode=='outside' and kind is native.Owned else None)
         if tag is None:raise Unsupported('unsupported kind')
         if ident in active:raise Unsupported('cycle')
         scalar=tag in ('n','t','f','i','v')
@@ -55,7 +57,8 @@ def capture(incoming, outside, *, _parents=None):
         if not scalar:memo[ident]=ref;held.append(value)
         active.add(ident)
         def child(v,virtual=False):return visit(v,depth+1,mode,virtual)
-        if tag=='o':
+        if tag=='a':payload=None;edges=()
+        elif tag=='o':
             ordinal=next((i for i,p in enumerate(_parents) if p is parent),None)
             if ordinal is None:
                 if len(_parents)>=256:raise Bounds('immutable parents')

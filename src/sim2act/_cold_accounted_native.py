@@ -563,6 +563,11 @@ class _NativeCandidate:
         if self.config.joint_handoff:
             self.assert_joint(packets)
         self.observe(phase='native:representation')
+        if vars(self.graph).get('_source_fact_bindings'):
+            # This older arena has no declared immutable-Owner node protocol.
+            # Genuine representation miss before issuance: keep full legacy
+            # guards/joins and the qualified native Graph comparator instead.
+            raise _Unsupported('native_frontier_immutable_source_owner')
         if (not all(type(k) is str for k in self.graph.inputs)
                 or 'cold-trial:complete' in self.graph.inputs):
             raise _Unsupported('native_root_representation')

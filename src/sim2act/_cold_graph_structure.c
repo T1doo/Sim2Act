@@ -8,9 +8,9 @@
 static PyObject *unsupported, *unsupported_error;
 typedef struct {PyObject *key;size_t ordinal;} Entry;
 typedef struct {size_t slots,count;Entry*entries;} Map;
-typedef struct {PyObject*row,*limits,*quoted,*readrow,*readlimits,*marker,*reduce,*view;} Encoder;
+typedef struct {PyObject*row,*limits,*quoted,*readrow,*readlimits,*marker,*reduce,*view,*owned;} Encoder;
 typedef struct {PyObject*original;unsigned char kind;uint64_t bits;size_t count,*edges;int active;} Node;
-typedef struct {Node*nodes;size_t count,capacity,work,bytes;Map map;PyObject*args,*scope;Encoder types;} Tree;
+typedef struct {Node*nodes;size_t count,capacity,work,bytes;Map map;PyObject*args,*scope;Encoder types;Map immutable;PyObject*immutable_held;size_t immutable_work;} Tree;
 static size_t slot(PyObject*v,size_t slots){uintptr_t x=(uintptr_t)v;x>>=3;x^=x>>23;x*=UINT64_C(0x2127599bf4325c37);x^=x>>47;return (size_t)x&(slots-1);}
 static Entry*find(Map*m,PyObject*v){if(!m->slots)return NULL;size_t j=slot(v,m->slots);while(m->entries[j].key){if(m->entries[j].key==v)return m->entries+j;j=(j+1)&(m->slots-1);}return NULL;}
 static int insert(Map*m,PyObject*v,size_t ordinal){
@@ -18,21 +18,51 @@ static int insert(Map*m,PyObject*v,size_t ordinal){
  for(size_t i=0;i<m->slots;i++)if(m->entries[i].key){size_t j=slot(m->entries[i].key,n);while(next[j].key)j=(j+1)&(n-1);next[j]=m->entries[i];}PyMem_Free(m->entries);m->entries=next;m->slots=n;}
  size_t j=slot(v,m->slots);while(m->entries[j].key)j=(j+1)&(m->slots-1);m->entries[j]=(Entry){v,ordinal};m->count++;return 0;
 }
-static int kind(Encoder*s,PyObject*v){return v==s->marker?'p':v==Py_None?'n':v==Py_True?'t':v==Py_False?'f':PyLong_CheckExact(v)?'i':PyFloat_CheckExact(v)?'d':PyUnicode_CheckExact(v)?'s':PyBytes_CheckExact(v)?'b':PyDict_CheckExact(v)?'m':PyList_CheckExact(v)?'l':PyTuple_CheckExact(v)?'q':(PyObject*)Py_TYPE(v)==s->row?'r':(PyObject*)Py_TYPE(v)==s->limits?'c':(PyObject*)Py_TYPE(v)==s->quoted?'u':s->view&&(PyObject*)Py_TYPE(v)==s->view?'o':0;}
+static int kind(Encoder*s,PyObject*v){return v==s->marker?'p':v==Py_None?'n':v==Py_True?'t':v==Py_False?'f':PyLong_CheckExact(v)?'i':PyFloat_CheckExact(v)?'d':PyUnicode_CheckExact(v)?'s':PyBytes_CheckExact(v)?'b':PyDict_CheckExact(v)?'m':PyList_CheckExact(v)?'l':PyTuple_CheckExact(v)?'q':(PyObject*)Py_TYPE(v)==s->row?'r':(PyObject*)Py_TYPE(v)==s->limits?'c':(PyObject*)Py_TYPE(v)==s->quoted?'u':s->view&&(PyObject*)Py_TYPE(v)==s->view?'o':s->owned&&(PyObject*)Py_TYPE(v)==s->owned?'w':0;}
 static int memoized(int k){return k!='n'&&k!='t'&&k!='f'&&k!='i'&&k!='d';}
 static int scalar_bits(PyObject*v,int k,uint64_t*bits){
  if(k=='d'){double d=PyFloat_AS_DOUBLE(v);memcpy(bits,&d,8);return 0;}
  int overflow=0;long long n=PyLong_AsLongLongAndOverflow(v,&overflow);if(PyErr_Occurred())return -1;if(overflow){PyErr_SetString(unsupported_error,"Cold graph integer range");return -1;}*bits=(uint64_t)n;return 0;
 }
+/* Complete immutable identity inventory, shared across ALL owned roots.
+ * Held references make pointer membership stable. These are not comparison
+ * nodes: no array zeroing or immutable-content walk is needed on each match. */
+static int inventory(Tree*t,PyObject*v,int depth){
+ if(++t->immutable_work+t->work>1000000||depth>64){PyErr_SetString(unsupported_error,"Owned identity inventory bound");return -1;}
+ if(!PyTuple_CheckExact(v)&&!PyUnicode_CheckExact(v)&&!PyBytes_CheckExact(v)){
+  PyErr_SetString(unsupported_error,"Owned pin is not deeply immutable");return -1;
+ }
+ if(find(&t->immutable,v))return 0;
+ if(t->immutable.count+t->count>=100000){PyErr_SetString(unsupported_error,"Owned inventory node bound");return -1;}
+ if(!t->immutable_held){t->immutable_held=PyList_New(0);if(!t->immutable_held)return -1;}
+ if(PyList_Append(t->immutable_held,v)<0||insert(&t->immutable,v,t->immutable.count)<0)return -1;
+ if(PyTuple_CheckExact(v)){
+  for(Py_ssize_t i=0;i<PyTuple_GET_SIZE(v);i++)if(inventory(t,PyTuple_GET_ITEM(v,i),depth+1)<0)return -1;
+ }else{
+  size_t size=PyBytes_CheckExact(v)?(size_t)PyBytes_GET_SIZE(v):(size_t)PyUnicode_GET_LENGTH(v)*4;
+  if(size>16*1024*1024-t->bytes){PyErr_SetString(unsupported_error,"Owned inventory byte bound");return -1;}t->bytes+=size;
+ }
+ return 0;
+}
+
 static int capture_node(Tree*t,PyObject*v,int depth,size_t*out){
  if((t->work++&1023)==0&&PyErr_CheckSignals()<0)return -1;
- if(t->work>1000000||depth>64){PyErr_SetString(unsupported_error,"Cold graph capture bounds");return -1;}
+ if(t->work+t->immutable_work>1000000||depth>64){PyErr_SetString(unsupported_error,"Cold graph capture bounds");return -1;}
  int k=kind(&t->types,v);if(!k){PyErr_SetString(unsupported_error,"Cold graph node type");return -1;}
  if(memoized(k)){Entry*e=find(&t->map,v);if(e){if(t->nodes[e->ordinal].active){PyErr_SetString(unsupported_error,"Cyclic Cold graph");return -1;}*out=e->ordinal;return 0;}}
- if(t->count>=100000){PyErr_SetString(unsupported_error,"Cold graph node bound");return -1;}
+ if(t->count+t->immutable.count>=100000){PyErr_SetString(unsupported_error,"Cold graph node bound");return -1;}
  if(t->count==t->capacity){size_t n=t->capacity?t->capacity*2:1024;Node*next=PyMem_Realloc(t->nodes,n*sizeof(Node));if(!next){PyErr_NoMemory();return -1;}t->nodes=next;t->capacity=n;}
  size_t id=t->count++;*out=id;t->nodes[id]=(Node){.original=Py_NewRef(v),.kind=k,.active=memoized(k)};
  if(memoized(k)&&insert(&t->map,v,id)<0)return -1;
+ if(k=='w'){
+  PyObject*reduced=PyObject_CallFunctionObjArgs(t->types.reduce,Py_None,v,NULL);
+  if(!reduced)return -1;
+  int ok=PyTuple_CheckExact(reduced)&&PyTuple_GET_SIZE(reduced)==2
+   &&PyTuple_GET_ITEM(reduced,0)==t->types.marker&&PyTuple_CheckExact(PyTuple_GET_ITEM(reduced,1));
+  if(ok)ok=inventory(t,PyTuple_GET_ITEM(reduced,1),0)==0;
+  Py_DECREF(reduced);if(!ok){if(!PyErr_Occurred())PyErr_SetString(unsupported_error,"Owned complete reducer required");return -1;}
+  t->nodes[id].active=0;return 0;
+ }
  if(k=='i'||k=='d')return scalar_bits(v,k,&t->nodes[id].bits);
  if(k=='n'||k=='t'||k=='f')return 0;
  if(k=='s'||k=='b'){t->nodes[id].active=0;t->bytes+=k=='b'?PyBytes_GET_SIZE(v):PyUnicode_GET_LENGTH(v)*4;if(t->bytes>16*1024*1024){PyErr_SetString(unsupported_error,"Cold graph text bound");return -1;}return 0;}
@@ -64,11 +94,11 @@ static int capture_node(Tree*t,PyObject*v,int depth,size_t*out){
  t->nodes[id].count=count;t->nodes[id].edges=edges;t->nodes[id].active=0;edges=NULL;result=0;
  done:PyMem_Free(edges);Py_XDECREF(keys);Py_XDECREF(data);Py_XDECREF(index);Py_XDECREF(payload);return result;
 }
-static void free_tree(Tree*t){if(!t)return;PyObject*error=PyErr_GetRaisedException();for(size_t i=0;i<t->count;i++){Py_XDECREF(t->nodes[i].original);PyMem_Free(t->nodes[i].edges);}PyMem_Free(t->nodes);PyMem_Free(t->map.entries);Py_XDECREF(t->scope);Py_XDECREF(t->args);Py_XDECREF(t->types.marker);Py_XDECREF(t->types.reduce);PyMem_Free(t);if(error)PyErr_SetRaisedException(error);}
+static void free_tree(Tree*t){if(!t)return;PyObject*error=PyErr_GetRaisedException();for(size_t i=0;i<t->count;i++){Py_XDECREF(t->nodes[i].original);PyMem_Free(t->nodes[i].edges);}PyMem_Free(t->nodes);PyMem_Free(t->map.entries);PyMem_Free(t->immutable.entries);Py_XDECREF(t->immutable_held);Py_XDECREF(t->scope);Py_XDECREF(t->args);Py_XDECREF(t->types.marker);Py_XDECREF(t->types.reduce);PyMem_Free(t);if(error)PyErr_SetRaisedException(error);}
 static void close_tree(PyObject*cap){Tree*t=PyCapsule_GetPointer(cap,"sim2act.cold-graph-structure.v1");if(!t){PyErr_Clear();return;}free_tree(t);}
 static PyObject*snapshot(PyObject*self,PyObject*args){
  (void)self;Tree*t=PyMem_Calloc(1,sizeof(Tree));if(!t)return PyErr_NoMemory();PyObject*v;
- if(!PyArg_ParseTuple(args,"OOOOOOO|O",&v,&t->types.row,&t->types.limits,&t->types.quoted,&t->types.readrow,&t->types.readlimits,&t->scope,&t->types.view)){free_tree(t);return NULL;}
+ if(!PyArg_ParseTuple(args,"OOOOOOO|OO",&v,&t->types.row,&t->types.limits,&t->types.quoted,&t->types.readrow,&t->types.readlimits,&t->scope,&t->types.view,&t->types.owned)){free_tree(t);return NULL;}
  if(!PyTuple_CheckExact(t->scope)||PyTuple_GET_SIZE(t->scope)!=5){t->scope=NULL;free_tree(t);return Py_NewRef(unsupported);}Py_INCREF(t->scope);
  PyFrameObject*frame=PyThreadState_GetFrame(PyThreadState_Get());int frames=0;while(frame){PyFrameObject*back=PyFrame_GetBack(frame);Py_DECREF(frame);frame=back;frames++;}
  if(Py_GetRecursionLimit()-frames<256){free_tree(t);return Py_NewRef(unsupported);}
@@ -104,6 +134,17 @@ static int compare_node(Compare*c,size_t id,PyObject*v,int depth){
  if((c->work++&1023)==0&&PyErr_CheckSignals()<0)return -1;
  if(c->work>1000000||depth>64){PyErr_SetString(unsupported_error,"Cold graph compare bounds");return -1;}
  Node*n=c->t->nodes+id;int k=kind(&c->t->types,v);if(k!=n->kind)return 0;
+ if(v!=n->original&&memoized(k)){
+  Entry*before=find(&c->t->immutable,n->original),*now=find(&c->t->immutable,v);
+  if((before||now)&&(!before||!now||before->ordinal!=now->ordinal))return 0;
+ }
+ if(k=='w'){
+  if(v!=n->original)return 0;
+  if(c->actual[id])return c->actual[id]==v;
+  size_t*assigned=c->assigned+id;if(*assigned&&*assigned!=id+1)return 0;
+  *assigned=id+1;c->actual[id]=v;return 1;
+ }
+
  if(k=='i'||k=='d'){if(v==n->original)return 1;uint64_t b;if(scalar_bits(v,k,&b)<0)return -1;return b==n->bits;}
  if(k=='n'||k=='t'||k=='f')return 1;
  if(c->actual[id])return c->actual[id]==v;

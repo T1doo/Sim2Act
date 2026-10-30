@@ -250,7 +250,7 @@ static int source_outside(LiveMatch*s,PyObject*v,PyObject*seen,PyObject*active,P
  if(!source_tick(s,depth))return 0;
  /* Exact native views contain only immutable owner/node references. Their
   * original leaf identities and complete parent metadata remain in the pin. */
- if(Py_TYPE(v)==&SourceViewType)return 1;
+ if(Py_TYPE(v)==&SourceViewType||Py_TYPE(v)==&OwnedType)return 1;
  PyObject*id=PyLong_FromVoidPtr(v);if(!id)return 0;
  int ok=0;PyObject*ref=PyDict_GetItemWithError(s->reverse,id);
  if(ref){Py_ssize_t r;if(source_index(ref,s->n,&r))ok=source_mark(s,r,marked,shared,shared_leaves,virtual_containers,depth);goto done;}

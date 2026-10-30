@@ -2488,4 +2488,5 @@ _source_fact_code.register(7,globals(),(
     'resolve','validate_value','fingerprint','require'),
     constants=('_source_values','natural'),helpers=((vars(natural),(
         'is_candidate','pure','bounded_source','schemas','collected','report',
-        'citation_feedback','verify_saved','require')),))
+        'citation_feedback','verify_saved','expand','compile_candidate','preview',
+        'fingerprint','validate_value','object_schema','require')),))

@@ -53,7 +53,7 @@ _ALIASES = tuple((owner, name, getattr(owner, name)) for owner, names in (
          '_cold_graph_pickle_marker', '_ColdGraphPickler', '_ColdGraphBytesIO',
          '_ColdGraphRowMapping', '_ColdGraphCursorMeta', '_ColdGraphSimpleMeta',
          '_ColdGraphQuotedName', 'Limits', 'require', '_COLD_ROW_LOOKUP',
-         '_COLD_ROW_REQUIRE', '_COLD_ROW_LEAF', '_SOURCE_VIEW_TYPE', '_SOURCE_VIEW_PIN')),
+         '_COLD_ROW_REQUIRE', '_COLD_ROW_LEAF', '_SOURCE_VIEW_TYPE', '_SOURCE_VIEW_PIN', '_SOURCE_OWNER_TYPE', '_SOURCE_OWNER_PIN')),
     (r.codec, ('require',)),
     (accounted, ('rt', 'gate', 'o', '_Frontier', '_NativeCandidate')),
     (owned, ('_OwnedPrewriteMode',)),
@@ -179,12 +179,18 @@ def select(graph):
     # This is only a frequency hint. Every pending call executes its full SHA
     # in the original Graph.check frame; no prior content/PASS is remembered.
     state.count += 1
-    if state.count < 4:
+    # First-producer Source facts deliberately add roots at their original
+    # output boundaries. Delaying calibration repeats the complete SHA for
+    # the first three reads of every such root. Build the same fully checked
+    # snapshot immediately for this path; every later read still walks all
+    # current mutable content and Graph.check runs its dynamic gates afresh.
+    source_facts = fields.get('_source_fact_bindings')
+    if state.count < (1 if type(source_facts) is dict and source_facts else 4):
         return None
     if graph.input_key() != graph.key:
         return False
     values = graph.input_bytes(_snapshot_values=True)
-    capsule = _NATIVE_SNAPSHOT(values, *_ARGS, scope, r._SOURCE_VIEW_TYPE)
+    capsule = _NATIVE_SNAPSHOT(values, *_ARGS, scope, r._SOURCE_VIEW_TYPE, r._SOURCE_OWNER_TYPE)
     if graph.input_key() != graph.key:
         return False
     if capsule is _UNSUPPORTED:
@@ -257,7 +263,7 @@ def select_frontier(frontier):
     if frontier.key() != frontier.expected:
         return False
     values = _frontier_values(frontier, graph)
-    capsule = _NATIVE_SNAPSHOT(values, *_ARGS, scope, r._SOURCE_VIEW_TYPE)
+    capsule = _NATIVE_SNAPSHOT(values, *_ARGS, scope, r._SOURCE_VIEW_TYPE, r._SOURCE_OWNER_TYPE)
     if frontier.key() != frontier.expected:
         return False
     if capsule is _UNSUPPORTED:

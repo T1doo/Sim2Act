@@ -55,6 +55,8 @@ _SOURCE_OWNED_CHECK = _source_owned_code.CHECK
 _SOURCE_BINDING_TYPE = _source_owned_code._BINDING
 _SOURCE_VIEW_TYPE = _source_owned_code.image.View
 _SOURCE_VIEW_PIN = None if _SOURCE_VIEW_TYPE is None else _source_owned_code.native.view_pin
+_SOURCE_OWNER_TYPE = None if _SOURCE_VIEW_TYPE is None else _source_owned_code.native.Owned
+_SOURCE_OWNER_PIN = None if _SOURCE_VIEW_TYPE is None else _source_owned_code.native.owned_pin
 from . import _cold_archive_packet as _owned_archive_code
 _OWNED_ARCHIVE_CHECK = _owned_archive_code.CHECK
 _OWNED_ARCHIVE_KEY = _owned_archive_code.KEY
@@ -1988,6 +1990,8 @@ def fail_owned(worker, run, error):
 
 def _model_value(value, *, _byte_digests=None, _byte_seen=None):
     """Retain every field of actual SQL row mappings and exact Limits."""
+    if _SOURCE_OWNER_TYPE is not None and type(value) is _SOURCE_OWNER_TYPE:
+        return _model_value(_SOURCE_OWNER_PIN(value),_byte_digests=_byte_digests,_byte_seen=_byte_seen)
     if _source_owned_code.image.View is not None and type(value) is _source_owned_code.image.View:
         tag=value.node()[0]
         if tag in ('d','r'):
@@ -2040,6 +2044,8 @@ def _cold_graph_validate_inputs(values, *, _forbid_root=None):
         if _forbid_root is not None:
             require(value is not _forbid_root, "Incoming Cold graph reaches its input root")
         kind = type(value)
+        if _SOURCE_OWNER_TYPE is not None and kind is _SOURCE_OWNER_TYPE:
+            return visit(_SOURCE_OWNER_PIN(value))
         if _source_owned_code.image.View is not None and kind is _source_owned_code.image.View:
             return visit(_source_owned_code.native.view_pin(value))
         if (kind is str or kind is int or kind is float or kind is bool
@@ -2154,6 +2160,10 @@ class _ColdGraphPickler(_ColdGraphPicklerBase):
     """Code-only hoist; every call still has a fresh instance and fresh C memo."""
     def reducer_override(self, value):
         kind = type(value)
+        if _SOURCE_OWNER_TYPE is not None and kind is _SOURCE_OWNER_TYPE:
+            # Complete original metadata/carriers/parents remain in the SHA
+            # fallback. The native comparator alone avoids immutable walks.
+            return (_cold_graph_pickle_marker,_SOURCE_OWNER_PIN(value))
         if _SOURCE_VIEW_TYPE is not None and kind is _SOURCE_VIEW_TYPE:
             return (_cold_graph_pickle_marker, ('source-owned-node-v1', _SOURCE_VIEW_PIN(value)))
         if value is _cold_graph_pickle_marker:
@@ -5658,4 +5668,4 @@ _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_
     '_prove_node_from_facts','_prove_node','_prove_pending_from_facts','_prove_pending',
     'messages','parse','_anchor','strict_json','response_archive'),
     (_ColdGraphRead,_ColdTrialGraph,_ColdRunRawSeed,_ColdRunFacts,_ColdAuditSeed),
-    constants=('_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_source_owned_code','_SOURCE_VIEW_TYPE','_SOURCE_VIEW_PIN'))
+    constants=('_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_source_owned_code','_SOURCE_VIEW_TYPE','_SOURCE_VIEW_PIN','_SOURCE_OWNER_TYPE','_SOURCE_OWNER_PIN'))
