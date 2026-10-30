@@ -57,6 +57,7 @@ def test_original_large_cold_control(env, tmp_path, monkeypatch, cancel):
     def observer():
         nonlocal server, listener, server_thread
         handled = False
+        eligibility = {}
         try:
             end = time.monotonic()+850
             while not stopped.is_set() and time.monotonic()<end:
@@ -64,6 +65,11 @@ def test_original_large_cold_control(env, tmp_path, monkeypatch, cancel):
                     binding = getattr(epoch.worker,'pa_trial',None)
                     if (binding is None or epoch.header['runtime_id']==binding.contract.runtime_id
                             or store.engine.url.database != env[0].engine.url.database):
+                        continue
+                    if epoch not in eligibility:
+                        refs=read_db(store,'SELECT resource_refs FROM runs WHERE id=?',(epoch.header['id'],))
+                        eligibility[epoch]=bool(refs and json.loads(refs[0][0]) == [binding.contract.bindings[1].resource_id])
+                    if not eligibility[epoch]:
                         continue
                     if not any(old is epoch for _,old in tracked):
                         tracked.append((store,epoch)); save()
