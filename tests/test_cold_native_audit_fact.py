@@ -4,6 +4,7 @@ import pytest
 from test_cold_generation_facts import generated,scope
 from sim2act import natural_spec_runtime as runtime,goal_applications as generation
 from sim2act import pa_spec_apps as spec,_cold_source_packet as owned
+from sim2act import pb_natural_specs as extraction
 from sim2act.errors import DomainError
 
 
@@ -66,5 +67,32 @@ def test_native_audit_producer_replacement_is_not_executed(monkeypatch,module,na
     observed=[]
     def replaced(*args,**kwargs):observed.append(True);return {}
     monkeypatch.setattr(module,name,replaced)
+    with pytest.raises(DomainError):owned.current()
+    assert not observed
+
+
+@pytest.mark.parametrize('name',['_audit_prefix','_cold_audit_prefix','_cold_extract_pair',
+    'Metadata','ExtractInput','META','EXTRACT'])
+def test_extraction_row_producer_schema_and_routing_aliases_are_fixed(monkeypatch,name):
+    observed=[]
+    def replaced(*args,**kwargs):observed.append(True);return {}
+    monkeypatch.setattr(extraction,name,replaced)
+    with pytest.raises(DomainError):owned.current()
+    assert not observed
+
+
+@pytest.mark.parametrize('name',['_scope_pair_code_current','_SCOPE_PAIR_CORE','_persisted_snapshot_finite'])
+def test_extraction_pair_callback_replacement_is_not_executed(monkeypatch,name):
+    observed=[]
+    def replaced(*args,**kwargs):observed.append(True);return True
+    monkeypatch.setattr(spec,name,replaced)
+    with pytest.raises(DomainError):owned.current()
+    assert not observed
+
+
+def test_extraction_schema_override_is_not_executed(monkeypatch):
+    observed=[]
+    def replaced(cls,*args,**kwargs):observed.append(True);return object()
+    monkeypatch.setattr(extraction.ExtractInput,'model_validate',classmethod(replaced))
     with pytest.raises(DomainError):owned.current()
     assert not observed
