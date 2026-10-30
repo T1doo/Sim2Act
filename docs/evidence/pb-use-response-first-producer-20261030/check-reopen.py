@@ -10,7 +10,23 @@ root = Path(sys.argv[1]).resolve()
 db = root / 'fixture.db'
 before = hashlib.sha256(db.read_bytes()).hexdigest()
 wal=Path(str(db)+'-wal')
-wal_before=hashlib.sha256(wal.read_bytes()).hexdigest() if wal.exists() else None
+def wal_state(path):
+    try:
+        data=path.read_bytes()
+    except FileNotFoundError:
+        return dict(exists=False,size=None,sha256=None)
+    return dict(exists=True,size=len(data),sha256=hashlib.sha256(data).hexdigest())
+
+
+def wal_content_unchanged(before,after):
+    # A mode=ro WAL connection can create empty auxiliary files. No WAL
+    # frames exist in either an absent or zero-byte file. Any nonempty WAL
+    # must remain byte-for-byte identical; never ignore or checkpoint it.
+    return (before==after or
+        before['size'] in (None,0) and after['size'] in (None,0))
+
+
+wal_before=wal_state(wal)
 proof = json.loads((root / 'pb-controller-proof.json').read_text())
 expected = proof['result']
 assert proof['classification'] == 'SYNTHETIC_MOCK_PRODUCTION_BRANCH_NOT_REAL_LIVE_EVIDENCE'
@@ -18,6 +34,7 @@ assert proof['real_models'] == 0
 with closing(sqlite3.connect(db.as_uri()+'?mode=ro', uri=True, timeout=1)) as c:
     c.row_factory = sqlite3.Row
     c.execute('PRAGMA query_only=ON')
+    c.execute('BEGIN')  # All business comparisons read one SQLite snapshot.
     run = dict(c.execute('SELECT * FROM runs WHERE id=?', (proof['cold'],)).fetchone())
     binding = dict(c.execute('SELECT * FROM internal_run_bindings WHERE run_id=?', (run['id'],)).fetchone())
     app = dict(c.execute('SELECT * FROM internal_app_runs WHERE id=?', (binding['app_run_id'],)).fetchone())
@@ -44,14 +61,16 @@ with closing(sqlite3.connect(db.as_uri()+'?mode=ro', uri=True, timeout=1)) as c:
     logical=digest.hexdigest()
 after = hashlib.sha256(db.read_bytes()).hexdigest()
 assert before == after
-wal_after=hashlib.sha256(wal.read_bytes()).hexdigest() if wal.exists() else None
-assert wal_after==wal_before
+wal_after=wal_state(wal)
+assert wal_content_unchanged(wal_before,wal_after), 'WAL content changed during read-only verification'
 output = dict(status='PASS', classification='FRESH_PROCESS_READ_ONLY_SQLITE_WITH_WAL_NOT_WINDOWS_NOT_PG_NOT_LIVE',
     source_commit='96ddbaad62fd0ea5f80e351c477941f3cc2fcf9b', run_id=run['id'],
     run_status=run['status'], result_version=1, instance_versions=1, cold_verified_attempts=2,
     all_attempts=7, generation_received_attempts=3, source_and_cold_verified_attempts=4,
-    app_output_and_typed_result_equal_saved_http_result=True, database_unchanged=True,
-    main_database_sha256=after,wal_sha256=wal_after,logical_database_sha256=logical,
-    physical_identity_requires_main_and_wal=True,shm_is_transient_not_content_identity=True)
+    app_output_and_typed_result_equal_saved_http_result=True, database_content_unchanged=True,
+    main_database_sha256=after,wal_before=wal_before,wal_after=wal_after,logical_database_sha256=logical,
+    physical_main_and_wal_identity=wal_before==wal_after,
+    empty_wal_lifecycle_transition=wal_before!=wal_after,
+    nonempty_wal_requires_exact_identity=True,shm_is_transient_not_content_identity=True)
 Path(sys.argv[2]).write_text(json.dumps(output, indent=2)+'\n')
 print(json.dumps(output))
