@@ -71,6 +71,8 @@ jobs:
         id: install
         timeout-minutes: 4
         run: |
+          python -c "from pathlib import Path; import json,subprocess; root=Path('src/sim2act'); names=set(json.loads((root/'production_software_qualification.json').read_text())['files']) | {'production_software_qualification.json','text_software_anchors.json','text_software_qualification.json','web/app.css','web/index.html','web/internal.js','web/use.js'}; bad=[n for n in sorted(names) if (root/n).read_bytes()!=subprocess.check_output(['git','show','HEAD:'+(root/n).as_posix()])]; assert not bad, ('Checkout changed exact Git bytes',bad); print('Exact Git checkout bytes preserved: '+str(len(names)))"
+          if ($LASTEXITCODE -ne 0) { throw 'Checkout byte mismatch; no rewrite or qualification bypass.' }
           python -m venv .venv
           ./.venv/Scripts/python.exe -m pip install --retries 0 --timeout 30 -r requirements-windows.lock
           if ($LASTEXITCODE -ne 0) { throw 'Pinned dependency install failed; no alternate source.' }
