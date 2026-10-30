@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="127.285" timestamp="2026-10-30T04:00:14.464935+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_cold_snapshot_full_flow" name="test_same_large_cold_snapshot_control[complete]" time="126.973"><failure message="AttributeError: 'function' object has no attribute 'guard'">env = (&lt;sim2act.db.Store object at 0x7f11adf145f0&gt;, Settings(database_url='sqlite:////workspace/scratch/cold-snapshot-large-...97849365234877b78d20815068d4d5', 'user_a628e8a66bce49b1a8550253cb50fe2d', 'proj_bb82d4a531da474897b8568b68dd5645', ...)
+tmp_path = PosixPath('/workspace/scratch/cold-snapshot-large-complete-20261030/test_same_large_cold_snapshot_0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f11adf14050&gt;
+cancel = False
+
+    @pytest.mark.parametrize('cancel', [False, True], ids=['complete','cancel'])
+    def test_same_large_cold_snapshot_control(env, tmp_path, monkeypatch, cancel):
+        opened=snapshots(monkeypatch,env[1].database_url)
+        try:
+&gt;           large_control_flow(env,tmp_path,monkeypatch,cancel)
+
+tests/test_cold_snapshot_full_flow.py:42: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cold_control_full_flow.py:137: in test_original_large_cold_control
+    original_flow(env,tmp_path,monkeypatch)
+tests/test_pb_spec_production_controller.py:277: in test_pb_production_original_source_extraction_explicit_use_and_cold
+    read_reports, before_sql = observe_reservation_reads(monkeypatch)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f11adf14050&gt;
+
+    def observe_reservation_reads(monkeypatch):
+        """Passively inspect real checks and ensure their scope exits before writes."""
+        local, reports, tokens = threading.local(), [], []
+&gt;       reserve, preflight, guard = Worker.reserve, trial.preflight, Store.guard
+                                                                     ^^^^^^^^^^^
+E       AttributeError: 'function' object has no attribute 'guard'
+
+tests/test_pb_spec_production_controller.py:179: AttributeError</failure></testcase></testsuite></testsuites>
