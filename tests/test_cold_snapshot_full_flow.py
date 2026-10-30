@@ -23,16 +23,33 @@ from sim2act.db import Store, grants, resources
 
 def snapshots(monkeypatch, database_url):
     opened=[]
-    def cold_store(*args, **kwargs):
-        if args[0]!=database_url:
-            return Store(*args, **kwargs)
-        store=Store(*args, **kwargs, local_model_snapshots=True)
-        opened.append(store)
-        return store
+    original=Store.__init__
+    def cold_store(store, url, **kwargs):
+        if url==database_url:
+            kwargs['local_model_snapshots']=True
+        original(store,url,**kwargs)
+        if url==database_url:
+            opened.append(store)
     # Only the original test's explicit fresh Cold Store is selected, without
     # modifying the production worker, source callbacks or original assertions.
-    monkeypatch.setattr(controller_test, 'Store', cold_store)
+    monkeypatch.setattr(Store, '__init__', cold_store)
     return opened
+
+
+def test_snapshot_fixture_preserves_store_class_and_guard_observer(tmp_path,monkeypatch):
+    url='sqlite:///'+str(tmp_path/'fixture.db')
+    opened=snapshots(monkeypatch,url)
+    assert controller_test.Store is Store
+    # The original full controller patches Store.guard, not a factory proxy.
+    controller_test.observe_reservation_reads(monkeypatch)
+    selected=Store(url,test_only=True)
+    other=Store('sqlite:///'+str(tmp_path/'other.db'),test_only=True)
+    try:
+        assert type(selected) is Store and opened==[selected]
+        assert selected._local_model_snapshots and not other._local_model_snapshots
+        assert callable(Store.guard)
+    finally:
+        selected.engine.dispose();other.engine.dispose()
 
 
 @pytest.mark.parametrize('cancel', [False, True], ids=['complete','cancel'])
