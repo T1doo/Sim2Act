@@ -84,12 +84,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Pinned dependency install failed; no alternate source.' }
           ./.venv/Scripts/python.exe -m pip install --no-index --no-build-isolation --no-deps -e .
           if ($LASTEXITCODE -ne 0) { throw 'Exact source build failed.' }
-          ./.venv/Scripts/python.exe -c "import sys; assert sys.platform == 'win32'; from sim2act import _raw_snapshot, _cold_graph_structure, _cold_source_owned_impl, natural_spec_runtime; from sim2act.production_trial_admission import _qualified; from sim2act import _cold_source_packet as owned; _qualified(); assert owned.available(), 'Owned native source/build mismatch'; owned.current(); print('Three native extensions and complete owned code registration checked; SOURCE_SHA256='+_cold_source_owned_impl.SOURCE_SHA256)"
+          ./.venv/Scripts/python.exe -c "import sys; assert sys.platform == 'win32'; from sim2act import _raw_snapshot, _cold_graph_structure, _cold_source_owned_impl, natural_spec_runtime; from sim2act.production_trial_admission import _qualified; from sim2act import _cold_source_packet as owned; _qualified(); assert owned.available(), 'Owned native source/build mismatch'; owned.current(); import hashlib,json; from pathlib import Path; print('NATIVE_BUILD_IDENTITY='+json.dumps([dict(module=m.__name__,binary=Path(m.__file__).name,binary_sha256=hashlib.sha256(Path(m.__file__).read_bytes()).hexdigest(),source_sha256=m.SOURCE_SHA256) for m in (_raw_snapshot,_cold_graph_structure,_cold_source_owned_impl)])); print('Three native extensions and complete owned code registration checked')"
           if ($LASTEXITCODE -ne 0) { throw 'Required native imports or qualification failed.' }
           node -e "const [a,b,c]=process.versions.node.split('.').map(Number);if(!((a===22&&(b>22||(b===22&&c>=2)))||(a===24&&b>=15)||a>=26))throw Error('Existing Node does not meet locked jsdom engines; no runtime installer');console.log('Existing compatible Node '+process.versions.node)"
           if ($LASTEXITCODE -ne 0) { throw 'Existing Node incompatible; no replacement runtime.' }
           npm ci --prefix scripts/browser-ci --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org --cache "$env:RUNNER_TEMP/sim2act-npm-cache" --fetch-retries=0 --fetch-timeout=30000
           if ($LASTEXITCODE -ne 0) { throw 'Locked Node dependency install failed; no browser download.' }
+      - name: Native bounded recovery, cancellation, application use and exact export regressions
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        timeout-minutes: 4
+        run: |
+          ./.venv/Scripts/python.exe -m pytest --assert=plain tests/test_desktop_origin.py tests/test_desktop_control.py tests/test_application_use.py tests/test_csv_run_download.py tests/test_engineering_workspace.py tests/test_cold_source_native_views.py tests/test_cold_use_response_owned.py -q --basetemp="$env:RUNNER_TEMP/sim2act-regression-$env:GITHUB_RUN_ID" --junitxml="$env:RUNNER_TEMP/sim2act-regression.xml"
+          if ($LASTEXITCODE -ne 0) { throw 'Finite native regression failed; no retry or skipped failure.' }
       - name: Protected installed Edge, actual stable-origin restart and workspace pixels
         timeout-minutes: 4
         run: |
@@ -98,12 +104,6 @@ jobs:
           if ($Signature.Status -ne 'Valid' -or $Signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation') { throw 'Existing signed Edge unavailable; no installer/fallback.' }
           ./.venv/Scripts/python.exe scripts/windows_desktop_flow_ci.py --root "$env:RUNNER_TEMP/sim2act-desktop-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
           if ($LASTEXITCODE -ne 0) { throw 'Actual protected Edge flow failed; preserve log evidence.' }
-      - name: Native bounded recovery, cancellation, application use and exact export regressions
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        timeout-minutes: 4
-        run: |
-          ./.venv/Scripts/python.exe -m pytest --assert=plain tests/test_desktop_origin.py tests/test_desktop_control.py tests/test_application_use.py tests/test_csv_run_download.py tests/test_engineering_workspace.py tests/test_cold_source_native_views.py tests/test_cold_use_response_owned.py -q --basetemp="$env:RUNNER_TEMP/sim2act-regression-$env:GITHUB_RUN_ID" --junitxml="$env:RUNNER_TEMP/sim2act-regression.xml"
-          if ($LASTEXITCODE -ne 0) { throw 'Finite native regression failed; no retry or skipped failure.' }
       - name: Preserve boundary and actual test summary, no retained artifact/cache upload
         if: always()
         run: |
