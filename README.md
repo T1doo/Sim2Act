@@ -1,6 +1,6 @@
 # Sim2Act
 
-> **已封存的最新完整链：72c52360／证据版本 a140d37a**。Generate→Source→提取→fresh Cold Store→两次完整校验→保存结果，在真实时钟、合成SQLite/7次有限Mock下通过，两次Cold事务103.844/98.383秒，独立进程只读重开一致。[精确版本、原件与限制](docs/evidence/cloud-raw-mapping-20261028/README.md)。明确120秒SQLite协议保持原样，旧30秒、真实模型整链、PG及自然语义未通过；单次余量不构成稳定性保证。以前失败及B2/9a通过证据保留，不改签为新版本通过。
+> **已封存完整链源码：9523d3e2（Mock／文件SQLite）**。Generate→Source→提取→fresh Cold Store→完整G0/G1→保存结果，在真实时钟、7次有限Mock下通过，两次结算88.137/97.243秒，写入区段上界52.821/54.959秒；独立进程只读重开一致。原结算期限已接入写入准入，G0/G1取消、材料竞争及撤权均有实际回滚证据。[精确版本、热点表、失败与限制](docs/evidence/cloud-cold-deadline-20261030/README.md)。计时含被动监测，不能据此证明稳定因果提速；明确120秒SQLite合同未扩大，原30秒、真实模型整链、PG及自然语义未通过。以前失败及B2/9a通过证据保留，不改签为新版本通过。
 > 可独立使用的[空白合成桌面工作台与首次CSV流程](docs/PreviewRelease.md)不需要PG或模型密钥。固定免费Intern已有[独立真实提取证据](docs/evidence/cloud-settlement-20261028/README.md)，免费授权有效；[正式连接及精确试运行选择](docs/ProductionConnection.md)仍须使用已有应用连接、身份和原审批。桌面源包、EXE实编、窗口出现、完整操作及关闭重开分别验收，不互相替代。后续源码修补的验证范围各自记录。
 
 
