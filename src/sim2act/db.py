@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import math
 import re
 import sys
 import threading
@@ -722,8 +723,16 @@ class _WorkspaceWriterGate:
         self.completed = deque(maxlen=256)
 
     @contextmanager
-    def hold(self, seconds):
-        deadline = time.monotonic() + seconds
+    def hold(self, seconds, *, deadline=None):
+        relative = time.monotonic() + seconds
+        if deadline is not None:
+            try:
+                valid = type(deadline) in (int, float) and math.isfinite(deadline)
+            except OverflowError:
+                valid = False
+            if not valid:
+                raise DomainError('VERSION_CONFLICT', 'Invalid absolute workspace admission deadline')
+        deadline = relative if deadline is None else min(relative, deadline)
         ticket, owner = object(), threading.get_ident()
         entered = False
         waited = False

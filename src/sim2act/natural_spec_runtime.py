@@ -5063,7 +5063,7 @@ def _model_writer_connection(worker, candidate, plan):
     """Default is the original transaction; private candidate is explicit only."""
     if candidate is None:
         from ._sqlite_model_snapshot import transaction
-        with transaction(worker.store) as c:
+        with transaction(worker.store, settlement_interval=getattr(worker, '_settlement_interval', None)) as c:
             yield c, None
     else:
         with candidate.connection(worker, plan) as selected:

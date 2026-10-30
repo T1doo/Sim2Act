@@ -111,7 +111,7 @@ def test_fifo_timeout_is_snapshot_interruption_not_response_rejection(tmp_path,m
     thread=threading.Thread(target=held);thread.start()
     try:
         assert entered.wait(1)
-        monkeypatch.setattr(gate,'hold',lambda seconds:original(.03))
+        monkeypatch.setattr(gate,'hold',lambda seconds,**kwargs:original(.03,**kwargs))
         with pytest.raises(SnapshotChanged,match='admission failed'):
             with transaction(store) as c:
                 assert c.exec_driver_sql('SELECT value FROM probe').scalar()=='before'

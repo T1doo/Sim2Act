@@ -59,7 +59,7 @@ def profile(opened,tmp_path):
         (Connection.commit,'sql.commit'),
         (SQLiteDialect_pysqlite.do_commit,'sql.driver_commit')]
     codes={fn.__code__:name for fn,name in targets}
-    stacks,records,epochs,sql={}, {}, [], {}
+    stacks,records,epochs,sql,per_epoch={}, {}, [], {}, {}
     attached=[]
     native_sites={structure.select.__code__,structure.select_frontier.__code__,
         runtime._cold_graph_bytes.__code__,SQLiteDialect_pysqlite.do_commit.__code__}
@@ -70,22 +70,23 @@ def profile(opened,tmp_path):
         epoch=getattr(control.local,'epoch',None) if control is not None else None
         if epoch is not None and not any(e is epoch for e in epochs):epochs.append(epoch)
         return epoch
-    def aggregate(phase,name,elapsed,child=0):
-        entry=records.setdefault(phase,{}).setdefault(name,dict(calls=0,inclusive_seconds=0.,exclusive_among_targets_seconds=0.))
-        entry['calls']+=1;entry['inclusive_seconds']+=elapsed;entry['exclusive_among_targets_seconds']+=elapsed-child
+    def aggregate(epoch,phase,name,elapsed,child=0):
+        for record in (records,per_epoch.setdefault(id(epoch),{})):
+            entry=record.setdefault(phase,{}).setdefault(name,dict(calls=0,inclusive_seconds=0.,exclusive_among_targets_seconds=0.))
+            entry['calls']+=1;entry['inclusive_seconds']+=elapsed;entry['exclusive_among_targets_seconds']+=elapsed-child
     def before(c,cursor,statement,parameters,context,many):
         epoch=current()
         if epoch is None:return
         verb=statement.lstrip().partition(' ')[0].upper()
-        sql[id(context)]=(epoch,verb,time.monotonic())
+        sql[id(context)]=(epoch,epoch.phase,verb,time.monotonic())
         if verb in ('INSERT','UPDATE','DELETE'):
             boundaries.setdefault(id(epoch),{}).setdefault('first_dml_wall',time.time())
     def after(c,cursor,statement,parameters,context,many):
         old=sql.pop(id(context),None)
-        if old:aggregate(old[0].phase,'sql.execute.'+old[1],time.monotonic()-old[2])
+        if old:aggregate(old[0],old[1],'sql.execute.'+old[2],time.monotonic()-old[3])
     def failed(context):
         old=sql.pop(id(context.execution_context),None)
-        if old:aggregate(old[0].phase,'sql.failed.'+old[1],time.monotonic()-old[2])
+        if old:aggregate(old[0],old[1],'sql.failed.'+old[2],time.monotonic()-old[3])
     boundaries={}
     def push(token,name):
         epoch=current()
@@ -95,14 +96,14 @@ def profile(opened,tmp_path):
             for kind,fn in [('before_cursor_execute',before),('after_cursor_execute',after),('handle_error',failed)]:
                 event.listen(engine,kind,fn);attached.append((engine,kind,fn))
         if name=='sql.commit':boundaries.setdefault(id(epoch),{})['commit_start_wall']=time.time()
-        stacks.setdefault(threading.get_ident(),[]).append([token,name,epoch,time.monotonic(),0.])
+        stacks.setdefault(threading.get_ident(),[]).append([token,name,epoch,epoch.phase,time.monotonic(),0.])
     def pop(token):
         frames=stacks.get(threading.get_ident(),[])
         if not frames or frames[-1][0]!=token:return
-        _,name,epoch,started,child=frames.pop();elapsed=time.monotonic()-started
-        aggregate(epoch.phase,name,elapsed,child)
+        _,name,epoch,phase,started,child=frames.pop();elapsed=time.monotonic()-started
+        aggregate(epoch,phase,name,elapsed,child)
         if name=='sql.commit':boundaries.setdefault(id(epoch),{})['commit_end_wall']=time.time()
-        if frames:frames[-1][4]+=elapsed
+        if frames:frames[-1][5]+=elapsed
     def start(code,offset):push(code,codes[code])
     def end(code,offset,value=None):pop(code)
     def native_name(callee,arg0):
@@ -143,20 +144,23 @@ def profile(opened,tmp_path):
         (tmp_path/'passive-profile.json').write_text(json.dumps(dict(
             classification='PASSIVELY_INSTRUMENTED_ORIGINAL_LARGE_COLD_FIXED_MOCK_SQLITE_WAL',
             records=records,pending_frames=sum(map(len,stacks.values())),pending_sql=len(sql),
-            epochs=[dict(ordinal=i+1,**boundaries.get(id(e),{})) for i,e in enumerate(epochs)],
+            epochs=[dict(ordinal=i+1,records=per_epoch.get(id(e),{}),**boundaries.get(id(e),{})) for i,e in enumerate(epochs)],
             limitations='Instrumentation included; exclusive subtracts only observed target children; inclusive overlaps. SQL execute excludes fetch/materialization. Native compare includes Python reducers. Commit includes I/O; correlate fsync trace independently.'),indent=2)+'\n')
 
 
 def test_original_large_cold_scoped_profile(env,tmp_path,monkeypatch):
     opened=snapshots(monkeypatch,env[1].database_url)
-    with profile(opened,tmp_path) as measured:
-        large_flow(env,tmp_path,monkeypatch,False)
+    try:
+        with profile(opened,tmp_path) as measured:
+            large_flow(env,tmp_path,monkeypatch,False)
+    finally:
+        (tmp_path/'snapshot-writer-timings.json').write_text(json.dumps([r for s in opened for r in s._local_model_snapshot_records],indent=2)+'\n')
     assert len(opened)==1
     assert json.loads((tmp_path/'passive-profile.json').read_text())['pending_frames']==0
+    assert json.loads((tmp_path/'passive-profile.json').read_text())['pending_sql']==0
     assert measured['G1']['graph.commit']['calls']==2
     assert len(opened[0]._local_model_snapshot_records)==2
     assert all(r['outcome']=='COMMITTED' for r in opened[0]._local_model_snapshot_records)
-    (tmp_path/'snapshot-writer-timings.json').write_text(json.dumps(list(opened[0]._local_model_snapshot_records),indent=2)+'\n')
 
 
 def test_scoped_profile_pairs_native_success_failure_and_real_sql(tmp_path):
