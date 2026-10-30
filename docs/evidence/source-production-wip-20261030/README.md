@@ -1,39 +1,25 @@
-# Source production wiring WIP — not release or full-flow acceptance
+# Source production wiring — correctness connected, large flow still fails
 
-Base: `cd65e648cfe9efcc8b5f0382dd89e3c976dac91b`.
+Frozen tested source: `ce22ff9e9c3204936fd7db9c03e935b1c0f2e800` on `dev/cloud-g0-live-20261028`. This is unfinished engineering, not Release or product acceptance.
 
-The post Source producer now returns an immutable native Owner/Binding and the
-Source consumers read static, immutable native views. The original Graph pin
-retains the complete metadata, original leaves and shared outside anchors;
-input/role/control root identities are continuously bound. Source models leave
-the repeated consumer cohort, while the original complete Journal Ledger and
-QuotaCursor checks remain. Source business equality/usage stay distinct from
-the stronger constructor/handoff/full Slot-storage comparisons. Pre/Generate
-and prepublication-capacity fallback retain their full original paths.
+The post accounted-Source producer returns a native immutable Owner/Binding. All its direct consumers use native immutable views, including Source usage, fresh full current Ledger joins, archive bodies/resolution/chain and runtime complete fields/model collection. The original initial raw/domain gate executes before ownership. Full metadata, original leaves and cross-family anchors remain in the complete Graph pin. Scope7/root identity, dynamic permission/revocation, owner/version/fence, stop and dual clocks remain checked. Pre/Generate and genuine prepublication capacity fallback keep the original complete route. See source-wiring.md for the precise migrated consumer inventory and remaining fact families.
 
-The latest completed component run is
-`/workspace/scratch/source-production-sealed-code-connect-20261030.log`:
-1 passed, 4.75 seconds, at 2026-10-30 12:32 UTC. It uses original SQL producers,
-Source usage, archive bodies, source resolution and archive-chain consumers over
-synthetic file-SQLite records. It executes no Worker, model call or HTTP sender.
-Earlier failing comparisons were retained in `source-production-connect-first`,
-`-second`, and `source-production-view-connect` logs under the same scratch root.
+The native extension was built in this Linux environment; headers are included in source packaging and the refreshed 152-file software qualification. The independent review found no remaining correctness blocker after initial-domain, scope-root, immutable-view and fresh-Ledger fixes. The final component regressions and their original log identities are recorded in freeze-validation.json and closure-fix-validation.json. These are component SQL fixtures, not model/Worker acceptance.
 
-The environment disconnected before the boundary-test append/run process was
-created. Recovery confirmed the original single test file and no new boundary
-log or lingering test process. The 19 changed/new source files were also saved
-to `/workspace/scratch/source-production-wip-recovery-20261030` before this commit.
+## Two actual large attempts, both preserved failures
 
-Pending: actual production-wiring independent review; root rebinding and full
-Slot storage/alias rejection tests; the complete stage/runtime collector and
-existing regression suite; new native-view grammar/mutation tests; refreshed
-software qualification (headers have been added to its required inventory);
-then exact-source same-large-input G0/G1, cancellation/revocation/concurrency and
-reopen measurements. The current qualification JSON is deliberately still the
-previous source, so this WIP is not a qualified production target. No Windows
-validation, fourth CI run, paid request, deployment, main update or Release.
+`00d3768dc68f54c03d702cc6d45deb8cc91e6e03` failed before publication because the code registry included outer reservation observer functions outside the Source callee closure. The fix uses the independently audited literal 26 local callees plus four original imported pure helpers. No original observer or business assertion was removed. See failed-00d3768d.
 
-The previous full Worker result remains 97.42/118.62 seconds for two Cold
-settlements, with only 1.38 seconds on the latter. It is not new-source evidence,
-and does not meet the original performance goal. The 30-second writer admission
-budget and 120-second settlement interval are distinct and are unchanged.
+The ce22 run started **2026-10-30 14:12:03 UTC**, ended **14:19:31 UTC**, exit **1**. It used the original large input, real clocks, fixed MockTransport and synthetic file SQLite WAL. There were **6 Mock requests, 0 real model requests**. First Cold settlement hit the unchanged **120-second** deadline and rolled back: **120.003994s total, 60.545123s G0, 59.457658s writer interval**. No second Cold was reached. Source ownership was actually published once (1,249 owned nodes, 706 original carrier leaves, 31 cross-family anchors, 27,035 metadata bytes); usage executed once and full fresh slot joins four times. No successful result/reopen proof exists for this source. Its attempt was later recorded REJECTED_KNOWN/BUDGET_EXHAUSTED; two prior Source VERIFIED and three generation RECEIVED attempts remain. No Cold typed result is asserted.
+
+See failed-ce22ff9e/summary.json, timings.json, run.json, shape-summary.json and actual-counts.json.gz. The original DB, Mock exchanges and full failure log remain private at the paths/hash identities in preserved-private.json. They have not been deleted or published.
+
+## What this proves and does not prove
+
+The real production path now consumes the immutable Source family, but that alone has not achieved the required performance. In the incomplete G1 there were 1,169 actual full encodings / 779,880,813 encoded bytes; input_bytes separately returned 7,279 projections and 1,145 byte strings / 760,593,381 bytes. Successful full native comparisons after Source publication still traversed about 326.93 million edges across 3,508 calls (weighted 46,337 nodes), before the deadline. These are partial failing counts, not successful whole-flow improvements over older sources. G0 retained its original path (1,188 actual encodings / 546,659,631 bytes).
+
+The new Source pin replaces the final accounted-Source raw output and its direct Source typed cohort; it is not a migration of all Source provenance. Earlier pb-source:* / pb-source-audit:*, Source run-facts/run-raw-seed, post-audit-seed and complete.source_facts/source_audit/source_outputs/source_proved remain mutable roots with real downstream consumers. The Source pin also retains cross-family anchors and does not erase previously published Journal/Generate/stage facts. Their full scans and complete mutable checks remain. The remaining structural issue must be audited at those actual shared producer roots; simply adding another immutable wrapper or removing whole-Graph checks would not establish safety or benefit. No identical large rerun has been started after this failure.
+
+The original 30-second writer admission/first-DML contract is distinct from the 120-second G0+G1 settlement interval. Neither was enlarged. The current run does not meet the original complete-window performance goal. The older f6c5 source did commit in 97.42/118.62s, but is a different source and the latter 1.38s margin was already inadequate; that proof cannot be reused as ce22 acceptance.
+
+No new-source large cancellation/revocation/concurrency run or successful reopen has completed. Existing component mutation/alias/SQL permission regressions are not relabeled as a new full large run. Windows, actual Intern, formal PostgreSQL and natural semantic/product acceptance remain unverified for this source. The fourth Windows CI remains paused with 506 seconds reserved. No main update, Release, deployment, new credentials/permissions, paid request or user-PC operation occurred.
