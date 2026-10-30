@@ -224,6 +224,7 @@ def open_workspace(path, *, new=False):
             inspector = inspect(store.engine)
             require(schema_structure(inspector) == schema_structure(), "SCHEMA_CHANGED")
             require(store.authenticate(TOKEN) == marker["principal_id"], "IDENTITY_CHANGED")
+        store._enable_local_model_snapshots()
         return root, store, marker
     except Exception:
         store.engine.dispose()

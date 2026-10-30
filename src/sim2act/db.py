@@ -768,13 +768,21 @@ class _WorkspaceWriterGate:
 
 
 class Store:
-    def __init__(self, url: str, *, test_only=False, workspace_serialized=False):
+    def __init__(self, url: str, *, test_only=False, workspace_serialized=False, local_model_snapshots=False):
         if not url.startswith("postgresql+psycopg://") and not (
             test_only and url.startswith("sqlite://")
         ):
             raise ValueError("PostgreSQL required outside engineering tests")
         if type(workspace_serialized) is not bool:
             raise ValueError("Explicit workspace serialization selection required")
+        if type(local_model_snapshots) is not bool:
+            raise ValueError("Explicit local model snapshot selection required")
+        if local_model_snapshots:
+            parsed = make_url(url)
+            if (not test_only or parsed.drivername != 'sqlite' or not parsed.database
+                    or parsed.database == ':memory:' or parsed.database.startswith('file:')
+                    or parsed.query.get('mode') == 'memory'):
+                raise ValueError('Local model snapshots require test-only file SQLite')
         if workspace_serialized:
             parsed = make_url(url)
             if (not test_only or parsed.drivername != "sqlite" or not parsed.database
@@ -803,6 +811,29 @@ class Store:
         sqlalchemy_event.listen(self.engine, "before_cursor_execute", proof_write_boundary)
         self.sqlite = self.engine.dialect.name == "sqlite"
         self.test_only = test_only  # Explicit fixture guard; production entrypoints leave False.
+        self._local_model_snapshots = False
+        self._local_model_snapshot_records = deque(maxlen=256)
+        if local_model_snapshots:
+            try:
+                self._enable_local_model_snapshots()
+            except BaseException:
+                self.engine.dispose()
+                raise
+
+    def _enable_local_model_snapshots(self):
+        # Existing workspace callers verify schema/identity BEFORE this durable
+        # setup. Never use this operation to probe an unknown data directory.
+        parsed = self.engine.url
+        if (not self.test_only or not self.sqlite or parsed.drivername != 'sqlite'
+                or not parsed.database or parsed.database == ':memory:'
+                or parsed.database.startswith('file:') or parsed.query.get('mode') == 'memory'):
+            raise ValueError('Local model snapshots require test-only file SQLite')
+        if not self._local_model_snapshots:
+            with self.engine.connect() as c:
+                if c.exec_driver_sql('PRAGMA journal_mode=WAL').scalar().lower() != 'wal':
+                    raise DomainError('RESOURCE_UNAVAILABLE', 'Local model WAL setup failed')
+                c.commit()
+            self._local_model_snapshots = True
 
     def owns_connection(self, c):
         """Original Engine, or this Store's narrowly issued synthetic writer.

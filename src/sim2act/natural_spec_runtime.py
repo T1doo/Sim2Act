@@ -5062,7 +5062,8 @@ def _model_settlement_read(worker, c, inputs):
 def _model_writer_connection(worker, candidate, plan):
     """Default is the original transaction; private candidate is explicit only."""
     if candidate is None:
-        with worker.store.tx() as c:
+        from ._sqlite_model_snapshot import transaction
+        with transaction(worker.store) as c:
             yield c, None
     else:
         with candidate.connection(worker, plan) as selected:
@@ -5071,6 +5072,7 @@ def _model_writer_connection(worker, candidate, plan):
 
 def advance_model(worker, run, *, _heartbeat_state=None):
     from ._sqlite_run_control import Interrupted as LocalControlInterrupted
+    from ._sqlite_model_snapshot import SnapshotChanged
     from . import pa_spec_apps as spec
     from .app_jobs import lock_live
     from .db import new_id
@@ -5306,6 +5308,7 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                     and run["runtime_id"] != selected_binding.contract.runtime_id
                     and run["resource_refs"] == [selected_binding.contract.bindings[1].resource_id]):
                 plan = candidate.prepare(worker, binding, graph_call, limits)
+        control_epoch = None
         with _model_settlement_writer(worker, job, meta["deadline"], _heartbeat_state,
                 attempt_id=aid, _original_run=run) as writer_epoch, \
                 store.local_model_settlement(worker, job, meta["deadline"]) as control_epoch, \
@@ -5379,6 +5382,8 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                             cold.guard, "second"))
             if control_epoch is not None:
                 control_epoch.postwrite()
+            from ._sqlite_model_snapshot import promote
+            promote(c)
             c.execute(
                 update(attempts)
                 .where(
@@ -5446,6 +5451,13 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                             **({"_model_after": model_after} if model_after is not None else {}))
             from .model_settlement import checkpoint
             checkpoint(worker)
+    except SnapshotChanged as changed:
+        # Snapshot upgrade is an all-database conflict, never a response rejection.
+        # No replay of a stale G0 or any of its writes is permitted.
+        if control_epoch is not None and control_epoch.commands:
+            if not LocalControlInterrupted(control_epoch).wait_commands():
+                return False
+        raise DomainError("OUTCOME_UNKNOWN", "Concurrent change stopped local settlement; received evidence retained") from changed
     except LocalControlInterrupted as interrupted:
         # All five writes have rolled back; SQL, renewal and settlement locks
         # are now released. Never turn a control abort into response rejection.

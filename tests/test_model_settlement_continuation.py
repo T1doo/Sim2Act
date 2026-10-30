@@ -53,7 +53,7 @@ from sim2act.model import CapturedResponse, InternModel, normalize_usage
     "reject_owner", "limits_platform", "limits_node", "tail_reentry",
     "output_drift", "failed_write",
     "tail_extra_expiry", "row_mapping_drift",
-    "source_identity_drift", "source_deadline_drift",
+    "source_identity_drift", "source_deadline_drift", "snapshot_pending_control",
 ])
 def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, monkeypatch, case):
     def forbidden(*_, **__):
@@ -334,10 +334,37 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
             raise DomainError("VERSION_CONFLICT", "Synthetic owner competition blocks rejection")
         return original_owner(*args, **kwargs)
     monkeypatch.setattr(archive, "receipt_owner", owner)
+    if case == 'snapshot_pending_control':
+        from sim2act._sqlite_model_snapshot import SnapshotChanged, promote
+        store._enable_local_model_snapshots()
+        original_connection = runtime._model_writer_connection
+        @contextmanager
+        def competing_snapshot(w, candidate, plan):
+            try:
+                with original_connection(w, candidate, plan) as pair:
+                    c = pair[0]
+                    c.execute(select(attempts.c.id).where(attempts.c.id == aid)).one()
+                    # A real other-connection commit invalidates the snapshot.
+                    with store.tx() as other:
+                        store.event(other,rid,'UNIT_CONCURRENT_SNAPSHOT_COMMIT',{})
+                    epoch=store._local_model_control.local.epoch
+                    epoch.commands.add(threading.Event())  # Undelivered command completion, NOT an ACK.
+                    epoch.deadline=time.monotonic()+.02
+                    promote(c)
+                    c.execute(update(attempts).where(attempts.c.id == aid).values(status='VERIFIED'))
+                    pytest.fail('A stale WAL snapshot unexpectedly wrote')
+                    yield pair
+            except SnapshotChanged as conflict:
+                assert isinstance(conflict.__cause__,OperationalError)
+                state['actual_snapshot_conflict']=True
+                raise
+        monkeypatch.setattr(runtime,'_model_writer_connection',competing_snapshot)
     error = None
     try:
         if case == "success":
             assert runtime.advance_model(worker, run) is True
+        elif case == 'snapshot_pending_control':
+            assert runtime.advance_model(worker,run) is False
         else:
             with pytest.raises(DomainError) as caught:
                 runtime.advance_model(worker, run)
@@ -361,6 +388,14 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
             statements = [row["kind"] for row in sql if row["transaction"] == state["tx"]]
             assert [kind for kind in statements if kind != "SELECT"] == [
                 "BEGIN", "UPDATE", "INSERT", "UPDATE", "UPDATE", "INSERT"]
+        elif case == 'snapshot_pending_control':
+            assert state['actual_snapshot_conflict']
+            assert attempt['status']=='RECEIVED' and op['status']=='DISPATCHED'
+            assert 'NS_SETTLED' not in kinds and 'NS_REJECTED' not in kinds
+            with store.tx() as c:
+                current=c.execute(select(runs).where(runs.c.id==rid)).mappings().one()
+                assert current['status']==run['status'] and current['version']==run['version']
+            assert app_state=='QUEUED'
         else:
             assert "NS_SETTLED" not in kinds and "SPEC_STEP_VERIFIED" not in kinds
             assert app_state == "QUEUED" and op["receipt"] is None
