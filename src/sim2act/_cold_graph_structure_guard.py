@@ -41,6 +41,8 @@ _FUNCTIONS = (
     accounted._Frontier.check, accounted._Frontier.values, accounted._Frontier.key,
     accounted._Frontier._refresh, accounted._Frontier.added, accounted.gate.require,
     accounted._NativeCandidate.release, owned._OwnedPrewriteMode.close,
+    accounted._NativeCandidate.qualify, accounted._SizingProjection.copy,
+    typed._graph_source_upstream_run_equal,
     r._cold_graph_bytes, r._cold_graph_row_storage, r._cold_graph_limit_values,
     r._cold_graph_pickle_marker, r._ColdGraphPickler.reducer_override,
     r.require, r.codec.require, typed.require, typed._trial_typed_storage,
@@ -55,7 +57,7 @@ _ALIASES = tuple((owner, name, getattr(owner, name)) for owner, names in (
          '_ColdGraphQuotedName', 'Limits', 'require', '_COLD_ROW_LOOKUP',
          '_COLD_ROW_REQUIRE', '_COLD_ROW_LEAF', '_SOURCE_VIEW_TYPE', '_SOURCE_VIEW_PIN', '_SOURCE_OWNER_TYPE', '_SOURCE_OWNER_PIN')),
     (r.codec, ('require',)),
-    (accounted, ('rt', 'gate', 'o', '_Frontier', '_NativeCandidate')),
+    (accounted, ('rt', 'gate', 'o', '_Frontier', '_NativeCandidate', '_SizingProjection')),
     (owned, ('_OwnedPrewriteMode',)),
     (r._row_native_code, ('_RAW_ROW_LOOKUP', '_RAW_UNSUPPORTED')),
     (typed, ('require', '_trial_typed_storage', '_trial_typed_classes', '_trial_typed_nested_classes')),
@@ -65,7 +67,7 @@ _ALIASES = tuple((owner, name, getattr(owner, name)) for owner, names in (
 # re-resolving 268 individual descriptors and never remembers data or PASS.
 _roots = (r._ColdGraphRead, r._ColdGraphPickler, r._ColdGraphRowMapping,
     r._ColdGraphCursorMeta, r._ColdGraphSimpleMeta, r._ColdGraphQuotedName, r.Limits,
-    ProductionTrialBinding, accounted._Frontier, accounted._NativeCandidate, owned._OwnedPrewriteMode,
+    ProductionTrialBinding, accounted._Frontier, accounted._NativeCandidate, accounted._SizingProjection, owned._OwnedPrewriteMode,
     *typed._trial_typed_nested_classes())
 _classes = {}
 _metas = {}

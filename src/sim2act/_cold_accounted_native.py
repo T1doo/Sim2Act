@@ -61,6 +61,23 @@ class _SizingProjection(_Projection):
     def copy(self, value, depth=0, *, typed=False):
         if self.row_base is not None and depth == 0:
             depth = self.row_base + 1
+        # Admission sizing only: include the COMPLETE immutable carrier and
+        # all parent pins. The actual Owner/View and every mutable anchor stay
+        # in the frontier; this temporary representation is never a consumer.
+        source_kind = ('owner' if rt._SOURCE_OWNER_TYPE is not None and type(value) is rt._SOURCE_OWNER_TYPE
+            else 'view' if rt._SOURCE_VIEW_TYPE is not None and type(value) is rt._SOURCE_VIEW_TYPE else None)
+        if source_kind is not None:
+            key = id(value), typed
+            if key in self.done:
+                if depth + self.done[key][2] > min(self.b.bounds.depth - 16, (sys.getrecursionlimit() - 200) // 5):
+                    raise _Capacity('source_sizing_depth')
+                return self.done[key][1]
+            self.alloc(512)  # wrapper/ref/strong memo, before native accessors
+            prepared = (rt._SOURCE_OWNER_PIN(value) if source_kind == 'owner' else
+                ('source-owned-node-v1', rt._SOURCE_VIEW_PIN(value)))
+            copied = super().copy(prepared, depth, typed=typed)
+            self.done[key] = value, copied, self.done[id(prepared), typed][2]
+            return copied
         if type(value) is RowMapping:
             if self.row_base is not None:
                 raise _Capacity('nested_sizing_row')
@@ -92,6 +109,8 @@ class _SizingProjection(_Projection):
             self.done[key] = value, copied, height
             return copied
         return super().copy(value, depth, typed=typed)
+
+
 
 
 class _Arena:
@@ -563,11 +582,6 @@ class _NativeCandidate:
         if self.config.joint_handoff:
             self.assert_joint(packets)
         self.observe(phase='native:representation')
-        if vars(self.graph).get('_source_fact_bindings'):
-            # This older arena has no declared immutable-Owner node protocol.
-            # Genuine representation miss before issuance: keep full legacy
-            # guards/joins and the qualified native Graph comparator instead.
-            raise _Unsupported('native_frontier_immutable_source_owner')
         if (not all(type(k) is str for k in self.graph.inputs)
                 or 'cold-trial:complete' in self.graph.inputs):
             raise _Unsupported('native_root_representation')
@@ -589,8 +603,13 @@ class _NativeCandidate:
             gate.require(type(self.upstreams) is tuple and len(self.upstreams) == 2)
             for role, value in zip(('source', 'generate'), self.upstreams, strict=True):
                 self.observe(phase='native:upstream:', role=role)
+                expected = o._node(packets[role]).get('value').get('run')
+                if rt._SOURCE_VIEW_TYPE is not None and type(value) is rt._SOURCE_VIEW_TYPE:
+                    if role != 'source':
+                        raise _Unsupported('source_view_in_generate_role')
+                    gate.require(gate._graph_source_upstream_run_equal(ledger, value, expected), 'Full upstream Run differs')
+                    continue
                 with ledger.snapshot(value, visible=True) as raw:
-                    expected = o._node(packets[role]).get('value').get('run')
                     gate.require(ledger.equal(expected, o._node(raw)), 'Full upstream Run differs')
                     del raw, expected
         ticket = ledger.reserve()

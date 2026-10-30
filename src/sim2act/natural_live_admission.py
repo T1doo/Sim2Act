@@ -1633,6 +1633,66 @@ def _graph_trial_stage_models_from_raw(models, stage_facts, inputs, *, _owned=No
         _graph_trial_extraction_models_from_raw(models, extraction, full['extraction'])
 
 
+
+def _graph_source_upstream_run_equal(ledger, value, expected):
+    """Pre-issuance visible Run join, fully prepaid before compatibility copy.
+
+    Only a parentless immutable SQL/JSON image is admitted here. Composite
+    business readers continue using their original representation. No mutable
+    copy, identity shortcut, authority or comparison result survives return.
+    """
+    from . import natural_spec_runtime as rt, cold_accounted as o
+    from ._cold_accounted_budget import _Capacity, _Unsupported
+    from ._cold_accounted_values import _node
+    source = rt._source_owned_code
+    source.current()
+    if not source.image.is_kind(value, 'd', 'r'):
+        raise _Unsupported('source_upstream_view')
+    owner = value.owner()
+    pin = rt._SOURCE_OWNER_PIN(owner)
+    if len(pin) != 2:  # no unmetered parent expansion during plain()
+        raise _Unsupported('source_upstream_parents')
+    data = source.native.owned_data(owner)
+    nodes, leaves = data[1], data[2]
+    count = len(nodes)
+    if count > ledger.bounds.nodes:
+        raise _Capacity('source_upstream_nodes')
+    ledger.spend(count + len(leaves) + 1)
+    # Covers the complete metadata walk BEFORE examining payloads. Native
+    # shape bounds each table by 100000 nodes and 1000000 edges. Refund only
+    # after all temporary dictionaries/views/packets have been released.
+    ticket = ledger.reserve(units=8192 + 4096 * count + 128 * len(leaves))
+    copied = packet = None
+    try:
+        edges = 0
+        for tag, payload in nodes:
+            if tag not in ('n','t','f','i','v','s','b','u','d','r','l','q'):
+                raise _Unsupported('source_upstream_node')
+            edges += (2 * len(payload) if tag == 'd' else len(payload)
+                if tag in ('r','l','q') else 1 if tag == 'u' else 0)
+        if edges > ledger.bounds.edges:
+            raise _Capacity('source_upstream_edges')
+        leaf = sum(len(v) * (4 if type(v) is str else 1) for v in leaves)
+        if leaf > ledger.bounds.leaf_bytes:
+            raise _Capacity('source_upstream_leaf')
+        ticket.grow(64 * edges + 8 * leaf)
+        # Includes key collisions/linear native lookups, recursion frames and
+        # text hashing; aliases use plain()'s canonical Owner/node memo.
+        ledger.spend(128 * (count + edges + 1) ** 2 * (leaf + 1))
+        copied = source.image.plain(value)
+        source.current()
+        if type(copied) is not dict or set(copied) != set(o._FIELDS['run']):
+            raise _Unsupported('source_upstream_run_schema')
+        with ledger.snapshot(copied, visible=True) as packet:
+            result = ledger.equal(expected, _node(packet))
+            packet = None
+        return result
+    finally:
+        copied = packet = None
+        ticket.close()
+
+
+
 def _graph_trial_stage_raw_from_raw(stage_facts, full, *, _graph=None):
     """Original complete Stage identity joins, over exact controlled storage."""
     full = _trial_pure_mapping(full)

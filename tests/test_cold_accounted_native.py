@@ -6,6 +6,7 @@ The harness mirrors original mid-edge validations, not an acceptance run.
 
 from contextlib import contextmanager
 from types import SimpleNamespace
+import sys
 
 import pytest
 from accounted_sqlite_fixture import seed_cold
@@ -34,12 +35,32 @@ NATIVE_LIMITS = LIMITS._replace(resident=10**30, peak=10**32, work=10**40)
 
 
 @contextmanager
-def native_segment(f, c, *, limits=NATIVE_LIMITS, middle=None, before_choose=None, receipt_setup=None, joint=False):
+def observed_stage_entries(events):
+    """Read real call arguments without replacing a fixed Source producer."""
+    monitor=sys.monitoring;slot=next(i for i in (3,5,4) if monitor.get_tool(i) is None)
+    code=dispatch._graph_stage_accounted.__code__
+    def entered(actual,offset):
+        frame=sys._getframe(1)
+        assert frame.f_code is code
+        events.append(frame.f_locals['stage'])
+    monitor.use_tool_id(slot,'Original Source Generate ordering assertions')
+    try:
+        monitor.register_callback(slot,monitor.events.PY_START,entered)
+        monitor.set_local_events(slot,code,monitor.events.PY_START)
+        yield
+    finally:
+        monitor.set_local_events(slot,code,0)
+        monitor.register_callback(slot,monitor.events.PY_START,None)
+        monitor.free_tool_id(slot)
+
+
+@contextmanager
+def native_segment(f, c, *, limits=NATIVE_LIMITS, middle=None, before_choose=None, receipt_setup=None, joint=False, upstream_setup=None, config=None):
     inputs = {'synthetic-native-candidate': True}
     roles = dict.fromkeys(('source', 'generate', 'platform', 'trial', 'per_use'))
     with pb._source_reads(f.store, c), runtime._cold_graph_read(
         f.worker, c, inputs, roles, 'pre'
-    ) as graph, native._native_candidate(graph, native._NativeConfig(BOUNDS, limits, joint_handoff=joint)) as candidate:
+    ) as graph, native._native_candidate(graph, config or native._NativeConfig(BOUNDS, limits, joint_handoff=joint)) as candidate:
         state, cursor, revision = dispatch._graph_journal_state(graph, f.store, c, f.binding)
         graph.add('trial-generated-model-facet', dict(frozen=f.frozen.model_dump()))
         graph.add('cold-trial:bound', dict(binding=getattr(f, 'cold_bound', f.bound), source_binding=f.bound))
@@ -59,8 +80,9 @@ def native_segment(f, c, *, limits=NATIVE_LIMITS, middle=None, before_choose=Non
         candidate.stage('generate', generated)
         if before_choose is not None:
             before_choose(graph, source, generated, candidate)
+        upstreams = upstream_setup(graph,source,generated) if upstream_setup is not None else None
         platform = receipt_setup(graph) if receipt_setup is not None else None
-        selected = candidate.choose(state, receipt_platform=platform)
+        selected = candidate.choose(state, upstreams=upstreams, receipt_platform=platform)
         source, generated, mode = selected.source, selected.generated, selected.mode
         full = dict(binding=getattr(f, 'cold_bound', {}), cold_job=getattr(f, 'cold_job', {}),
                     source_binding=f.bound, source=source if mode else dict(run=source[0]),
@@ -90,17 +112,12 @@ def native_segment(f, c, *, limits=NATIVE_LIMITS, middle=None, before_choose=Non
             graph.check(f.store, c)
 
 
-def test_original_order_once_and_packet_only_budget_is_joint_legacy(sql_facts, monkeypatch):
+def test_original_order_once_and_packet_only_budget_is_joint_legacy(sql_facts):
     f, events = sql_facts, []
-    original = dispatch._graph_stage_accounted
-    def producer(*args, **kwargs):
-        events.append(args[7])
-        return original(*args, **kwargs)
-    monkeypatch.setattr(dispatch, '_graph_stage_accounted', producer)
     def middle(graph, source):
         events.append('recipe')
         assert graph._accounted_frontier is None
-    with f.store.tx() as c, native_segment(f, c, limits=LIMITS, middle=middle) as s:
+    with observed_stage_entries(events),f.store.tx() as c, native_segment(f, c, limits=LIMITS, middle=middle) as s:
         assert events == ['source', 'recipe', 'generate']
         assert s.cohort.route == 'LEGACY' and s.mode is None
         assert s.graph._accounted_frontier is None and not s.candidate.mode.scope._issued
@@ -108,16 +125,11 @@ def test_original_order_once_and_packet_only_budget_is_joint_legacy(sql_facts, m
         assert resolve(s).public_receipt['source_run_id'] == f.source_id
 
 
-def test_middle_error_precedes_generate_and_never_issues(sql_facts, monkeypatch):
+def test_middle_error_precedes_generate_and_never_issues(sql_facts):
     f, events = sql_facts, []
-    original = dispatch._graph_stage_accounted
-    def producer(*args, **kwargs):
-        events.append(args[7])
-        return original(*args, **kwargs)
-    monkeypatch.setattr(dispatch, '_graph_stage_accounted', producer)
     def middle(graph, source):
         raise DomainError('VERSION_CONFLICT', 'original recipe error')
-    with pytest.raises(DomainError, match='original recipe error'), f.store.tx() as c:
+    with observed_stage_entries(events),pytest.raises(DomainError, match='original recipe error'), f.store.tx() as c:
         with native_segment(f, c, middle=middle):
             pytest.fail('middle error cannot select')
     assert events == ['source']
@@ -170,6 +182,107 @@ def test_owned_frontier_real_consumers_and_two_coordinator_checks(sql_facts, mon
     assert not s.mode.active and not arena.nodes
     with pytest.raises(DomainError):
         _ = record.id
+
+
+@pytest.mark.parametrize('closed_bounds',[False,True],ids=['finite-fixture','actual-closed-policy'])
+def test_first_owned_source_facts_keep_frontier_and_real_consumers(sql_facts,monkeypatch,closed_bounds):
+    from sim2act import _cold_source_packet as source_owned
+    f=sql_facts;seed_cold(f);captured={}
+    def upstreams(graph,source,generated):
+        job=source_owned.own_fact(graph,'source-frontier:job',source[0])
+        child=source_owned.own_fact(graph,'source-frontier:child',dict(job=job))
+        captured.update(job=job,child=child,roots=tuple(graph._source_fact_bindings))
+        return job,generated[0]
+    config=native._bounded_settlement_config() if closed_bounds else None
+    with f.store.tx() as c,native_segment(f,c,upstream_setup=upstreams,config=config) as s:
+        assert s.cohort.route=='OWNED',s.candidate.selection_record()
+        assert s.graph._accounted_frontier is s.candidate.frontier
+        assert source_owned.image.same(captured['child']['job'],captured['job'])
+        assert tuple(s.graph._source_fact_bindings)==captured['roots']
+        # Production remaps stage facts to the issued records after choose;
+        # the pre-issue immutable SQL job never enters a mutable Run reader.
+        assert type(s.stage[0]) is owned._Record
+        assert s.stage[0] is s.source.run
+        for name in captured['roots']:
+            assert s.candidate.frontier.values()[name] is s.graph.inputs[name]
+        before=s.cohort.ledger.resident,s.cohort.ledger.work
+        def forbidden(*args,**kwargs):pytest.fail('post-issuance copy, allocation or legacy replay')
+        with monkeypatch.context() as patch:
+            for name in ('snapshot','spend','view'):patch.setattr(_Ledger,name,forbidden)
+            for name in ('assert_current','assert_run','assert_stage','assert_archive'):
+                patch.setattr(owned._LegacyOracle,name,forbidden)
+            for _ in range(2):
+                s.mode.assert_current()
+                _,phase,actual,_=gate._graph_run_context(s.graph,f.store,c,f.user,f.contract,
+                    f.binding.approval_key,'cold',f.cold_job['id'],1,1,s.cold_stage,_owned=s.mode)
+                assert phase==f.cold_phase.authority and actual['id']==f.cold_job['id']
+                resolved=resolve(s,_owned=s.mode)
+                dispatch._graph_pb_archive_chain(s.graph,f.store,c,f.binding,s.state,resolved,s.source,_owned=s.mode)
+        assert before==(s.cohort.ledger.resident,s.cohort.ledger.work)
+        assert tuple(s.graph._source_fact_bindings)==captured['roots']
+
+
+def test_source_frontier_rejects_undeclared_late_fact(sql_facts):
+    from sim2act import _cold_source_packet as source_owned
+    reached=False
+    def upstreams(graph,source,generated):
+        return source_owned.own_fact(graph,'source-frontier:first',source[0]),generated[0]
+    with pytest.raises(DomainError,match='Native candidate continuity cannot be exported as legacy origin bytes'),sql_facts.store.tx() as c:
+        with native_segment(sql_facts,c,upstream_setup=upstreams) as s:
+            assert s.cohort.route=='OWNED'
+            reached=True
+            source_owned.own_fact(s.graph,'source-frontier:undeclared-late',dict(value=1))
+    assert reached
+
+
+def test_source_upstream_copy_has_budget_before_plain(sql_facts):
+    import sys
+    from accounted_sqlite_fixture import segment
+    from sim2act import _cold_source_packet as source_owned
+    from sim2act._cold_accounted_budget import _Capacity
+    f=sql_facts;plain_calls=[]
+    with f.store.tx() as c,segment(f,c,phase='pre') as s:
+        job=source_owned.own_fact(s.graph,'source-frontier:budget-job',s.stage[0])
+        limits=NATIVE_LIMITS._replace(resident=8191,peak=8191)
+        ledger=_Ledger(BOUNDS,limits)
+        monitor=sys.monitoring;slot=next(i for i in (3,5,4) if monitor.get_tool(i) is None)
+        target=source_owned.image.plain.__code__
+        def entered(code,offset):plain_calls.append(1)
+        monitor.use_tool_id(slot,'Source preallocation boundary assertion')
+        try:
+            monitor.register_callback(slot,monitor.events.PY_START,entered)
+            monitor.set_local_events(slot,target,monitor.events.PY_START)
+            with pytest.raises(_Capacity):
+                gate._graph_source_upstream_run_equal(ledger,job,None)
+            assert plain_calls==[] and ledger.resident==0
+        finally:
+            monitor.set_local_events(slot,target,0)
+            monitor.register_callback(slot,monitor.events.PY_START,None)
+            monitor.free_tool_id(slot);ledger.close()
+
+
+@pytest.mark.parametrize('damage',['anchor','registry','scope','callee'])
+def test_source_frontier_keeps_actual_boundaries_live(sql_facts,monkeypatch,damage):
+    from sim2act import _cold_source_packet as source_owned
+    shared={'value':[1]};calls=[];reached=False
+    def upstreams(graph,source,generated):
+        graph.add('source-frontier:external',shared)
+        job=source_owned.own_fact(graph,'source-frontier:job',source[0])
+        source_owned.own_fact(graph,'source-frontier:shared',dict(shared=shared))
+        return job,generated[0]
+    with pytest.raises(DomainError),sql_facts.store.tx() as c:
+        with native_segment(sql_facts,c,upstream_setup=upstreams) as s:
+            assert s.cohort.route=='OWNED'
+            reached=True
+            with monkeypatch.context() as patch:
+                if damage=='anchor':shared['value'].append(2)
+                elif damage=='registry':del s.graph._source_fact_bindings
+                elif damage=='scope':s.graph.scope[0]=object()
+                else:
+                    def bad(*args,**kwargs):calls.append(1);return True
+                    patch.setattr(gate,'_graph_source_upstream_run_equal',bad)
+                s.mode.assert_current()
+    assert reached and calls==[]
 
 
 def test_codec_frontier_removes_only_owned_nested_values(sql_facts, monkeypatch):
