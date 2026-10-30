@@ -29,6 +29,16 @@ def capture(incoming, outside, *, _parents=None):
     nodes=[];origins=[];memo={};held=[];active=set();synthetic=[];leaves=[];kinds=[]
     work=size=0
     virtual_leaves=set();real_leaves=set();virtual_ids=set();virtual_containers=set()
+    external=set()
+    def mark_external(start):
+        # A shared incoming node already has its complete immutable image.
+        # Include its descendants just as the original outside reachability
+        # walk did. Outside-only nodes have already visited every child.
+        todo=[start]
+        while todo:
+            ref=todo.pop()
+            if ref in external:continue
+            external.add(ref);todo.extend(nodes[ref][2])
     def visit(value,depth=0,mode='source',synthetic_leaf=False):
         nonlocal work,size
         work+=1
@@ -52,8 +62,10 @@ def capture(incoming, outside, *, _parents=None):
             ref=memo[ident]
             if tag in ('s','b'):(virtual_leaves if synthetic_leaf else real_leaves).add(ref)
             if nodes[ref][0]!=tag:raise Unsupported('typed/raw interpretation conflict')
+            if mode=='outside' and ref not in external:mark_external(ref)
             return ref
         ref=len(nodes);nodes.append(None);origins.append(value);kinds.append(tag)
+        if mode=='outside':external.add(ref)
         if not scalar:memo[ident]=ref;held.append(value)
         active.add(ident)
         def child(v,virtual=False):return visit(v,depth+1,mode,virtual)
@@ -76,9 +88,17 @@ def capture(incoming, outside, *, _parents=None):
         elif tag in ('n','t','f'):payload=None;edges=()
         elif tag=='d':
             if not all(type(k) is str or type(k) is quoted_name for k in value):raise Unsupported('dict keys')
-            payload=tuple((child(k,id(value) in virtual_containers and id(k) in virtual_ids),child(v)) for k,v in dict.items(value));edges=tuple(x for p in payload for x in p)
+            if mode=='outside':
+                for k,v in dict.items(value):
+                    child(k,id(value) in virtual_containers and id(k) in virtual_ids);child(v)
+                payload=None;edges=()
+            else:
+                payload=tuple((child(k,id(value) in virtual_containers and id(k) in virtual_ids),child(v)) for k,v in dict.items(value));edges=tuple(x for p in payload for x in p)
         elif tag in ('q','l'):
-            payload=tuple(child(v) for v in value);edges=payload
+            if mode=='outside':
+                for v in value:child(v)
+                payload=None;edges=()
+            else:payload=tuple(child(v) for v in value);edges=payload
         elif tag=='e':
             if not all(type(v) is str for v in value):raise Unsupported('only model field-name set')
             payload=tuple(child(v) for v in sorted(value));edges=payload
@@ -88,7 +108,10 @@ def capture(incoming, outside, *, _parents=None):
             rawindex=object.__getattribute__(value,'_key_to_index')
             originals={id(k) for k in (*storage[0],*tuple(rawindex)) if type(k) is str}
             virtual_ids.update(id(k) for k in storage[2] if id(k) not in originals)
-            payload=tuple(child(v) for v in storage);edges=payload
+            if mode=='outside':
+                for v in storage:child(v)
+                payload=None;edges=()
+            else:payload=tuple(child(v) for v in storage);edges=payload
         elif tag=='u':
             # Exactly the original graph's quoted-name reducer representation.
             text=str.__str__(value);synthetic.append(text)
@@ -105,10 +128,11 @@ def capture(incoming, outside, *, _parents=None):
             if type(raw) is not dict or type(selected) is not set or extra is not None or private is not None:raise Unsupported('model storage')
             schema=kind.__module__+'.'+kind.__qualname__;synthetic.append(schema)
             payload=(child(schema,True),child(raw),child(selected),child(extra),child(private));edges=payload
-        nodes[ref]=(tag,payload,edges);active.remove(ident)
+        nodes[ref]=(tag,payload,edges) if mode=='source' else (tag,None,())
+        active.remove(ident)
         return ref
     root=visit(incoming)
-    outroot=visit(outside,mode='outside')
+    visit(outside,mode='outside')
     def reachable(start):
         seen=set();todo=[start]
         while todo:
@@ -116,7 +140,7 @@ def capture(incoming, outside, *, _parents=None):
             if ref in seen:continue
             seen.add(ref);todo.extend(nodes[ref][2])
         return seen
-    owned=reachable(root);external=reachable(outroot)
+    owned=reachable(root)
     if any(nodes[ref][0] in ('m','e') for ref in external):
         raise Unsupported('outside graph cannot encode typed/model-set storage')
     if virtual_leaves & real_leaves:raise Unsupported('synthetic/original leaf interpretation conflict')
