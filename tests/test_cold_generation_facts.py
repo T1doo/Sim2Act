@@ -41,6 +41,7 @@ from sim2act.db import (
 )
 from sim2act.errors import DomainError
 from sim2act import _cold_source_image as owned_image
+from sim2act import _cold_source_packet as owned_packet
 from sim2act.production_trial_admission import canonical_quota_subject
 from sim2act.spec_production import ProductionTrialBinding
 from sim2act.worker import Worker
@@ -145,8 +146,17 @@ def test_complete_generation_facts_equal_public_none_and_full_limits(generated, 
         with scope(f, c) as guard:
             contract, source, reader, history = strict_history(f, c, guard)
             assert owned_image.compat(history) == (public_history[0], [dict(r) for r in public_history[1]])
-            assert owned_image.is_kind(history,"q") and owned_image.is_kind(history[1],"l")
+            assert reader._source_owned is owned_packet.available()
             assert len(history[1]) == 3
+            if owned_packet.available():
+                assert owned_image.is_kind(history,"q") and owned_image.is_kind(history[1],"l")
+                assert owned_image.is_kind(reader.source_pin,"d")
+                assert type(reader.contract_pin) is dict
+                assert guard.inputs[reader.contract_record_name] is reader.contract_pin
+                assert reader.source_pin["contract"] == reader.contract_pin
+            else:
+                assert type(history) is tuple and type(history[1]) is list
+                assert type(reader.source_pin) is dict and reader.contract_record_name is None
             assert [r["parameters"]["generation_index"] for r in history[1]] == [0, 1, 2]
             strict_none = generation._cold_candidate_from_history(f.store, c, f.run,
                 contract, source, history, None, reader)
@@ -529,3 +539,24 @@ def test_original_target_strict_relay_keeps_guard_valueerror_identity(generated,
                     same_exception_object=True, completed=completed, later_sql=later_sql,
                     later_calls=later_calls, default_error="VERSION_CONFLICT", sticky=not guard.active))
     assert snapshot(f.store) == before and len(f.sent) == 3
+
+
+@pytest.mark.parametrize('fault',['content','same-value-root','same-value-reader-pointer'])
+def test_owned_complete_source_retains_exact_typed_contract_boundary(generated,fault):
+    f=generated
+    reached=False
+    with f.store.tx() as c, pytest.raises(DomainError):
+        with scope(f,c) as guard:
+            contract,material,reader=generation._cold_generation_source(f.store,c,f.run,guard)
+            assert owned_image.is_kind(reader.source_pin,'d')
+            assert type(reader.contract_pin) is dict
+            assert guard.inputs[reader.contract_record_name] is reader.contract_pin
+            if fault=='content':
+                reader.contract_pin['limits']['max_requests']=float(contract.limits.max_requests)
+            elif fault=='same-value-root':
+                guard.inputs[reader.contract_record_name]=copy.deepcopy(reader.contract_pin)
+            else:
+                reader.contract_pin=copy.deepcopy(reader.contract_pin)
+            reached=True
+            reader.check()
+    assert reached and not guard.active

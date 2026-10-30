@@ -4147,7 +4147,14 @@ class _ColdTrialGraph:
                 and type(t.use_review.prefix) is use._ColdUseReviewPrefix
                 and type(t.use_review.value) is tuple and len(t.use_review.value) == 3
                 and type(t.use_value) is tuple and len(t.use_value) == 5)
-            raw = raw_slot(t.generation_reader.source_record_name)['contract']
+            reader = t.generation_reader
+            if reader._source_owned:
+                require(reader.contract_record_name == 'generation:' + reader.run['id'] + ':contract-boundary')
+                raw = raw_slot(reader.contract_record_name)
+                require(type(raw) is dict and raw is reader.contract_pin,
+                    'Generation typed contract boundary changed identity')
+            else:
+                raw = raw_slot(reader.source_record_name)['contract']
             gate._trial_typed_hold(models, FrozenRunContract, t.generation_contract, raw)
             gate._trial_typed_hold(models, pb.ExtractInput, t.extraction_prefix.body,
                 raw_slot(t.extraction_prefix.key)['body'])

@@ -221,6 +221,18 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                             # trusted SQL labels in the independently queried rows.
                             from sim2act import _cold_source_image as generation_image
                             assert generation_image.compat(graph.generation_history[1]) == generation_attempts
+                            # Exercise the real typed collector over this exact
+                            # actual first-binding graph without stage authority.
+                            collector=object.__new__(runtime._ColdTrialGraph)
+                            collector.__dict__.update(guard=guard,trial=graph,
+                                journal=None,source_accounted=None,generate_accounted=None,
+                                cold_stage_facts=None,source_stage_facts=None,sealed_fields=None,
+                                live_source=None,context_record=None,accounted_prewrite=None)
+                            typed=collector._typed_parameter_models()
+                            from sim2act.contracts import FrozenRunContract
+                            assert any(kind is FrozenRunContract and model is graph.generation_contract
+                                and raw is graph.generation_reader.contract_pin for kind,model,raw in typed)
+                            admission._trial_typed_values(typed)
                             assert graph.native_audit["attempts"] == sorted(generation_attempts, key=lambda row: row["id"])
                             assert dict(graph.source_facts.typed.typed) == next(row
                                 for row in before["internal_instance_data"]

@@ -809,6 +809,7 @@ class _GenerationFactsReader:
         self._source_owned = guard is not None and _generation_owned.available()
         self._source_owned_origin = self._source_owned
         self.source_record_name = None
+        self.contract_record_name = self.contract_pin = None
         self.contract = self.material = self.source_pin = None
         self.authorities = ()
         self.history_value = None
@@ -851,16 +852,25 @@ class _GenerationFactsReader:
                 self.guard.invalidate()
                 raise DomainError("VERSION_CONFLICT", "Generation Run input changed")
             if self.source_pin is not None:
-                if (self.source_record_name is not None
-                        and self.guard.inputs.get(self.source_record_name) is not self.source_pin):
+                if (self.source_record_name is not None and not (
+                        _generation_owned.image.same(_generation_owned.fact(self.guard, self.source_record_name), self.source_pin)
+                        if self._source_owned else self.guard.inputs.get(self.source_record_name) is self.source_pin)):
                     self.guard.invalidate()
                     raise DomainError("VERSION_CONFLICT", "Generation source anchor rebound")
                 if type(self.contract) is not FrozenRunContract:
                     raise DomainError("VERSION_CONFLICT", "Missing complete generation contract")
                 from .natural_live_admission import _trial_typed_equal
+                contract_raw = self.source_pin["contract"]
+                if self.contract_record_name is not None:
+                    if (not self._source_owned
+                            or self.contract_record_name != "generation:" + self.run["id"] + ":contract-boundary"
+                            or type(self.contract_pin) is not dict
+                            or self.guard.inputs.get(self.contract_record_name) is not self.contract_pin):
+                        raise DomainError("VERSION_CONFLICT", "Generation typed contract boundary changed")
+                    contract_raw = self.contract_pin
                 if (self.authorities != tuple(self.source_pin["authorities"])
-                        or dict(self.run) != self.source_pin["run"]
-                        or not _trial_typed_equal(FrozenRunContract.model_dump(self.contract), self.source_pin["contract"])
+                        or (_trial_pure_mapping(dict(self.run)) if self._source_owned else dict(self.run)) != self.source_pin["run"]
+                        or not _trial_typed_equal(FrozenRunContract.model_dump(self.contract), contract_raw)
                         or self.material != self.source_pin["material"]):
                     self.guard.invalidate()
                     raise DomainError("VERSION_CONFLICT", "Generation source facts changed")
@@ -874,9 +884,18 @@ class _GenerationFactsReader:
             if self.guard is not None:
                 raw = copy.deepcopy(_generation_plain(self, value))
                 name = "generation:" + self.run["id"] + ":" + str(len(self.raw_reads)) + ":" + label
-                # The complete source retains its original typed contract boundary.
-                # All other records transfer before any consumer receives them.
-                if self._source_owned and label != "complete-source":
+                if self._source_owned:
+                    if label == "complete-source":
+                        # Publish the exact contract from the FINAL independent
+                        # deepcopy domain before capture. The owned source keeps
+                        # this alias as an explicit outside boundary; the actual
+                        # FrozenRunContract still uses the original raw typed gate.
+                        if (self.source_pin is None or self.contract_record_name is not None
+                                or type(raw) is not dict or type(raw.get("contract")) is not dict):
+                            raise DomainError("VERSION_CONFLICT", "Complete Generation source publication changed")
+                        contract_name = "generation:" + self.run["id"] + ":contract-boundary"
+                        self.guard.add(contract_name, raw["contract"])
+                        self.contract_pin, self.contract_record_name = raw["contract"], contract_name
                     raw = _generation_owned.own_fact(self.guard, name, raw)
                 else:
                     self.guard.add(name, raw)

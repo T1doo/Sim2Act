@@ -30,9 +30,6 @@ def test_generation_records_transfer_before_consumers_and_keep_independent_copie
         assert other['left'][0]['value']=='synthetic'
         assert owned.image.plain(value)=={'left':[{'value':'synthetic'}],'right':[{'value':'synthetic'}]}
         with pytest.raises(TypeError):value['left'][0]['value']='consumer mutation'
-        complete=reader.record('complete-source',{'contract':{'typed':'boundary'}})
-        assert type(complete) is dict
-        assert s.graph.inputs['generation:'+run['id']+':2:complete-source'] is complete
         reader.check()
 
 
