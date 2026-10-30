@@ -14,7 +14,6 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
-from sqlalchemy.engine import RowMapping
 from test_natural_spec_apps import material
 from test_pa_spec_apps import instance
 from test_pb_natural_specs import prepare, preview_commit
@@ -176,9 +175,7 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                     expected_source_audit = pb.source_audit(store, c, user, pid, source_rid)
                     base = expected_cold["release"]["snapshot"]["draft"]
                     expected_extraction_origin = pb.verify(store, c, user, base, full)
-                    expected_audit_out = {}
-                    expected_extraction_audit = pb.audit_fingerprint(store, c, user, base,
-                        _audit_out=expected_audit_out)
+                    expected_extraction_audit = pb.audit_fingerprint(store, c, user, base)
                     expected_use = use.bound(store, c, user, current, expected_cold["snapshot"],
                         expected_cold["release"], full)
                 assert snapshot(store) == before
@@ -217,24 +214,6 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                             from sim2act import _cold_source_packet as native_owned
                             assert native_owned.image.compat(graph.native_audit) == expected_native
                             if native_owned.available():
-                                extraction=graph.extraction_audit_prefix
-                                assert native_owned.image.is_kind(extraction.actual,'r')
-                                assert native_owned.image.compat(extraction.actual)==expected_audit_out['base']
-                                assert type(extraction.draft) is dict
-                                assert extraction.draft is graph.use_review.prefix.base
-                                assert type(extraction.marker) is RowMapping
-                                assert type(extraction.meta) is pb.Metadata
-                                assert type(extraction.body) is pb.ExtractInput
-                                audit_out={}
-                                copied_digest=pb._audit_from_source(extraction.meta,extraction.meta_seal,
-                                    extraction.marker,extraction.body,extraction.frozen,extraction.actual,
-                                    graph.source_audit.digest,_audit_out=audit_out)
-                                assert copied_digest==expected_extraction_audit
-                                assert audit_out==expected_audit_out
-                                assert type(audit_out['base']['candidate']) is dict
-                                audit_out['base']['candidate']['namespace']='independent-copy-domain'
-                                assert native_owned.image.compat(extraction.actual)==expected_audit_out['base']
-                                guard.check(store,c)
                                 assert native_owned.image.is_kind(graph.native_audit,'d')
                                 native_key='original-native-audit:'+graph.native_audit['original']['id']
                                 assert native_owned.image.same(native_owned.fact(guard,native_key),graph.native_audit)
@@ -341,10 +320,6 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                             assert seeded_graph.generation_reader.raw_seed is audit_seed.generation_seed
                             assert seeded_graph.native_audit is audit_seed.native
                             if native_owned.available():
-                                assert native_owned.image.is_kind(seeded_graph.extraction_audit_prefix.actual,'r')
-                                assert native_owned.image.compat(seeded_graph.extraction_audit_prefix.actual)==expected_audit_out['base']
-                                assert type(seeded_graph.extraction_audit_prefix.draft) is RowMapping
-                                assert seeded_graph.extraction_audit_prefix.draft is audit_seed.use_prefix.base
                                 assert native_owned.image.is_kind(seeded_graph.use_prefix.frozen,'d')
                                 assert native_owned.image.is_kind(audit_seed.use_prefix.frozen,'d')
                                 assert not native_owned.image.same(seeded_graph.use_prefix.frozen,

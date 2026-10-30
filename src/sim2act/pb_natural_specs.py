@@ -1423,11 +1423,6 @@ def _audit_prefix(store, c, user, draft, *, _graph_read=None):
         app_drafts.c.project_id == draft["project_id"], app_drafts.c.runtime_id == draft["runtime_id"]))
     _checkpoint_graph(store, c, _graph_read)
     actual = result.mappings().one()
-    if _graph_read is not None and _owned_source_enabled():
-        # This independent SQL row has not escaped into a mutable graph root.
-        # Keep its complete RowMapping storage, not the equal Release draft.
-        key='pb-extraction-actual:'+str(len(vars(_graph_read).get('_source_fact_bindings',{})))
-        actual=_source_fact_code.own_fact(_graph_read,key,actual)
     return meta, meta_seal, marker, body, frozen, actual
 
 
@@ -1436,10 +1431,7 @@ def _audit_from_source(meta, meta_seal, marker, body, frozen, actual, source_dig
         metadata=meta.model_dump(), metadata_seal=meta_seal,
         marker=dict(marker), request=body.model_dump(), frozen=frozen, draft=dict(actual)))
     if _audit_out is not None:
-        visible=dict(actual)
-        if _source_fact_code.image.is_kind(actual,'r'):
-            visible=_source_fact_code.image.compat(visible)
-        _audit_out.update(base=copy.deepcopy(visible), digest=digest)
+        _audit_out.update(base=copy.deepcopy(dict(actual)), digest=digest)
     return digest
 
 
@@ -1636,13 +1628,9 @@ _source_fact_code.register(6,globals(),(
     '_cold_source_prefix','_cold_source_typed','_cold_source_from_audit',
     '_cold_source_facet_from_source','_cold_review_from_source',
     '_cold_verify_from_review','_cold_verify_facet_from_review','_cold_audit_from_source',
-    '_audit_prefix','_cold_audit_prefix','_cold_extract_pair',
     '_review_source_from_facts','_review_from_facts','_verify_from_review','_audit_from_source',
     '_check_review_read','_cold_persisted_pair','_persisted_pair_input','_persisted_extract_input',
     '_review_preview','candidate','frozen_for','_extraction_name','_invalidate_cold_inputs',
     'source_gate','require','fingerprint'),
     (_ColdSourcePrefix,_ColdSourceTyped,_ColdSourceFacts,_ColdSourceAuditPrefix,
-     _ColdSourceAuditFacts,_ColdExtractionReview,_ColdReviewRead,_ColdExtractionAuditPrefix,
-     Metadata,ExtractInput,ReviewInput),
-    constants=('natural','_source_fact_code','app_drafts','task_extractions','select','copy',
-        'Metadata','ExtractInput','ReviewInput','GoalCardRunSource','Limits','META','EXTRACT'))
+     _ColdSourceAuditFacts,_ColdExtractionReview,_ColdReviewRead),constants=('natural','_source_fact_code'))
