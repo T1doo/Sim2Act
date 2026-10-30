@@ -1,7 +1,9 @@
 """Original advance_model five writes/rejection with real SQLite and no IO.
 
-Recipe/phase ancestry, sender, journal ledger and non-trial guard are explicit
-unit stubs. Current consent, Grants, full Run predicate, NS body archives,
+Recipe/phase ancestry, sender, journal ledger, full graph ASSEMBLY and non-trial
+guard are explicit unit seams. No fake Graph or production qualification is
+issued. Real _ModelSettlementRead.live/settle/tail and original advance_model
+five writes remain under test. Current consent, Grants, full Run predicate, NS body archives,
 response pairing, five production writes, rollback and rejection CAS are real.
 The unmodified full P-B test remains the complete lineage acceptance gate.
 """
@@ -46,6 +48,79 @@ from sim2act.db import (
 )
 from sim2act.errors import DomainError
 from sim2act.model import CapturedResponse, InternModel, normalize_usage
+
+
+@contextmanager
+def continuation_component_scope(worker, c, inputs):
+    """Assemble real continuation inputs, excluding the complete Cold lineage.
+
+    This test-only component boundary replaces whole-graph assembly, never its
+    production predicates. It derives admission and authority through the
+    existing guard and fills proof facts from actual SQLite/archive rows.
+    The unmodified original full controller independently covers composition.
+    """
+    store=worker.store
+    nonce=object()
+    assert '_model_settlement_scope' not in c.info
+    c.info['_model_settlement_scope']=nonce
+    proof=None
+    try:
+        proof=runtime._ModelSettlementRead(worker,c,inputs,nonce)
+        with store.proof_authorities(c) as authorities:
+            admission={}
+            fresh=spec.commit_guard(worker,c,inputs['call_run'],inputs['binding'],_model_out=admission)
+            proof.check()
+            runtime.require(fresh['version']==inputs['current']['version']==inputs['meta']['run_version']
+                and fresh['created_at']==inputs['meta']['created_at'] and time.time()<inputs['meta']['deadline'])
+            proof.admission=dict(admission)
+            proof.source_identity=admission['source_identity']
+            proof.source_deadline=admission['source_deadline']
+            proof.add(fresh=fresh,full_admission=proof.admission)
+            runtime.enabled(worker)
+            final=spec.bound(store,c,fresh['principal_id'],fresh,inputs['platform'])
+            proof.check()
+            proof.add(post_binding=final,declared=final['draft']['candidate']['manifest']['runtime_limits'])
+            runtime.require(final['audit_fingerprint']==inputs['binding']['audit_fingerprint'])
+            spec.receipts(store,c,fresh,final)
+            proof.check()
+            runtime.require(trial._identity(worker,c,fresh,inputs['aid']) is proof.binding)
+            slot,capture,parsed,actual=trial._journal_chain(store,c,proof.binding,fresh,inputs['aid'],inputs['raw'])
+            proof.check()
+            _,wire=archive._read(c,fresh['principal_id'],fresh,inputs['aid'],archive.REQUEST)
+            _,response_body=archive._read(c,fresh['principal_id'],fresh,inputs['aid'],archive.RESPONSE)
+            archive.receipt_owner(c,fresh,inputs['aid'],wire)
+            runtime.require(actual['id']==inputs['aid'] and actual['run_id']==fresh['id']
+                and actual['status']=='VERIFIED' and actual['response']==inputs['response']
+                and actual['usage']==inputs['usage'] and actual['parameters']['natural_spec']==inputs['meta']
+                and wire==inputs['wire'] and actual['parameters']['natural_spec_wire']['sha256']==hashlib.sha256(wire).hexdigest()
+                and actual['parameters']['natural_spec_wire']['bytes']==len(wire))
+            proof.add(actual_attempt=dict(actual),current_journal=dict(slot=slot.model_dump(),
+                capture=capture.model_dump(),parsed=parsed,wire=wire,response_body=response_body))
+            op=c.execute(select(operations).where(operations.c.id==inputs['meta']['operation_id'],operations.c.run_id==fresh['id'])).mappings().one()
+            proof.check()
+            runtime.require(op['status']=='VERIFIED' and op['receipt']==inputs['receipt'])
+            proof.add(actual_operation=dict(op),trial_limits=gate._limits(proof.binding.contract),
+                frozen_limits=store._frozen_contract_after_scope(c,fresh).limits,action_limits=inputs['action']['limits'])
+            proof.authorities.update(authorities)
+            proof.live()
+            proof.state='READY'
+        yield fresh,final,proof
+        proof.check()
+        runtime.require(proof.state=='TAIL_DONE')
+        proof.active,proof.state=False,'CLOSED'
+    except BaseException:
+        if proof is not None:proof.invalidate()
+        raise
+    finally:
+        if proof is not None:
+            proof.active=False;proof.authorities.clear();proof._byte_digests.clear();proof._input_structure=None
+        if c.info.get('_model_settlement_scope') is nonce:c.info.pop('_model_settlement_scope',None)
+
+
+def test_production_cold_graph_still_rejects_placeholder_worker():
+    # Component isolation must never relax the actual full-graph entry gate.
+    with pytest.raises(DomainError,match='Cold graph read requires exact local role inputs'):
+        runtime._ColdGraphRead(SimpleNamespace(),object(),{}, {},'post',[object()])
 
 
 @pytest.mark.parametrize("case", [
@@ -306,7 +381,7 @@ def test_original_model_settlement_atomicity_and_continuation(env, tmp_path, mon
                         epoch=c.info.get("source_proof_write_epoch", 0)))
     event.listen(store.engine, "before_cursor_execute", statement)
 
-    original_scope = runtime._model_settlement_read
+    original_scope = continuation_component_scope
     @contextmanager
     def scoped(w, c, inputs):
         connection[:] = [c]
