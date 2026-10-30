@@ -886,6 +886,11 @@ def advance(worker, run):
 
 
 def _sqlite_heartbeat_contention(store, exc):
+    from .db import WorkspaceWriterAdmissionTimeout, _WorkspaceWriterGate
+    local_gate = getattr(store, "_workspace_writer_gate", None)
+    if (type(exc) is WorkspaceWriterAdmissionTimeout and store.test_only and store.sqlite
+            and type(local_gate) is _WorkspaceWriterGate and exc.gate is local_gate):
+        return True
     code = getattr(getattr(exc, "orig", None), "sqlite_errorcode", None)
     return (store.sqlite and isinstance(exc, OperationalError)
         and isinstance(exc.orig, sqlite3.Error) and type(code) is int

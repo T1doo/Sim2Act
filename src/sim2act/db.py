@@ -4,9 +4,11 @@ import hashlib
 import json
 import re
 import sys
+import threading
 import time
 import uuid
-from contextlib import contextmanager
+from collections import deque
+from contextlib import contextmanager, nullcontext
 
 from pydantic import ValidationError
 from sqlalchemy import (
@@ -28,6 +30,7 @@ from sqlalchemy import (
 )
 from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.engine import make_url
 
 from .contracts import FrozenRunContract, GoalSpec, Limits, ResourceSnapshot
 from .errors import DomainError
@@ -701,13 +704,89 @@ def fingerprint(value):
     ).hexdigest()
 
 
+class WorkspaceWriterAdmissionTimeout(DomainError):
+    """Actual admission contention, owned by exactly one local Store gate."""
+
+    def __init__(self, gate):
+        super().__init__("RESOURCE_UNAVAILABLE", "Workspace writer admission timed out")
+        self.gate = gate
+
+
+class _WorkspaceWriterGate:
+    """FIFO admission for one local file Store, never an authorization proof."""
+
+    def __init__(self):
+        self.condition = threading.Condition()
+        self.queue = deque()
+        self.owner = None
+        self.completed = deque(maxlen=256)
+
+    @contextmanager
+    def hold(self, seconds):
+        deadline = time.monotonic() + seconds
+        ticket, owner = object(), threading.get_ident()
+        entered = False
+        waited = False
+        queued = time.monotonic()
+        with self.condition:
+            if self.owner == owner:
+                raise DomainError("VERSION_CONFLICT", "Nested workspace writer transaction")
+            self.queue.append(ticket)
+            try:
+                while self.owner is not None or self.queue[0] is not ticket:
+                    waited = True
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise WorkspaceWriterAdmissionTimeout(self)
+                    self.condition.wait(remaining)
+                if time.monotonic() >= deadline:
+                    if waited:
+                        raise WorkspaceWriterAdmissionTimeout(self)
+                    raise DomainError("RESOURCE_UNAVAILABLE", "Workspace writer admission timed out")
+                self.queue.popleft()
+                self.owner = owner
+                entered = True
+                started = time.monotonic()
+                wall = time.time()
+            finally:
+                if not entered:
+                    self.queue.remove(ticket)
+                    self.condition.notify_all()
+        try:
+            yield deadline
+        finally:
+            with self.condition:
+                self.completed.append(dict(started_at=wall,
+                    wait_seconds=started-queued, hold_seconds=time.monotonic()-started))
+                self.owner = None
+                self.condition.notify_all()
+
+    def snapshot(self):
+        with self.condition:
+            return dict(waiters=len(self.queue), active=self.owner is not None,
+                completed=[dict(item) for item in self.completed])
+
+
 class Store:
-    def __init__(self, url: str, *, test_only=False):
+    def __init__(self, url: str, *, test_only=False, workspace_serialized=False):
         if not url.startswith("postgresql+psycopg://") and not (
             test_only and url.startswith("sqlite://")
         ):
             raise ValueError("PostgreSQL required outside engineering tests")
-        self.engine = create_engine(url, pool_pre_ping=True)
+        if type(workspace_serialized) is not bool:
+            raise ValueError("Explicit workspace serialization selection required")
+        if workspace_serialized:
+            parsed = make_url(url)
+            if (not test_only or parsed.drivername != "sqlite" or not parsed.database
+                    or parsed.database == ":memory:" or parsed.database.startswith("file:")
+                    or parsed.query.get("mode") == "memory" or parsed.query.get("timeout") != "30"):
+                raise ValueError("Workspace serialization requires test-only file SQLite with timeout=30")
+        # A queued writer must not incur a second pool checkout wait. Direct
+        # read connections retain the original Engine and fail closed on pool
+        # exhaustion; local file handles need no network pre-ping.
+        self.engine = create_engine(url, pool_pre_ping=not workspace_serialized,
+            **({"pool_timeout": 0} if workspace_serialized else {}))
+        self._workspace_writer_gate = _WorkspaceWriterGate() if workspace_serialized else None
 
         def proof_write_boundary(connection, cursor, statement, parameters, context, executemany):
             # Conservatively invalidate ephemeral same-call proofs for every
@@ -737,20 +816,32 @@ class Store:
 
     @contextmanager
     def tx(self, *, wait_seconds=None, _cap_wait=False):
-        with self.engine.connect() as c:
+        if self.sqlite and wait_seconds is not None:
+            if type(wait_seconds) not in (int, float) or not 0 < wait_seconds <= 30:
+                raise ValueError("Bounded transaction wait required")
+        gate = self._workspace_writer_gate
+        if gate is not None and (type(gate) is not _WorkspaceWriterGate
+                or not self.test_only or not self.sqlite):
+            raise DomainError("VERSION_CONFLICT", "Workspace writer scope changed")
+        admission = (gate.hold(30 if wait_seconds is None else wait_seconds)
+            if gate is not None else nullcontext(None))
+        with admission as deadline, self.engine.connect() as c:
             prior_timeout = None
             raw = None
             try:
-                if self.sqlite and wait_seconds is not None:
-                    if type(wait_seconds) not in (int, float) or not 0 < wait_seconds <= 30:
-                        raise ValueError("Bounded transaction wait required")
+                if self.sqlite and (wait_seconds is not None or deadline is not None):
                     raw = c.connection.driver_connection
                     if raw is None:
                         raise RuntimeError("Database connection unavailable")
                     prior_timeout = raw.execute("PRAGMA busy_timeout").fetchone()[0]
-                    timeout_ms = int(wait_seconds * 1000)
+                    timeout_ms = prior_timeout if wait_seconds is None else int(wait_seconds * 1000)
                     if _cap_wait:
                         timeout_ms = min(prior_timeout, timeout_ms)
+                    if deadline is not None:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise DomainError("RESOURCE_UNAVAILABLE", "Workspace writer admission timed out")
+                        timeout_ms = min(timeout_ms, int(remaining * 1000))
                     raw.execute(f"PRAGMA busy_timeout = {timeout_ms}")
                 if self.sqlite:
                     c.exec_driver_sql("BEGIN IMMEDIATE")

@@ -203,12 +203,17 @@ def create_app(store=None, settings=None):
             return response
         from .app_jobs import rejection_proof
         from .db import internal_instances
-        try:
+        def scoped_rejection():
             user = identity(request.headers.get("authorization", ""))
             with db.tx() as c:
                 pid = c.execute(select(internal_instances.c.project_id).where(internal_instances.c.id == iid)).scalar()
                 db.lock_project(c, user, pid)
-                proof = rejection_proof(c, user, iid, pid, key, dict(endpoint=endpoint, body=body), "VALIDATION_NOT_STARTED")
+                return rejection_proof(c, user, iid, pid, key, dict(endpoint=endpoint, body=body), "VALIDATION_NOT_STARTED")
+        try:
+            # SQLite admission belongs to this synchronous handler's thread,
+            # never the event loop that serves other reads and cancellation.
+            from starlette.concurrency import run_in_threadpool
+            proof = await run_in_threadpool(scoped_rejection)
             if proof:
                 import json
                 value = json.loads(response.body)

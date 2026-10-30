@@ -4,7 +4,6 @@ Reuses the existing first-use/local-candidate loopback, test-only Store and
 ordinary Worker pattern. Never initializes a pre-existing directory/database.
 """
 
-import asyncio
 import hashlib
 import json
 import os
@@ -209,7 +208,7 @@ def open_workspace(path, *, new=False):
     for suffix in ["", "-journal", "-wal", "-shm"]:
         file = root / (DATABASE + suffix)
         require(not file.is_symlink() and (not file.exists() or file.is_file()), "LINKED_DATABASE")
-    store = Store(settings_for(root).database_url, test_only=True)
+    store = Store(settings_for(root).database_url, test_only=True, workspace_serialized=True)
     try:
         require(store.engine.url.database == str(root / DATABASE), "AMBIGUOUS_DIRECTORY")
         if new:
@@ -231,20 +230,8 @@ def open_workspace(path, *, new=False):
         raise
 
 
-def workspace_app(store, settings, gate=None, worker_turn=None):
+def workspace_app(store, settings):
     app = create_app(store, settings)
-
-    if gate is not None:
-        @app.middleware("http")
-        async def single_sqlite_writer(request, call_next):
-            # This launcher owns one SQLite API/Worker pair. Pending requests
-            # stay cancellable; a cancelled waiter never acquires a stray lock.
-            while (worker_turn is not None and worker_turn.is_set()) or not gate.acquire(blocking=False):
-                await asyncio.sleep(0.01)
-            try:
-                return await call_next(request)
-            finally:
-                gate.release()
 
     @app.get("/")
     def synthetic_page():
@@ -326,9 +313,7 @@ def serve(path, *, new=False, port=0, control_stdin=False):
             raise
         settings = settings_for(root)
         worker = Worker(store, settings, NeverModel())
-        gate = threading.Lock()
-        worker_turn = threading.Event()
-        server = uvicorn.Server(uvicorn.Config(workspace_app(store, settings, gate, worker_turn), host="127.0.0.1",
+        server = uvicorn.Server(uvicorn.Config(workspace_app(store, settings), host="127.0.0.1",
             log_level="error", access_log=False, timeout_graceful_shutdown=5))
         stopped = threading.Event()
         errors = []
@@ -340,22 +325,10 @@ def serve(path, *, new=False, port=0, control_stdin=False):
                 while not stopped.is_set():
                     if desktop_origin is not None:
                         require(_read_desktop_origin(root) == desktop_origin, "DESKTOP_ORIGIN_CHANGED")
-                    # A continuous sequence of API reads must not starve the
-                    # original Worker. Once waiting, it gets the next turn;
-                    # lock waits remain bounded and observe owned shutdown.
-                    worker_turn.set()
-                    acquired = False
-                    while not stopped.is_set() and not acquired:
-                        acquired = gate.acquire(timeout=0.1)
-                    worker_turn.clear()
-                    if not acquired:
-                        break
-                    try:
-                        if stopped.is_set():
-                            break
-                        worker.once()
-                    finally:
-                        gate.release()
+                    # FIFO admission is per Store.tx, not the entire Run.
+                    # Commands/reads can enter between atomic steps and while
+                    # the Worker computes outside a database transaction.
+                    worker.once()
                     if server.started and not announced:
                         if desktop_origin is not None:
                             require(_read_desktop_origin(root) == desktop_origin, "DESKTOP_ORIGIN_CHANGED")
@@ -373,8 +346,6 @@ def serve(path, *, new=False, port=0, control_stdin=False):
                             for f in traceback.extract_tb(error.__traceback__)[:32]])), flush=True)
                 stopped.set()
                 server.should_exit = True
-            finally:
-                worker_turn.clear()
 
         if control_stdin:
             print(json.dumps(dict(event="SYNTHETIC_WORKSPACE_STARTING", worker_id=worker.id,

@@ -28,8 +28,7 @@ from sim2act.worker import Worker
 def test_rejection_terminal_page_protocol(tmp_path):
     result = tmp_path / "terminal-protocol.json"
     process = subprocess.run(["node", "tests/rejection_terminal_protocol.cjs", str(result)],
-        cwd=Path(__file__).parents[1], env={**os.environ,
-            "NODE_PATH": "/workspace/node-tools/node_modules"},
+        cwd=Path(__file__).parents[1], env=os.environ.copy(),
         capture_output=True, text=True, timeout=40)
     (tmp_path / "protocol.stdout").write_text(process.stdout)
     (tmp_path / "protocol.stderr").write_text(process.stderr)
