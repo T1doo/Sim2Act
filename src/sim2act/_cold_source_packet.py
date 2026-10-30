@@ -118,15 +118,48 @@ def fact_current(graph):
 
 
 def fact(graph,name):
+    """Read one immutable value, never a whole-graph or authority verdict.
+
+    Original checkpoints still validate the COMPLETE registry and mutable
+    graph. A pure data lookup need only bind this requested immutable value
+    to the current scope; it must not rescan every other fact as added work.
+    """
     registry=vars(graph).get('_source_fact_bindings',{})
-    if name not in registry:return graph.inputs[name]
-    fact_current(graph)
-    return registry[name][1]
+    require(type(registry) is dict and type(graph.inputs) is dict and type(name) is str)
+    root=graph.inputs[name]
+    marked=type(root) is tuple and len(root)==2 and type(root[0]) is str and root[0]==FACT_TAG
+    if name not in registry:
+        require(not marked)
+        return root  # Actual legacy data needs no optional native extension.
+    current()
+    scope=_scope(graph)
+    require(type(graph.inputs) is dict and graph.inputs is scope[1]
+        and vars(graph).get('_source_fact_bindings') is registry)
+    root=graph.inputs[name]
+    marked=type(root) is tuple and len(root)==2 and type(root[0]) is str and root[0]==FACT_TAG
+    require(marked and graph.active is True and type(graph.scope) is list
+        and len(graph.scope)==1 and graph.scope[0] is graph.nonce)
+    entry=registry[name]
+    require(type(entry) is tuple and len(entry)==2)
+    packet,view=entry
+    require(type(packet) is _BINDING and type(view) is image.View
+        and native.binding_current(packet,native.binding_owner(packet),graph.nonce,graph.epoch,graph.phase,scope)
+        and root[1] is native.binding_pin(packet)
+        and image.same(view,native.read_owner(native.binding_owner(packet))))
+    _scope_current(graph,scope)
+    require(graph.inputs is scope[1] and vars(graph).get('_source_fact_bindings') is registry
+        and registry.get(name) is entry and graph.inputs.get(name) is root)
+    return view
 
 
 def fields_ref(graph,name,value):
     """Fresh control-field comparison, then the same immutable parent node."""
-    if name not in vars(graph).get('_source_fact_bindings',{}):return value
+    registry=vars(graph).get('_source_fact_bindings',{})
+    require(type(registry) is dict and type(graph.inputs) is dict)
+    if name not in registry:
+        root=graph.inputs.get(name)
+        require(not (type(root) is tuple and len(root)==2 and type(root[0]) is str and root[0]==FACT_TAG))
+        return value
     from .natural_spec_runtime import _source_fields_equal
     saved=fact(graph,name)
     require(_source_fields_equal(saved,value))

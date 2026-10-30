@@ -218,3 +218,59 @@ def test_source_stage_join_consumes_first_owned_sql_job(sql_facts,phase,damage):
   wrong=owned.own_fact(s.graph,'source-test:stage-wrong-job',changed)
   with pytest.raises(DomainError):
    gate._graph_trial_stage_raw_from_raw((wrong,*stage[1:]),s.graph.inputs['cold-trial:complete'],_graph=s.graph)
+
+
+@pytest.mark.parametrize('reader',['fact','fields_ref'])
+@pytest.mark.parametrize('damage',['missing-entry','wrong-pin','scope'])
+def test_requested_fact_damage_rejects_at_pure_getter(sql_facts,reader,damage):
+ f=sql_facts;reached=False;returned=False
+ with pytest.raises(DomainError),f.store.tx() as c,segment(f,c,phase='pre') as s:
+  name='source-getter:requested';owned.own_fact(s.graph,name,dict(value=1))
+  if damage=='missing-entry':del s.graph._source_fact_bindings[name]
+  elif damage=='wrong-pin':s.graph.inputs[name]=(owned.FACT_TAG,())
+  else:s.graph.scope[0]=object()
+  reached=True
+  if reader=='fact':owned.fact(s.graph,name)
+  else:owned.fields_ref(s.graph,name,dict(value=1))
+  returned=True
+ assert reached and not returned,'Must reject at getter, before scope-exit full check'
+
+
+def test_pure_getter_other_entry_fault_still_rejects_at_original_full_guard(sql_facts):
+ f=sql_facts;reached=False
+ with pytest.raises(DomainError),f.store.tx() as c,segment(f,c,phase='pre') as s:
+  a='source-getter:other';b='source-getter:requested'
+  owned.own_fact(s.graph,a,dict(value=1))
+  value=owned.own_fact(s.graph,b,dict(value=2))
+  s.graph._source_fact_bindings[a]=s.graph._source_fact_bindings[b]
+  assert owned.fact(s.graph,b) is value
+  assert owned.fields_ref(s.graph,b,dict(value=2)) is value
+  reached=True
+  s.graph.check(f.store,c)
+ assert reached and not s.graph.active
+
+
+@pytest.mark.parametrize('change',['root','registry'])
+def test_getter_reloads_requested_root_after_code_check(sql_facts,change):
+ import sys
+ f=sql_facts;changed=[];returned=False
+ with pytest.raises(DomainError),f.store.tx() as c,segment(f,c,phase='pre') as s:
+  name='source-getter:current-window';owned.own_fact(s.graph,name,dict(value=1))
+  monitor=sys.monitoring;slot=next(i for i in (3,5,4) if monitor.get_tool(i) is None)
+  target=owned.current.__code__
+  def completed(code,offset,value):
+   if not changed:
+    changed.append(True)
+    if change=='root':s.graph.inputs[name]=(owned.FACT_TAG,())
+    else:s.graph._source_fact_bindings={}
+  monitor.use_tool_id(slot,'Requested root replacement during qualification')
+  try:
+   monitor.register_callback(slot,monitor.events.PY_RETURN,completed)
+   monitor.set_local_events(slot,target,monitor.events.PY_RETURN)
+   owned.fact(s.graph,name)
+   returned=True
+  finally:
+   monitor.set_local_events(slot,target,0)
+   monitor.register_callback(slot,monitor.events.PY_RETURN,None)
+   monitor.free_tool_id(slot)
+ assert changed and not returned
