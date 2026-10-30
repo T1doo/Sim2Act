@@ -519,6 +519,7 @@ class _ColdRunFacts:
             self.key = f"run-facts:{job['id']}"
             self._source_owned = (_source_owned_code.available() and (raw_seed is not None
                 or job['id'] in vars(guard).get('_source_fact_run_ids',())))
+            self._source_owned_origin=self._source_owned
             self._raw: dict = {}
             self._receipt_proofs: list[str] = []
             self._manifests: list = []
@@ -549,6 +550,8 @@ class _ColdRunFacts:
                 and self.key == f"run-facts:{job['id']}"
                 and _source_owned_code.image.same(_source_owned_code.fact(self.guard,self.key)["job"],job),
                 "Cold Run raw facts changed identity")
+            require(type(self._source_owned) is bool and self._source_owned is self._source_owned_origin,
+                'Source reader representation cannot change')
             require(type(self._raw) is dict and type(self._manifests) is list
                 and type(self._receipt_proofs) is list and type(self._counter_proofs) is list
                 and type(self._node_proofs) is list, "Cold Run fact registries changed")
@@ -641,8 +644,7 @@ class _ColdRunFacts:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
             self.check(self.store, self.connection, self.job)
             require(name not in self._raw, "Cold Run raw facts cannot be rebound")
-            if (self._source_owned and not name.startswith(('counter-manifest:','node-input:',
-                    'node-proof:','receipts:','receipt-binding:'))):
+            if self._source_owned and not name.startswith(('counter-manifest:','receipt-binding:')):
                 value=_source_owned_code.own_fact(self.guard,f"{self.key}:{name}",value)
             else:self.guard.add(f"{self.key}:{name}",value,_run_facts=self)
             self._raw[name] = value
@@ -650,6 +652,12 @@ class _ColdRunFacts:
         except BaseException:
             _invalidate_cold_run_facts(self)
             raise
+
+    def produced_value(self,role,value):
+        """Own a new private consumer value before any consumer receives it."""
+        if not self._source_owned:return value
+        require(type(role) is str and role in {'intent','receipt-phase','receipt-result'})
+        return self._put(f'produced:{role}:{len(self._raw)}',value)
 
     def pin_manifest(self, manifest):
         try:
@@ -1120,10 +1128,13 @@ class _ColdRunFacts:
             require(type(kind) is str and kind in {"verified", "pending"}, "Exact node proof role required")
             self.check(self.store, self.connection, self.job)
             require(type(inputs_key) is str and inputs_key.startswith(f"node-input:{kind}:"))
-            require(self._get(inputs_key) is inputs, "Original complete node inputs required")
+            require((_source_owned_code.image.same(self._get(inputs_key),inputs)
+                if self._source_owned else self._get(inputs_key) is inputs),
+                "Original complete node inputs required")
             name = f"node-proof:{kind}:{len(self._node_proofs)}"
-            self._put(name, dict(inputs_key=inputs_key, value=value))
+            saved=self._put(name,dict(inputs_key=inputs_key,value=value))
             self._node_proofs.append(name)
+            return saved['value'] if self._source_owned else None
         except BaseException:
             _invalidate_cold_run_facts(self)
             raise
@@ -1131,8 +1142,15 @@ class _ColdRunFacts:
     def record_receipts(self, binding, outputs, proved, pending_id, allow_pending):
         try:
             require(type(self) is _ColdRunFacts, "Exact Cold Run raw facts required")
-            value = dict(binding=binding, outputs=outputs, proved=proved,
-                pending_id=pending_id, allow_pending=allow_pending)
+            if self._source_owned:
+                binding_key=f'receipt-binding:{len(self._receipt_proofs)}'
+                require(self._get(binding_key) is binding,'Original scoped receipt binding required')
+                # This boundary remains a fully pinned mutable binding family.
+                # Its exact original identity is checked on every proof use.
+                value=dict(binding_ref=binding_key,outputs=outputs,proved=proved,
+                    pending_id=pending_id,allow_pending=allow_pending)
+            else:value=dict(binding=binding,outputs=outputs,proved=proved,
+                pending_id=pending_id,allow_pending=allow_pending)
             name = f"receipts:{len(self._receipt_proofs)}"
             self._put(name, value)
             self._receipt_proofs.append(name)
@@ -1146,8 +1164,13 @@ class _ColdRunFacts:
             self.check(self.store, self.connection, self.job)
             for name in self._receipt_proofs:
                 value = self._get(name)
-                if (value["binding"] is binding and value["outputs"] is outputs
-                        and value["proved"] is proved and value["pending_id"] is None
+                binding_same=(self._get(value['binding_ref']) is binding if self._source_owned
+                    else value['binding'] is binding)
+                outputs_same=(_source_owned_code.image.same(value['outputs'],outputs) if self._source_owned
+                    else value['outputs'] is outputs)
+                proved_same=(_source_owned_code.image.same(value['proved'],proved) if self._source_owned
+                    else value['proved'] is proved)
+                if (binding_same and outputs_same and proved_same and value["pending_id"] is None
                         and value["allow_pending"] is True):
                     return
             require(False, "Complete original pending-aware receipt proof required")
@@ -1580,7 +1603,7 @@ def _node_proof_inputs(job, binding, op, intent, action, attempt, receipt_phase)
 def _prove_node_from_facts(store, c, job, binding, op, intent, action, facts, *, _receipt_phase=None):
     try:
         _check_run_facts(store, c, job, facts)
-        require(_receipt_phase is None or type(_receipt_phase) is dict,
+        require(_receipt_phase is None or _source_data_kind(_receipt_phase,dict),
             "Exact receipt node phase required")
         return _prove_node(store, c, job, binding, op, intent, action,
             _facts=facts, _receipt_phase=_receipt_phase)
@@ -1606,6 +1629,7 @@ def _prove_node(store, c, job, binding, op, intent, action, *, _facts=None, _rec
         hit, value, inputs_key = _facts.node_proof("verified", node_inputs)
         if hit:
             return value
+        if _facts._source_owned:node_inputs=_facts._get(inputs_key)
     meta = a["parameters"]["natural_spec"]
     require(
         a["status"] == "VERIFIED"
@@ -1662,7 +1686,8 @@ def _prove_node(store, c, job, binding, op, intent, action, *, _facts=None, _rec
     )
     _counter_checkpoint(c, job, _facts)
     if _facts is not None:
-        _facts.record_node_proof("verified", node_inputs, expected, inputs_key)
+        saved=_facts.record_node_proof("verified",node_inputs,expected,inputs_key)
+        if _facts._source_owned:expected=saved
     return expected
 
 
@@ -1735,7 +1760,7 @@ def prove_pending(store, c, job, binding, op, intent, action):
 def _prove_pending_from_facts(store, c, job, binding, op, intent, action, facts, *, _receipt_phase=None):
     try:
         _check_run_facts(store, c, job, facts)
-        require(_receipt_phase is None or type(_receipt_phase) is dict,
+        require(_receipt_phase is None or _source_data_kind(_receipt_phase,dict),
             "Exact receipt pending phase required")
         return _prove_pending(store, c, job, binding, op, intent, action,
             _facts=facts, _receipt_phase=_receipt_phase)
@@ -1766,6 +1791,7 @@ def _prove_pending(store, c, job, binding, op, intent, action, *, _facts=None, _
         hit, _, inputs_key = _facts.node_proof("pending", node_inputs)
         if hit:
             return
+        if _facts._source_owned:node_inputs=_facts._get(inputs_key)
     meta = row["parameters"]["natural_spec"]
     require(
         meta["intent"] == intent
@@ -1963,8 +1989,13 @@ def fail_owned(worker, run, error):
 def _model_value(value, *, _byte_digests=None, _byte_seen=None):
     """Retain every field of actual SQL row mappings and exact Limits."""
     if _source_owned_code.image.View is not None and type(value) is _source_owned_code.image.View:
-        return _model_value(_source_owned_code.image.plain(value),
-            _byte_digests=_byte_digests,_byte_seen=_byte_seen)
+        tag=value.node()[0]
+        if tag in ('d','r'):
+            return {key:_model_value(child,_byte_digests=_byte_digests,_byte_seen=_byte_seen)
+                for key,child in value.items()}
+        if tag in ('l','q'):
+            return [_model_value(child,_byte_digests=_byte_digests,_byte_seen=_byte_seen) for child in value]
+        require(False,'Unsupported model proof value')
     if type(value) is Limits:
         return _model_value(value.model_dump(), _byte_digests=_byte_digests, _byte_seen=_byte_seen)
     if isinstance(value, Mapping):
@@ -2156,6 +2187,12 @@ class _ColdGraphRead:
     """Local pre-origin read pins. No origin completion or stage authority."""
 
     def __init__(self, worker, c, inputs, role_limits, phase, scope):
+        if _SOURCE_VIEW_TYPE is not None:
+            checker,code,defaults=_SOURCE_OWNED_CHECK
+            if (_source_owned_code.current is not checker or checker.__code__ is not code
+                    or checker.__defaults__ is not defaults):
+                raise DomainError('VERSION_CONFLICT','Source fact entry code changed')
+            checker()
         from .natural_live_admission import PBTrialContract
         from .spec_production import ProductionTrialBinding
         from .worker import Worker
@@ -5616,6 +5653,9 @@ _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_
     '_source_data_kind','_source_fields_equal','_cold_seed_audit_rows','_cold_seed_fixed_rows','_cold_seed_fixed_check',
     '_cold_run_raw_seed','_cold_run_facts','_check_run_facts','_cold_read_checkpoint',
     '_cold_sqlite_order','_cold_attempt_order','_model_value','_model_inputs',
-    '_invalidate_cold_run_raw_seed','_invalidate_cold_run_facts','fingerprint'),
+    '_invalidate_cold_run_raw_seed','_invalidate_cold_run_facts','fingerprint',
+    '_counters_from_facts','_counters','_counter_checkpoint','_node_proof_inputs',
+    '_prove_node_from_facts','_prove_node','_prove_pending_from_facts','_prove_pending',
+    'messages','parse','_anchor','strict_json','response_archive'),
     (_ColdGraphRead,_ColdTrialGraph,_ColdRunRawSeed,_ColdRunFacts,_ColdAuditSeed),
-    constants=('_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE'))
+    constants=('_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_source_owned_code','_SOURCE_VIEW_TYPE','_SOURCE_VIEW_PIN'))

@@ -60,10 +60,10 @@ def _class(cls):
     return (cls,type(cls),cls.__mro__,tuple(vars(cls).items()),tuple(methods))
 
 
-def register(index, namespace, names, classes=(), constants=()):
+def register(index, namespace, names, classes=(), constants=(), helpers=()):
     # Only import-time code metadata enters this one-time native registry.
     if _SOURCE_OK:
-        native.register_code(index,((_witness(namespace,names),),tuple(_class(c) for c in classes),
+        native.register_code(index,((_witness(namespace,names),*(_witness(space,keys) for space,keys in helpers)),tuple(_class(c) for c in classes),
             ((namespace,tuple((name,namespace[name]) for name in constants)),)))
 
 
@@ -99,6 +99,7 @@ def _scope_current(graph,scope):
 def fact_current(graph):
     """Fresh scoped registry/root identity checks; contains no cached PASS."""
     registry=vars(graph).get('_source_fact_bindings',{})
+    require(graph.active and len(graph.scope)==1 and graph.scope[0] is graph.nonce)
     require(type(registry) is dict and type(graph.inputs) is dict)
     require(all(type(name) is str for name in registry))
     marked={name for name,value in graph.inputs.items() if type(value) is tuple
@@ -106,11 +107,12 @@ def fact_current(graph):
     require(set(registry)==marked)
     if not marked:return
     current()
+    scope=_scope(graph)
     for name,entry in registry.items():
         require(type(name) is str and type(entry) is tuple and len(entry)==2)
         packet,view=entry
         require(type(packet) is _BINDING and type(view) is image.View
-            and native.binding_current(packet,native.binding_owner(packet),graph.nonce,graph.epoch,graph.phase,_scope(graph))
+            and native.binding_current(packet,native.binding_owner(packet),graph.nonce,graph.epoch,graph.phase,scope)
             and graph.inputs[name][1] is native.binding_pin(packet)
             and image.same(view,native.read_owner(native.binding_owner(packet))))
 
@@ -120,6 +122,15 @@ def fact(graph,name):
     if name not in registry:return graph.inputs[name]
     fact_current(graph)
     return registry[name][1]
+
+
+def fields_ref(graph,name,value):
+    """Fresh control-field comparison, then the same immutable parent node."""
+    if name not in vars(graph).get('_source_fact_bindings',{}):return value
+    from .natural_spec_runtime import _source_fields_equal
+    saved=fact(graph,name)
+    require(_source_fields_equal(saved,value))
+    return saved
 
 
 def own_fact(graph,name,value):

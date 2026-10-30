@@ -1695,6 +1695,13 @@ def _receipt_checkpoint(store, c, job, facts):
         _check_run_facts(store, c, job, facts)
 
 
+def _cold_receipt_phase(facts,pending_id,allow_pending,index,outputs,proved):
+    # Preserve the original independent deepcopy domain before ownership.
+    value=copy.deepcopy(_source_values.compat(dict(pending_id=pending_id,
+        allow_pending=allow_pending,index=index,outputs=outputs,proved=proved)))
+    return facts.produced_value('receipt-phase',value) if facts._source_owned else value
+
+
 def _cold_receipts(store, c, job, binding, facts, *, pending_id=None, allow_pending=False):
     from .natural_spec_runtime import _check_run_facts, _invalidate_cold_run_facts
 
@@ -1714,6 +1721,9 @@ def _cold_receipts(store, c, job, binding, facts, *, pending_id=None, allow_pend
         _check_run_facts(store, c, job, facts)
         if continuation is not None:
             continuation.produced(result)
+        if facts._source_owned:
+            frozen=facts.produced_value('receipt-result',result)
+            result=frozen[0],frozen[1]
         facts.record_receipts(binding, result[0], result[1], pending_id, allow_pending)
         if continuation is not None:
             continuation.finish()
@@ -1741,6 +1751,8 @@ def _receipts(store, c, job, binding, *, pending_id=None, allow_pending=False, _
             break
         op = by_step[sid]
         intent = intent_for(step, action, plan, outputs, proved)
+        if _facts is not None and _facts._source_owned:
+            intent=_facts.produced_value('intent',intent)
         _receipt_checkpoint(store, c, job, _facts)
         stored = (_facts.intent(op["id"]) if _facts is not None else
             c.execute(select(operation_intents.c.request).where(operation_intents.c.operation_id == op["id"])).scalar())
@@ -1750,8 +1762,7 @@ def _receipts(store, c, job, binding, *, pending_id=None, allow_pending=False, _
                 from .natural_spec_runtime import _prove_pending_from_facts, prove_pending
                 if _facts is not None:
                     _prove_pending_from_facts(store, c, job, binding, op, intent, action, _facts,
-                        _receipt_phase=copy.deepcopy(_source_values.compat(
-                            dict(pending_id=pending_id,allow_pending=allow_pending,index=index,outputs=outputs,proved=proved))))
+                        _receipt_phase=_cold_receipt_phase(_facts,pending_id,allow_pending,index,outputs,proved))
                 else:
                     prove_pending(store, c, job, binding, op, intent, action)
                 _receipt_checkpoint(store, c, job, _facts)
@@ -1780,8 +1791,7 @@ def _receipts(store, c, job, binding, *, pending_id=None, allow_pending=False, _
                 if action["executor"]["ref"] in natural.MODEL_KINDS:
                     from .natural_spec_runtime import _prove_node_from_facts, prove_node
                     expected = (_prove_node_from_facts(store, c, job, binding, op, intent, action, _facts,
-                        _receipt_phase=copy.deepcopy(_source_values.compat(
-                            dict(pending_id=pending_id,allow_pending=allow_pending,index=index,outputs=outputs,proved=proved))))
+                        _receipt_phase=_cold_receipt_phase(_facts,pending_id,allow_pending,index,outputs,proved))
                         if _facts is not None else prove_node(store, c, job, binding, op, intent, action))
                 else:
                     expected = natural.pure(action["executor"]["ref"],
@@ -2466,3 +2476,16 @@ def mount(app, store, limits, identity):
             source_scope_gate(store, c, rid)
             job = c.execute(select(runs).where(runs.c.id == rid, runs.c.principal_id == user, runs.c.project_id == pid)).mappings().one()
             return natural.sample_preview(store, c, job)
+
+
+# Exact consumers of the owned Source reader. Other ancestry stays on its
+# original fully checked interface and is not inferred to be immutable.
+from . import _cold_source_packet as _source_fact_code
+_source_fact_code.register(7,globals(),(
+    '_receipt_checkpoint','_cold_receipt_phase','_cold_receipts','_receipts',
+    '_cold_verify_job_from_receipts','_verify_job_from_receipts','_receipt_output',
+    '_receipt_data','_receipt_has_unknown','intent_for','receipt_for','output_for',
+    'resolve','validate_value','fingerprint','require'),
+    constants=('_source_values','natural'),helpers=((vars(natural),(
+        'is_candidate','pure','bounded_source','schemas','collected','report',
+        'citation_feedback','verify_saved','require')),))

@@ -40,7 +40,10 @@ from sim2act.worker import Worker
 
 
 def dump(path, value):
-    path.write_text(json.dumps(value, indent=2, ensure_ascii=False, default=str) + "\n")
+    from sim2act._cold_source_image import View,plain
+    def exported(item):
+        return plain(item) if View is not None and type(item) is View else str(item)
+    path.write_text(json.dumps(value, indent=2, ensure_ascii=False, default=exported) + "\n")
 
 
 def material_goal(store, user, resource, goal, content):

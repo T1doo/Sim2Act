@@ -16,6 +16,7 @@ _MAX_LEAF=16*1024*1024
 
 
 def capture(incoming, outside, *, _parents=None):
+    if _parents is not None and type(_parents) is not list:raise Unsupported('exact parent registry required')
     from sim2act import natural_spec_runtime as rt, natural_live_admission as gate
     from sim2act import production_trial_policy as policy, production_trial_sender as sender
     from sim2act.natural_source_archives import BodyArchive
@@ -121,6 +122,11 @@ def capture(incoming, outside, *, _parents=None):
     try:rt._cold_graph_validate_inputs(anchors)
     except DomainError as error:raise Unsupported('unrepresentable boundary') from error
     order=tuple(sorted(owned));rename={ref:i for i,ref in enumerate(order)}
+    # Outside traversal also sees immutable views. They are not part of this
+    # fact's owned domain unless an incoming node actually references them.
+    parent_order=tuple(dict.fromkeys(nodes[ref][1][0] for ref in order if kinds[ref]=='o'))
+    parent_map={old:new for new,old in enumerate(parent_order)}
+    if _parents is not None:_parents[:]=[_parents[i] for i in parent_order]
     emitted=[];carrier=[];leafmap={}
     for ref in order:
         tag,value,edges=nodes[ref]
@@ -130,6 +136,7 @@ def capture(incoming, outside, *, _parents=None):
         elif tag=='d':value=tuple((rename[k],rename[v]) for k,v in value)
         elif tag in ('q','l','e','r','m'):value=tuple(rename[v] for v in value)
         elif tag in ('u','c'):value=rename[value]
+        elif tag=='o':value=(parent_map[value[0]],value[1])
         emitted.append((tag,value))
     boundary=tuple((rename[ref],i) for i,ref in enumerate(shared))
     # This private prototype exposes the immutable parsed table as data. The

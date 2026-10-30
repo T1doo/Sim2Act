@@ -73,7 +73,8 @@ def require(ok, message="Exact natural-spec contract changed"):
 
 
 def is_candidate(value):
-    return isinstance(value, dict) and value.get("namespace") == VERSION
+    from ._cold_source_image import is_kind
+    return (isinstance(value,dict) or is_kind(value,'d')) and value.get("namespace")==VERSION
 
 
 def bounded_source(source):

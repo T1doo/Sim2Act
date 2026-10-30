@@ -71,15 +71,18 @@ static PyObject*make_owned_core(PyObject*data,PyObject*parents){
  if(!ok)return Py_NewRef(unsupported);
  if(!source_image_shape(data))return Py_NewRef(unsupported);
  PyObject*nodes=PyTuple_GET_ITEM(data,1);
+ unsigned char used_parents[256]={0};
  for(Py_ssize_t i=0;i<PyTuple_GET_SIZE(nodes);i++){
   PyObject*node=PyTuple_GET_ITEM(nodes,i);
   if(PyUnicode_READ_CHAR(PyTuple_GET_ITEM(node,0),0)=='o'){
    PyObject*p=PyTuple_GET_ITEM(node,1);Py_ssize_t ordinal,ref;
    if(!shape_ref(PyTuple_GET_ITEM(p,0),PyTuple_GET_SIZE(parents),&ordinal))return Py_NewRef(unsupported);
+   used_parents[ordinal]=1;
    Owned*parent=(Owned*)PyTuple_GET_ITEM(parents,ordinal);
    if(!shape_ref(PyTuple_GET_ITEM(p,1),PyTuple_GET_SIZE(PyTuple_GET_ITEM(parent->data,1)),&ref))return Py_NewRef(unsupported);
   }
  }
+ for(Py_ssize_t i=0;i<PyTuple_GET_SIZE(parents);i++)if(!used_parents[i])return Py_NewRef(unsupported);
  /* All data are now exact immutable builtins. Marshal writes only metadata;
   * original leaves remain the exact original objects in the full graph pin. */
  Py_ssize_t n=PyTuple_GET_SIZE(data);PyObject*metadata=PyTuple_New(n-1);
