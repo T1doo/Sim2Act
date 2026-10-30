@@ -40,6 +40,7 @@ from .db import (
     runs,
 )
 from .errors import DomainError
+from . import _cold_source_packet as _generation_owned
 from .goal_planner import checked_usage, configured_provider, locked, safe_received_message
 from .model import (
     InternModel,
@@ -555,6 +556,16 @@ def _history(store, c, run):
     return _history_core(_GenerationFactsReader(store, c, run))
 
 
+def _generation_plain(reader, value):
+    """Ephemeral legacy API input; never retained as an owned Graph root."""
+    return _generation_owned.image.compat(value) if reader._source_owned else value
+
+
+def _generation_mapping(reader, value):
+    return isinstance(value, dict) or (reader._source_owned
+        and _generation_owned.image.is_kind(value, "d"))
+
+
 def _history_core(reader):
     """Reconstruct every request from frozen input and separately anchored received responses."""
     store, c, run = reader.store, reader.c, reader.run
@@ -574,14 +585,14 @@ def _history_core(reader):
             raise DomainError("OUTCOME_UNKNOWN", "Unresolved generation request is never resent")
         parameters = attempt["parameters"]
         if (
-            not isinstance(parameters, dict)
+            not _generation_mapping(reader, parameters)
             or type(parameters.get("max_tokens")) is not int
             or type(parameters.get("generation_fence")) is not int
             or parameters["generation_fence"] < 1
-            or not isinstance(attempt["response"], dict)
-            or not isinstance(attempt["usage"], dict)
+            or not _generation_mapping(reader, attempt["response"])
+            or not _generation_mapping(reader, attempt["usage"])
             or attempt["usage"].get("status") != "known"
-            or not isinstance(attempt["usage"].get("tokens"), dict)
+            or not _generation_mapping(reader, attempt["usage"].get("tokens"))
         ):
             raise DomainError("VERSION_CONFLICT", "Invalid typed generation attempt evidence")
         tools = stage_tools(selected, index)
@@ -654,13 +665,13 @@ def _history_core(reader):
         if fingerprint(parameters.get("model_identity")) != fingerprint(identity):
             raise DomainError("VERSION_CONFLICT", "Actual provider identity evidence changed")
         checked_usage(
-            {"usage": attempt["usage"]["tokens"]},
+            {"usage": _generation_plain(reader, attempt["usage"]["tokens"])},
             reader.frozen().limits,
             parameters["max_tokens"],
             attempt["reserved_tokens"],
         )
         reader.check()
-        messages.append(copy.deepcopy(attempt["response"]))
+        messages.append(copy.deepcopy(_generation_plain(reader, attempt["response"])))
         if index == 0:
             calls = attempt["response"].get("tool_calls", [])
             if len(calls) != 1:
@@ -670,7 +681,7 @@ def _history_core(reader):
                 {
                     "role": "tool",
                     "tool_call_id": calls[0]["id"],
-                    "content": json.dumps(receipt, ensure_ascii=False, separators=(",", ":")),
+                    "content": json.dumps(_generation_plain(reader, receipt), ensure_ascii=False, separators=(",", ":")),
                 }
             )
             messages.append(
@@ -688,7 +699,7 @@ def _history_core(reader):
                 expected_diagnostic = receipt["data"]["diagnostic"]
                 if fingerprint(parameters.get("generation_diagnostic")) != fingerprint(expected_diagnostic):
                     raise DomainError("VERSION_CONFLICT", "Checker feedback and revision authorization differ")
-                messages.append(dict(role="tool", tool_call_id=calls[0]["id"], content=json.dumps(receipt, ensure_ascii=False, separators=(",", ":"))))
+                messages.append(dict(role="tool", tool_call_id=calls[0]["id"], content=json.dumps(_generation_plain(reader, receipt), ensure_ascii=False, separators=(",", ":"))))
                 messages.append(dict(role="user", content="Consume the actual check feedback. Return the complete same candidate if PASS, or one corrected candidate if FAIL. No tools; final response only."))
             diagnostic = parameters.get("generation_diagnostic")
             if diagnostic is not None:
@@ -700,7 +711,7 @@ def _history_core(reader):
                         "role": "user",
                         "content": json.dumps(
                             {
-                                "repair": diagnostic,
+                                "repair": _generation_plain(reader, diagnostic),
                                 "remaining_repairs": 0,
                                 "preserve_frozen_contract": True,
                             },
@@ -795,6 +806,8 @@ class _GenerationFactsReader:
     def __init__(self, store, c, run, guard=None):
         self.store, self.c, self.run, self.guard = store, c, run, guard
         self._guard_initial = guard
+        self._source_owned = guard is not None and _generation_owned.available()
+        self._source_owned_origin = self._source_owned
         self.source_record_name = None
         self.contract = self.material = self.source_pin = None
         self.authorities = ()
@@ -806,7 +819,11 @@ class _GenerationFactsReader:
         self.raw_seed = self._raw_seed_initial = None
         self.check()
         if guard is not None:
-            guard.add("generation:" + run["id"] + ":run", self.run_pin)
+            name = "generation:" + run["id"] + ":run"
+            if self._source_owned:
+                self.run_pin = _generation_owned.own_fact(guard, name, self.run_pin)
+            else:
+                guard.add(name, self.run_pin)
             self.check()
 
     def check(self):
@@ -815,6 +832,9 @@ class _GenerationFactsReader:
                 if self._guard_initial is not None:
                     self._guard_initial.invalidate()
                 raise DomainError("VERSION_CONFLICT", "Generation read scope pointer changed")
+            if (type(self._source_owned) is not bool
+                    or self._source_owned is not self._source_owned_origin):
+                raise DomainError("VERSION_CONFLICT", "Generation representation changed")
             if self.guard is None:
                 return
             from .natural_spec_runtime import _cold_read_checkpoint
@@ -825,7 +845,9 @@ class _GenerationFactsReader:
                 if type(self.raw_seed) is not _ColdGenerationRawSeed:
                     raise DomainError("VERSION_CONFLICT", "Exact Generation raw seed required")
                 self.raw_seed.check(self.store, self.c, self.run["principal_id"], self.run, self.contract)
-            if dict(self.run) != self.run_pin:
+            from .natural_live_admission import _trial_pure_mapping
+            if not (_trial_pure_mapping(dict(self.run)) == self.run_pin
+                    if self._source_owned else dict(self.run) == self.run_pin):
                 self.guard.invalidate()
                 raise DomainError("VERSION_CONFLICT", "Generation Run input changed")
             if self.source_pin is not None:
@@ -850,8 +872,14 @@ class _GenerationFactsReader:
         try:
             self.check()
             if self.guard is not None:
-                raw = copy.deepcopy(value)
-                self.guard.add("generation:" + self.run["id"] + ":" + str(len(self.raw_reads)) + ":" + label, raw)
+                raw = copy.deepcopy(_generation_plain(self, value))
+                name = "generation:" + self.run["id"] + ":" + str(len(self.raw_reads)) + ":" + label
+                # The complete source retains its original typed contract boundary.
+                # All other records transfer before any consumer receives them.
+                if self._source_owned and label != "complete-source":
+                    raw = _generation_owned.own_fact(self.guard, name, raw)
+                else:
+                    self.guard.add(name, raw)
                 self.raw_reads.append((label, raw))
             self.check()
             return raw if self.guard is not None else value
@@ -889,12 +917,13 @@ class _GenerationFactsReader:
     def _raw_get(self, key):
         try:
             self.check()
-            name, entry = self._raw_cache[key]
-            if (self.guard.inputs.get(name) is not entry
-                    or tuple(entry["key"]) != key):
+            name, entry, value = self._raw_cache[key]
+            if (not _generation_owned.image.same(_generation_owned.fact(self.guard, name), entry)
+                    or tuple(entry["key"]) != key
+                    or not _generation_owned.image.same(entry["value"], value)):
                 raise DomainError("VERSION_CONFLICT", "Generation raw fact rebound")
             self.check()
-            return entry["value"]
+            return value
         except BaseException:
             self.invalidate()
             raise
@@ -908,9 +937,10 @@ class _GenerationFactsReader:
                 raise DomainError("VERSION_CONFLICT", "Generation raw fact cannot be replaced")
             name = "generation:" + self.run["id"] + ":" + str(len(self.raw_reads)) + ":raw-" + label
             entry = self.record("raw-" + label, dict(key=list(key), value=value))
-            self._raw_cache[key] = (name, entry)
+            value = entry["value"]
+            self._raw_cache[key] = (name, entry, value)
             self.check()
-            return entry["value"]
+            return value
         except BaseException:
             self.invalidate()
             raise
@@ -1175,7 +1205,7 @@ def _cold_history_from_source(store, c, run, contract, material, reader):
         value = _history_core(reader)
         reader.check()
         reader.history_value = reader.record("complete-history",
-            (value[0], [dict(row) for row in value[1]]))
+            (value[0], [dict(_generation_plain(reader, row)) for row in value[1]]))
         return reader.history_value
     except BaseException:
         if type(reader) is _GenerationFactsReader:
@@ -1916,7 +1946,7 @@ def _check_counters_core(reader, rows):
     limits = contract.limits
     spec = contract.application_generation.version in SPEC_GENERATIONS
     ctx = run["context"]
-    _check_counter_rows(rows)
+    _check_counter_rows(_generation_plain(reader, rows))
     reader.check()
     count_tools = reader.counter_operations()
     _check_counters_from_facts(ctx, limits, spec, rows, count_tools)

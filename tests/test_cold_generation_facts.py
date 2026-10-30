@@ -40,6 +40,7 @@ from sim2act.db import (
     runs,
 )
 from sim2act.errors import DomainError
+from sim2act import _cold_source_image as owned_image
 from sim2act.production_trial_admission import canonical_quota_subject
 from sim2act.spec_production import ProductionTrialBinding
 from sim2act.worker import Worker
@@ -143,7 +144,8 @@ def test_complete_generation_facts_equal_public_none_and_full_limits(generated, 
         native = spec._native_audit_facts(f.store, c, f.user, f.draft)
         with scope(f, c) as guard:
             contract, source, reader, history = strict_history(f, c, guard)
-            assert history == (public_history[0], [dict(r) for r in public_history[1]])
+            assert owned_image.compat(history) == (public_history[0], [dict(r) for r in public_history[1]])
+            assert owned_image.is_kind(history,"q") and owned_image.is_kind(history[1],"l")
             assert len(history[1]) == 3
             assert [r["parameters"]["generation_index"] for r in history[1]] == [0, 1, 2]
             strict_none = generation._cold_candidate_from_history(f.store, c, f.run,
@@ -191,7 +193,7 @@ def test_fixed_raw_methods_memo_once_preserve_full_lists_and_default_queries(gen
             with scope(f, c) as guard:
                 _, _, reader, _ = strict_history(f, c, guard)
                 received = reader._anchors("GA_RECEIVED")
-                assert len(received) == 4 and received.count(first["data"]) == 2
+                assert len(received) == 4 and sum(row == first["data"] for row in received) == 2
                 read, check = reader.read_operation(), reader.checker_operation()
                 requests = [reader.intent(read), reader.intent(check)]
                 response = reader.checker_response()
@@ -299,7 +301,7 @@ def test_wrong_raw_facet_input_role_and_write_reuse_poison_same_scope(generated,
                         call = partial(reader._anchors, "GA_RECEIVED")
                     elif fault == "history-copy":
                         call = partial(generation._cold_candidate_from_history, f.store, c, f.run,
-                            contract, source, copy.deepcopy(history), None, reader)
+                            contract, source, copy.deepcopy(owned_image.compat(history)), None, reader)
                     elif fault == "bad-limits":
                         class Callback:
                             def model_dump(self):

@@ -1636,7 +1636,7 @@ def _native_audit_facts(store, c, user, draft, *, _graph_read=None, _generation_
                     "attempts" if name == "attempts" else "counter-operations")
                 require(_generation_reader._raw_present(raw_key), "Complete audit raw rows were not pinned")
                 loaded = sorted(
-                    (copy.deepcopy(dict(r)) for r in _generation_reader._raw_get(raw_key)),
+                    (copy.deepcopy(_source_values.compat(dict(r))) for r in _generation_reader._raw_get(raw_key)),
                     key=lambda r: r["id"])
             else:
                 loaded = c.execute(query).mappings().all()

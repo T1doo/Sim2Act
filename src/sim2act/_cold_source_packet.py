@@ -60,11 +60,12 @@ def _class(cls):
     return (cls,type(cls),cls.__mro__,tuple(vars(cls).items()),tuple(methods))
 
 
-def register(index, namespace, names, classes=(), constants=(), helpers=()):
+def register(index, namespace, names, classes=(), constants=(), helpers=(), constant_helpers=()):
     # Only import-time code metadata enters this one-time native registry.
     if _SOURCE_OK:
         native.register_code(index,((_witness(namespace,names),*(_witness(space,keys) for space,keys in helpers)),tuple(_class(c) for c in classes),
-            ((namespace,tuple((name,namespace[name]) for name in constants)),)))
+            ((namespace,tuple((name,namespace[name]) for name in constants)),
+             *((space,tuple((name,space[name]) for name in keys)) for space,keys in constant_helpers))))
 
 
 class Capacity(ValueError):

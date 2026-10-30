@@ -5659,6 +5659,8 @@ def advance_model(worker, run, *, _heartbeat_state=None):
     return True
 
 
+from . import goal_applications as _generation_fact_code
+
 _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_limit_values',
     '_source_data_kind','_source_fields_equal','_cold_seed_audit_rows','_cold_seed_fixed_rows','_cold_seed_fixed_check',
     '_cold_run_raw_seed','_cold_run_facts','_check_run_facts','_cold_read_checkpoint',
@@ -5667,5 +5669,17 @@ _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_
     '_counters_from_facts','_counters','_counter_checkpoint','_node_proof_inputs',
     '_prove_node_from_facts','_prove_node','_prove_pending_from_facts','_prove_pending',
     'messages','parse','_anchor','strict_json','response_archive'),
-    (_ColdGraphRead,_ColdTrialGraph,_ColdRunRawSeed,_ColdRunFacts,_ColdAuditSeed),
-    constants=('_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_source_owned_code','_SOURCE_VIEW_TYPE','_SOURCE_VIEW_PIN','_SOURCE_OWNER_TYPE','_SOURCE_OWNER_PIN'))
+    (_ColdGraphRead,_ColdTrialGraph,_ColdRunRawSeed,_ColdRunFacts,_ColdAuditSeed,
+        _generation_fact_code._GenerationFactsReader),
+    constants=('_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_source_owned_code','_SOURCE_VIEW_TYPE','_SOURCE_VIEW_PIN','_SOURCE_OWNER_TYPE','_SOURCE_OWNER_PIN'),
+    helpers=((vars(_generation_fact_code),('_generation_plain','_generation_mapping',
+        '_history_core','_cold_generation_reader','_cold_generation_source','_cold_history_from_source',
+        '_cold_candidate_from_history','_parse_candidate_core','_read_receipt_core',
+        '_check_counters_core','_check_counter_rows','_check_counters_from_facts',
+        '_candidate_attempt_from_history','_candidate_validation_seal','_candidate_from_checked_facts',
+        '_source_scope_gate','_source_body','_initial_messages_from_facts','stage_tools','parse_generation',
+        'checked_usage','normalize_usage','returned_model_identity','require_returned_model',
+        'fingerprint','strict_json','response_archive','body','parse_response','authorized_read')),
+        (vars(_generation_fact_code.copy),('deepcopy',))),
+    constant_helpers=((vars(_generation_fact_code),('_generation_owned','_GenerationFactsReader',
+        'FrozenRunContract','copy','json','httpx')),))

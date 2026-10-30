@@ -216,7 +216,11 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                             assert graph.binding["release"]["id"] == release["id"]
                             assert graph.source_binding["snapshot"]["run_id"] == source_rid
                             assert len(graph.generation_history[1]) == 3
-                            assert graph.generation_history[1] == generation_attempts
+                            # Compare the complete visible SQL protocol after the private
+                            # reader transfers ownership; quoted_name keys remain
+                            # trusted SQL labels in the independently queried rows.
+                            from sim2act import _cold_source_image as generation_image
+                            assert generation_image.compat(graph.generation_history[1]) == generation_attempts
                             assert graph.native_audit["attempts"] == sorted(generation_attempts, key=lambda row: row["id"])
                             assert dict(graph.source_facts.typed.typed) == next(row
                                 for row in before["internal_instance_data"]
@@ -274,7 +278,7 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                             assert seeded_graph.binding["release"]["id"] == release["id"]
                             assert seeded_graph.source_binding["snapshot"]["run_id"] == source_rid
                             assert len(seeded_graph.generation_history[1]) == 3
-                            assert seeded_graph.generation_history[1] == generation_attempts
+                            assert generation_image.compat(seeded_graph.generation_history[1]) == generation_attempts
                             assert seeded_graph.native_audit["attempts"] == sorted(generation_attempts, key=lambda row: row["id"])
                             assert dict(seeded_graph.source_facts.typed.typed) == next(row
                                 for row in before["internal_instance_data"]
