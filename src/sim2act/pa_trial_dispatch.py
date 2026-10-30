@@ -20,6 +20,8 @@ from .db import attempts, events, fingerprint, runs
 from .db import delivery_graph_requests as rows
 from .delivery_graph_apps import controlled
 from .errors import DomainError
+from . import _cold_archive_packet as _owned_archive_code
+_OWNED_ARCHIVE_CHECK = _owned_archive_code.CHECK
 from .goal_applications import response_archive
 from .model import CapturedResponse, InternModel, normalize_usage
 from .natural_source_archives import BodyArchive, _body
@@ -1703,7 +1705,27 @@ def _graph_pb_archive_chain(graph, store, c, b, state, resolved, source_facts, *
         gate._graph_trial_journal_models(graph, store, c, _models, state)
         gate._graph_trial_accounted_models(graph, store, c, _models, source_facts, 'source', **{'_owned': _owned} if _owned is not None else {})
         _guard()
-        if _owned is None:
+        from . import _cold_archive_packet as owned_archive
+        # Exact native classification cannot invoke a replaced packet callback.
+        if type(resolved) is tuple:
+            gate.require(_owned is None and _accounted_test is None)
+            checker, code, defaults, config = _OWNED_ARCHIVE_CHECK
+            gate.require(owned_archive.current is checker and checker.__code__ is code
+                and checker.__defaults__ is defaults and owned_archive._CONFIG is config)
+            consumer_code = _OWNED_ARCHIVE_CONSUMERS
+            checker(config, consumer_code)
+            receipt, requests, responses = owned_archive.bound(graph, resolved)
+            def owned_continuation():
+                # The original dynamic/whole-graph/typed guard still runs.
+                # A callback in it cannot replace the immutable-view semantics
+                # before the next consumer access, even temporarily.
+                _guard()
+                gate.require(owned_archive.current is checker and checker.__code__ is code
+                    and checker.__defaults__ is defaults and owned_archive._CONFIG is config)
+                checker(config, consumer_code)
+            _archive_chain_values(b, state, receipt, requests, responses, source_facts,
+                _guard=owned_continuation)
+        elif _owned is None:
             _archive_chain_from_facts(b, state, resolved, source_facts, _guard=_guard)
         else:
             from . import cold_accounted
@@ -1724,7 +1746,14 @@ def _graph_pb_archive_chain(graph, store, c, b, state, resolved, source_facts, *
 
 def _archive_chain_from_facts(b, state, resolved, source_facts, *, _guard=None):
     """Original pure archive-family comparison; caller keeps every outer gate."""
-    receipt = resolved.public_receipt
+    from ._cold_archive_packet import reject_experiment
+    reject_experiment(resolved)
+    return _archive_chain_values(b, state, resolved.public_receipt,
+        resolved.request_bodies, resolved.response_bodies, source_facts, _guard=_guard)
+
+
+def _archive_chain_values(b, state, receipt, requests, responses, source_facts, *, _guard=None):
+    """Same complete joins; owned consumers read only immutable node views."""
     source, actual, chains, ns_reads = source_facts
     slots = [s for s in state.slots if s.identity.stage == 'source']
     gate.require(gate._trial_result(_production_binding(b), _guard) and (not state.halted) and (len(slots) == len(receipt['attempts']) == len(chains) == len(ns_reads) == 2) and (receipt['verification'] == 'SPEC_PRODUCTION_CONTROLLER_ARCHIVE') and (receipt['live_allowed'] is False) and (receipt['source_run_id'] == source['id']))
@@ -1734,7 +1763,7 @@ def _archive_chain_from_facts(b, state, resolved, source_facts, *, _guard=None):
         linked, capture, parsed, checked, wire, payload = matching[0]
         gate.require(linked == slot and checked in actual and (slot.identity.run_id == source['id']) and (slot.identity.attempt_id == proof['attempt_id']) and (slot.identity.wire_sha256 == proof['request_sha256']) and (slot.identity.wire_bytes == proof['request_bytes']) and (capture.raw_sha256 == proof['decoded_body_sha256']) and (capture.raw_bytes == proof['decoded_body_bytes']) and (capture.canonical_sha256 == proof['canonical_ascii_sha256']) and (capture.canonical_ascii_bytes == proof['canonical_ascii_bytes']))
         index = receipt['attempts'].index(proof)
-        gate.require(resolved.request_bodies[index] == wire and resolved.response_bodies[index] == payload)
+        gate.require(requests[index] == wire and responses[index] == payload)
 
 
 def _journal_capture_from_facts(slot, capture, payload, *, _guard=None):
@@ -1757,3 +1786,6 @@ def _pb_prefix_source_from_facts(state, *, _guard=None):
     source_ids = {s.identity.run_id for s in first if s.identity.stage == 'source'}
     gate.require(not state.halted and len(first) == 5 and all((s.accepted for s in first)) and (len(source_ids) == 1))
     return next(iter(source_ids))
+
+_OWNED_ARCHIVE_CONSUMERS = _owned_archive_code.witness(globals(),
+    ('_graph_pb_archive_chain', '_archive_chain_values'))

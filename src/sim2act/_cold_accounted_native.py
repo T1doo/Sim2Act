@@ -749,6 +749,8 @@ def _resolved_shape(resolved):
     consumed strings compare with bounded owned values (length mismatch is O(1)).
     Unknown fields are rejected, never dropped. The legacy mode is unchanged.
     """
+    from ._cold_archive_packet import reject_experiment
+    reject_experiment(resolved)
     receipt = resolved.public_receipt
     gate.require(type(receipt) is dict and len(receipt) == 18
                  and all(type(k) is str for k in receipt))

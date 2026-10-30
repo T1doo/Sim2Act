@@ -25,6 +25,9 @@ from .db import (
 )
 from .delivery_graph_apps import controlled
 from .errors import DomainError
+from . import _cold_archive_packet as _owned_archive_code
+_OWNED_ARCHIVE_CHECK = _owned_archive_code.CHECK
+_OWNED_ARCHIVE_CAPACITY = _owned_archive_code.Capacity
 from .text_logic_reuse import pair, remember
 
 VERSION: Literal["natural-source-body-archive.v1"] = "natural-source-body-archive.v1"
@@ -504,7 +507,27 @@ def _graph_resolve_trial_source(graph, store, c, user, contract, approval_key, l
             gate._trial_result(store.recheck_proof_authorities(c, {'_call_authorities': tuple(sorted(authorities))}), _guard)
             require(gate._trial_result(time.time(), _guard) < contract.expires_at, 'Original trial approval expired during source proof')
             _guard()
-            resolved = gate._trial_result(ResolvedSourceArchive(receipt, requests, responses), _guard)
+            if graph.phase == 'post':
+                from . import _cold_archive_packet as owned_archive
+                checker, code, defaults, config = _OWNED_ARCHIVE_CHECK
+                require(owned_archive.current is checker and checker.__code__ is code
+                    and checker.__defaults__ is defaults and owned_archive._CONFIG is config)
+                checker(config, _OWNED_ARCHIVE_PRODUCERS)
+                # Only this complete producer transfers ownership. Experimental
+                # accounted consumers have not migrated to the new post packet.
+                require(_owned is None and _accounted_test is None,
+                    'Post archive packet cannot enter an unmigrated experiment')
+                try:
+                    resolved = owned_archive.capture(receipt, requests, responses)
+                except _OWNED_ARCHIVE_CAPACITY:
+                    # No packet/edge has escaped: retain every old check.
+                    checker(config, _OWNED_ARCHIVE_PRODUCERS)
+                    resolved = ResolvedSourceArchive(receipt, requests, responses)
+                else:
+                    graph.add(owned_archive.KEY, resolved)
+                gate._trial_result(None, _guard)
+            else:
+                resolved = gate._trial_result(ResolvedSourceArchive(receipt, requests, responses), _guard)
         gate._trial_result(None, _guard)
         _guard()
         return resolved
@@ -522,3 +545,7 @@ def _source_accepted_from_facts(approval_key, accepted, current, job, *, _guard=
 
 def _source_row_from_facts(contract, row, slot, production, *, _guard=None):
     require(row['mode'] == ('LIVE' if production else 'MOCK') and row['status'] == 'VERIFIED' and (row['request_model'] == row['response_model'] == contract.model) and (slot['accepted'] is True) and (slot['settlement'] is not None))
+
+# Fixed producer closure, including the fresh private public/proof containers.
+_OWNED_ARCHIVE_PRODUCERS = _owned_archive_code.witness(globals(),
+    ('_graph_resolve_trial_source', '_graph_source_bodies'))

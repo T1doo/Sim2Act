@@ -1690,6 +1690,8 @@ def _archive_chain(family, state, resolved):
     Caller retains original ledger/resolve typed guards, current DB authorization
     and byte/archive producers. Snapshotting these arguments issues no permit.
     """
+    from ._cold_archive_packet import reject_experiment
+    reject_experiment(resolved)
     gate.require(type(family) is _Family)
     family._root()
     gate.require(

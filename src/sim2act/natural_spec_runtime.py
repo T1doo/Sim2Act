@@ -50,6 +50,9 @@ from . import _cold_base_segment as _base_segments
 from . import _cold_policy_segment as _policy_segments
 from . import _cold_typed_native_candidate as _typed_native_code
 from . import db as _raw_seed_db
+from . import _cold_archive_packet as _owned_archive_code
+_OWNED_ARCHIVE_CHECK = _owned_archive_code.CHECK
+_OWNED_ARCHIVE_KEY = _owned_archive_code.KEY
 from . import model_settlement as _raw_read_settlement
 from . import natural_live_admission as _row_native_code
 from . import natural_specs as codec
@@ -4204,6 +4207,16 @@ class _ColdTrialGraph:
         require(self.trial is None or (type(self.trial) is _ColdBindingGraph and self.trial.guard is self.guard))
         require(self.audit_seed is None or (type(self.audit_seed) is _ColdAuditSeed and self.audit_seed.guard is self.guard))
         require(self.phase in {'EMPTY', 'BUILDING', 'COMPLETE', 'BUSY'})
+        from . import _cold_archive_packet as owned_archive
+        if _OWNED_ARCHIVE_KEY in self.guard.inputs:
+            checker, code, defaults, config = _OWNED_ARCHIVE_CHECK
+            require(owned_archive.current is checker and checker.__code__ is code
+                and checker.__defaults__ is defaults and owned_archive._CONFIG is config)
+            checker(config)
+            require(self.guard.phase == 'post' and owned_archive.is_packet(self.resolved)
+                and self.guard.inputs[owned_archive.KEY] is self.resolved)
+            if self.authority_record is not None and 'archive' in self.authority_record:
+                require(self.authority_record['archive'] is self.resolved)
         if self.trial is not None and self.phase in {'COMPLETE', 'BUSY'}:
             owned = getattr(self, 'accounted_prewrite', None)
             require(self.sealed_fields is (owned.complete if owned is not None else self.guard.inputs['cold-trial:complete']))
@@ -4575,7 +4588,12 @@ class _ColdTrialGraph:
                 self.authorities.update(authorities)
                 output = dict(run=dict(job), context=self._dump(self.context), source=self._dump(source), authorities=tuple(sorted(self.authorities)), admission=self.admission, deadlines=tuple(finite))
                 if first:
-                    output['archive'] = dict(public_receipt=self.resolved.public_receipt, request_bodies=self.resolved.request_bodies, response_bodies=self.resolved.response_bodies)
+                    from . import _cold_archive_packet as owned_archive
+                    if type(self.resolved) is tuple:
+                        require(g.inputs.get(owned_archive.KEY) is self.resolved)
+                        output['archive'] = self.resolved
+                    else:
+                        output['archive'] = dict(public_receipt=self.resolved.public_receipt, request_bodies=self.resolved.request_bodies, response_bodies=self.resolved.response_bodies)
                 g.add(prefix.key + ':trial-output', output)
                 self.authority_record, self.authority_record_key = (output, prefix.key + ':trial-output')
             pin()
