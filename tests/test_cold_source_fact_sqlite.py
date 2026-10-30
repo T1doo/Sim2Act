@@ -198,3 +198,23 @@ def test_source_first_check_calibrates_complete_new_root_and_rejects_change(sql_
   reached=True
   s.graph.check(f.store,c)
  assert reached,'Mutation must be reached after first-check calibration'
+
+
+@pytest.mark.parametrize('phase',['pre','post'])
+@pytest.mark.parametrize('damage',['numeric-bool','numeric-float','container'])
+def test_source_stage_join_consumes_first_owned_sql_job(sql_facts,phase,damage):
+ from sim2act import natural_live_admission as gate
+ f=sql_facts
+ with f.store.tx() as c,segment(f,c,phase=phase) as s:
+  job=owned.own_fact(s.graph,'source-test:stage-job',s.stage[0])
+  stage=(job,*s.stage[1:])
+  gate._graph_trial_stage_raw_from_raw(stage,s.graph.inputs['cold-trial:complete'],_graph=s.graph)
+  # The immutable adapter is limited to this Source join. Unknown mappings
+  # and direct immutable input to the original pure-mapping gate still fail.
+  with pytest.raises(DomainError):gate._trial_pure_mapping(job)
+  changed=dict(owned.image.plain(job))
+  if damage=='container':changed['resource_refs']=tuple(changed['resource_refs'])
+  else:changed['version']=True if damage=='numeric-bool' else float(changed['version'])
+  wrong=owned.own_fact(s.graph,'source-test:stage-wrong-job',changed)
+  with pytest.raises(DomainError):
+   gate._graph_trial_stage_raw_from_raw((wrong,*stage[1:]),s.graph.inputs['cold-trial:complete'],_graph=s.graph)

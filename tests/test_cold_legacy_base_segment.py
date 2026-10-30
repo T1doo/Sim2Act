@@ -1,7 +1,7 @@
 """Legacy typed collector pure closure, real SQLite/CGR but no Worker/model."""
 
 import sys
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 
 import pytest
 from accounted_sqlite_fixture import seed_cold, segment
@@ -141,8 +141,11 @@ def test_unknown_serializer_keeps_entry_full_before_callback(sql_facts, monkeypa
 def test_changed_legacy_helper_selects_original_entry(sql_facts, monkeypatch):
     with legacy(sql_facts, True) as (t, _):
         assert code.eligible(t)
-        monkeypatch.setattr(gate, '_graph_trial_stage_raw_from_raw', lambda *args: None)
-        assert not code.eligible(t)
+        # This tests selector eligibility, without executing a changed helper
+        # or carrying it across the complete Source scope's exit check.
+        with monkeypatch.context() as patch:
+            patch.setattr(gate, '_graph_trial_stage_raw_from_raw', lambda *args: None)
+            assert not code.eligible(t)
 
 
 def test_foreign_receiver_is_ineligible_without_callback():
@@ -187,17 +190,26 @@ def test_fixed_legacy_stage_parent_keeps_dynamic_and_joins_but_not_duplicate_cod
 
 
 def test_unknown_stage_wrapper_keeps_original_callback(sql_facts, monkeypatch):
-    with legacy(sql_facts, True) as (_, s):
+    from sim2act import _cold_source_packet as source_owned
+    installed=source_owned.available()
+    calls=[];reached=False
+    rejection=(pytest.raises(DomainError,match='Complete Source code changed') if installed else nullcontext())
+    with rejection, legacy(sql_facts, True) as (_, s):
         original = gate._graph_trial_stage_raw
-        calls = []
 
         def callback(*args, **kwargs):
             calls.append(1)
             return original(*args, **kwargs)
 
-        monkeypatch.setattr(gate, '_graph_trial_stage_raw', callback)
-        gate._graph_trial_stage_parent_pin(s.graph, sql_facts.store, s.c, s.stage)
-        assert calls == [1]
+        with monkeypatch.context() as patch:
+            patch.setattr(gate, '_graph_trial_stage_raw', callback)
+            # Published Source refuses replacement before any callback; an
+            # optional-extension absence retains the original callback route.
+            reached=True
+            gate._graph_trial_stage_parent_pin(s.graph, sql_facts.store, s.c, s.stage)
+    assert reached
+    assert calls == ([] if installed else [1])
+    if installed:assert not s.graph.active
 
 
 def test_second_stage_dynamic_failure_invalidates_in_both_modes(sql_facts):

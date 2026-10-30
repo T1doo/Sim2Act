@@ -15,6 +15,10 @@ def test_post_source_producer_and_all_direct_consumers(sql_facts):
   assert owned.pin(s.graph,s.source) is s.graph.inputs[owned.KEY]
   facts=owned.facts(s.graph,s.source)
   assert facts[0]['id']==f.source_id
+  source_job=owned.own_fact(s.graph,'source-owned-consumer:job',s.stage[0])
+  source_stage=(source_job,*s.stage[1:])
+  phase,checked_job=gate._graph_stage_current(s.graph,f.store,c,f.user,f.contract,'source',source_stage)
+  assert phase==f.phase.authority and checked_job is source_job
   models=[]
   gate._graph_trial_accounted_models(s.graph,f.store,c,models,s.source,'source')
   assert models==[]
@@ -23,7 +27,7 @@ def test_post_source_producer_and_all_direct_consumers(sql_facts):
   requests,responses,proofs=archive._graph_source_bodies(s.graph,f.store,c,f.user,f.contract,s.state,s.source)
   assert len(requests)==len(responses)==len(proofs)==2
   resolved=archive._graph_resolve_trial_source(s.graph,f.store,c,f.user,f.contract,
-      f.binding.approval_key,s.state,s.stage,f.proof,s.source,f.extraction)
+      f.binding.approval_key,s.state,source_stage,f.proof,s.source,f.extraction)
   dispatch._graph_pb_archive_chain(s.graph,f.store,c,f.binding,s.state,resolved,s.source)
 
 
@@ -32,13 +36,15 @@ def test_post_cold_stage_and_runtime_collector(sql_facts):
  from sim2act import natural_spec_runtime as rt
  f=sql_facts;seed_cold(f)
  with f.store.tx() as c,segment(f,c,phase='post') as s:
+  source_job=owned.own_fact(s.graph,'source-owned-collector:job',s.stage[0])
+  source_stage=(source_job,*s.stage[1:])
   phase,job=gate._graph_stage_current(s.graph,f.store,c,f.user,f.contract,'cold',s.cold_stage)
   assert phase==f.cold_phase.authority and job['id']==f.cold_job['id']
   graph=object.__new__(rt._ColdTrialGraph)
   graph.__dict__.update(worker=f.worker,c=c,guard=s.graph,accounted_prewrite=None,
     platform=None,trial=None,audit_seed=None,journal=(s.state,s.cursor,s.graph.inputs['cold-trial:journal']['revision']),
     source_accounted=s.source,generate_accounted=s.generated,cold_stage_facts=s.cold_stage,
-    source_stage_facts=s.stage,sealed_fields=s.graph.inputs['cold-trial:complete'],
+    source_stage_facts=source_stage,sealed_fields=s.graph.inputs['cold-trial:complete'],
     source_proof=f.proof,original=f.contract,live_source=None,context_record=None,
     authority_record=None,authority_fields=None,phase='COMPLETE')
   graph.check()

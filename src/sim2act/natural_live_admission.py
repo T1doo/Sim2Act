@@ -1645,12 +1645,23 @@ def _graph_trial_stage_raw_from_raw(stage_facts, full, *, _graph=None):
             and source is not None and extraction is not None)
     else:
         from . import _cold_source_packet as source_owned
+        source_job = job
+        if source_owned.image.is_kind(job, 'd', 'r'):
+            # The first Source Run reader now owns its complete SQL row.
+            # Only this immutable boundary projects to the original visible
+            # mapping protocol. Keep the global raw/type gates unchanged;
+            # hidden storage and aliases remain in the scoped Owner pin.
+            require(_graph is not None)
+            source_owned.fact_current(_graph)
+            source_job = source_owned.image.plain(job)
         saved_source = (source_owned.raw_fields(_graph,full['source'])
             if type(full['source']) is tuple else _trial_pure_mapping(full['source']))
+        saved_job = saved_source['run']
+        if source_owned.image.is_kind(saved_job, 'd', 'r'):
+            saved_job = source_owned.image.plain(saved_job)
         require(bound is full['source_binding']
-            and (source_owned.image.business_equal(saved_source['run'],job)
-                if type(full['source']) is tuple else _trial_typed_equal(
-                    _trial_pure_data(_trial_pure_mapping(job)),_trial_pure_data(saved_source['run'])))
+            and _trial_typed_equal(_trial_pure_data(_trial_pure_mapping(source_job)),
+                _trial_pure_data(saved_job))
             and source is None and extraction is None)
     generation = _trial_pure_mapping(full['generation'])
     require(raw is generation['raw'] and metadata is generation['metadata']
