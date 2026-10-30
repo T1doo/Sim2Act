@@ -23,7 +23,8 @@ async function setup(){
   if(gate&&!gate.used&&url===gate.url){gate.used=true;await new Promise(resolve=>gate.resolve=resolve);}
   if(denied&&url===`/api/internal/instances/${i}`)return {ok:false,status:403,json:async()=>({error:{code:'GRANT_REVOKED'}})};
   let value;
-  if(url===`/api/internal/instances/${i}/runs/${child}/control-status`)value=controlBody||controlState;
+  if(url===`/api/internal/instances/${i}/runs/${child}/control-progress`)value={...(controlBody||controlState),consistency:'COMMITTED_METADATA_ONLY'};
+  else if(url===`/api/internal/instances/${i}/runs/${child}/control-status`)value=controlBody||controlState;
   else if(method==='POST')value={namespace:'INTERNAL_ENGINEERING_ONLY',formal_publication_enabled:false,status:'CANCELLED'};
   else if(url===`/api/apps/${a}`)value=app;
   else if(url===`/api/internal/apps/${a}/instances`)value={items:[instance(i),instance(j)]};
@@ -98,7 +99,7 @@ function navigate(kind){
  gate={url:`/api/internal/instances/${i}/runs/${child}/commands`,used:false};
  const cancelling=$('known-internal-stop-cancel').onclick();await wait(()=>gate.used);await $('known-internal-stop-cancel').onclick();gate.resolve();await cancelling;
  check(calls.filter(c=>c.method==='POST').length===1&&$('known-internal-stop-status').textContent.includes('CANCELLED'),'explicit double click cancels exactly once then only reads metadata');
- await setup();await recover();denied=true;gate={url:`/api/internal/instances/${i}/runs/${child}/control-status`,used:false};
+ await setup();await recover();denied=true;gate={url:`/api/internal/instances/${i}/runs/${child}/control-progress`,used:false};
  const stopping=open();await wait(()=>gate.used);navigate('identity');$('result').textContent='CURRENT CLEAN';gate.resolve();await stopping;
  check($('result').textContent==='CURRENT CLEAN'&&calls.every(c=>c.method==='GET'),'late owner metadata cannot paint another connection or send commands');
  await setup();await recover();denied=true;await open();w.selectWorkspace('apps');w.selectWorkspace('projects');await tick();

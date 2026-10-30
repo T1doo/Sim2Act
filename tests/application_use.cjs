@@ -98,7 +98,7 @@ async function focused(){
   async function use(){
    $('use-list').querySelector(`[data-use-family="CSV"][data-instance-id="${info.instance}"] button`).click();await idlePage();
   }
-  async function cancel(){const b=[...$('internal-controls').querySelectorAll('button')].find(b=>b.textContent==='取消后台任务');assert(b);b.click();await idlePage();check(w.eval('engineering.run.status')==='CANCELLED','original recovered Run cancelled with no result');}
+  async function cancel(){const read=$('internal-stop-read');assert(read);read.click();await idlePage();const b=$('internal-stop-cancel');assert(b&&!b.disabled);b.click();await idlePage();check(w.eval('engineering.run.status')==='CANCELLED','original recovered Run cancelled with no result');}
   await engine();mode='lost';$('internal-run-form').dispatchEvent(new w.Event('submit',{cancelable:true}));await idlePage();const first=JSON.stringify(posts.at(-1)),count=posts.length;
   await use();submit('amount');await idlePage();check(posts.length===count&&$('use-submit').disabled,'engineering unknown intent blocks new key in use surface');
   w.selectWorkspace('resources');w.selectWorkspace('apps');await idlePage();$('use-engineering-recover').click();await idlePage();$('internal-retry').click();await idlePage();check(JSON.stringify(posts.at(-1))===first,'visible bridge after workspace ABA returns to exact engineering intent');await cancel();

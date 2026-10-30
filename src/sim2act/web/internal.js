@@ -195,6 +195,7 @@ function offerInternalRunReread(view,instance,run,connection,workspace) {
   $("internal-controls").append(button);
 }
 function clearInternal() {
+  clearInternalStopControl(engineering);
   $("internal-use-recovery")?.remove();
   clearInternalRunReread();
   if(typeof clearNaturalLogic==="function")clearNaturalLogic();
@@ -319,6 +320,7 @@ async function showInternalInstance(id,view=engineering) {
   clearPBUse();
   clearNaturalTaskExtraction();
   if(!view || !engineeringCurrent(view))return;
+  clearInternalStopControl(view);
   clearInternalRunReread(view);
   if(typeof clearOwnerReview==="function")clearOwnerReview();
   clearRegisteredExtraction();
@@ -361,6 +363,63 @@ async function showInternalInstance(id,view=engineering) {
   } catch(error){if(current()){invalidateInternalContent(view);$("internal-instance-info").textContent="";$("internal-run-status").textContent=error.message;engineeringStatus(view,error.message,"error");return {permissionDenied:["PERMISSION_DENIED","GRANT_REVOKED"].includes(error.message),instanceId:id,failedSelection:selection,instanceGeneration:view.instanceGeneration,runGeneration:view.runGeneration};}}
   if(current())engineeringButtons(view);
 }
+const internalStopStatuses=["QUEUED","RUNNING","WAITING_APPROVAL","WAITING_RESOURCE","RECONCILING","PAUSE_REQUESTED","PAUSED","CANCEL_REQUESTED","SUCCEEDED","PARTIAL","FAILED","CANCELLED"];
+function internalCancelReceipt(value){
+  if(!value||value.namespace!=="INTERNAL_ENGINEERING_ONLY"||value.formal_publication_enabled!==false||!["CANCEL_REQUESTED","RECONCILING","CANCELLED"].includes(value.status)||Object.keys(value).some(k=>!["namespace","formal_publication_enabled","status"].includes(k)))throw Error("取消回执绑定不一致");
+  return value;
+}
+async function internalStopMetadata(path,iid,rid,current){
+  if(!current())return null;
+  let value,progress=true;
+  try{value=await api(path+"/control-progress");}
+  catch(error){if(!current())return null;if(!["UNSUPPORTED_CAPABILITY","PERMISSION_DENIED"].includes(error.message))throw error;progress=false;value=await api(path+"/control-status");}
+  if(!current())return null;
+  const fields=["namespace","id","instance_id","status","version","cancel_intent","content_access","formal_publication_enabled",...(progress?["consistency"]:[])];
+  if(!value||value.namespace!=="INTERNAL_ENGINEERING_ONLY"||value.id!==rid||value.instance_id!==iid||value.content_access!==false||value.formal_publication_enabled!==false||!Number.isSafeInteger(value.version)||value.version<1||typeof value.cancel_intent!=="boolean"||!internalStopStatuses.includes(value.status)||Object.keys(value).some(k=>!fields.includes(k))||(progress&&value.consistency!=="COMMITTED_METADATA_ONLY"))throw Error("停止状态绑定不一致");
+  return value;
+}
+function clearInternalStopControl(view){
+  if(!view?.stopControl)return;
+  view.stopControl.observer?.disconnect();view.stopControl.panel.remove();view.stopControl=null;
+}
+function installInternalStopControl(view,instance,id){
+  if(view.stopControl?.current()&&view.stopControl.id===id)return;
+  clearInternalStopControl(view);
+  if(!/^run_[a-f0-9]{32}$/.test(id)||!engineeringCurrent(view)||view.instance?.id!==instance.id)return;
+  const panel=document.createElement("div"),status=document.createElement("span"),read=document.createElement("button"),cancel=document.createElement("button");
+  panel.id="internal-stop-control";panel.className="internal-stop-control";status.id="internal-stop-status";status.setAttribute("role","status");
+  read.id="internal-stop-read";cancel.id="internal-stop-cancel";read.type=cancel.type="button";read.textContent="读取后台状态";cancel.textContent="取消原任务";cancel.disabled=true;
+  status.textContent="仅停止控制；成果仍需完整核查。";panel.append(status,read,cancel);$("internal-controls").after(panel);
+  const binding={panel,id,iid:instance.id,project:view.project,app:view.app,appSelection:view.appGeneration,instanceSelection:view.instanceGeneration,runSelection:view.runGeneration,workspace:workspaceSelectionGeneration,connection:identityConnectionGeneration,identity:token,busy:false,state:null};
+  view.stopControl=binding;
+  const current=()=>panel.isConnected&&view.stopControl===binding&&engineeringCurrent(view)&&view.project===binding.project&&view.app===binding.app&&view.appGeneration===binding.appSelection&&view.instance?.id===binding.iid&&view.instanceGeneration===binding.instanceSelection&&view.runGeneration===binding.runSelection&&workspaceSelectionGeneration===binding.workspace&&identityConnectionGeneration===binding.connection&&token===binding.identity;
+  binding.current=current;
+  const buttons=()=>{if(!current())return;read.disabled=binding.busy;cancel.disabled=binding.busy||!binding.state||binding.state.cancel_intent||!["QUEUED","RUNNING","PAUSED","WAITING_RESOURCE","PAUSE_REQUESTED","RECONCILING"].includes(binding.state.status);};
+  const path=`/api/internal/instances/${encodeURIComponent(binding.iid)}/runs/${encodeURIComponent(id)}`;
+  read.onclick=async()=>{
+    if(!current()||binding.busy)return;binding.busy=true;binding.state=null;buttons();
+    try{const state=await internalStopMetadata(path,binding.iid,id,current);if(!current())return;binding.state=state;status.textContent=`${state.status} · 仅已提交状态，成果待核。`;}
+    catch(error){if(current())status.textContent=`后台状态未确认：${error.message}；仅可明确重读。`;}
+    finally{binding.busy=false;buttons();}
+  };
+  cancel.onclick=async()=>{
+    if(!current()||binding.busy||cancel.disabled||!binding.state)return;
+    const version=binding.state.version;binding.state=null;binding.busy=true;
+    // Make the previous full-detail response stale before control can commit.
+    binding.runSelection=++view.runGeneration;view.run=null;$("internal-run-detail").textContent="";$("internal-controls").replaceChildren();buttons();
+    try{const saved=await api(path+"/commands","POST",{command:"cancel",version});if(!current())return;
+      internalCancelReceipt(saved);
+      status.textContent=`原任务取消已确认：${saved.status}；成果仍待完整读取。`;
+      // A new scoped detail read may run while this independent stop control
+      // remains usable. Neither metadata nor this ACK clears an original key.
+      const reread=showInternalRun(id,view,instance,saved.status),rereadSelection=view.runGeneration;
+      void reread.catch(error=>{if(engineeringCurrent(view)&&view.instance?.id===binding.iid&&view.runGeneration===rereadSelection&&token===binding.identity&&identityConnectionGeneration===binding.connection&&workspaceSelectionGeneration===binding.workspace)engineeringStatus(view,error.message,"error");});
+    }catch(error){if(current())status.textContent=`取消结果未确认：${error.message}；请明确读取后台状态，不会自动重发。`;}
+    finally{binding.busy=false;buttons();}
+  };
+  binding.observer=new MutationObserver(()=>{if(current())return;read.disabled=cancel.disabled=true;status.textContent="选择或身份已变化，请重新选择原任务。";binding.observer.disconnect();});
+  binding.observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:["hidden","aria-current"]});
+}
 async function showKnownInternalRunStop(scope){
   // Entered only from a verified accepted receipt after its own instance read
   // lost content access. Keep opaque IDs, never restore a cached instance.
@@ -379,12 +438,10 @@ async function showKnownInternalRunStop(scope){
   });
   observer.observe($("projects"),{attributes:true,attributeFilter:["hidden"]});observer.observe($("result"),{childList:true});
   const path=`/api/internal/instances/${encodeURIComponent(scope.iid)}/runs/${encodeURIComponent(scope.rid)}`;
-  const statuses=["QUEUED","RUNNING","WAITING_APPROVAL","WAITING_RESOURCE","RECONCILING","PAUSE_REQUESTED","PAUSED","CANCEL_REQUESTED","SUCCEEDED","PARTIAL","FAILED","CANCELLED"];
   let busy=false,state=null;
   const buttons=()=>{if(!current())return;read.disabled=busy;cancel.disabled=busy||!state||!["QUEUED","RUNNING","PAUSED","WAITING_RESOURCE","PAUSE_REQUESTED","RECONCILING"].includes(state.status)||state.cancel_intent;};
   const readState=async()=>{
-    const value=await api(path+"/control-status");if(!current())return;
-    if(value.namespace!=="INTERNAL_ENGINEERING_ONLY"||value.id!==scope.rid||value.instance_id!==scope.iid||value.content_access!==false||value.formal_publication_enabled!==false||!Number.isSafeInteger(value.version)||value.version<1||typeof value.cancel_intent!=="boolean"||!statuses.includes(value.status)||Object.keys(value).some(k=>!["namespace","id","instance_id","status","version","cancel_intent","content_access","formal_publication_enabled"].includes(k)))throw Error("停止状态绑定不一致");
+    const value=await internalStopMetadata(path,scope.iid,scope.rid,current);if(!current())return;
     state=value;status.textContent=`原Run ${value.id} · ${value.status} · 取消意图 ${value.cancel_intent?"已保留":"无"}；不读取材料或成果。`;
   };
   read.onclick=safe(async()=>{if(!current()||busy)return;busy=true;state=null;buttons();try{await readState();}catch(error){if(current())status.textContent=`停止状态未确认：${error.message}；请明确重新读取，不会重发取消。`;}finally{busy=false;buttons();}});
@@ -393,7 +450,7 @@ async function showKnownInternalRunStop(scope){
     const version=state.version;busy=true;state=null;buttons();
     try{
       const saved=await api(path+"/commands","POST",{command:"cancel",version});if(!current())return;
-      if(saved.namespace!=="INTERNAL_ENGINEERING_ONLY"||saved.formal_publication_enabled!==false||!statuses.includes(saved.status))throw Error("取消回执绑定不一致");
+      internalCancelReceipt(saved);
       status.textContent=`已受理原Run ${scope.rid} 的取消：${saved.status}。`;
       try{await readState();}catch(error){if(current())status.textContent+=` 当前停止状态回读未确认：${error.message}；仅明确读取，不会重发取消。`;}
     }catch(error){if(current())status.textContent=`取消结果未确认：${error.message}；仅明确读取当前停止状态，不会自动重发。`;}
@@ -404,6 +461,7 @@ async function showKnownInternalRunStop(scope){
 async function showInternalRun(id,view=engineering,instance=view?.instance,acceptedCommandStatus=null,expectedReceipt=null) {
   if(!instance || !engineeringCurrent(view) || view.instance?.id!==instance.id)return;
   if(!acceptedCommandStatus&&view.runRead?.id===id&&view.runRead.current())return view.runRead.done;
+  clearInternalStopControl(view);
   clearNaturalTaskExtraction();
   clearInternalRunReread(view);
   const previousStatus=view.run?.status;
@@ -414,6 +472,9 @@ async function showInternalRun(id,view=engineering,instance=view?.instance,accep
   const current=()=>selectedCurrent() && workspace===workspaceSelectionGeneration;
   let finishRead;const done=new Promise(resolve=>{finishRead=resolve;});
   const read={id,current,done};view.runRead=read;
+  // Only an authenticated instance history is trusted before the full read.
+  // Unconfirmed submission receipts keep their existing original-key recovery.
+  if(!expectedReceipt&&instance.runs?.some(run=>run.id===id))installInternalStopControl(view,instance,id);
   try {
     if((view.spec||view.workflow)&&typeof selectOwnerRun==="function"&&ownerView?.rid!==id)await selectOwnerRun("",view);
     if(!current())return;
@@ -429,13 +490,14 @@ async function showInternalRun(id,view=engineering,instance=view?.instance,accep
       engineeringStatus(view,"当前权限不允许读取内容；仅显示 owner 停止控制状态，不恢复授权。","error");
     }
     if(!current())return;
-    if(run.instance_id!==instance.id)throw Error("运行绑定与实例不符");
+    if(run.instance_id!==instance.id||run.id!==id)throw Error("运行绑定与实例不符");
     if(expectedReceipt && run.content_access!==false && (run.namespace!=="INTERNAL_APPRUN" || run.id!==id || run.app_run_id!==expectedReceipt.app_run_id || run.release_id!==expectedReceipt.release_id))throw Error("运行接受回执与原实例或版本不符；原请求键保留，请恢复原回执。");
     renderRegisteredExtraction(view,instance,run);
-    view.run=run;$("internal-run-status").textContent=`${run.status} · 取消意图 ${run.cancel_intent ? "已保留" : "无"} · ${run.result ? JSON.stringify(run.result) : run.error?.code || "等待后台状态"}`;
+    view.run=run;installInternalStopControl(view,instance,id);$("internal-run-status").textContent=`${run.status} · 取消意图 ${run.cancel_intent ? "已保留" : "无"} · ${run.result ? JSON.stringify(run.result) : run.error?.code || "等待后台状态"}`;
     $("internal-run-detail").textContent=JSON.stringify(run,null,2);
     const commands=["QUEUED","RUNNING"].includes(run.status)?["pause","cancel"]:["PAUSED","WAITING_RESOURCE"].includes(run.status)&&!run.cancel_intent?(run.content_access===false?["cancel"]:["resume","cancel"]):["PAUSE_REQUESTED","RECONCILING"].includes(run.status)?["cancel"]:[];
-    $("internal-controls").replaceChildren(...commands.map(command=>{
+    // Cancellation has one independent entry, including while detail is busy.
+    $("internal-controls").replaceChildren(...commands.filter(command=>command!=="cancel"||!view.stopControl?.current()).map(command=>{
       const button=document.createElement("button");button.textContent={pause:"暂停",cancel:"取消后台任务",resume:"继续"}[command];
       button.onclick=()=>engineeringAction(view,async()=>{
         const actionWorkspace=workspaceSelectionGeneration;
@@ -673,6 +735,7 @@ function clearReleaseApproval(view) {
   $("internal-approval-detail").textContent="";$("internal-approval-label").textContent="";
 }
 function invalidateInternalContent(view) {
+  clearInternalStopControl(view);
   clearInternalRunReread(view);
   clearNaturalTaskExtraction();
   if(typeof clearOwnerReview==="function")clearOwnerReview();
