@@ -2,6 +2,10 @@
 // Saved instances share the existing controllers and current authorization checks.
 let applicationUse=null,applicationUseGeneration=0,applicationUseListGeneration=0,applicationUseContextGeneration=0;
 const applicationUseRequests=new Map();
+function applicationUseUnconfirmed(identity,project,id){
+ const pending=applicationUseRequests.get(JSON.stringify([identity,project,id]));
+ return pending&&["sending","unknown","accepted-read-error"].includes(pending.state)?pending:null;
+}
 const applicationUseDownloads=new Set();
 const applicationUseDirectoryViews=new WeakMap();
 const csvUseApp=a=>a?.candidate?.manifest?.validation_suite_ref==="receipt.readback.v1" && a.candidate.actions?.length===1 && a.candidate.actions[0].executor?.kind==="registered_tool" && a.candidate.actions[0].executor.ref==="data.aggregate_csv";
@@ -15,6 +19,7 @@ const naturalUseFamily=a=>{
 const applicationUseCurrent=v=>!!v && applicationUse===v && v.identity===token && v.project===$("project-select").value && v.generation===applicationUseGeneration;
 const applicationUseKey=v=>JSON.stringify([v.identity,v.project,v.id]);
 function clearApplicationUse(clearList=false){
+ $("use-engineering-recovery")?.remove();
  if(typeof clearCsvMaterialAccess==="function")clearCsvMaterialAccess(applicationUse);
  if(typeof clearCsvGoalRevision==="function")clearCsvGoalRevision(applicationUse);
  if(typeof clearCsvFullReport === "function")clearCsvFullReport();
@@ -153,7 +158,7 @@ async function openSavedInternalUse(appId,id,family,selectionCurrent=()=>true){
  const current=()=>selectionCurrent()&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration&&project===$("project-select").value&&(generation===null||generation===appSelectionGeneration);
  try{
   const opened=await showApp(appId,project,g=>{generation=g;},current,app=>{
-    const valid=family==="LITERAL_TEXT"?literalUseApp(app):family==="CLOSED_TEXT_WORKFLOW"?closedTextUseApp(app):naturalUseFamily(app)===family;
+    const valid=family==="CSV"?csvUseApp(app):family==="LITERAL_TEXT"?literalUseApp(app):family==="CLOSED_TEXT_WORKFLOW"?closedTextUseApp(app):naturalUseFamily(app)===family;
     if(!valid)throw Error("VERSION_CONFLICT");
   });
   if(!opened||!current())return;
@@ -161,8 +166,8 @@ async function openSavedInternalUse(appId,id,family,selectionCurrent=()=>true){
   if(!view||!engineeringCurrent(view)||view.app!==appId)throw Error("VERSION_CONFLICT");
   if(id)await showInternalInstance(id,view);
   if(!current()||!engineeringCurrent(view)||(id&&view.instance?.id!==id))return;
-  $("internal-title").textContent=family==="LITERAL_TEXT"?"使用已保存文本应用 · 字面检索":family==="CLOSED_TEXT_WORKFLOW"?"使用已保存文本应用 · 四步流程":`使用自然规范应用 · ${family==="NATURAL_PA"?"P-A":"P-B"}`;
-  $(["LITERAL_TEXT","CLOSED_TEXT_WORKFLOW"].includes(family)?"internal-panel":"pb-use-panel")?.scrollIntoView?.({block:"start"});
+  $("internal-title").textContent=family==="CSV"?"恢复原 CSV 实例运行":family==="LITERAL_TEXT"?"使用已保存文本应用 · 字面检索":family==="CLOSED_TEXT_WORKFLOW"?"使用已保存文本应用 · 四步流程":`使用自然规范应用 · ${family==="NATURAL_PA"?"P-A":"P-B"}`;
+  $(["CSV","LITERAL_TEXT","CLOSED_TEXT_WORKFLOW"].includes(family)?"internal-panel":"pb-use-panel")?.scrollIntoView?.({block:"nearest"});
  }catch(error){if(current())throw error;}
  finally{
   // The opening fence lasts through every chained read. Later explicit instance
@@ -177,7 +182,9 @@ async function openSavedInternalUse(appId,id,family,selectionCurrent=()=>true){
 function applicationUseButtons(v){
  if(!applicationUseCurrent(v))return;
  const pending=applicationUseRequests.get(applicationUseKey(v));
- const pendingLocked=pending&&["sending","unknown","accepted-read-error"].includes(pending.state),locked=!!v.csvGoalRevision?.busy||pendingLocked||(typeof csvMaterialAccessLocked==="function"&&csvMaterialAccessLocked(v));
+ const engineeringIntent=engineeringPendingInScope(v.identity,v.project,v.id);
+ renderUseEngineeringRecovery(v,engineeringIntent);
+ const pendingLocked=pending&&["sending","unknown","accepted-read-error"].includes(pending.state),locked=!!v.csvGoalRevision?.busy||pendingLocked||!!engineeringIntent||(typeof csvMaterialAccessLocked==="function"&&csvMaterialAccessLocked(v));
  if(pendingLocked&&[...$("use-column").options].some(o=>o.value===pending.body.input.column))$("use-column").value=pending.body.input.column;
  $("use-submit").disabled=v.busy||!!v.reading||locked||!$("use-column").value;
  $("use-column").disabled=v.busy||!!v.reading||locked;
@@ -186,6 +193,23 @@ function applicationUseButtons(v){
  $("use-recover").textContent=pending?.state==="unknown"?"恢复同一运行的接受回执":"重新读取已接受运行";
  $("use-refresh").disabled=v.busy||!!v.reading;
 }
+function renderUseEngineeringRecovery(v,pending){
+ let node=$("use-engineering-recovery");
+ if(!pending){node?.remove();return;}
+ if(node?.intent!==pending){
+  node?.remove();node=document.createElement("div");node.id="use-engineering-recovery";node.intent=pending;
+  const button=document.createElement("button"),identity=v.identity,project=v.project;
+  button.id="use-engineering-recover";button.type="button";button.textContent="到工程区恢复原请求";
+  node.append("工程区有未确认的原请求；此处不能另建运行。",button);$("use-form").after(node);
+  button.onclick=safe(async()=>{
+   if(!applicationUseCurrent(v)||engineeringPendingInScope(identity,project,v.id)!==pending)return;
+   const connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration;
+   await openSavedInternalUse(v.appId,v.id,"CSV",()=>identity===token&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration&&project===$("project-select").value);
+  });
+ }
+ node.querySelector("button").disabled=!!v.busy||!!v.reading;
+}
+function unconfirmedUseReceipt(){const error=Error("运行接受回执与原实例或版本尚未核对；请恢复原请求键。");error.unconfirmedInternalReceipt=true;return error;}
 async function openApplicationUse(appId,id){
  clearApp();clearApplicationUse();
  const v={id,appId,identity:token,project:$("project-select").value,generation:applicationUseGeneration,readGeneration:0,busy:false,instance:null,selected:null,historical:false};applicationUse=v;
@@ -293,7 +317,7 @@ function csvRunDownloadControl(v,run){
  }
  node.append(status);return node;
 }
-async function readApplicationUse(v){
+async function readApplicationUse(v,expectedPending=null){
  const generation=++v.readGeneration,connection=identityConnectionGeneration,workspace=workspaceSelectionGeneration,current=()=>applicationUseCurrent(v)&&generation===v.readGeneration&&connection===identityConnectionGeneration&&workspace===workspaceSelectionGeneration;
  if(current()){
   v.reading=generation;
@@ -335,7 +359,8 @@ async function readApplicationUse(v){
   $("use-form").hidden=false;$("use-refresh").hidden=false;
   $("use-output").replaceChildren();
   const run=instance.runs.find(r=>r.id===v.selected);
-  if(v.selected&&!run)throw Error("VERSION_CONFLICT: accepted run is not bound to this instance");
+  if(v.selected&&!run)throw expectedPending?unconfirmedUseReceipt():Error("VERSION_CONFLICT: accepted run is not bound to this instance");
+  if(expectedPending&&(applicationUseRequests.get(applicationUseKey(v))!==expectedPending||v.selected!==expectedPending.runId||run?.app_run_id!==expectedPending.appRunId||run?.release_id!==expectedPending.releaseId))throw unconfirmedUseReceipt();
   if(run){
    if(run.instance_id!==v.id)throw Error("VERSION_CONFLICT");
    const label=v.historical?"已选择的历史运行":"本次运行";
@@ -360,6 +385,7 @@ async function readApplicationUse(v){
   if(typeof renderCsvMaterialAccess==="function")renderCsvMaterialAccess(v);
   if(!current())return;
   applicationUseButtons(v);
+  return {current,run};
  }catch(error){if(!current())return;clearApplicationUseData(v);throw error;}
  finally{if(v.reading===generation)delete v.reading;if(current())applicationUseButtons(v);}
 }
@@ -367,9 +393,10 @@ async function submitApplicationUse(v,recover=false){
  if(!applicationUseCurrent(v)||v.busy||v.reading||v.csvGoalRevision?.busy||csvMaterialAccessLocked(v))return;
  const key=applicationUseKey(v);let pending=applicationUseRequests.get(key);
  if(!recover){
+  if(engineeringPendingInScope(v.identity,v.project,v.id))return;
   if(!v.instance||pending&&["sending","unknown","accepted-read-error"].includes(pending.state))return;
   const csvReview=$("use-csv-review-optin")?.checked&&typeof csvReviewStartScope==="function"&&v.csvReviewScope===csvReviewStartScope(v);
-  pending={state:"new",body:{expected_revision:v.instance.revision,expected_release_fingerprint:v.instance.release_fingerprint,input:{column:$("use-column").value},request_key:crypto.randomUUID(),...(csvReview?{csv_review:"FREEZE_SUM_ONLY_WITHOUT_MD"}:{})},runId:null,uncertain:false};applicationUseRequests.set(key,pending);
+  pending={state:"new",body:{expected_revision:v.instance.revision,expected_release_fingerprint:v.instance.release_fingerprint,input:{column:$("use-column").value},request_key:crypto.randomUUID(),...(csvReview?{csv_review:"FREEZE_SUM_ONLY_WITHOUT_MD"}:{})},runId:null,appRunId:null,releaseId:v.instance.release_id,uncertain:false};applicationUseRequests.set(key,pending);
  }
  if(!pending)return;
  if(!recover){$("use-acceptance").replaceChildren();v.selected=null;v.historical=false;$("use-output").replaceChildren(row("正在确认新运行的接受回执；下方历史结果不是本次新结果。"));}
@@ -379,8 +406,8 @@ async function submitApplicationUse(v,recover=false){
    pending.state="sending";
    try{
     const reply=await api(`/api/internal/instances/${v.id}/runs`,"POST",pending.body);
-    if(typeof reply.run_id!=="string"||!/^run_[a-f0-9]{32}$/.test(reply.run_id))throw Error("Invalid receipt");
-    pending.runId=reply.run_id;pending.state="accepted-read-error";
+    if(!reply||typeof reply!=="object"||Array.isArray(reply)||!/^run_[a-f0-9]{32}$/.test(reply.run_id)||!/^iapprun_[a-f0-9]{32}$/.test(reply.app_run_id)||reply.namespace!=="INTERNAL_ENGINEERING_ONLY"||typeof reply.cached!=="boolean"||!Number.isSafeInteger(reply.version)||reply.version<1||typeof reply.status!=="string"||!reply.status)throw unconfirmedUseReceipt();
+    pending.runId=reply.run_id;pending.appRunId=reply.app_run_id;pending.state="accepted-read-error";
    }catch(error){
     const rejected=!pending.uncertain&&Number.isInteger(error.httpStatus)&&error.httpStatus>=400&&error.httpStatus<500&&![408,425,429].includes(error.httpStatus);
     pending.state=rejected?"rejected":"unknown";if(!rejected)pending.uncertain=true;
@@ -390,7 +417,13 @@ async function submitApplicationUse(v,recover=false){
   }
   if(!applicationUseCurrent(v))return;
   v.selected=pending.runId;v.historical=false;
-  await readApplicationUse(v);if(applicationUseCurrent(v))pending.state="accepted";
+  try{
+   const confirmed=await readApplicationUse(v,pending);
+   if(confirmed?.current()&&applicationUseRequests.get(key)===pending)pending.state="accepted";
+  }catch(error){
+   if(error.unconfirmedInternalReceipt&&applicationUseRequests.get(key)===pending){pending.state="unknown";pending.uncertain=true;pending.runId=null;pending.appRunId=null;if(applicationUseCurrent(v)){v.selected=null;$("use-output").replaceChildren(row("接受回执绑定未确认；保留原键与原输入，请恢复同一请求，不要新建运行。"));}}
+   throw error;
+  }
  }finally{
   v.busy=false;applicationUseButtons(v);
   const live=applicationUse;

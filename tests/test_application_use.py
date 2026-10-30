@@ -17,7 +17,8 @@ from sim2act.lifecycle import create_instance
 from sim2act.worker import Worker
 
 
-def test_application_use_actual_http(env, tmp_path):
+@pytest.mark.parametrize('scenario', ['normal', 'bad-receipt', 'workspace-race', 'entry-fence'])
+def test_application_use_actual_http(env, tmp_path, scenario):
     store, settings, client, owner, other_owner, project, _ = env
     if not shutil.which('node'):
         pytest.skip('Developer Node required')
@@ -44,7 +45,7 @@ def test_application_use_actual_http(env, tmp_path):
         sock.bind(('127.0.0.1', 0))
         port = sock.getsockname()[1]
     (tmp_path / 'info.json').write_text(json.dumps({'base': f'http://127.0.0.1:{port}',
-        'project': project, 'other': other, 'app': app_id, 'instance': instance['id']}))
+        'project': project, 'other': other, 'app': app_id, 'instance': instance['id'], 'scenario': scenario}))
     app = create_app(store, settings)
 
     @app.post('/test-only-worker')
@@ -71,8 +72,10 @@ def test_application_use_actual_http(env, tmp_path):
         with store.tx() as c:
             for name, table in [('grants', grants), ('principals', principals)]:
                 assert [dict(r) for r in c.execute(select(table)).mappings()] == before[name]
-            assert len(c.execute(select(internal_app_runs)).all()) == 3
-            assert len(c.execute(select(internal_instance_data)).all()) == 2
+            expected_runs, expected_data = {'normal': (3, 2), 'bad-receipt': (3, 3),
+                'workspace-race': (1, 1), 'entry-fence': (2, 0)}[scenario]
+            assert len(c.execute(select(internal_app_runs)).all()) == expected_runs
+            assert len(c.execute(select(internal_instance_data)).all()) == expected_data
     finally:
         server.should_exit = True
         thread.join(8)

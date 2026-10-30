@@ -2,6 +2,11 @@
 // Each view and request carries its own identity/selection generation; no browser execution.
 let engineering = null, engineeringGeneration = 0;
 const engineeringPending = new Map();
+const engineeringPendingScopes = new WeakMap();
+function engineeringPendingInScope(identity,project,id){
+  const pending=engineeringPending.get(id),scope=pending&&engineeringPendingScopes.get(pending);
+  return scope?.identity===identity&&scope.project===project?pending:null;
+}
 const specRecoveryPrefix="sim2act.spec-run-recovery.v1:";
 const specRecoveryMetadata=new WeakMap();
 function clearSpecRecoveryMemory(){
@@ -190,6 +195,7 @@ function offerInternalRunReread(view,instance,run,connection,workspace) {
   $("internal-controls").append(button);
 }
 function clearInternal() {
+  $("internal-use-recovery")?.remove();
   clearInternalRunReread();
   if(typeof clearNaturalLogic==="function")clearNaturalLogic();
   clearPBUse();
@@ -222,12 +228,26 @@ function engineeringButtons(view) {
   $("internal-refresh").disabled=!!view.busy;
   $("internal-commit").disabled=!!view.busy || !view.approval || approvalExpired || !$("internal-approval-ack").checked;
   if(approvalExpired)engineeringStatus(view,"批准已到期，请重新核查；不会自动确认。","error");
-  $("internal-run-submit").disabled=!!view.busy || !!view.recoveryError || !view.instance || engineeringPending.has(view.instance.id) || pbUseUnknown(view.instance.id) || (view.agent && (!view.offlineReplay || !$("internal-term").value.trim()));
+  const usePending=view.instance&&typeof applicationUseUnconfirmed==="function"&&applicationUseUnconfirmed(view.token,view.project,view.instance.id);
+  renderEngineeringUseRecovery(view,usePending);
+  $("internal-run-submit").disabled=!!view.busy || !!view.recoveryError || !!usePending || !view.instance || engineeringPending.has(view.instance.id) || pbUseUnknown(view.instance.id) || (view.agent && (!view.offlineReplay || !$("internal-term").value.trim()));
   $("internal-retry").hidden=!view.instance || !engineeringPending.has(view.instance.id);
   $("internal-retry").disabled=!!view.busy || !!view.recoveryError;
   $("internal-retry").textContent=view.spec ? "仅用原请求键读取运行回执" : "恢复原请求回执";
   $("internal-new-intent").hidden=view.spec || $("internal-retry").hidden;$("internal-new-intent").disabled=!!view.busy;
   renderNaturalFirstGuide();
+}
+function renderEngineeringUseRecovery(view,pending){
+  let node=$("internal-use-recovery");
+  if(!pending){node?.remove();return;}
+  if(node?.intent!==pending){
+    node?.remove();node=document.createElement("div");node.id="internal-use-recovery";node.intent=pending;
+    const instanceId=view.instance.id;
+    const button=document.createElement("button");button.id="internal-use-recover";button.type="button";button.textContent="到使用区恢复原运行";
+    node.append("使用区有未确认的原运行；此处不能另建新请求。",button);$("internal-run-status").after(node);
+    button.onclick=safe(async()=>{if(!engineeringCurrent(view)||view.instance?.id!==instanceId||applicationUseUnconfirmed(view.token,view.project,instanceId)!==pending)return;await openApplicationUse(view.app,instanceId);});
+  }
+  node.querySelector("button").disabled=!!view.busy||pending.state==="sending";
 }
 async function engineeringAction(view,fn) {
   if(!view || !engineeringCurrent(view) || view.busy)return;
@@ -451,10 +471,11 @@ async function showInternalRun(id,view=engineering,instance=view?.instance,accep
 async function submitInternal(view,retry=false) {
   const instance=view.instance;if(!instance)return;
   if(pbUseUnknown(instance.id))return;
+  if(!retry&&typeof applicationUseUnconfirmed==="function"&&applicationUseUnconfirmed(view.token,view.project,instance.id))return;
   if(view.spec)return submitPersistentSpecRun(view,instance,retry);
   let pending=engineeringPending.get(instance.id);
   if(!pending&&!retry&&!textTermsReady($("internal-run-form"),true))return;
-  if(!pending && !retry){pending={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,input:view.spec ? {} : view.workflow ? textWorkflowInput("internal") : (view.agent||view.literal) ? {term:$("internal-term").value} : {column:$("internal-column").value},...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {}),...(appOwnGoalCurrent(appOwnGoalView)&&appOwnGoalView.state?.current ? {expected_owner_goal_binding_fingerprint:appOwnGoalView.state.current.binding_fingerprint} : {}),request_key:crypto.randomUUID()};engineeringPending.set(instance.id,pending);}
+  if(!pending && !retry){pending={expected_revision:instance.revision,expected_release_fingerprint:instance.release_fingerprint,input:view.spec ? {} : view.workflow ? textWorkflowInput("internal") : (view.agent||view.literal) ? {term:$("internal-term").value} : {column:$("internal-column").value},...(view.agent ? {offline_replay:structuredClone(view.offlineReplay)} : {}),...(appOwnGoalCurrent(appOwnGoalView)&&appOwnGoalView.state?.current ? {expected_owner_goal_binding_fingerprint:appOwnGoalView.state.current.binding_fingerprint} : {}),request_key:crypto.randomUUID()};engineeringPendingScopes.set(pending,{identity:view.token,project:view.project});engineeringPending.set(instance.id,pending);}
   if(!pending)return;
   const requestKey=pending.request_key;
   const generation=view.instanceGeneration;

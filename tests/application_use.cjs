@@ -41,6 +41,13 @@ async function setup(){
  const current=page;
  w.fetch=async(url,opts={})=>{current.requests++;try{const target=new URL(url,info.base);assert.equal(target.origin,info.base);const post=opts.method==='POST'&&target.pathname.endsWith('/runs');
   if(post)posts.push(JSON.parse(opts.body));const response=await fetch(target,opts);
+  if(post&&mode.startsWith('receipt-')){
+   const kind=mode;mode='normal';assert.equal(response.status,202);const value=await response.json();
+   if(kind==='receipt-missing')return new Response('{}',{status:202});
+   if(kind==='receipt-run')value.run_id='run_'+'0'.repeat(32);
+   if(kind==='receipt-app-run')value.app_run_id='iapprun_'+'0'.repeat(32);
+   return new Response(JSON.stringify(value),{status:202});
+  }
   if(post&&mode==='lost'){mode='normal';assert.equal(response.status,202);throw TypeError('Synthetic lost acceptance');}
   if(target.pathname==='/api/internal/instances/'+info.instance&&mode==='read-lost'){mode='normal';throw TypeError('Synthetic lost read');}
   if(target.pathname==='/api/internal/instances/'+info.instance&&mode==='hold'){mode='normal';await new Promise(r=>{release=r;});release=null;}
@@ -58,16 +65,53 @@ async function setup(){
   const body=await response.arrayBuffer();
   return new Response(body,{status:response.status,headers:response.headers});
  }finally{current.requests--;}};
- for(const file of ['app.js','internal.js','protocol.js','use.js']){const script=w.document.createElement('script');script.textContent=await(await fetch(info.base+'/'+file)).text();w.document.body.append(script);}
+ w.TextEncoder=TextEncoder;w.TextDecoder=TextDecoder;w.structuredClone=structuredClone;Object.defineProperty(w.crypto,'subtle',{value:require('node:crypto').webcrypto.subtle});
+ for(const element of [...w.document.querySelectorAll('script[src]')]){const file=element.getAttribute('src');const script=w.document.createElement('script');script.textContent=await(await fetch(info.base+file)).text();w.document.body.append(script);}
  $('token').value='synthetic-test-A';$('connect').click();await wait(()=>$('use-list').textContent.includes('Saved synthetic sum'),'saved instance list');
- $('use-list').querySelector('button').click();await wait(()=>!$('use-form').hidden,'open business use');
+ w.selectWorkspace('apps');
+ $('use-list').querySelector(`[data-use-family="CSV"][data-instance-id="${info.instance}"] button`).click();await wait(()=>!$('use-form').hidden,'open business use');
 }
 const worker=async()=>{const r=await fetch(info.base+'/test-only-worker',{method:'POST',headers:{Authorization:'Bearer synthetic-test-A','Content-Type':'application/json'},body:'{}'});assert.equal(r.status,200);};
 const state=()=>w.eval('applicationUseRequests.get(applicationUseKey(applicationUse))?.state');
 const submit=column=>{$('use-column').value=column;$('use-form').dispatchEvent(new w.Event('submit',{cancelable:true}));};
+async function focused(){
+ if(info.scenario==='bad-receipt'){
+  for(const kind of ['missing','run','app-run']){
+   await idlePage();const before=posts.length;mode='receipt-'+kind;submit('amount');await idlePage();
+   check(state()==='unknown'&&!$('use-recover').hidden,kind+' invalid acceptance remains recoverable by original key');
+   const original=JSON.stringify(posts.at(-1));$('use-recover').click();await idlePage();
+   check(state()==='accepted'&&posts.length===before+2&&JSON.stringify(posts.at(-1))===original,kind+' recovery reuses original body and key');
+   await worker();$('use-refresh').click();await idlePage();check($('use-output').textContent.includes('合计 12'),kind+' same accepted Run finishes with exact saved result');
+  }
+ }else if(info.scenario==='workspace-race'){
+  mode='hold';submit('amount');await wait(()=>!!release,'accepted instance read held');
+  w.selectWorkspace('resources');release();await idlePage();
+  check(state()==='accepted-read-error','workspace-invalidated read cannot confirm acceptance');
+  const before=posts.length;w.selectWorkspace('apps');await idlePage();$('use-recover').click();await idlePage();
+  check(state()==='accepted'&&posts.length===before,'current explicit recovery only reads already accepted Run');
+  await worker();$('use-refresh').click();await idlePage();check($('use-output').textContent.includes('合计 12'),'recovered accepted Run retains original result');
+ }else{
+  async function engine(){
+   [...$('app-list').querySelectorAll('.row')].find(r=>r.textContent.includes('Saved synthetic sum')).querySelector('button').click();await idlePage();
+   [...$('internal-instances').querySelectorAll('.row')].find(r=>r.textContent.includes(info.instance)).querySelector('button').click();await idlePage();
+  }
+  async function use(){
+   $('use-list').querySelector(`[data-use-family="CSV"][data-instance-id="${info.instance}"] button`).click();await idlePage();
+  }
+  async function cancel(){const b=[...$('internal-controls').querySelectorAll('button')].find(b=>b.textContent==='取消后台任务');assert(b);b.click();await idlePage();check(w.eval('engineering.run.status')==='CANCELLED','original recovered Run cancelled with no result');}
+  await engine();mode='lost';$('internal-run-form').dispatchEvent(new w.Event('submit',{cancelable:true}));await idlePage();const first=JSON.stringify(posts.at(-1)),count=posts.length;
+  await use();submit('amount');await idlePage();check(posts.length===count&&$('use-submit').disabled,'engineering unknown intent blocks new key in use surface');
+  w.selectWorkspace('resources');w.selectWorkspace('apps');await idlePage();$('use-engineering-recover').click();await idlePage();$('internal-retry').click();await idlePage();check(JSON.stringify(posts.at(-1))===first,'visible bridge after workspace ABA returns to exact engineering intent');await cancel();
+  await use();mode='lost';submit('tax');await idlePage();const second=JSON.stringify(posts.at(-1)),other=posts.length;
+  await engine();$('internal-run-form').dispatchEvent(new w.Event('submit',{cancelable:true}));await idlePage();check(posts.length===other&&$('internal-run-submit').disabled,'use unknown intent blocks new engineering key');
+  w.selectWorkspace('resources');w.selectWorkspace('apps');await idlePage();$('internal-use-recover').click();await idlePage();$('use-recover').click();await idlePage();check(JSON.stringify(posts.at(-1))===second&&state()==='accepted','reverse bridge after workspace ABA recovers original use intent');
+  await engine();const pendingRun=[...$('internal-runs').querySelectorAll('.row')].find(r=>r.textContent.includes('QUEUED'));assert(pendingRun);pendingRun.querySelector('button').click();await idlePage();await cancel();
+ }
+}
 (async()=>{try{
  await setup();await idlePage();check($('use-info').textContent.includes('未发布内部版本')&&$('use-info').textContent.includes('0模型请求'),'scope and publication boundary visible');
- check($('use-acceptance').textContent.includes('样本工具检查：PASS')&&$('use-acceptance').textContent.includes('尚未选择运行')&&$('use-acceptance').textContent.includes('NOT_RUN；用户确认：PENDING；正式发布：关闭'),'frozen technical sample remains distinct from semantic and user acceptance');
+ if(info.scenario!=='normal'){await focused();}else{
+ check($('use-acceptance').textContent.includes('样本工具检查：PASS')&&$('use-acceptance').textContent.includes('尚未选择运行')&&$('use-acceptance').textContent.includes('NOT_RUN；本人适用范围声明见下方所选Run的独立读取；正式发布：关闭'),'frozen technical sample remains distinct from semantic and user acceptance');
  for(const kind of ['evidence-missing','evidence-ref','evidence-binding']){
   const count=posts.length;await idlePage();mode=kind;await w.readApplicationUse(w.eval('applicationUse'));
   check($('use-acceptance').textContent.includes('样本工具检查：UNKNOWN')&&!$('use-acceptance').textContent.includes('样本工具检查：PASS')&&posts.length===count,kind+' cannot promote untrusted frozen evidence or write');
@@ -78,7 +122,7 @@ const submit=column=>{$('use-column').value=column;$('use-form').dispatchEvent(n
  check($('use-output').textContent.includes('QUEUED')&&!$('use-output').textContent.includes('合计 12'),'queued current run never displays an old successful result');
  await worker();$('use-refresh').click();await wait(()=>$('use-output').textContent.includes('合计 12'),'first result');
  check($('use-history').textContent.includes('历史结果 v1')&&$('use-output').textContent.includes('SUCCEEDED'),'normal worker creates durable first result');
- check($('use-acceptance').textContent.includes('本次技术执行：SUCCEEDED；结果核对：PASS · v1')&&$('use-acceptance').textContent.includes('用户确认：PENDING'),'real normal worker result v1 is technical only');
+ check($('use-acceptance').textContent.includes('本次技术执行：SUCCEEDED；结果核对：PASS · v1')&&$('use-acceptance').textContent.includes('本人适用范围声明见下方所选Run的独立读取'),'real normal worker result v1 is technical only');
  await idlePage();const beforeBinding=posts.length;mode='record-binding';await w.readApplicationUse(w.eval('applicationUse'));
  check($('use-acceptance').textContent.includes('本次技术执行：SUCCEEDED')&&!$('use-acceptance').textContent.includes('结果核对：PASS')&&posts.length===beforeBinding,'unbound result record cannot promote technical result assessment or write');
  await w.readApplicationUse(w.eval('applicationUse'));
@@ -92,7 +136,7 @@ const submit=column=>{$('use-column').value=column;$('use-form').dispatchEvent(n
  check($('use-acceptance').textContent.includes('结果核对：PASS · v2'),'second real result assessment bound to v2');
  await idlePage();mode='read-lost';$('use-refresh').click();await wait(()=>$('use-form').hidden,'read lost');
  check($('use-output').textContent===''&&$('use-history').textContent===''&&$('use-info').textContent.includes('读取失败不表示任务执行失败'),'read failure clears stale outcomes and controls');
- check($('use-acceptance').textContent==='', 'read failure clears all acceptance evidence');
+ check(!$('use-acceptance').textContent.includes('固定版本样本工具检查')&&!$('use-acceptance').textContent.includes('结果核对：PASS'), 'read failure clears technical acceptance evidence while preserving separate owner metadata controls');
  const before=posts.length;$('use-refresh').click();await wait(()=>!$('use-form').hidden,'manual GET restore');check(posts.length===before,'read restoration sends no POST');
  const option=new w.Option('synthetic invalid text column','memo');$('use-column').append(option);submit('memo');await wait(()=>state()==='accepted','invalid column accepted for real worker rejection');await worker();$('use-refresh').click();await wait(()=>$('use-output').textContent.includes('FAILED'),'failed new run');
  check(!$('use-output').textContent.includes('合计')&&$('use-history').textContent.includes('历史结果 v2'),'failed current run keeps old successful result historical only');
@@ -106,10 +150,11 @@ const submit=column=>{$('use-column').value=column;$('use-form').dispatchEvent(n
  check($('use-acceptance').textContent.includes('尚未选择运行')&&!$('use-acceptance').textContent.includes('结果核对：PASS'),'cold read does not auto accept history');
  const coldPosts=posts.length;const priorRun=[...$('use-history').children].find(r=>r.textContent.includes('SUCCEEDED')&&r.textContent.includes('结果版本 1'));priorRun.querySelector('button').click();
  await wait(()=>$('use-acceptance').textContent.includes('所选历史技术执行：SUCCEEDED'),'selected historical assessment');
- check($('use-acceptance').textContent.includes('结果核对：PASS · v1')&&$('use-acceptance').textContent.includes('用户确认：PENDING')&&posts.length===coldPosts,'explicit historical review stays read-only and never becomes user confirmation');
+ check($('use-acceptance').textContent.includes('结果核对：PASS · v1')&&$('use-acceptance').textContent.includes('本人适用范围声明见下方所选Run的独立读取')&&posts.length===coldPosts,'explicit historical review stays read-only and never becomes user confirmation');
  $('token').value='synthetic-test-B';$('connect').click();await wait(()=>$('project-select').selectedOptions[0]?.textContent==='Other identity project','new identity');
  check($('use-form').hidden&&$('use-output').textContent===''&&$('use-history').textContent===''&&!$('use-list').textContent.includes('Saved synthetic sum'),'identity change clears old business results');
  check($('use-acceptance').textContent==='', 'identity change clears acceptance');
- await closePage();check(lifecycle.length===2&&lifecycle.every(p=>p.requests===0&&p.actions===0&&p.errors===0),'both pages close after actions and requests settle without late errors');
+ }
+ await closePage();check(lifecycle.length===(info.scenario==='normal'?2:1)&&lifecycle.every(p=>p.requests===0&&p.actions===0&&p.errors===0),'pages close after actions and requests settle without late errors');
  const result={status:'PASS',lifecycle,checks,posts:posts.length,real_model_requests:0,browser:'NOT_RUN',pixels:'NOT_RUN',runtime_scope:'same frozen CSV resource, column parameter only'};fs.writeFileSync(path.join(root,'results.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
 }catch(error){console.error(error.stack);process.exitCode=1;}finally{try{await closePage();}catch(error){console.error(error.stack);process.exitCode=1;}}})();
