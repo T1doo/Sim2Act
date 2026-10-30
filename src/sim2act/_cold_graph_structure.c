@@ -85,13 +85,21 @@ static int compare_node(Compare*c,size_t id,PyObject*v,int depth){
  if((c->work++&1023)==0&&PyErr_CheckSignals()<0)return -1;
  if(c->work>1000000||depth>64){PyErr_SetString(unsupported_error,"Cold graph compare bounds");return -1;}
  Node*n=c->t->nodes+id;int k=kind(&c->t->types,v);if(k!=n->kind)return 0;
- if(k=='i'||k=='d'){uint64_t b;if(scalar_bits(v,k,&b)<0)return -1;return b==n->bits;}
+ if(k=='i'||k=='d'){if(v==n->original)return 1;uint64_t b;if(scalar_bits(v,k,&b)<0)return -1;return b==n->bits;}
  if(k=='n'||k=='t'||k=='f')return 1;
  if(c->actual[id])return c->actual[id]==v;
- Entry*old=find(&c->t->map,v);
- if(old){size_t*assigned=c->assigned+old->ordinal;if(*assigned&&*assigned!=id+1)return 0;*assigned=id+1;}
- else{Entry*seen=find(&c->changed,v);if(seen&&seen->ordinal!=id)return 0;if(!seen&&insert(&c->changed,v,id)<0)return -1;}
- c->actual[id]=Py_NewRef(v);
+ if(v==n->original){
+  /* The captured tree already owns this exact reference and its ordinal.
+   * Preserve reverse-alias assignment, but avoid a redundant pointer lookup
+   * and temporary reference. Mutable nodes STILL traverse every child below. */
+  size_t*assigned=c->assigned+id;if(*assigned&&*assigned!=id+1)return 0;
+  *assigned=id+1;c->actual[id]=v;
+ }else{
+  Entry*old=find(&c->t->map,v);
+  if(old){size_t*assigned=c->assigned+old->ordinal;if(*assigned&&*assigned!=id+1)return 0;*assigned=id+1;}
+  else{Entry*seen=find(&c->changed,v);if(seen&&seen->ordinal!=id)return 0;if(!seen&&insert(&c->changed,v,id)<0)return -1;}
+  c->actual[id]=Py_NewRef(v);
+ }
  if(k=='s'){if(v==n->original)return 1;int same=PyUnicode_Compare(v,n->original);if(same==-1&&PyErr_Occurred())return -1;return same==0;}
  if(k=='b')return v==n->original||(PyBytes_GET_SIZE(v)==PyBytes_GET_SIZE(n->original)&&!memcmp(PyBytes_AS_STRING(v),PyBytes_AS_STRING(n->original),PyBytes_GET_SIZE(v)));
  size_t edge=0;int result=1;PyObject*keys=NULL,*data=NULL,*index=NULL,*payload=NULL;
@@ -118,7 +126,7 @@ static PyObject*matches_fast(PyObject*self,PyObject*args){
  PyFrameObject*frame=PyThreadState_GetFrame(PyThreadState_Get());int frames=0;while(frame){PyFrameObject*back=PyFrame_GetBack(frame);Py_DECREF(frame);frame=back;frames++;}
  if(Py_GetRecursionLimit()-frames<256)return Py_NewRef(unsupported);
  Compare c={.t=t};c.actual=PyMem_Calloc(t->count?t->count:1,sizeof(PyObject*));c.assigned=PyMem_Calloc(t->count?t->count:1,sizeof(size_t));if(!c.actual||!c.assigned){PyMem_Free(c.actual);PyMem_Free(c.assigned);return PyErr_NoMemory();}
- int result=compare_node(&c,0,v,0);PyObject*error=PyErr_GetRaisedException();for(size_t i=0;i<t->count;i++)Py_XDECREF(c.actual[i]);PyMem_Free(c.actual);PyMem_Free(c.assigned);PyMem_Free(c.changed.entries);if(error)PyErr_SetRaisedException(error);
+ int result=compare_node(&c,0,v,0);PyObject*error=PyErr_GetRaisedException();for(size_t i=0;i<t->count;i++)if(c.actual[i]!=t->nodes[i].original)Py_XDECREF(c.actual[i]);PyMem_Free(c.actual);PyMem_Free(c.assigned);PyMem_Free(c.changed.entries);if(error)PyErr_SetRaisedException(error);
  if(result<0){if(PyErr_ExceptionMatches(unsupported_error)){PyErr_Clear();return Py_NewRef(unsupported);}return NULL;}return PyBool_FromLong(result);
 }
 static int same_namespace(PyTypeObject *kind, PyObject *items, size_t *work) {
