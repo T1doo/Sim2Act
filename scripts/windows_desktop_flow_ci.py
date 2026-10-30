@@ -33,6 +33,8 @@ def main():
     with TestClient(create_app(store, settings)) as client:
         client.headers['Authorization'] = 'Bearer '+workspace.TOKEN
         project = client.post('/api/projects', json={'name':'Synthetic desktop recovery'}).json()['id']
+        catalog = client.get(f'/api/projects/{project}/protocol/contracts')
+        assert catalog.status_code == 200 and len(catalog.json()['items']) == 4, catalog.text
         resource, card = material(client, project, SOURCE)
         data = store, settings, client, marker['principal_id'], project, resource, card
         generation, result, sent = generate(data)
