@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.783" timestamp="2026-10-31T10:41:30.794109+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_counter_loaded_segment" name="test_first_manifest_registration_hits_and_reduces_complete_pins" time="0.725"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f60e5a21040&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f60e4e71d90&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f60e5a20dd0&gt;
+
+    def test_first_manifest_registration_hits_and_reduces_complete_pins(local_origin, monkeypatch):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+                                                              ^^^^^^^^^^^
+
+tests/test_counter_loaded_segment.py:143: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2511: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2263: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase></testsuite></testsuites>

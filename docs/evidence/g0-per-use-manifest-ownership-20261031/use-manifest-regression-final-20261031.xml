@@ -1,0 +1,865 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="24" skipped="0" tests="56" time="209.215" timestamp="2026-10-31T10:36:59.624525+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_cold_use_manifest_owned" name="test_default_owner_retired_alias_full_storage_dump_and_scope" time="1.229" /><testcase classname="tests.test_cold_use_manifest_owned" name="test_live_limits_alias_selects_original_before_publication" time="0.929" /><testcase classname="tests.test_cold_use_manifest_owned" name="test_external_schema_alias_stays_in_complete_graph_pin" time="0.928" /><testcase classname="tests.test_cold_use_manifest_owned" name="test_prepublication_refusal_is_scope_checked_without_replay[bounds]" time="1.058" /><testcase classname="tests.test_cold_use_manifest_owned" name="test_prepublication_refusal_is_scope_checked_without_replay[root-and-bounds]" time="1.004" /><testcase classname="tests.test_cold_use_manifest_owned" name="test_independent_scope_cannot_reuse_equal_manifest_owner" time="0.899" /><testcase classname="tests.test_cold_use_manifest_owned" name="test_changed_helper_role_rejected_before_foreign_dispatch[_TYPE]" time="0.001" /><testcase classname="tests.test_cold_use_manifest_owned" name="test_changed_helper_role_rejected_before_foreign_dispatch[_ALL]" time="0.000" /><testcase classname="tests.test_cold_use_manifest_owned" name="test_changed_helper_role_rejected_before_foreign_dispatch[_DICT]" time="0.000" /><testcase classname="tests.test_cold_use_manifest_owned" name="test_changed_helper_role_rejected_before_foreign_dispatch[DomainError]" time="0.000" /><testcase classname="tests.test_cold_source_native_views" name="test_semantically_malformed_view_nodes_rejected_in_isolated_process" time="0.019" /><testcase classname="tests.test_cold_use_response_owned" name="test_native_graph_rejects_synthetic_scope_forwarders_before_sql[use-_use_pair]" time="0.934" /><testcase classname="tests.test_cold_use_response_owned" name="test_native_graph_rejects_synthetic_scope_forwarders_before_sql[spec-scope_gate]" time="0.900" /><testcase classname="tests.test_cold_use_response_owned" name="test_native_graph_rejects_synthetic_scope_forwarders_before_sql[spec-pair]" time="0.963" /><testcase classname="tests.test_cold_use_response_owned" name="test_actual_graph_checkpoint_rejects_fixed_family_mutation[field]" time="2.516" /><testcase classname="tests.test_cold_use_response_owned" name="test_actual_graph_checkpoint_rejects_fixed_family_mutation[namespace]" time="2.849" /><testcase classname="tests.test_cold_use_response_owned" name="test_actual_graph_checkpoint_rejects_fixed_family_mutation[use]" time="2.801" /><testcase classname="tests.test_cold_use_response_owned" name="test_actual_graph_checkpoint_rejects_fixed_family_mutation[meta]" time="2.860" /><testcase classname="tests.test_cold_use_response_owned" name="test_actual_graph_checkpoint_rejects_fixed_family_mutation[consent]" time="2.871" /><testcase classname="tests.test_cold_use_response_owned" name="test_actual_graph_checkpoint_rejects_fixed_family_mutation[body_type]" time="2.919" /><testcase classname="tests.test_cold_use_response_owned" name="test_actual_graph_checkpoint_rejects_fixed_family_mutation[route]" time="2.905" /><testcase classname="tests.test_cold_use_response_owned" name="test_actual_graph_checkpoint_rejects_fixed_family_mutation[storage]" time="2.921" /><testcase classname="tests.test_cold_use_response_owned" name="test_response_classifier_replacement_is_refused_before_execution" time="0.001" /><testcase classname="tests.test_cold_use_response_owned" name="test_partial_ninth_code_family_and_duplicate_registration_fail_closed" time="0.032" /><testcase classname="tests.test_counter_loaded_segment" name="test_first_manifest_registration_hits_and_reduces_complete_pins" time="0.385"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f586ea930b0&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f58741b1dc0&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f586e703890&gt;
+
+    def test_first_manifest_registration_hits_and_reduces_complete_pins(local_origin, monkeypatch):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+                                                              ^^^^^^^^^^^
+
+tests/test_counter_loaded_segment.py:143: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2546: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2298: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[True-False-False]" time="0.362"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f5874d78b90&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f5874f40860&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f5874d7b110&gt;
+use_seed = False, marker = False, mapping_job = True
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+                                                              ^^^^^^^^^^^
+
+tests/test_counter_loaded_segment.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2546: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2298: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[True-False-True]" time="0.500"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f5874d7aa20&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f586ef87fe0&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f5874d79640&gt;
+use_seed = True, marker = False, mapping_job = True
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+                                                              ^^^^^^^^^^^
+
+tests/test_counter_loaded_segment.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2546: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2298: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[True-True-False]" time="0.327"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f5874d79220&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f586f7df230&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f5874d78ce0&gt;
+use_seed = False, marker = True, mapping_job = True
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+                                                              ^^^^^^^^^^^
+
+tests/test_counter_loaded_segment.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2546: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2298: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[True-True-True]" time="0.506"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f5874d7b620&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f5874e181a0&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f5874d78410&gt;
+use_seed = True, marker = True, mapping_job = True
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+                                                              ^^^^^^^^^^^
+
+tests/test_counter_loaded_segment.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2546: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2298: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-False-False]" time="0.315"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f587501d250&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f586f6eb290&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f587501d6d0&gt;
+use_seed = False, marker = False, mapping_job = 'cursor'
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+                                                              ^^^^^^^^^^^
+
+tests/test_counter_loaded_segment.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2546: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2298: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-False-True]" time="0.472"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f58751fbf80&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f586ecf7170&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f58751fbec0&gt;
+use_seed = True, marker = False, mapping_job = 'cursor'
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+                                                              ^^^^^^^^^^^
+
+tests/test_counter_loaded_segment.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2546: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2298: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-True-False]" time="0.379"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f586e97a6f0&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f5875356f60&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f586e97a0c0&gt;
+use_seed = False, marker = True, mapping_job = 'cursor'
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+                                                              ^^^^^^^^^^^
+
+tests/test_counter_loaded_segment.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2546: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2298: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_actual_mapping_job_hits_without_sql_and_keeps_original_rows[cursor-True-True]" time="0.333"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f5875d474d0&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f58750ef200&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f5875d47830&gt;
+use_seed = True, marker = True, mapping_job = 'cursor'
+
+    @pytest.mark.parametrize("use_seed", [False, True])
+    @pytest.mark.parametrize("marker", [False, True])
+    @pytest.mark.parametrize("mapping_job", [True, "cursor"])
+    def test_actual_mapping_job_hits_without_sql_and_keeps_original_rows(
+        local_origin, monkeypatch, use_seed, marker, mapping_job
+    ):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+                                                              ^^^^^^^^^^^
+
+tests/test_counter_loaded_segment.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2546: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2298: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_missing_raw_key_uses_original_query_without_packet" time="0.536"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f5875219670&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f586e81b350&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+
+    def test_missing_raw_key_uses_original_query_without_packet(local_origin):
+        f = local_origin
+        queries = []
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+                                                              ^^^^^^^^^^^
+
+tests/test_counter_loaded_segment.py:195: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2546: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2298: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_original_data_mutation_inside_core_fails_late_pin" time="0.332"><failure message="UnboundLocalError: cannot access local variable 'calls' where it is not associated with a value">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f586f37aae0&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f586ec47170&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+
+    def test_original_data_mutation_inside_core_fails_late_pin(local_origin):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c):
+            with pytest.raises(DomainError):
+                with scope(f, c) as guard:
+                    facts, _ = prepared(f, c, guard)
+                    with observe_core(
+                        lambda: facts.job["context"]["messages"].append("synthetic drift")
+                    ) as calls:
+                        r._counters(c, facts.job, f.origin[0], _facts=facts)
+&gt;           assert calls == [1] and not guard.active
+                   ^^^^^
+E           UnboundLocalError: cannot access local variable 'calls' where it is not associated with a value
+
+tests/test_counter_loaded_segment.py:220: UnboundLocalError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_two_attempts_match_original_and_retain_rows[False]" time="0.593"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f586ec9cbc0&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f586f0bfa40&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f5875d47e60&gt;
+marker = False
+tmp_path = PosixPath('/workspace/scratch/use-manifest-regression-final-20261031/test_two_attempts_match_origin0')
+
+    @pytest.mark.parametrize("marker", [False, True])
+    def test_two_attempts_match_original_and_retain_rows(local_origin, monkeypatch, marker, tmp_path):
+        import json
+    
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+                                                              ^^^^^^^^^^^
+
+tests/test_counter_loaded_segment.py:228: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2546: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2298: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_two_attempts_match_original_and_retain_rows[True]" time="0.382"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f587417aa20&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f586e9ab350&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f5874178680&gt;
+marker = True
+tmp_path = PosixPath('/workspace/scratch/use-manifest-regression-final-20261031/test_two_attempts_match_origin1')
+
+    @pytest.mark.parametrize("marker", [False, True])
+    def test_two_attempts_match_original_and_retain_rows(local_origin, monkeypatch, marker, tmp_path):
+        import json
+    
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+                                                              ^^^^^^^^^^^
+
+tests/test_counter_loaded_segment.py:228: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2546: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2298: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_bad_loaded_values_keep_original_rejection[extra_slot]" time="0.580"><failure message="UnboundLocalError: cannot access local variable 'guard' where it is not associated with a value">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f5875063470&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f586e8a0b30&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f5874c26660&gt;
+change = 'extra_slot'
+
+    @pytest.mark.parametrize(
+        "change",
+        ["extra_slot", "duplicate_anchor", "wrong_anchor", "wrong_mode", "context", "repeated_ordinal"],
+    )
+    def test_bad_loaded_values_keep_original_rejection(local_origin, monkeypatch, change):
+        f = local_origin
+    
+        def altered(context, rows, raw, reserved):
+            aid = rows[0]["id"]
+            if change == "extra_slot":
+                raw["reservation:" + aid].append(dict(raw["reservation:" + aid][0]))
+            elif change == "duplicate_anchor":
+                raw["anchor:NS_RESERVED:" + aid].append(dict(raw["anchor:NS_RESERVED:" + aid][0]))
+            elif change == "wrong_anchor":
+                raw["anchor:NS_RESERVED:" + aid][0]["reserved_tokens"] += 1
+            elif change == "wrong_mode":
+                raw["mode"] = "MOCK"
+            elif change == "context":
+                context["repairs"] = 1
+            else:
+                rows[1]["parameters"]["natural_spec"]["ordinal"] = 0
+    
+        # Each rejection has its own graph, since failure invalidates the scope.
+        results = []
+        original_inputs = copy.deepcopy(f.inputs)
+        for legacy in (False, True):
+            f.inputs = copy.deepcopy(original_inputs)
+            with f.store.tx() as c, pb._source_reads(f.store, c):
+                with pytest.raises(DomainError) as caught:
+                    with scope(f, c) as guard:
+                        facts, _ = prepared(f, c, guard, count=2, change=altered)
+                        with monkeypatch.context() as patch:
+                            if legacy:
+                                patch.setattr(r, "_cold_counter_loaded", lambda *a: r._RAW_READ_MISS)
+                            r._counters(c, facts.job, f.origin[0], _facts=facts)
+                results.append(caught.value.public())
+&gt;           assert not guard.active
+                       ^^^^^
+E           UnboundLocalError: cannot access local variable 'guard' where it is not associated with a value
+
+tests/test_counter_loaded_segment.py:287: UnboundLocalError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_bad_loaded_values_keep_original_rejection[duplicate_anchor]" time="0.331"><failure message="UnboundLocalError: cannot access local variable 'guard' where it is not associated with a value">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f5874cbaf30&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f586e86f530&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f5874cba960&gt;
+change = 'duplicate_anchor'
+
+    @pytest.mark.parametrize(
+        "change",
+        ["extra_slot", "duplicate_anchor", "wrong_anchor", "wrong_mode", "context", "repeated_ordinal"],
+    )
+    def test_bad_loaded_values_keep_original_rejection(local_origin, monkeypatch, change):
+        f = local_origin
+    
+        def altered(context, rows, raw, reserved):
+            aid = rows[0]["id"]
+            if change == "extra_slot":
+                raw["reservation:" + aid].append(dict(raw["reservation:" + aid][0]))
+            elif change == "duplicate_anchor":
+                raw["anchor:NS_RESERVED:" + aid].append(dict(raw["anchor:NS_RESERVED:" + aid][0]))
+            elif change == "wrong_anchor":
+                raw["anchor:NS_RESERVED:" + aid][0]["reserved_tokens"] += 1
+            elif change == "wrong_mode":
+                raw["mode"] = "MOCK"
+            elif change == "context":
+                context["repairs"] = 1
+            else:
+                rows[1]["parameters"]["natural_spec"]["ordinal"] = 0
+    
+        # Each rejection has its own graph, since failure invalidates the scope.
+        results = []
+        original_inputs = copy.deepcopy(f.inputs)
+        for legacy in (False, True):
+            f.inputs = copy.deepcopy(original_inputs)
+            with f.store.tx() as c, pb._source_reads(f.store, c):
+                with pytest.raises(DomainError) as caught:
+                    with scope(f, c) as guard:
+                        facts, _ = prepared(f, c, guard, count=2, change=altered)
+                        with monkeypatch.context() as patch:
+                            if legacy:
+                                patch.setattr(r, "_cold_counter_loaded", lambda *a: r._RAW_READ_MISS)
+                            r._counters(c, facts.job, f.origin[0], _facts=facts)
+                results.append(caught.value.public())
+&gt;           assert not guard.active
+                       ^^^^^
+E           UnboundLocalError: cannot access local variable 'guard' where it is not associated with a value
+
+tests/test_counter_loaded_segment.py:287: UnboundLocalError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_bad_loaded_values_keep_original_rejection[wrong_anchor]" time="0.484"><failure message="UnboundLocalError: cannot access local variable 'guard' where it is not associated with a value">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f58743792b0&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f587428bc80&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f587437acc0&gt;
+change = 'wrong_anchor'
+
+    @pytest.mark.parametrize(
+        "change",
+        ["extra_slot", "duplicate_anchor", "wrong_anchor", "wrong_mode", "context", "repeated_ordinal"],
+    )
+    def test_bad_loaded_values_keep_original_rejection(local_origin, monkeypatch, change):
+        f = local_origin
+    
+        def altered(context, rows, raw, reserved):
+            aid = rows[0]["id"]
+            if change == "extra_slot":
+                raw["reservation:" + aid].append(dict(raw["reservation:" + aid][0]))
+            elif change == "duplicate_anchor":
+                raw["anchor:NS_RESERVED:" + aid].append(dict(raw["anchor:NS_RESERVED:" + aid][0]))
+            elif change == "wrong_anchor":
+                raw["anchor:NS_RESERVED:" + aid][0]["reserved_tokens"] += 1
+            elif change == "wrong_mode":
+                raw["mode"] = "MOCK"
+            elif change == "context":
+                context["repairs"] = 1
+            else:
+                rows[1]["parameters"]["natural_spec"]["ordinal"] = 0
+    
+        # Each rejection has its own graph, since failure invalidates the scope.
+        results = []
+        original_inputs = copy.deepcopy(f.inputs)
+        for legacy in (False, True):
+            f.inputs = copy.deepcopy(original_inputs)
+            with f.store.tx() as c, pb._source_reads(f.store, c):
+                with pytest.raises(DomainError) as caught:
+                    with scope(f, c) as guard:
+                        facts, _ = prepared(f, c, guard, count=2, change=altered)
+                        with monkeypatch.context() as patch:
+                            if legacy:
+                                patch.setattr(r, "_cold_counter_loaded", lambda *a: r._RAW_READ_MISS)
+                            r._counters(c, facts.job, f.origin[0], _facts=facts)
+                results.append(caught.value.public())
+&gt;           assert not guard.active
+                       ^^^^^
+E           UnboundLocalError: cannot access local variable 'guard' where it is not associated with a value
+
+tests/test_counter_loaded_segment.py:287: UnboundLocalError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_bad_loaded_values_keep_original_rejection[wrong_mode]" time="0.481"><failure message="UnboundLocalError: cannot access local variable 'guard' where it is not associated with a value">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f58759d06b0&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f586f21f5f0&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f58759d3a70&gt;
+change = 'wrong_mode'
+
+    @pytest.mark.parametrize(
+        "change",
+        ["extra_slot", "duplicate_anchor", "wrong_anchor", "wrong_mode", "context", "repeated_ordinal"],
+    )
+    def test_bad_loaded_values_keep_original_rejection(local_origin, monkeypatch, change):
+        f = local_origin
+    
+        def altered(context, rows, raw, reserved):
+            aid = rows[0]["id"]
+            if change == "extra_slot":
+                raw["reservation:" + aid].append(dict(raw["reservation:" + aid][0]))
+            elif change == "duplicate_anchor":
+                raw["anchor:NS_RESERVED:" + aid].append(dict(raw["anchor:NS_RESERVED:" + aid][0]))
+            elif change == "wrong_anchor":
+                raw["anchor:NS_RESERVED:" + aid][0]["reserved_tokens"] += 1
+            elif change == "wrong_mode":
+                raw["mode"] = "MOCK"
+            elif change == "context":
+                context["repairs"] = 1
+            else:
+                rows[1]["parameters"]["natural_spec"]["ordinal"] = 0
+    
+        # Each rejection has its own graph, since failure invalidates the scope.
+        results = []
+        original_inputs = copy.deepcopy(f.inputs)
+        for legacy in (False, True):
+            f.inputs = copy.deepcopy(original_inputs)
+            with f.store.tx() as c, pb._source_reads(f.store, c):
+                with pytest.raises(DomainError) as caught:
+                    with scope(f, c) as guard:
+                        facts, _ = prepared(f, c, guard, count=2, change=altered)
+                        with monkeypatch.context() as patch:
+                            if legacy:
+                                patch.setattr(r, "_cold_counter_loaded", lambda *a: r._RAW_READ_MISS)
+                            r._counters(c, facts.job, f.origin[0], _facts=facts)
+                results.append(caught.value.public())
+&gt;           assert not guard.active
+                       ^^^^^
+E           UnboundLocalError: cannot access local variable 'guard' where it is not associated with a value
+
+tests/test_counter_loaded_segment.py:287: UnboundLocalError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_bad_loaded_values_keep_original_rejection[context]" time="0.327"><failure message="UnboundLocalError: cannot access local variable 'guard' where it is not associated with a value">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f586ebb2f90&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f5874305340&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f586ebb1940&gt;
+change = 'context'
+
+    @pytest.mark.parametrize(
+        "change",
+        ["extra_slot", "duplicate_anchor", "wrong_anchor", "wrong_mode", "context", "repeated_ordinal"],
+    )
+    def test_bad_loaded_values_keep_original_rejection(local_origin, monkeypatch, change):
+        f = local_origin
+    
+        def altered(context, rows, raw, reserved):
+            aid = rows[0]["id"]
+            if change == "extra_slot":
+                raw["reservation:" + aid].append(dict(raw["reservation:" + aid][0]))
+            elif change == "duplicate_anchor":
+                raw["anchor:NS_RESERVED:" + aid].append(dict(raw["anchor:NS_RESERVED:" + aid][0]))
+            elif change == "wrong_anchor":
+                raw["anchor:NS_RESERVED:" + aid][0]["reserved_tokens"] += 1
+            elif change == "wrong_mode":
+                raw["mode"] = "MOCK"
+            elif change == "context":
+                context["repairs"] = 1
+            else:
+                rows[1]["parameters"]["natural_spec"]["ordinal"] = 0
+    
+        # Each rejection has its own graph, since failure invalidates the scope.
+        results = []
+        original_inputs = copy.deepcopy(f.inputs)
+        for legacy in (False, True):
+            f.inputs = copy.deepcopy(original_inputs)
+            with f.store.tx() as c, pb._source_reads(f.store, c):
+                with pytest.raises(DomainError) as caught:
+                    with scope(f, c) as guard:
+                        facts, _ = prepared(f, c, guard, count=2, change=altered)
+                        with monkeypatch.context() as patch:
+                            if legacy:
+                                patch.setattr(r, "_cold_counter_loaded", lambda *a: r._RAW_READ_MISS)
+                            r._counters(c, facts.job, f.origin[0], _facts=facts)
+                results.append(caught.value.public())
+&gt;           assert not guard.active
+                       ^^^^^
+E           UnboundLocalError: cannot access local variable 'guard' where it is not associated with a value
+
+tests/test_counter_loaded_segment.py:287: UnboundLocalError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_bad_loaded_values_keep_original_rejection[repeated_ordinal]" time="0.479"><failure message="UnboundLocalError: cannot access local variable 'guard' where it is not associated with a value">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f58741e9010&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f586ea97170&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f58741e99d0&gt;
+change = 'repeated_ordinal'
+
+    @pytest.mark.parametrize(
+        "change",
+        ["extra_slot", "duplicate_anchor", "wrong_anchor", "wrong_mode", "context", "repeated_ordinal"],
+    )
+    def test_bad_loaded_values_keep_original_rejection(local_origin, monkeypatch, change):
+        f = local_origin
+    
+        def altered(context, rows, raw, reserved):
+            aid = rows[0]["id"]
+            if change == "extra_slot":
+                raw["reservation:" + aid].append(dict(raw["reservation:" + aid][0]))
+            elif change == "duplicate_anchor":
+                raw["anchor:NS_RESERVED:" + aid].append(dict(raw["anchor:NS_RESERVED:" + aid][0]))
+            elif change == "wrong_anchor":
+                raw["anchor:NS_RESERVED:" + aid][0]["reserved_tokens"] += 1
+            elif change == "wrong_mode":
+                raw["mode"] = "MOCK"
+            elif change == "context":
+                context["repairs"] = 1
+            else:
+                rows[1]["parameters"]["natural_spec"]["ordinal"] = 0
+    
+        # Each rejection has its own graph, since failure invalidates the scope.
+        results = []
+        original_inputs = copy.deepcopy(f.inputs)
+        for legacy in (False, True):
+            f.inputs = copy.deepcopy(original_inputs)
+            with f.store.tx() as c, pb._source_reads(f.store, c):
+                with pytest.raises(DomainError) as caught:
+                    with scope(f, c) as guard:
+                        facts, _ = prepared(f, c, guard, count=2, change=altered)
+                        with monkeypatch.context() as patch:
+                            if legacy:
+                                patch.setattr(r, "_cold_counter_loaded", lambda *a: r._RAW_READ_MISS)
+                            r._counters(c, facts.job, f.origin[0], _facts=facts)
+                results.append(caught.value.public())
+&gt;           assert not guard.active
+                       ^^^^^
+E           UnboundLocalError: cannot access local variable 'guard' where it is not associated with a value
+
+tests/test_counter_loaded_segment.py:287: UnboundLocalError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_unsuitable_snapshot_falls_back_before_core" time="0.343"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f5874273710&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f586f537230&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+
+    def test_unsuitable_snapshot_falls_back_before_core(local_origin):
+        from sqlalchemy.sql.elements import quoted_name
+    
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+                                                              ^^^^^^^^^^^
+
+tests/test_counter_loaded_segment.py:295: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2546: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2298: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_unknown_copy_or_json_dependencies_use_old_path[_Comparison]" time="0.520"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f5874c27e00&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f586ec44f20&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f5874c24860&gt;
+name = '_Comparison'
+
+    @pytest.mark.parametrize("name", ["_Comparison", "standard_serializers", "json_defaults"])
+    def test_unknown_copy_or_json_dependencies_use_old_path(local_origin, monkeypatch, name):
+        f = local_origin
+        calls = []
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+                                                              ^^^^^^^^^^^
+
+tests/test_counter_loaded_segment.py:306: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2546: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2298: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_unknown_copy_or_json_dependencies_use_old_path[standard_serializers]" time="0.348"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f586ef50890&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f586eebb7d0&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f586ef51310&gt;
+name = 'standard_serializers'
+
+    @pytest.mark.parametrize("name", ["_Comparison", "standard_serializers", "json_defaults"])
+    def test_unknown_copy_or_json_dependencies_use_old_path(local_origin, monkeypatch, name):
+        f = local_origin
+        calls = []
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+                                                              ^^^^^^^^^^^
+
+tests/test_counter_loaded_segment.py:306: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2546: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2298: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_unknown_copy_or_json_dependencies_use_old_path[json_defaults]" time="0.604"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f586ea046e0&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f586f5259d0&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f586ea068d0&gt;
+name = 'json_defaults'
+
+    @pytest.mark.parametrize("name", ["_Comparison", "standard_serializers", "json_defaults"])
+    def test_unknown_copy_or_json_dependencies_use_old_path(local_origin, monkeypatch, name):
+        f = local_origin
+        calls = []
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+                                                              ^^^^^^^^^^^
+
+tests/test_counter_loaded_segment.py:306: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2546: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2298: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_original_core_exception_is_not_rechecked_or_replaced" time="0.349"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f586ed408c0&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f587523b350&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+
+    def test_original_core_exception_is_not_rechecked_or_replaced(local_origin):
+        f = local_origin
+        original = ValueError("synthetic original counter execution failure")
+    
+        def raised():
+            raise original
+    
+        with f.store.tx() as c, pb._source_reads(f.store, c):
+            with pytest.raises(ValueError) as caught:
+&gt;               with scope(f, c) as guard:
+                     ^^^^^^^^^^^
+
+tests/test_counter_loaded_segment.py:331: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2546: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2298: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="tests.test_counter_loaded_segment" name="test_foreign_native_keys_are_refused_without_equality" time="0.000" /><testcase classname="tests.test_cold_use_effective_owned" name="test_actual_candidate_owner_or_prepublication_fallback_keeps_complete_result[producer-alias]" time="37.445" /><testcase classname="tests.test_cold_use_effective_owned" name="test_actual_candidate_owner_or_prepublication_fallback_keeps_complete_result[pre-bounds]" time="39.648" /><testcase classname="tests.test_cold_use_effective_owned" name="test_actual_candidate_owner_or_prepublication_fallback_keeps_complete_result[facet]" time="36.784" /><testcase classname="tests.test_cold_use_effective_owned" name="test_actual_candidate_root_rebinding_invalidates_before_return" time="24.928" /><testcase classname="tests.test_cold_use_effective_owned" name="test_candidate_late_capacity_error_is_same_exception_not_raw_replay" time="24.268" /><testcase classname="tests.test_cold_use_effective_owned" name="test_candidate_producer_code_is_qualified_before_dispatch" time="0.001" /><testcase classname="tests.test_cold_use_effective_owned" name="test_missing_optional_native_extension_retains_original_candidate" time="0.680" /></testsuite></testsuites>

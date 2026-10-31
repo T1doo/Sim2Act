@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.131" timestamp="2026-10-31T10:42:50.578929+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_counter_loaded_segment" name="test_first_manifest_registration_hits_and_reduces_complete_pins" time="0.771"><failure message="assert ([] == [1]&#10;  &#10;  Right contains one more item: 1&#10;  Use -v to get more diff)">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f3772376a80&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f3771b56bd0&gt;, ...x_requests=2, max_tools=4, max_repairs=0, max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)}}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f3772377020&gt;
+
+    def test_first_manifest_registration_hits_and_reduces_complete_pins(local_origin, monkeypatch):
+        f = local_origin
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as guard:
+            facts, _ = prepared(f, c, guard)
+            assert facts._manifests == []
+            with observe_core() as calls:
+                assert r._counters(c, facts.job, f.origin[0], _facts=facts) == []
+&gt;           assert calls == [1] and len(facts._manifests) == 1
+E           assert ([] == [1]
+E             
+E             Right contains one more item: 1
+E             Use -v to get more diff)
+
+tests/test_counter_loaded_segment.py:159: AssertionError</failure></testcase></testsuite></testsuites>
