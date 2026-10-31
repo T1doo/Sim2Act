@@ -1,0 +1,29 @@
+# Proposed next product implementation: one fresh whole-cohort call
+
+This is a proposed implementation boundary, **not an implemented or qualified backend**. The application remains c6a42c783fd92818654b02e5fb469675877c632a. None of the following permits skipping G1, dynamic guards or full graph checks.
+
+## Existing seam and scope
+
+`natural_live_admission._trial_typed_values` is already documented and implemented as one pure complete cohort pass. Its lexical list contains `(expected_class, actual_model, saved_raw)` triples. `_ColdTrialGraph._typed_parameter_models` builds the current trial cohort, `_typed_values_from_models` consumes it, and `_trial_typed_guard`/other produced-model paths reach the same complete validation entry. The current `_stream_values` implementation supplies the exact semantic oracle.
+
+The model/raw objects are still mutable and externally aliased. `_trial_typed_hold` deduplicates identical triples only; it does not transfer data ownership. `_ColdBindingGraph.binding`, reader/review fields and the `counter-manifest:`/`receipt-binding:` exceptions in `_ColdRunFacts._put` are concrete mutable boundaries. Merely enabling `_NativeModels.produced` or freezing a local list would not migrate all those consumers. Do not remove their checks.
+
+The smaller change is to borrow the current cohort for **one synchronous call** and perform a new full traversal on every invocation. Preserve the original live-list iteration rather than copying or pre-validating all future triples: a callback can change later entries. Hold only the references required by the current traversal, preserving callback/GC boundaries. No data result, memo, model/raw projection, Graph, permission, equality answer or PASS survives the call.
+
+## Required producer and consumer behavior
+
+1. Keep all existing producers and `_trial_typed_values` entry/return/exception boundaries. Do not assign `graph._typed_native_candidate`; that existing knob disables a different structural qualification path.
+2. Add a separately qualified whole-cohort backend only for fixed exact layouts and original standard serializers. Before work, qualify actual code/defaults/global roles, class/MRO/metadata, native exports, current trace/profile/signal and bounded stack/work resources. Unknown configurations run the original Python function in its original frame; do not run part of the new backend and then replay old work.
+3. Preserve the original per-triple order: complete actual model/storage validation; complete raw validation and strict actual/raw comparison; original compiled serializer exactly once with `warnings=False`; complete dump/raw comparison. Preserve list/tuple, bool/int, ordering, omissions, shared DAG/alias values, cycle and unknown-type rejection, including validation of later malformed raw values after an earlier mismatch. Do not normalize via JSON or replace complete comparison with hashes.
+4. Within each original per-triple validation/comparison segment only, use explicit DFS and completed-pair memoization to avoid Python iterator/generator overhead. Do not reuse completed validation or comparison answers across triples or a serializer/callback boundary merely because they share one enclosing call. Native metadata reads must not dispatch arbitrary descriptors. Original serializer callbacks and exceptions execute once; unknown serializer behavior stays on the old pre-serializer-snapshot path. Exceptions after execution starts propagate once, without replay.
+5. Leave `_ColdTrialGraph._base`'s fresh `_check_dynamic`, mode/current checks, entry/exception whole-input pins and final `Graph.check` in place. All SQL, protected-read permission/revocation checks, bound owner/version/fence/epoch, stop/both clocks, actual five writes, postconditions and final atomic commit remain original.
+
+This eliminates the all-Python/file/callback/transaction/query-order/authorization closure requirement **for a cached G1 result**, because it caches no G1 result and changes no external calls. It still requires complete local behavior equivalence and fresh metadata/entry-hook qualification. The helper-code counterexample in this evidence is a mandatory rejection case, not an issue that can be waived as rare.
+
+## Implementation acceptance, before routing
+
+Use complete existing cohort inputs and original outputs/exceptions as differential oracle. Required boundaries include changed helper code with stable identity, actual module-global shadows, class/descriptor/schema/serializer changes, entry signal mutation, GC callbacks, deep/large/cyclic graphs, aliases/hidden RowMapping storage, later malformed raw values, recursion limits and changed exception order. Such diagnostics must never be counted as real grants/revocations or product cancellation acceptance.
+
+Measure net whole-call cost with ordinary and unsupported cohorts, including qualification and fallback costs, using real monotonic and thread CPU clocks. Do not use only one PB contract projection or multiply its saving by unrelated graph-call counts. The prior **5.346373 second** typed-call region is the measured target/upper bound on that observation, not a promised saving. It cannot explain or remove the separate 12.7 second structural-selector region or all 42–46 seconds of writer time.
+
+Only after independent review and material differential benefit should normal routing be changed. Then freeze exact bytes and repeat the same two real-clock large Cold saves, immediate first new-process reopen and actual writer-lock cancellation with no parallel measurement. Report G0, writer and total intervals separately, unchanged 30-second admission/first-DML and 120-second whole-settlement policies, Mock versus live and SQLite versus formal PostgreSQL. New C would also require its own Windows qualification later; old Windows evidence does not cover it.
