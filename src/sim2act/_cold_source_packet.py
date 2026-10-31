@@ -205,22 +205,24 @@ def own_fact(graph,name,value):
         _ColdGraphRead.invalidate(graph);raise
 
 
-def bound(graph,value=None):
+def bound(graph,value=None,*,stage='source'):
     current()
-    packet=vars(graph).get('_source_owned_binding')
+    require(type(stage) is str and stage in ('source','generate'))
+    packet=vars(graph).get('_'+stage+'_owned_binding')
     require(type(packet) is _BINDING and (value is None or value is packet)
         and graph.active and graph.phase=='post' and graph._accounted_frontier is None
         and native.binding_current(packet,native.binding_owner(packet),graph.nonce,graph.epoch,graph.phase,_scope(graph))
-        and graph.inputs.get(KEY) is native.binding_pin(packet))
+        and graph.inputs.get('cold-trial:accounted-'+stage) is native.binding_pin(packet))
     return packet
 
 
 def pin(graph,value):
-    return native.binding_pin(bound(graph,value))
+    stage='generate' if value is vars(graph).get('_generate_owned_binding') else 'source'
+    return native.binding_pin(bound(graph,value,stage=stage))
 
 
-def facts(graph,value):
-    packet=bound(graph,value)
+def facts(graph,value,*,stage='source'):
+    packet=bound(graph,value,stage=stage)
     return native.read_owner(native.binding_owner(packet))[0]
 
 
@@ -252,11 +254,14 @@ def _config(graph):
         (policy.Ledger,descriptor(policy.Ledger,'__dict__')))
 
 
-def publish(graph,value,raw,guard):
+def publish(graph,value,raw,guard,*,stage='source'):
     """Original producer complete first; never publish a legacy mutable family."""
     from .natural_spec_runtime import _ColdGraphRead
-    require(type(graph) is _ColdGraphRead and graph.phase=='post' and KEY not in graph.inputs
-        and vars(graph).get('_source_owned_binding') is None)
+    require(type(stage) is str and stage in ('source','generate'))
+    key='cold-trial:accounted-'+stage
+    slot='_'+stage+'_owned_binding'
+    require(type(graph) is _ColdGraphRead and graph.phase=='post' and key not in graph.inputs
+        and vars(graph).get(slot) is None)
     current();scope=_scope(graph);config=_config(graph)
     # Ownership representation is broader than the original raw domain (for
     # model field sets and hidden row storage). Preserve the entire original
@@ -286,10 +291,10 @@ def publish(graph,value,raw,guard):
     require(type(packet) is _BINDING)
     _scope_current(graph,scope)
     try:
-        _ColdGraphRead.add(graph,KEY,native.binding_pin(packet))
-        vars(graph)['_source_owned_binding']=packet
+        _ColdGraphRead.add(graph,key,native.binding_pin(packet))
+        vars(graph)[slot]=packet
         _ColdGraphRead.check(graph,graph.store,graph.connection)
-        bound(graph,packet)
+        bound(graph,packet,stage=stage)
         _scope_current(graph,scope)
         return packet
     except BaseException:
@@ -306,17 +311,25 @@ def usage(parsed):
     return dict(status='known' if complete else 'partial' if known else 'unknown',tokens=known or None)
 
 
-def stage_usage(graph,packet,guard):
-    root=facts(graph,packet)
+def stage_usage(graph,packet,guard,*,stage='source'):
+    require(type(stage) is str and stage in ('source','generate'))
+    bound(graph,packet,stage=stage)
+    root=facts(graph,packet,stage=stage)
     run,actual,chains,reads=root
-    require(len(actual)==len(chains)==len(reads)==2)
+    require(len(actual)==len(chains)==(3 if stage=='generate' else 2)
+        and len(reads)==(0 if stage=='generate' else 2))
     for slot,capture,parsed,checked,wire,payload in chains:
         normal=usage(parsed);guard();current()
         require(any(image.business_equal(checked,a) for a in actual)
-            and checked['status']=='VERIFIED' and image.business_equal(checked['usage'],normal)
+            and checked['status']==('RECEIVED' if stage=='generate' else 'VERIFIED') and image.business_equal(checked['usage'],normal)
             and normal['status']=='known' and slot.settlement is not None
             and all(getattr(slot.settlement,k)==normal['tokens'].get(k)
                 for k in ('prompt_tokens','completion_tokens','total_tokens')))
+        if stage=='generate':
+            # Original _trial_result(_stage_usage_from_facts(...), guard)
+            # kept a second fresh dynamic/typed/content boundary after each
+            # complete row/settlement comparison. Ownership does not remove it.
+            guard();current()
 
 
 def slot_join(graph,packet,state,owned_slot,aid,guard):

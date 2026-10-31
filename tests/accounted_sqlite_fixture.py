@@ -837,6 +837,8 @@ def segment(f, c, phase="pre", *, prewrite=False, cohort=None):
         # reader; do not reconstruct or thaw the owned Source family.
         source_job = (c.execute(select(runs).where(runs.c.id==f.source_id)).mappings().one()
             if source_packet is not None else None)
+        generated_job = (c.execute(select(runs).where(runs.c.id==f.gen_id)).mappings().one()
+            if source_owned.is_packet(generated) else None)
         full = dict(
             binding=getattr(f, "cold_bound", {}),
             cold_job=getattr(f, "cold_job", {}),
@@ -847,7 +849,7 @@ def segment(f, c, phase="pre", *, prewrite=False, cohort=None):
             generation=dict(
                 raw=f.raw,
                 metadata=f.metadata,
-                run=generated.run if mode is not None else generated[0],
+                run=generated_job if generated_job is not None else generated.run if mode is not None else generated[0],
             ),
             source_proof=f.proof,
             extraction=dict(
@@ -868,7 +870,7 @@ def segment(f, c, phase="pre", *, prewrite=False, cohort=None):
             f.bound,
             f.raw,
             f.metadata,
-            generated.run if mode is not None else generated[0],
+            generated_job if generated_job is not None else generated.run if mode is not None else generated[0],
             f.frozen,
             generated,
             None,
@@ -880,7 +882,7 @@ def segment(f, c, phase="pre", *, prewrite=False, cohort=None):
                 f.cold_bound,
                 f.raw,
                 f.metadata,
-                generated.run if mode is not None else generated[0],
+                generated_job if generated_job is not None else generated.run if mode is not None else generated[0],
                 f.frozen,
                 generated,
                 source,

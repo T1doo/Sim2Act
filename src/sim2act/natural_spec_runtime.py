@@ -2332,6 +2332,15 @@ class _ColdGraphRead:
                 raise DomainError('VERSION_CONFLICT','Source checker code changed')
             checker()
             _source_owned_code.bound(self)
+        if (type(self.inputs) is dict and 'cold-trial:accounted-generate' in self.inputs
+                and (type(self.inputs['cold-trial:accounted-generate']) is tuple
+                     or vars(self).get('_generate_owned_binding') is not None)):
+            checker,code,defaults=_SOURCE_OWNED_CHECK
+            if (_source_owned_code.current is not checker or checker.__code__ is not code
+                    or checker.__defaults__ is not defaults):
+                raise DomainError('VERSION_CONFLICT','Generate checker code changed')
+            checker()
+            _source_owned_code.bound(self,stage='generate')
         w = self.worker
         from .model_settlement import checkpoint
         checkpoint(w)
@@ -2402,6 +2411,7 @@ class _ColdGraphRead:
         was_active = self.active
         self.active = False
         vars(self).pop('_source_owned_binding',None)
+        vars(self).pop('_generate_owned_binding',None)
         vars(self).pop('_source_fact_bindings',None)
         vars(self).pop("_structure_state", None)
         # This opt-in selector owns no data/authority. Drop the back-reference
@@ -4149,7 +4159,8 @@ class _ColdTrialGraph:
         if self.generate_accounted is not None and 'cold-trial:accounted-generate' in inputs:
             if owned is None:
                 gate._graph_trial_accounted_models_from_raw(models, self.generate_accounted,
-                    raw_slot('cold-trial:accounted-generate'))
+                    (inputs['cold-trial:accounted-generate'] if (_SOURCE_BINDING_TYPE is not None and type(self.generate_accounted) is _SOURCE_BINDING_TYPE)
+                        else raw_slot('cold-trial:accounted-generate')), _graph=g)
             else:
                 if native_base:
                     owned._base_family_current(g, self.generate_accounted, 'generate')
@@ -4494,7 +4505,8 @@ class _ColdTrialGraph:
         pin()
         if self.accounted_prewrite is None:
             require(self._accounted_fields(self.generate_accounted) == g.inputs['cold-trial:accounted-generate'])
-            require((_source_owned_code.facts(g,self.source_accounted)[0] if (_SOURCE_BINDING_TYPE is not None and type(self.source_accounted) is _SOURCE_BINDING_TYPE) else self.source_accounted[0])['id'] == t.source_counter_reader.job['id'] and self.generate_accounted[0]['id'] == generation['id'])
+            require((_source_owned_code.facts(g,self.source_accounted)[0] if (_SOURCE_BINDING_TYPE is not None and type(self.source_accounted) is _SOURCE_BINDING_TYPE) else self.source_accounted[0])['id'] == t.source_counter_reader.job['id']
+                and (_source_owned_code.facts(g,self.generate_accounted,stage='generate')[0] if (_SOURCE_BINDING_TYPE is not None and type(self.generate_accounted) is _SOURCE_BINDING_TYPE) else self.generate_accounted[0])['id'] == generation['id'])
         else:
             self.accounted_prewrite.assert_family(g, self.generate_accounted, 'generate')
             self.accounted_prewrite.assert_upstream_run('source', t.source_counter_reader.job)

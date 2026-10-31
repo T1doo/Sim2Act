@@ -1004,11 +1004,17 @@ def _graph_stage_current(graph, store, c, user, contract, stage, stage_facts, *,
             for row in generated.actual:
                 _trial_result(cold_accounted._stage_usage(generated, row.id), _guard)
         else:
-            require(generated[0] == gen and len(generated[1]) == len(generated[2]) == 3)
-            from .pa_trial_dispatch import _stage_usage_from_facts
-            for chain in generated[2]:
-                require(chain[3] in generated[1])
-                _trial_result(_stage_usage_from_facts(chain[3], 'generate', chain[0], chain[2], chain[3], _guard=_guard), _guard)
+            from . import _cold_source_packet as source_owned
+            if _SOURCE_BINDING_TYPE is not None and type(generated) is _SOURCE_BINDING_TYPE:
+                generated_facts=source_owned.facts(graph,generated,stage='generate')
+                require(source_owned.image.business_equal(generated_facts[0],gen))
+                source_owned.stage_usage(graph,generated,_guard,stage='generate')
+            else:
+                require(generated[0] == gen and len(generated[1]) == len(generated[2]) == 3)
+                from .pa_trial_dispatch import _stage_usage_from_facts
+                for chain in generated[2]:
+                    require(chain[3] in generated[1])
+                    _trial_result(_stage_usage_from_facts(chain[3], 'generate', chain[0], chain[2], chain[3], _guard=_guard), _guard)
         original = draft['candidate']
         if stage == 'cold':
             require(type(extraction) is tuple and len(extraction) == 4)
@@ -1625,7 +1631,7 @@ def _graph_trial_stage_models_from_raw(models, stage_facts, inputs, *, _owned=No
         if source is not None:
             _owned.assert_family(_owned.graph, source, 'source')
     else:
-        _graph_trial_accounted_models_from_raw(models, generated, inputs['cold-trial:accounted-generate'])
+        _graph_trial_accounted_models_from_raw(models, generated, inputs['cold-trial:accounted-generate'], _graph=_graph)
         if source is not None:
             _graph_trial_accounted_models_from_raw(models, source, inputs['cold-trial:accounted-source'], _graph=_graph)
     if extraction is not None:

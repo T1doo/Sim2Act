@@ -1596,7 +1596,7 @@ def _graph_stage_accounted(graph, store, c, b, state, cursor, rid, stage, *, _ow
     ordered NS reads). No stage Authority is accepted as a substitute.
     """
 
-    if stage=='source' and graph.phase=='post' and _owned is None and _SOURCE_OWNED_ENABLED:
+    if stage in ('source','generate') and graph.phase=='post' and _owned is None and _SOURCE_OWNED_ENABLED:
         checker,code,defaults=_SOURCE_OWNED_CHECK
         if (_source_owned_code.current is not checker or checker.__code__ is not code
                 or checker.__defaults__ is not defaults):
@@ -1653,7 +1653,7 @@ def _graph_stage_accounted(graph, store, c, b, state, cursor, rid, stage, *, _ow
         completed_raw = gate._graph_trial_accounted_raw(graph, store, c, completed_value, _models)
         key = 'cold-trial:accounted-' + stage
         from . import _cold_source_packet as source_owned
-        if stage=='source' and graph.phase=='post' and _owned is None and _SOURCE_OWNED_ENABLED:
+        if stage in ('source','generate') and graph.phase=='post' and _owned is None and _SOURCE_OWNED_ENABLED:
             checker,code,defaults=_SOURCE_OWNED_CHECK
             if (source_owned.current is not checker or checker.__code__ is not code
                     or checker.__defaults__ is not defaults):
@@ -1661,7 +1661,7 @@ def _graph_stage_accounted(graph, store, c, b, state, cursor, rid, stage, *, _ow
             checker()
             # The complete producer is finished. No legacy Source node escaped.
             try:
-                return source_owned.publish(graph,completed_value,completed_raw,_guard)
+                return source_owned.publish(graph,completed_value,completed_raw,_guard,stage=stage)
             except _SOURCE_CAPACITY:
                 # Bounded capacity failure before publication only retains all
                 # original full checks; errors after publication invalidate.

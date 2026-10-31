@@ -53,8 +53,101 @@ def test_post_cold_stage_and_runtime_collector(sql_facts):
   models=graph._typed_parameter_models()
   from sim2act import production_trial_sender as sender
   assert not any(kind is archive.BodyArchive for kind,model,raw in models)
-  assert sum(kind is sender.Capture for kind,model,raw in models)==3
+  assert sum(kind is sender.Capture for kind,model,raw in models)==0
   assert graph._accounted_fields(s.source) is s.graph.inputs[owned.KEY]
+  assert owned.is_packet(s.generated)
+  assert graph._accounted_fields(s.generated) is s.graph.inputs['cold-trial:accounted-generate']
+
+
+def test_post_generate_complete_family_and_original_stage_consumers(sql_facts):
+ f=sql_facts
+ with f.store.tx() as c,segment(f,c,phase='pre') as legacy:
+  oracle_raw=legacy.graph.inputs['cold-trial:accounted-generate']
+ with f.store.tx() as c,segment(f,c,phase='post') as s:
+  packet=s.generated
+  assert owned.is_packet(packet)
+  assert owned.bound(s.graph,packet,stage='generate') is packet
+  saved=owned.facts(s.graph,packet,stage='generate')
+  run,actual,chains,reads=saved
+  assert run['id']==f.gen_id and len(actual)==len(chains)==3 and len(reads)==0
+  assert all(row['status']=='RECEIVED' for row in actual)
+  # Compare the original complete producer's data, retaining order and models;
+  # its graph/read token has ended and conveys no post authority.
+  complete=owned.native.read_owner(owned.native.binding_owner(packet))
+  assert owned.image.business_equal(complete[1],oracle_raw)
+  models=[]
+  gate._graph_trial_accounted_models(s.graph,f.store,c,models,packet,'generate')
+  assert models==[]
+  owned.stage_usage(s.graph,packet,lambda:s.graph.check(f.store,c),stage='generate')
+  authority,job=gate._graph_stage_current(s.graph,f.store,c,f.user,f.contract,'source',s.stage)
+  assert authority==f.phase.authority and job is s.stage[0]
+
+
+@pytest.mark.parametrize('damage',['missing-binding','equal-root','source-root','epoch','sql'])
+def test_post_generate_rechecks_complete_scope_and_transaction(sql_facts,damage):
+ from sqlalchemy import select
+ from sim2act.db import runs
+ from sim2act.errors import DomainError
+ f=sql_facts
+ rejected=False
+ with pytest.raises(DomainError),f.store.tx() as c,segment(f,c,phase='post') as s:
+  assert owned.is_packet(s.generated)
+  key='cold-trial:accounted-generate'
+  if damage=='missing-binding':vars(s.graph).pop('_generate_owned_binding')
+  elif damage=='equal-root':s.graph.inputs[key]=tuple(list(s.graph.inputs[key]))
+  elif damage=='source-root':s.graph.inputs[key]=s.graph.inputs[owned.KEY]
+  elif damage=='epoch':c.info['source_proof_write_epoch']=s.graph.epoch+1
+  else:
+   # An actual write invalidates the entire read/proof epoch even if the
+   # immutable historical generation data themselves have not changed.
+   row=c.execute(select(runs).where(runs.c.id==f.gen_id)).mappings().one()
+   c.execute(runs.update().where(runs.c.id==f.gen_id).values(version=row['version']+1))
+  try:s.graph.check(f.store,c)
+  except DomainError:
+   rejected=True
+   raise
+ assert rejected and not s.graph.active
+ assert '_source_owned_binding' not in vars(s.graph)
+ assert '_generate_owned_binding' not in vars(s.graph)
+
+
+def test_source_only_consumers_reject_generate_packet(sql_facts):
+ from sim2act.errors import DomainError
+ f=sql_facts
+ with f.store.tx() as c,segment(f,c,phase='post') as s:
+  with pytest.raises(DomainError):owned.bound(s.graph,s.generated)
+  with pytest.raises(DomainError):owned.facts(s.graph,s.generated)
+  with pytest.raises(DomainError):owned.stage_usage(s.graph,s.generated,lambda:s.graph.check(f.store,c))
+  s.graph.check(f.store,c)
+
+
+def test_owned_generate_does_not_hide_current_journal_slot_mutation(sql_facts):
+ from accounted_sqlite_fixture import seed_cold
+ from sim2act import natural_spec_runtime as rt
+ from sim2act.errors import DomainError
+ f=sql_facts;seed_cold(f);rejected=False
+ with pytest.raises(DomainError),f.store.tx() as c,segment(f,c,phase='post') as s:
+  trial=object.__new__(rt._ColdTrialGraph)
+  trial.__dict__.update(worker=f.worker,c=c,guard=s.graph,accounted_prewrite=None,
+    platform=None,trial=None,audit_seed=None,
+    journal=(s.state,s.cursor,s.graph.inputs['cold-trial:journal']['revision']),
+    source_accounted=s.source,generate_accounted=s.generated,cold_stage_facts=s.cold_stage,
+    source_stage_facts=s.stage,sealed_fields=s.graph.inputs['cold-trial:complete'],
+    source_proof=f.proof,original=f.contract,live_source=None,context_record=None,
+    authority_record=None,authority_fields=None,phase='COMPLETE')
+  trial.check()
+  saved=owned.facts(s.graph,s.generated,stage='generate')[2][0][0]
+  slot=next(v for v in s.state.slots if v.identity.attempt_id==saved.identity.attempt_id)
+  raw=object.__getattribute__(slot.settlement,'__dict__')
+  before=raw['total_tokens'];raw['total_tokens']=before+1
+  try:
+   assert saved.settlement.total_tokens==before  # Historical facts are owned.
+   try:trial.check()  # Current live Ledger still has its full typed/raw gate.
+   except DomainError:
+    rejected=True
+    raise
+  finally:raw['total_tokens']=before
+ assert rejected and not s.graph.active
 
 
 @pytest.mark.parametrize('which',['inputs','roles'])
@@ -98,6 +191,7 @@ def test_same_roots_do_not_allow_transfer_to_a_cloned_graph(sql_facts):
  with f.store.tx() as c,segment(f,c,phase='post') as s:
   clone=object.__new__(rt._ColdGraphRead);clone.__dict__.update(vars(s.graph))
   with pytest.raises(DomainError):owned.bound(clone,s.source)
+  with pytest.raises(DomainError):owned.bound(clone,s.generated,stage='generate')
   s.graph.check(f.store,c)
 
 
