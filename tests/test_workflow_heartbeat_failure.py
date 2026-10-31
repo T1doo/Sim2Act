@@ -254,7 +254,9 @@ def test_model_sync_renewal_publishes_committed_lease(env):
     store, settings = env[:2]
     rid = enqueue(env, "model-heartbeat-publication")
     run = store.claim("original-worker", 30)
-    state = dict(lock=threading.Lock(), lease_until=0)
+    # Match process_job's actual initial publication state. An absent deadline
+    # or zero (already expired) lease is not a live owner awaiting renewal.
+    state = dict(lock=threading.Lock(), lease_until=run['lease_until'], deadline=None)
     worker = SimpleNamespace(store=store, s=settings, id="original-worker", stop=threading.Event())
     renew(worker, run, run["created_at"] + settings.run_seconds, _heartbeat_state=state)
     with store.tx() as c:

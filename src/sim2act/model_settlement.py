@@ -37,6 +37,49 @@ def _publish(state, worker, job, lease):
 
 
 @contextmanager
+def original_interval(worker, job, deadline, state):
+    """Carry the actually committed ordinary lease to the final writer clock.
+
+    This issues no renewal beyond the original heartbeat and no graph/permit.
+    The conservative monotonic bound begins before that renewal, so time spent
+    committing it or a wall-clock rollback cannot create additional lifetime.
+    The caller owns the same renewal/writer locks until this scope closes.
+    """
+    store, settings, stop, owner = worker.store, worker.s, worker.stop, worker.id
+    _require(store.sqlite and not hasattr(worker, '_settlement_interval'),
+             'Original SQLite settlement cannot reenter')
+    lease_seconds = settings.lease_seconds
+    run_deadline = job['created_at'] + settings.run_seconds
+    _require(all(type(v) in (int, float) and math.isfinite(v)
+                 for v in (lease_seconds, deadline, run_deadline))
+        and 0 < lease_seconds <= 30, 'Finite original ordinary lease required')
+    started_mono, started_wall = time.monotonic(), time.time()
+    cutoff = min(deadline, run_deadline)
+    _require(not stop.is_set() and started_wall < cutoff, 'Original settlement interval ended')
+    if state is None:
+        lease = store.heartbeat(owner, job['id'], job['fence'], lease_seconds,
+            _deadline=cutoff, _wait_seconds=min(5., cutoff-started_wall), _running_only=True)
+    else:
+        from .text_workflows import _renew_sync_locked
+        lease = _renew_sync_locked(worker, job, state, deadline=cutoff)
+    _require(type(lease) in (int, float) and math.isfinite(lease)
+        and worker.store is store and worker.s is settings and worker.stop is stop
+        and worker.id == owner, 'Original committed heartbeat or owner changed')
+    cutoff = min(cutoff, lease)
+    token = (started_mono + min(lease_seconds, cutoff-started_wall), cutoff)
+    worker._settlement_interval = token
+    try:
+        checkpoint(worker)
+        yield
+    finally:
+        if getattr(worker, '_settlement_interval', None) is token:
+            del worker._settlement_interval
+        else:
+            # Retain an original failure and never delete foreign metadata.
+            stop.set()
+
+
+@contextmanager
 def interval(worker, job, attempt_id, deadline, state):
     from . import natural_live_admission as gate
     from .spec_production import ProductionTrialBinding

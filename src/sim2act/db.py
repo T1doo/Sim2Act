@@ -8,6 +8,7 @@ import sys
 import threading
 import time
 import uuid
+from time import monotonic as _lease_monotonic
 from collections import deque
 from contextlib import contextmanager, nullcontext
 
@@ -1562,9 +1563,15 @@ class Store:
     def heartbeat(self, worker_id, run_id=None, fence=None, lease_seconds=30, *,
                   _deadline=None, _wait_seconds=None, _running_only=False):
         renewed_until = None
+        commit_bounds = None
+        def renewal_clock():
+            if commit_bounds is not None and (time.time() >= commit_bounds[1]
+                    or _lease_monotonic() >= commit_bounds[0]):
+                raise DomainError('BUDGET_EXHAUSTED', 'Original heartbeat interval ended before commit')
         if _deadline is not None and time.time() >= _deadline:
             raise DomainError("BUDGET_EXHAUSTED", "Original heartbeat interval ended")
-        with self.tx(wait_seconds=_wait_seconds, _cap_wait=True) as c:
+        with self.tx(wait_seconds=_wait_seconds, _cap_wait=True,
+                     **({'_commit_clock_check': renewal_clock} if self.sqlite and run_id else {})) as c:
             if c.execute(select(heartbeats.c.id).where(heartbeats.c.id == worker_id)).first():
                 c.execute(
                     update(heartbeats).where(heartbeats.c.id == worker_id).values(at=time.time())
@@ -1573,12 +1580,19 @@ class Store:
                 c.execute(insert(heartbeats).values(id=worker_id, at=time.time()))
             if run_id:
                 current = self.guard(c, run_id, fence)
+                renewal_mono = _lease_monotonic() if self.sqlite else None
                 now = time.time()
                 if _running_only and (current["status"] != "RUNNING" or current["cancel_intent"]):
                     raise DomainError("VERSION_CONFLICT", "Heartbeat Run stopped")
                 if _deadline is not None and now >= _deadline:
                     raise DomainError("BUDGET_EXHAUSTED", "Original heartbeat interval ended")
                 renewed_until = now + lease_seconds
+                if self.sqlite:
+                    wall = min(current['lease_until'], renewed_until,
+                               _deadline if _deadline is not None else renewed_until)
+                    if not math.isfinite(wall) or wall <= now:
+                        raise DomainError('BUDGET_EXHAUSTED', 'Original heartbeat interval ended')
+                    commit_bounds = (renewal_mono + wall-now, wall)
                 renewed = c.execute(
                     update(runs)
                     .where(runs.c.id == run_id, runs.c.worker_id == worker_id,

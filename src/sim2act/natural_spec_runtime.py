@@ -177,11 +177,10 @@ def _model_settlement_writer(worker, job, deadline, state, *, attempt_id=None, _
     extended = (worker.store.sqlite and type(binding) is ProductionTrialBinding
         and type(binding.contract) is PBTrialContract
         and type(binding.contract.caps) is SQLiteSettlementCaps)
-    if not worker.store.sqlite or state is None and not extended:
+    if not worker.store.sqlite:
         renew(worker, job, deadline, _heartbeat_state=state)
         yield
         return
-    from .text_workflows import _renew_sync_locked
     if state is None:
         renewal_lock = Lock()
     else:
@@ -208,8 +207,9 @@ def _model_settlement_writer(worker, job, deadline, state, *, attempt_id=None, _
                             require(_OWNED_WRITER_LIFETIMES.pop(key, None) is token,
                                 "Owned writer lifetime changed before unlock")
             else:
-                _renew_sync_locked(worker, job, state, deadline=deadline)
-                yield
+                from .model_settlement import original_interval
+                with original_interval(worker, job, deadline, state):
+                    yield
     finally:
         settlement_lock.release()
 
@@ -5448,6 +5448,8 @@ def _model_writer_connection(worker, candidate, plan):
         from ._sqlite_model_snapshot import transaction
         from .model_settlement import commit_checkpoint
         interval, stop = getattr(worker, '_settlement_interval', None), worker.stop
+        require(not worker.store.sqlite or interval is not None,
+            'Original finite settlement writer scope required')
         with transaction(worker.store, settlement_interval=interval,
                 **({'_commit_check': lambda: commit_checkpoint(worker, interval, stop),
                     '_commit_clock_check': lambda: commit_checkpoint(worker, interval, stop, control=False)}
