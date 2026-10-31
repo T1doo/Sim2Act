@@ -2484,17 +2484,24 @@ def mount(app, store, limits, identity):
 from . import _cold_source_packet as _source_fact_code
 from . import contracts as _release_contract_models
 from . import goals as _release_goal_models
+from . import _cold_accounted_receipts as _receipt_continuation_code
+
 _source_fact_code.register(7,globals(),(
     '_native_audit_facts','scope_gate','pair','is_candidate',
     '_receipt_checkpoint','_cold_receipt_phase','_cold_receipts','_receipts',
     '_cold_verify_job_from_receipts','_verify_job_from_receipts','_receipt_output',
     '_receipt_data','_receipt_has_unknown','intent_for','receipt_for','output_for',
     'resolve','validate_value','fingerprint','require'),
-    (natural.Recipe,_release_goal_models.GoalCardInput,AppManifest,ActionSpec,*(kind for kind in natural.Recipe.__mro__[1:] if kind.__flags__ & (1 << 9))),
-    constants=('AppManifest','ActionSpec','_source_values','natural','_source_fact_code','copy'),helpers=((vars(natural),(
+    (natural.Recipe,_release_goal_models.GoalCardInput,AppManifest,ActionSpec,
+        _receipt_continuation_code._ReceiptClosure,
+        *(kind for kind in natural.Recipe.__mro__[1:] if kind.__flags__ & (1 << 9))),
+    constants=('AppManifest','ActionSpec','_source_values','natural','_source_fact_code','copy',
+        '_receipt_continuation_code'),helpers=((vars(_receipt_continuation_code),('_receipt_for_frontier','_receipt_phase_same')),(vars(natural),(
         'is_candidate','pure','bounded_source','schemas','collected','report',
         'citation_feedback','verify_saved','expand','compile_candidate','preview',
         'fingerprint','validate_value','object_schema','require')),),
-    constant_helpers=((vars(natural),('Recipe','AppManifest','ActionSpec')),
+    constant_helpers=((vars(_receipt_continuation_code),('_ReceiptClosure','rt','gate','natural','sys')),
+        (vars(_receipt_continuation_code.sys),('_getframe',)),
+        (vars(natural),('Recipe','AppManifest','ActionSpec')),
         (vars(_release_contract_models),('AppManifest','ActionSpec')),
         (vars(_release_goal_models),('GoalCardInput',))))

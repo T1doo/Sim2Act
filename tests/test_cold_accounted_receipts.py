@@ -58,9 +58,10 @@ def setup(f, c, r, *, prior=False):
     def prepare(graph):
         graph.add('call', dict(meta=r.meta))
         reader = rt._ColdRunFacts(f.store, c, f.cold_job, graph)
-        reader.record_counters(AppManifest.model_validate(f.cold_bound['plan']['definition']['manifest']))
+        manifest=rt._source_owned_code.image.plain(f.cold_bound['plan']['definition']['manifest'])
+        reader.record_counters(AppManifest.model_validate(manifest))
         prefix = _ColdBindingPrefix(graph, 'synthetic-platform-binding', f.user, f.cold_job,
-            AppManifest.model_validate(f.cold_bound['plan']['definition']['manifest']).runtime_limits,
+            AppManifest.model_validate(manifest).runtime_limits,
             'cold', {}, None, None)
         graph.add(prefix.key + ':bound:complete', f.cold_bound)
         platform = object.__new__(rt._ColdBindingGraph)

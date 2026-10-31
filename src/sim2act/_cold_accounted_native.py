@@ -586,13 +586,23 @@ class _NativeCandidate:
                 or 'cold-trial:complete' in self.graph.inputs):
             raise _Unsupported('native_root_representation')
         if self.receipt_platform is not None:
+            if rt._SOURCE_VIEW_TYPE is None:
+                raise _Unsupported('receipt_source_qualification')
+            from types import FunctionType
+            gate.require(type(rt._SOURCE_OWNED_CHECK) is tuple and len(rt._SOURCE_OWNED_CHECK)==3,
+                'Exact receipt qualifier metadata required')
+            checker, code, defaults = rt._SOURCE_OWNED_CHECK
+            gate.require(type(checker) is FunctionType and rt._source_owned_code.current is checker
+                and checker.__code__ is code and checker.__defaults__ is defaults,
+                'Exact receipt qualifier required')
+            checker()
             from ._cold_accounted_receipts import _ReceiptClosure
             self.observe(phase='native:receipt-preload')
             ledger.reserve('resident', 4096)
             self.receipt = _ReceiptClosure(self, self.receipt_platform)
-            self.receipt.preload(ledger)
+            _ReceiptClosure.preload(self.receipt, ledger)
             self.observe(phase='native:receipt-budget')
-            self.receipt.budget(ledger, _SizingProjection)
+            _ReceiptClosure.budget(self.receipt, ledger, _SizingProjection)
         # Ledger is fixed typed and retains its old full dynamic typed guards.
         # Its entire extent, including non-Source slots, must fit before issue.
         self.observe(phase='native:ledger')

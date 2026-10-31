@@ -2398,6 +2398,18 @@ class _ColdGraphRead:
             from ._cold_accounted_native import _Frontier
             require(type(self._accounted_frontier) is _Frontier
                 and self._accounted_frontier.graph is self)
+            # Raw-only test graphs need the same immutable code witness before
+            # dispatching the optional receipt protocol's methods/defaults.
+            from types import FunctionType
+            require(type(_SOURCE_OWNED_CHECK) is tuple and len(_SOURCE_OWNED_CHECK)==3,
+                'Exact receipt qualifier metadata required')
+            checker, code, defaults = _SOURCE_OWNED_CHECK
+            require(type(checker) is FunctionType and _source_owned_code.current is checker
+                and checker.__code__ is code and checker.__defaults__ is defaults,
+                'Exact receipt qualifier required')
+            checker()
+            from ._cold_accounted_receipts import _receipt_for_frontier
+            _receipt_for_frontier(self._accounted_frontier)
         require(type(self.inputs) is dict and bool(self.inputs)
             and self.phase in {"pre", "post"} and type(self.role_limits) is dict
             and set(self.role_limits) == {"source", "generate", "platform", "trial", "per_use"}
