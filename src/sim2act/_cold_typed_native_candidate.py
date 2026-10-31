@@ -30,7 +30,7 @@ _ASAN_LINK = Path('/usr/lib/gcc/x86_64-linux-gnu/14/libasan.so')
 _ASAN_REAL = Path('/usr/lib/x86_64-linux-gnu/libasan.so.8.0.0')
 _ASAN_SHA256 = 'f5c57422d80671ced6cffe350f92c8ab9bec23fda9b155658aac630d2bc2a240'
 _BINARIES = {
-    None: 'a9c32db0f64ab4a8f901a5c7c5dc3cf32cc72c67573437f38b7ec306459510f2',
+    None: 'ce91773ea4c788483c877c60ad96985f0f712cee990724b8584b50a7b29ca71f',
     'address': '3cca77d9b8eecc2d8f583bff44bd7a80be914011a9952c038c10a8a4d3d68b89',
 }
 _HEADERS = {

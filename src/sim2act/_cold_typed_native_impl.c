@@ -321,9 +321,15 @@ static int qualified_keys(PyObject *value, int *work) {
 
 static PyObject *selection(PyObject *module, PyObject *args) {
     PyObject *expected, *model, *roots, *allowed, *branch, *workflow, *require_fn;
-    PyObject *base, *meta;
-    if (!PyArg_ParseTuple(args, "OOOOOOOOO:select_project", &expected, &model, &roots,
-            &allowed, &branch, &workflow, &require_fn, &base, &meta)) return NULL;
+    PyObject *base, *meta, *extra = Py_None;
+    if (!PyArg_ParseTuple(args, "OOOOOOOOO|O:select_project", &expected, &model, &roots,
+            &allowed, &branch, &workflow, &require_fn, &base, &meta, &extra)) return NULL;
+#ifndef SIM2ACT_COHORT_SELECTION_GATE
+    if (extra != Py_None) {
+        PyErr_SetString(PyExc_TypeError, "No extended selection ABI in this component");
+        return NULL;
+    }
+#endif
     if (!class_tuple(roots) || !class_tuple(allowed) || !PyType_Check(expected) ||
         !PyType_Check(branch) || !PyType_Check(workflow) || !PyType_Check(base) ||
         !PyType_Check(meta) || !PyCallable_Check(require_fn)) {
@@ -349,6 +355,11 @@ static PyObject *selection(PyObject *module, PyObject *args) {
     if (thread->c_profilefunc != NULL || thread->c_tracefunc != NULL) {
         reason = "trace-or-profile"; goto finish;
     }
+#ifdef SIM2ACT_COHORT_SELECTION_GATE
+    if (!SIM2ACT_COHORT_SELECTION_GATE(extra)) {
+        reason = "cohort-configuration-or-raw"; goto finish;
+    }
+#endif
     if (!member(roots, expected) || (PyObject *)Py_TYPE(model) != expected) {
         reason = "root"; goto finish;
     }

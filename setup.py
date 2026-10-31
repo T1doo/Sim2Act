@@ -40,6 +40,16 @@ setup(
             ],
         ),
         Extension(
+            "sim2act._cold_typed_cohort",
+            ["src/sim2act/_cold_typed_cohort.c"],
+            optional=True,
+            depends=["src/sim2act/_cold_typed_native_impl.c", "src/sim2act/_raw_snapshot.c", "src/sim2act/_cold_cohort_backend.py"],
+            define_macros=[("SIM2ACT_VISITOR_SOURCE_SHA", '"' + hashlib.sha256(b''.join(
+                Path(__file__).parent.joinpath("src/sim2act", name).read_bytes()
+                for name in ("_cold_typed_cohort.c", "_cold_typed_native_impl.c", "_raw_snapshot.c", "_cold_cohort_backend.py")
+            )).hexdigest() + '"')],
+        ),
+        Extension(
             "sim2act._cold_source_owned_impl",
             ["src/sim2act/_cold_source_owned_impl.c"],
             optional=True,

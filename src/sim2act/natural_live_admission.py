@@ -1829,6 +1829,13 @@ def raw_snapshot_backend():
 
 
 from . import _cold_source_packet as _source_owned_code
+_COHORT_BUILTIN_ROLES = tuple((name, globals().get(name, __builtins__[name]
+    if type(__builtins__) is dict else getattr(__builtins__, name))) for name in (
+        'type','dict','list','tuple','set','str','int','float','bool','bytes','object',
+        'all','any','len','id','iter','next','zip'))
+_COHORT_MODULE_BINDINGS = tuple((name,value) for name,value in globals().copy().items()
+    if not name.startswith('__'))
 _source_owned_code.register(1,globals(),tuple(name for name,value in globals().copy().items()
     if type(value) is _source_owned_code.FunctionType and value.__module__==__name__),
-    constants=('_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_SOURCE_OWNED_ENABLED','_SOURCE_CAPACITY'))
+    constants=('_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_SOURCE_OWNED_ENABLED','_SOURCE_CAPACITY',
+        '_COHORT_BUILTIN_ROLES','_COHORT_MODULE_BINDINGS'))

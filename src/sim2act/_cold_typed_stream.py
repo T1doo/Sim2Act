@@ -302,3 +302,18 @@ def _stream_values(expected, model, raw):
     require(comparison.equal(value, raw, typed=False),
         'Typed trial fact changed after its complete raw proof')
     return True
+
+
+# Independent import-time code metadata for a later optional backend. This is
+# not captured from whatever helpers happen to exist on its first invocation.
+_COHORT_PRIMITIVE_CODE = tuple((fn, fn.__code__, fn.__defaults__, fn.__kwdefaults__,
+    tuple((fn.__kwdefaults__ or {}).items())) for fn in (
+        require, _model_children, _mapping_pairs, _raw_mapping_pairs, _unpaired,
+        _stream_values, *[value for value in vars(_Comparison).values()
+            if callable(value) and hasattr(value, '__code__')]))
+_COHORT_BUILTIN_ROLES = tuple((name, globals().get(name, __builtins__[name]
+    if type(__builtins__) is dict else getattr(__builtins__, name))) for name in (
+        'type','dict','list','tuple','set','str','int','float','bool','bytes','object',
+        'all','any','len','id','iter','next','zip'))
+_COHORT_MODULE_BINDINGS = tuple((name,value) for name,value in globals().copy().items()
+    if not name.startswith('__'))
