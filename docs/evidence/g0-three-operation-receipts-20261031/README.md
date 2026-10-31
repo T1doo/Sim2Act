@@ -38,3 +38,25 @@ With P=actual complete sizing allocation units, U=that full envelope's conservat
 Before reserve, nonauthoritative scalar diagnostics now record actual P/N/E/leaf/U, requested buffer units, working/retained split, live/resident-before and quota. old_three_envelope_units is a hypothetical value computed for THAT NEW current preflight, not a backfilled measurement for8f. It is never read for routing or authority, and Ledger.peak still means successful charged peak, not a refused request.
 
 Independent actual-diff budget/liveness review found no remaining freeze blocker.43 original/new receipt regressions passed99.82s, no fail/error/skip; they overlap the prior86 scope and are not a unique total. New ordinary-capacity large routing, two saves, first fresh-process reopen and actual locked cancellation remain pending at this corrected freeze. No C/native ABI, main/Release, Windows CI, PC, fee/credential/permission or timeout change.
+
+
+## Corrected frozen full-flow evidence
+
+Application **68c27fdde3d60f0f84bb45b4b0efbaab82ef2d07** was clean at start/end. Normal 2026-10-31 04:03:22 UTC–2026-10-31 04:11:51 UTC, exit0: two COMMITTED,7fixedMock/0real, actual G0 route events OWNED for BOTH epochs. This closes the real second-model protocol coverage gap. It does NOT establish a performance improvement.
+
+| Cold | Actual G0 route | G0 seconds | Atomic writer seconds | Total seconds |
+| --- | --- | ---: | ---: | ---: |
+| 1 | OWNED | 31.542773 | 45.116670 | 76.660371 |
+| 2 | OWNED | 33.978684 | 50.218180 | 84.197333 |
+
+Compared with preservedfb60, first G0 is3.346973s slower, writer2.067584s slower, total5.414721s slower; second G0 is1.338025s slower, writer5.298219s slower, total6.636201s slower. Both G0 and both writers remain above30s. This is one frozen sample/version with observer overhead; no distribution, SLA, process-RSS or overall completion claim. All original30/120second constraints remain unchanged. First/second total120s margins are43.339629/35.802667s; these do not satisfy the30second objective.
+
+Actual second preflight N32520/E71378/leaf1290986, P26743253, U35029741. Requested working368609066+retained106682794=475291860; prior live39050469 gives successfully charged peak514342329 below1073741824. Issuance resident99224272 below536870912. Hypothetical old three-envelope amount1105827198+that current pre-live would exceed the same bound. This hypothetical uses the corrected NEW preflight, not an invented measurement of the8f rejection. Selection is sampled at choose PY_RETURN while the scope is live; after_scope activeTrue is NOT a post-close accounting observation. Work is conservative logical prepayment, not measured CPU/visited nodes.
+
+Second G0 typed calls2997→2957 and model entries22705→13374; actual encodings816→863 (+47), NOT a reduction. First G0 and both G1 encoding/typed counts are unchanged. Count-comparison.json separates input_bytes projection returns from bytes encoding. before-after.json records mutually exclusive monitored costs plus nonnegative remainder, no inclusive sums; monitor errors[]/partial_calls0. Actual G1 graph.select remains14.195711/15.957615s, typed5.317703/5.610612s, capture3.993613/4.949805s. SQL/fsync were not individually timed and may lie in parent-exclusive costs or the remainder. Cause of unchanged-path timing regression is not isolated; no invented causal claim or blind repeat is offered.
+
+Immediate first fresh-process reopen ran before any later DB inspection, using completed metadata-derived source SHA plus clean current HEAD before DB open: SUCCEEDED, exactly one instance version/effect, two Cold VERIFIED/all7 attempts, saved HTTP/app/typed values equal. Main SHA587b7a4fc85279826e36b3fbcb6ea39dc332b4a3300a6f90993b8c9399b4df8e and logical content unchanged; absent→empty0B WAL lifecycle is physical identity FALSE. Nonempty WAL still requires exact identity. No old wrong SHA label or second-open replacement.
+
+Actual first-Cold locked-G1 cancellation 2026-10-31 04:12:33 UTC–2026-10-31 04:18:26 UTC, exit0: independent SQLite writer probe BUSY5 before HTTP. Status HTTP200 0.226900s, cancel HTTP200 0.140367s; G028.813952s, interrupted writer4.810301s, total33.625103s ROLLED_BACK. Prior history/received whole row/typed/archive/resources unchanged, no new settlement/rejection. Final RECONCILING/RECEIVED is not terminal CANCELLED.6Mock/0real; cancellation times are single samples, not completion performance.
+
+The cancellation plugins match only the normal complete item, so no cancel selector/cost counts were emitted or claimed; actual test control/snapshot records prove its writer/HTTP/rollback boundary. Raw databases and model exchange bodies remain private with size/SHA manifests. Complete8f capacity failure evidence and passedfb60 remain preserved. Current engineering coverage is SQLite/test_only/fixedMock, not formalPG/live provider/new target-Windows/EXE acceptance; no newC/ABI/CI/PC/main/Release/deploy/fee/credential/security permission. The protocol implementation is validated in the real local chain; long atomic write locks and the original30second performance objective remain unresolved.
