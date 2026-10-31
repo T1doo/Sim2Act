@@ -102,8 +102,8 @@ def checked_app(app_wheel, specification, candidate_manifest=None):
             or profile["native_artifacts"]
         ):
             raise ValueError("Python preview requires a pure py3-none-any wheel")
-        if kind == "native-candidate.v1" and len(profile["native_artifacts"]) != 2:
-            raise ValueError("Native candidate requires both compiled extensions")
+        if kind == "native-candidate.v1" and len(profile["native_artifacts"]) != len(wheel_tools.MODULES):
+            raise ValueError("Native candidate requires all configured compiled extensions")
     else:
         raise ValueError("Unknown candidate artifact profile")
     source = {

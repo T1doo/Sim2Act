@@ -83,7 +83,7 @@ def test_native_windows_complete_c_and_native_inventory(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "change", ["missing_c", "native_sha", "unknown_pyd", "linux_so", "tag", "root", "duplicate"]
+    "change", ["missing_c", "missing_native", "native_sha", "unknown_pyd", "linux_so", "tag", "root", "duplicate"]
 )
 def test_malformed_native_candidate_refuses_before_output(tmp_path, change):
     wheel, manifest, m, source, native = make(tmp_path)
@@ -91,6 +91,8 @@ def test_malformed_native_candidate_refuses_before_output(tmp_path, change):
         del source["sim2act/_cold_typed_native_impl.c"]
     elif change == "native_sha":
         m["wheel_profile"]["native_artifacts"][next(iter(native))]["sha256"] = "0" * 64
+    elif change == "missing_native":
+        native.pop("sim2act/_cold_typed_cohort.cp312-win_amd64.pyd")
     elif change == "unknown_pyd":
         native["sim2act/unlisted.cp312-win_amd64.pyd"] = b"unknown"
     elif change == "linux_so":
@@ -107,6 +109,8 @@ def test_malformed_native_candidate_refuses_before_output(tmp_path, change):
             z.writestr("sim2act/__init__.py", b"")
         data = out.getvalue()
     wheel.write_bytes(data)
+    if change == "missing_native":
+        m["wheel_profile"] = h.wheel_profile(wheel.name, data)
     m["files"]["wheels/" + wheel.name] = h.record(data)
     manifest.write_text(json.dumps(m))
     output = tmp_path / "absent.zip"
@@ -192,7 +196,15 @@ def test_local_builder_keeps_setup_c_sources_and_forbids_downloads(tmp_path, mon
     manifest = json.loads((tmp_path / "out/candidate-manifest.json").read_text())
     assert "setup.py" in manifest["files"]
     assert manifest["artifact_profile"] == "native-candidate.v1"
-    assert len(manifest["wheel_profile"]["native_artifacts"]) == 2
+    assert len(manifest["wheel_profile"]["native_artifacts"]) == 4
+
+
+def test_native_allowlist_covers_every_declared_setup_extension():
+    import ast
+    tree=ast.parse((Path(__file__).resolve().parents[1]/'setup.py').read_bytes())
+    names={n.args[0].value.removeprefix('sim2act.') for n in ast.walk(tree)
+           if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=='Extension'}
+    assert set(h.MODULES)==names
 
 
 def test_python_preview_profile_rejects_native_wheel(tmp_path):

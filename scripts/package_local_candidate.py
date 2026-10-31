@@ -29,6 +29,8 @@ FILES = [
     "docs/FirstUse.md",
     "docs/LocalCandidate.md",
     "docs/PreviewRelease.md",
+    "docs/LimitedTextCandidate.md",
+    "docs/F2/BlankSyntheticWorkspaceQuickstart.md",
     "scripts/Common.ps1",
     "scripts/Setup.ps1",
     "scripts/Doctor.ps1",
@@ -87,11 +89,11 @@ def main():
             parser.error("Only ordinary tracked files can be packaged: " + name)
         contents[name] = git("show", commit + ":" + name)
     contents["README.md"] = (
-        "# Sim2Act 合成 mock 本地候选\n\n"
-        "下载包范围与当前阻塞见 [候选使用说明](docs/PreviewRelease.md)。\n"
-        "安装、演示命令及限制见 [本地候选说明](docs/LocalCandidate.md)。\n"
+        "# Sim2Act 限制本地候选\n\n"
+        "正常入口、已有依赖环境的安装／启动／退出／重开见 [限制候选步骤](docs/LimitedTextCandidate.md)。\n"
+        "历史 mock 演示见 [本地候选说明](docs/LocalCandidate.md)。\n"
         "精确源码和文件校验值见 candidate-manifest.json。\n"
-        "不含真实凭据、数据库或历史大证据；不启用真实模型。\n"
+        "不含真实凭据、数据库或历史大证据；默认不启用模型，显式参数只开放单文本逐字合同。\n"
     ).encode()
     with tempfile.TemporaryDirectory(prefix="sim2act-candidate-build-") as folder:
         staging = Path(folder)
@@ -146,9 +148,9 @@ def main():
         parser.exit(
             1, "Python preview requires a pure py3-none-any wheel with no native artifacts\n"
         )
-    if not args.python_preview and len(profile["native_artifacts"]) != 2:
+    if not args.python_preview and len(profile["native_artifacts"]) != len(wheel_tools.MODULES):
         parser.exit(
-            1, "Native candidate requires both compiled extensions; build output preserved\n"
+            1, "Native candidate requires all configured compiled extensions; build output preserved\n"
         )
     contents["wheels/" + wheel.name] = wheel_data
     manifest = dict(
@@ -157,6 +159,8 @@ def main():
         build_backend="setuptools==82.0.1",
         python="3.12",
         mode="SYNTHETIC_MOCK_DEMO",
+        opt_in_capabilities=["exact-resource-read.v1"],
+        default_model_enabled=False,
         artifact_profile="python-preview.v1" if args.python_preview else "native-candidate.v1",
         wheel_profile=profile,
         build_platform=sys.platform,

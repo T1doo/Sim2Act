@@ -7,7 +7,7 @@ import zipfile
 from email.parser import BytesParser
 from pathlib import Path
 
-MODULES = ("_raw_snapshot", "_cold_graph_structure")
+MODULES = ("_raw_snapshot", "_cold_graph_structure", "_cold_typed_cohort", "_cold_source_owned_impl")
 META_PREFIX = "sim2act-0.1.0.dist-info/"
 METADATA = {
     META_PREFIX + name
