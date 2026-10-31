@@ -1,0 +1,81 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____________ test_original_thirty_large_fails_without_false_result _____________
+
+env = (<sim2act.db.Store object at 0x7fcf0dba9af0>, Settings(database_url='sqlite:////workspace/scratch/ordinary-thirty-nega...b7cdd9c99d47d9967690d6e718d3ac', 'user_42e49717697a46898156a24b674e1f95', 'proj_292da972105044019511a1eac21d4818', ...)
+tmp_path = PosixPath('/workspace/scratch/ordinary-thirty-negative-2ad32276-20261031/test_original_thirty_large_fai0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fcf0dba97c0>
+
+    def test_original_thirty_large_fails_without_false_result(env,tmp_path,monkeypatch):
+        opened=snapshots(monkeypatch,env[1].database_url)
+        original_prepare=controller_test.prepare_pb
+        changes=[]
+        # Restore the original helper reference before any application code runs.
+        # Only choose a freshly approved old TrialCaps payload, never mutate approval.
+        def ordinary_prepare(env,out):
+            controller_test.prepare_pb=original_prepare
+            data=controller_test.apps.setup(env)
+            account='synthetic-pb-production-shape'
+            subject=controller_test.admission.canonical_quota_subject(account)
+            data=(data[0],replace(data[1],quota_subject=subject),*data[2:])
+            data[0].initialize(quota_subject=subject)
+            original,consent=controller_test.frozen(data,ttl=1800)
+            contract=gate.PBTrialContract(**(original.model_dump()|dict(quota_subject=subject,
+                caps=gate.TrialCaps().model_dump())),path='P-B',
+                extraction_request_key='original-pb-production-extraction',
+                extraction_recipe=controller_test.apps.recipe('ordered'))
+            consent=consent.model_copy(update=dict(expected_contract_fingerprint=fingerprint(contract.model_dump())))
+            gate.approve(data[0],data[3],contract,consent)
+            changes.append({'caps':contract.caps.model_dump(),'approval_key':consent.request_key,
+                'contract_fingerprint':fingerprint(contract.model_dump()),'original_approve_used':True})
+            return data,SimpleNamespace(contract=contract,approval_key=consent.request_key,account_id=account)
+        monkeypatch.setattr(controller_test,'prepare_pb',ordinary_prepare)
+        caught=None;frame=None
+        try:original_flow(env,tmp_path,monkeypatch)
+        except AssertionError as error:
+            caught=error;tb=error.__traceback__
+            while tb:
+                if tb.tb_frame.f_code is original_flow.__code__:frame=tb.tb_frame
+                tb=tb.tb_next
+        assert caught is not None and frame is not None
+        text=Path(original_flow.__code__.co_filename).read_text()
+        wanted=next(n.lineno for n in ast.walk(ast.parse(text)) if isinstance(n,ast.Assert)
+            and ast.get_source_segment(text,n.test)=='result.status_code == 200 and result.json()["status"] == "SUCCEEDED"')
+        last=traceback.extract_tb(caught.__traceback__)[-1]
+        assert Path(last.filename)==Path(original_flow.__code__.co_filename) and last.lineno==wanted,(last,wanted)
+        binding=frame.f_locals['binding'];cold=frame.f_locals['cold_id']
+        assert type(binding.contract.caps) is gate.TrialCaps
+        assert len(changes)==1 and changes[0]['caps']['lease_seconds']==30
+        assert 'settlement_seconds' not in changes[0]['caps']
+        assert len(opened)==1
+        records=list(opened[0]._local_model_snapshot_records)
+        assert len(records)==1 and records[0]['outcome']=='ROLLED_BACK'
+        assert 27<records[0]['seconds']<120
+        # The original controller has returned and its stores/worker have closed.
+        # These are negative-case reads, not a first-success readback claim.
+        db=tmp_path/'fixture.db'
+        with sqlite3.connect('file:'+str(db)+'?mode=ro',uri=True) as c:
+            c.row_factory=sqlite3.Row
+            run=dict(c.execute('SELECT * FROM runs WHERE id=?',(cold,)).fetchone())
+            attempt=dict(c.execute('SELECT * FROM attempts WHERE run_id=?',(cold,)).fetchone())
+            operation=dict(c.execute('SELECT * FROM operations WHERE run_id=?',(cold,)).fetchone())
+            internal=dict(c.execute('SELECT a.* FROM internal_app_runs a JOIN internal_run_bindings b ON b.app_run_id=a.id WHERE b.run_id=?',(cold,)).fetchone())
+            typed=c.execute('SELECT count(*) FROM internal_instance_data WHERE instance_id=?',(internal['instance_id'],)).fetchone()[0]
+            settled=c.execute("SELECT count(*) FROM events WHERE run_id=? AND kind IN ('NS_SETTLED','SPEC_STEP_VERIFIED','NS_SETTLEMENT_LEASE_RESERVED')",(cold,)).fetchone()[0]
+            total=c.execute('SELECT count(*) FROM attempts').fetchone()[0]
+        assert run['status']!='SUCCEEDED' and run['created_at']+300>time.time()
+        assert binding.contract.expires_at>time.time()
+>       assert attempt['status']=='RECEIVED' and attempt['response'] is not None
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError
+
+../test_original_thirty_large_20261031.py:74: AssertionError
+=============================== warnings summary ===============================
+../../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../test_original_thirty_large_20261031.py::test_original_thirty_large_fails_without_false_result
+1 failed, 1 warning in 349.49s (0:05:49)

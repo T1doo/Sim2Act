@@ -1,6 +1,8 @@
 # Sim2Act
 
-> **当前图错误边界修复候选：2d41ad38（Linux x86_64／CPython3.12）**。[ZIP、准确身份、安装／停止／卸载范围](deliverables/limited-text-candidate-graph-fixed-20261031/README.md)。原12图失败逐项闭合：11项fixture替换生产函数违反原代码门，去替换后暴露1项真实frontier AttributeError，已修受控拒绝且完整门保留。冻结293及新安装59项零失败／零跳过；新包CSV=30保存／首次重开／原键、正常关闭及专用环境卸载后数据保留实测通过。[失败原件、逐项对照和实际流程](docs/evidence/graph-fixture-and-installed-cleanup-20261031/README.md)。本轮0新真实模型调用，仅核前版真实结果兼容；非Windows EXE／全产品／正式Release，PG／大型Cold live及30秒稳定性能缺口仍保留。
+> **当前更早截止修复候选：2ad32276（Linux x86_64／CPython3.12）**。[包身份及使用范围](deliverables/limited-text-candidate-deadline-20261031/README.md)。签120结算也受原更早state截止约束，原越界提交反例已实修；307／安装44项定向回归通过，范围重叠。匹配大型两笔保存／首次重开通过，但G0为31.09／30.96秒、writer45.45／49.60秒、total76.54／80.56秒，比基线更慢，**未解决原普通30秒目标**。[原失败、实际对照及未实现的最小完整架构](docs/evidence/cold-earliest-deadline-boundary-20261031/README.md)。本轮0新真实模型，未改main／Release、Windows／PG未验；不是全产品完成。
+
+> **前版图错误边界修复候选：2d41ad38（Linux x86_64／CPython3.12）**。[ZIP、准确身份、安装／停止／卸载范围](deliverables/limited-text-candidate-graph-fixed-20261031/README.md)。原12图失败逐项闭合：11项fixture替换生产函数违反原代码门，去替换后暴露1项真实frontier AttributeError，已修受控拒绝且完整门保留。冻结293及新安装59项零失败／零跳过；新包CSV=30保存／首次重开／原键、正常关闭及专用环境卸载后数据保留实测通过。[失败原件、逐项对照和实际流程](docs/evidence/graph-fixture-and-installed-cleanup-20261031/README.md)。本轮0新真实模型调用，仅核前版真实结果兼容；非Windows EXE／全产品／正式Release，PG／大型Cold live及30秒稳定性能缺口仍保留。
 
 > **前版真实模型限制候选：1a23c032（Linux x86_64／CPython3.12）**。[ZIP、一次启动步骤、版本与哈希](deliverables/limited-text-candidate-final-20261031/README.md)。已新安装并从源码目录外执行：新direct.v2单文本目标2次真实Intern、1739 tokens、6.39秒独立验收保存及首次重开，原键不重放；历史UNKNOWN和格式失败保留。旧SQLite30秒续租／提交及更窄state截止已补尾检，原120秒合同未改；安全修复不冒充性能达标。[分版本测试、失败及实际证据](docs/evidence/finite-lease-and-installed-v2-20261031/README.md)。默认模型关闭，非Windows EXE／正式Release，PG／大型Cold live及30秒稳定性能仍未验。
 

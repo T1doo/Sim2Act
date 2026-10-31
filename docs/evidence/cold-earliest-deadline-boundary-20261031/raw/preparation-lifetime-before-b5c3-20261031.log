@@ -1,0 +1,111 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+________ test_signed_interval_cannot_book_after_earlier_state_deadline _________
+
+received = (namespace(store=<sim2act.db.Store object at 0x7fb8f5b069c0>, s=Settings(database_url='sqlite:////workspace/scratch/pr...'lease_until': 1793477842.96417, 'deadline': 0, 'renewal_lock': <unlocked _thread.lock object at 0x7fb8f529cc80>, ...})
+tmp_path = PosixPath('/workspace/scratch/preparation-lifetime-before-b5c3-20261031/test_signed_interval_cannot_bo0')
+
+    def test_signed_interval_cannot_book_after_earlier_state_deadline(received,tmp_path):
+        worker,job,aid,deadline,state=received
+        state['deadline']=0
+        with worker.store.engine.connect() as c:
+            before=c.execute(select(runs.c.lease_until).where(runs.c.id==job['id'])).scalar_one()
+        caught=None;entered=False
+        try:
+            with runtime._model_settlement_writer(worker,job,deadline,state,attempt_id=aid):
+                entered=True
+        except DomainError as error:caught=error
+        with worker.store.engine.connect() as c:
+            after=c.execute(select(runs.c.lease_until).where(runs.c.id==job['id'])).scalar_one()
+            booked=c.execute(select(events.c.id).where(events.c.run_id==job['id'],
+                events.c.kind==settlement.RESERVED)).all()
+        (tmp_path/'expired-state-booking.json').write_text(json.dumps(dict(
+            entered=entered,rejected=caught is not None,lease_unchanged=before==after,
+            reserved_events=len(booked),real_model_requests=0),indent=2)+'\n')
+>       assert caught is not None and not entered
+E       assert (None is not None)
+
+tests/test_settlement_preparation_lifetime.py:35: AssertionError
+________ test_signed_writer_commit_keeps_earliest_state_deadline[False] ________
+
+received = (namespace(store=<sim2act.db.Store object at 0x7fb8f40e0230>, s=Settings(database_url='sqlite:////workspace/scratch/pr...477844.3947275, 'deadline': 1793477814.3626242, 'renewal_lock': <unlocked _thread.lock object at 0x7fb8ef1f8d80>, ...})
+tmp_path = PosixPath('/workspace/scratch/preparation-lifetime-before-b5c3-20261031/test_signed_writer_commit_keep0')
+snapshot = False
+
+    @pytest.mark.parametrize('snapshot',[False,True])
+    def test_signed_writer_commit_keeps_earliest_state_deadline(received,tmp_path,snapshot):
+        worker,job,aid,deadline,state=received
+        if snapshot:worker.store._enable_local_model_snapshots()
+        cutoff=time.time()+.4
+        state['deadline']=cutoff
+        entered=[];caught=None;actual_token=None
+        try:
+            with runtime._model_settlement_writer(worker,job,deadline,state,attempt_id=aid):
+                actual_token=worker._settlement_interval
+                with runtime._model_writer_connection(worker,None,None) as (c,plan):
+                    assert plan is None
+                    snapshots.promote(c)
+                    c.execute(update(runs).where(runs.c.id==job['id']).values(result={'expired-state':'must-not-commit'}))
+                    def callback(connection):
+                        entered.append(time.time()<cutoff)
+                        threading.Event().wait(max(0,cutoff-time.time())+.03)
+                    event.listen(c,'commit',callback)
+        except (DomainError,snapshots.SnapshotChanged) as error:caught=error
+        with worker.store.engine.connect() as c:
+            result=c.execute(select(runs.c.result).where(runs.c.id==job['id'])).scalar_one()
+        (tmp_path/'earliest-state-writer.json').write_text(json.dumps(dict(
+            snapshot=snapshot,callback_entered_before_deadline=entered,
+            original_state_deadline=cutoff,actual_token_wall_deadline=actual_token[1],
+            rejected=caught is not None,persisted_result=result,real_model_requests=0),indent=2)+'\n')
+        assert entered==[True]
+>       assert caught is not None and result is None
+E       assert (None is not None)
+
+tests/test_settlement_preparation_lifetime.py:65: AssertionError
+________ test_signed_writer_commit_keeps_earliest_state_deadline[True] _________
+
+received = (namespace(store=<sim2act.db.Store object at 0x7fb8ef18e360>, s=Settings(database_url='sqlite:////workspace/scratch/pr...3477845.7911851, 'deadline': 1793477815.759759, 'renewal_lock': <unlocked _thread.lock object at 0x7fb8ef40b640>, ...})
+tmp_path = PosixPath('/workspace/scratch/preparation-lifetime-before-b5c3-20261031/test_signed_writer_commit_keep1')
+snapshot = True
+
+    @pytest.mark.parametrize('snapshot',[False,True])
+    def test_signed_writer_commit_keeps_earliest_state_deadline(received,tmp_path,snapshot):
+        worker,job,aid,deadline,state=received
+        if snapshot:worker.store._enable_local_model_snapshots()
+        cutoff=time.time()+.4
+        state['deadline']=cutoff
+        entered=[];caught=None;actual_token=None
+        try:
+            with runtime._model_settlement_writer(worker,job,deadline,state,attempt_id=aid):
+                actual_token=worker._settlement_interval
+                with runtime._model_writer_connection(worker,None,None) as (c,plan):
+                    assert plan is None
+                    snapshots.promote(c)
+                    c.execute(update(runs).where(runs.c.id==job['id']).values(result={'expired-state':'must-not-commit'}))
+                    def callback(connection):
+                        entered.append(time.time()<cutoff)
+                        threading.Event().wait(max(0,cutoff-time.time())+.03)
+                    event.listen(c,'commit',callback)
+        except (DomainError,snapshots.SnapshotChanged) as error:caught=error
+        with worker.store.engine.connect() as c:
+            result=c.execute(select(runs.c.result).where(runs.c.id==job['id'])).scalar_one()
+        (tmp_path/'earliest-state-writer.json').write_text(json.dumps(dict(
+            snapshot=snapshot,callback_entered_before_deadline=entered,
+            original_state_deadline=cutoff,actual_token_wall_deadline=actual_token[1],
+            rejected=caught is not None,persisted_result=result,real_model_requests=0),indent=2)+'\n')
+        assert entered==[True]
+>       assert caught is not None and result is None
+E       assert (None is not None)
+
+tests/test_settlement_preparation_lifetime.py:65: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_settlement_preparation_lifetime.py::test_signed_interval_cannot_book_after_earlier_state_deadline
+FAILED tests/test_settlement_preparation_lifetime.py::test_signed_writer_commit_keeps_earliest_state_deadline[False]
+FAILED tests/test_settlement_preparation_lifetime.py::test_signed_writer_commit_keeps_earliest_state_deadline[True]
+3 failed, 1 warning in 4.09s
