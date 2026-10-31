@@ -1424,6 +1424,9 @@ def _bound_contract_from_facts(store, c, user, job, limits, snapshot, draft, man
     from .db import attempts
     contract = store._frozen_contract_after_scope(c, job)
     _bound_checkpoint(store, c, _graph_read)
+    from . import _cold_use_manifest as owned_manifest
+    model = (owned_manifest.current(_graph_read,manifest)
+        if owned_manifest.is_manifest(manifest) else manifest)
     from .spec_production import generation_mode
     content = goal["snapshot"]["content"]
     require(contract.source_goal_card is None and contract.goal.goal_id == goal["card_id"]
@@ -1443,7 +1446,7 @@ def _bound_contract_from_facts(store, c, user, job, limits, snapshot, draft, man
     if natural.is_candidate(draft["candidate"]):
         from .natural_spec_runtime import counters
         clock = snapshot.get("natural_spec_clock")
-        _bound_clock_from_facts(clock, job, contract, manifest)
+        _bound_clock_from_facts(clock, job, contract, model)
         if _graph_read is None:
             counters(c, job, manifest)
         else:
@@ -1456,7 +1459,7 @@ def _bound_contract_from_facts(store, c, user, job, limits, snapshot, draft, man
             and type(job["context"].get("tools")) is int and 0 <= job["context"]["tools"] <= 4)
         require(c.execute(select(attempts.c.id).where(attempts.c.run_id == job["id"])).first() is None)
     if validate_input:
-        validate_value(manifest.input_schema, snapshot["input"])
+        validate_value(_source_fact_code.image.plain(model.input_schema), snapshot["input"])
     plan = _bound_plan_from_facts(draft, snapshot, source)
     _bound_checkpoint(store, c, _graph_read)
     return contract, plan

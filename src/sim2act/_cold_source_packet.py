@@ -250,13 +250,14 @@ def raw_fields(graph,expected_pin):
     return native.read_owner(native.binding_owner(packet))[1]
 
 
-def _config(graph):
+def _config(graph, *, _manifest=False):
     from . import natural_spec_runtime as rt, natural_live_admission as gate
     from . import _cold_graph_structure_guard as structure, _cold_policy_segment as schema
     from . import production_trial_policy as policy, production_trial_sender as sender
     from .natural_source_archives import BodyArchive
     require(structure._qualified(graph))
-    models=(policy.Slot,policy.ReservationIdentity,policy.Outcome,sender.Capture,BodyArchive)
+    require(type(_manifest) is bool)
+    models=image.model_classes() if _manifest else image.model_classes()[:5]
     require(all(schema._fixed_schema(cls) for cls in (*models,policy.Ledger)))
     def descriptor(cls,name):
         return next(vars(base)[name] for base in cls.__mro__ if name in vars(base))

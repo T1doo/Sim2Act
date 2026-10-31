@@ -121,9 +121,11 @@ def base_audit(store, c, user, base, family, *, _audit_out=None):
     return (pb.audit_fingerprint if family == PB else spec.audit_fingerprint)(store, c, user, base)
 
 
-def _bound_fingerprint(value):
+def _bound_fingerprint(value, *, _graph_read=None):
     draft, manifest, report, material, goal = value
-    return fingerprint([draft, manifest.model_dump(), report, material, goal])
+    saved = (_manifest_code.dump(_graph_read,manifest) if _graph_read is not None and _manifest_code.is_manifest(manifest)
+        else manifest.model_dump())
+    return fingerprint([draft, saved, report, material, goal])
 
 
 def _invalidate_use_reads(*values):
@@ -742,15 +744,19 @@ def _bound_review_identity_from_facts(snapshot, family, body, frozen, checked, *
         and snapshot["pb_effective_fingerprint" if family == PB else "pa_effective_fingerprint"] == checked["effective_fingerprint"])
 
 
-def _bound_review_from_facts(job, snapshot, release, limits, family, body, frozen, checked, *, _graph_read=None):
+def _bound_review_from_facts(job, snapshot, release, limits, family, body, frozen, checked, *, _graph_read=None, _manifest_key=None):
     """Pure original predicates; caller retains all preceding scope/IO gates."""
     try:
         _use_own_checkpoint(_graph_read)
         _bound_review_identity_from_facts(snapshot, family, body, frozen, checked, _graph_read=_graph_read)
         draft = {**copy.deepcopy(_use_fact_code.image.compat(release["snapshot"]["draft"])), "candidate": checked["effective_candidate"],
             "fingerprint": checked["effective_fingerprint"], family.field + "_run_id": job["id"]}
-        manifest, _, report = natural.compile_candidate(draft["candidate"], limits)
+        selected = _manifest_code.compiler(_graph_read) if _manifest_key is not None else None
+        compile_current = natural.compile_candidate if selected is None else selected
+        manifest, _, report = compile_current(draft["candidate"], limits)
         _use_own_checkpoint(_graph_read)
+        if selected is not None:
+            manifest = _manifest_code.publish(_graph_read,_manifest_key,manifest,selected)
         return draft, manifest, report
     except BaseException:
         _invalidate_use_reads(_graph_read)
@@ -1094,12 +1100,15 @@ def _cold_bound_from_review(store, c, user, prefix, review_facts):
         _cold_review_for_bound(store, c, user, prefix, review_facts)
         checked, material, goal = review_facts.value
         result = _bound_review_from_facts(prefix.job, prefix.snapshot, prefix.release,
-            prefix.limits, PB, prefix.body, prefix.frozen, checked, _graph_read=prefix.guard)
+            prefix.limits, PB, prefix.body, prefix.frozen, checked, _graph_read=prefix.guard,
+            _manifest_key=prefix.key+':manifest')
         prefix.check(store, c, user)
         review_facts.check(store, c, user)
         draft, manifest, report = result
         bound = draft, manifest, report, material, _use_dump(GoalCardRunSource, goal, prefix.guard)
-        prefix.guard.add(prefix.key + ":bound", dict(draft=draft, manifest=manifest.model_dump(),
+        saved_manifest = (_manifest_code.dump(prefix.guard,manifest,key=prefix.key+':manifest')
+            if _manifest_code.is_manifest(manifest) else manifest.model_dump())
+        prefix.guard.add(prefix.key + ":bound", dict(draft=draft, manifest=saved_manifest,
             report=report, material=material, goal=bound[4]))
         return bound
     except BaseException:
@@ -1452,14 +1461,22 @@ def mount(app, store, limits, identity, *, family=PB):
 # leaves. Public no-Graph review/bound/audit retain their original protocol.
 from types import FunctionType as _UseFunctionType
 from . import _cold_source_packet as _use_fact_code
+from . import _cold_use_manifest as _manifest_code
 from . import delivery_graph_apps as _use_pair_code
 _USE_OWNED_CHECK=_use_fact_code.CHECK
 _USE_OWNED_ENABLED=_use_fact_code._SOURCE_OK
 _use_fact_code.register(8,globals(),tuple(name for name,value in tuple(globals().items())
     if type(value) is _UseFunctionType and value.__module__==__name__
     and (name.startswith('_') or name in ('scope_gate','use_hint','saved_family')))+('fingerprint','require'),
-    (_ColdUseReviewPrefix,_ColdUseReviewFacts,_ColdUseBoundPrefix,_ColdUseAuditPrefix,Family),
+    (_ColdUseReviewPrefix,_ColdUseReviewFacts,_ColdUseBoundPrefix,_ColdUseAuditPrefix,Family,
+        *_use_fact_code.image.model_classes()[5:]),
     constants=('PB','PA','FAMILIES','_USE_FAMILY_STATES','Family','CommitInput','ReviewInput','RunScopeInput',
         'GoalCardRunSource','Limits','natural','pb','spec','copy','_use_fact_code','_use_pair_code',
-        '_USE_OWNED_CHECK','_USE_OWNED_ENABLED'),
-    helpers=((vars(_use_pair_code),('lookup','checked')),))
+        '_USE_OWNED_CHECK','_USE_OWNED_ENABLED','_manifest_code'),
+    helpers=((vars(_use_pair_code),('lookup','checked')),
+        (vars(_manifest_code),('_predicate','_guarded','is_manifest','compiler','current','_current','dump','publish','_publish','_fallback'))),
+    constant_helpers=((vars(_manifest_code),('TAG','SCHEMA','_COMPILE','_COMPILE_STATE','owned','natural',
+        'AppManifest','DomainError','_TYPE','_LEN','_ALL','_DICT','_TUPLE','_STR','_VARS','_PROFILE','_TRACE',
+        '_BASE_EXCEPTION','sys')),
+        (vars(_manifest_code.sys),('getprofile','gettrace')),
+        (vars(_use_fact_code.image),('model_classes',)),))

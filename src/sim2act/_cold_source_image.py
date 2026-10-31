@@ -15,8 +15,21 @@ _MAX_EDGES=1000000
 _MAX_LEAF=16*1024*1024
 
 
-def capture(incoming, outside, *, _parents=None):
+def model_classes():
+    """Fixed model ordinals; existing five Source ordinals never change."""
+    from . import production_trial_policy as policy, production_trial_sender as sender
+    from .natural_source_archives import BodyArchive
+    from .contracts import (AppManifest, Limits, Dependency, PermissionRequirement,
+        View as ManifestView, FieldSource, BranchCondition, BranchGroup,
+        WorkflowStep, ActionBinding, DataBinding, RuntimeIdentity)
+    return (policy.Slot,policy.ReservationIdentity,policy.Outcome,sender.Capture,BodyArchive,
+        AppManifest,Limits,Dependency,PermissionRequirement,ManifestView,FieldSource,
+        BranchCondition,BranchGroup,WorkflowStep,ActionBinding,DataBinding,RuntimeIdentity)
+
+
+def capture(incoming, outside, *, _parents=None, _manifest=False):
     if _parents is not None and type(_parents) is not list:raise Unsupported('exact parent registry required')
+    if type(_manifest) is not bool:raise Unsupported('exact model domain required')
     from sim2act import natural_spec_runtime as rt, natural_live_admission as gate
     from . import _cold_source_owned_impl as native
     from sim2act import production_trial_policy as policy, production_trial_sender as sender
@@ -25,7 +38,7 @@ def capture(incoming, outside, *, _parents=None):
     from sqlalchemy.engine import RowMapping
     from sqlalchemy.sql.elements import quoted_name
     from sim2act.contracts import Limits
-    models=(policy.Slot,policy.ReservationIdentity,policy.Outcome,sender.Capture,BodyArchive)
+    models=model_classes() if _manifest else model_classes()[:5]
     nodes=[];origins=[];memo={};held=[];active=set();synthetic=[];leaves=[];kinds=[]
     # Outside-only nodes need identity/type/budget state, never an emitted
     # record or an anchor. Negative refs keep their joint alias domain apart

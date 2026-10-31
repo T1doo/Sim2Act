@@ -54,6 +54,16 @@ def material_goal(store, user, resource, goal, content):
         goal_version=goal["version"], goal_fingerprint=goal["fingerprint"], goal_snapshot=saved["snapshot"])
 
 
+def use_value_protocol(guard,value):
+    """Complete visible protocol, with the explicit owned schema validated."""
+    from sim2act import _cold_use_manifest as owned_manifest
+    from sim2act._cold_source_image import compat
+    manifest=value[1]
+    raw=(owned_manifest.dump(guard,manifest) if owned_manifest.is_manifest(manifest)
+        else manifest.model_dump())
+    return compat((value[0],raw,*value[2:]))
+
+
 def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_path, monkeypatch, *, _post_facts_case=False, _base_probe=None, _effective_probe=None):
     from test_natural_spec_apps import SOURCE
 
@@ -262,7 +272,11 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                                 assert graph.extraction_audit_prefix.actual is not base
                             assert graph.extraction_origin == expected_extraction_origin
                             assert graph.extraction_audit == expected_extraction_audit
-                            assert graph.use_value == expected_use
+                            assert use_value_protocol(guard,graph.use_value) == use_value_protocol(None,expected_use)
+                            from sim2act import _cold_use_manifest as owned_manifest
+                            if native_owned.available():
+                                assert owned_manifest.is_manifest(graph.use_value[1])
+                                owned_manifest.current(guard,graph.use_value[1],key=graph.use_prefix.key+':manifest')
                             assert graph.binding["source"]["resource_id"] == third
                             assert graph.source_binding["source"]["resource_id"] == data[5]
                             assert graph.binding["release"]["id"] == release["id"]
@@ -328,7 +342,7 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                                 extraction_review=graph.extraction_review.checked,
                                 extraction_audit=graph.extraction_audit,
                                 extraction_manifest=graph.extraction_origin[0].model_dump(),
-                                use_candidate=graph.use_value[0], use_manifest=graph.use_value[1].model_dump(),
+                                use_candidate=graph.use_value[0], use_manifest=use_value_protocol(guard,graph.use_value)[1],
                                 use_report=graph.use_value[2], use_source=graph.use_value[3], use_goal=graph.use_value[4]))
                         assert not guard.active
                     first_guard = guard
@@ -361,7 +375,7 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                             assert generation_image.compat(seeded_graph.native_audit) == expected_native
                             assert seeded_graph.extraction_origin == expected_extraction_origin
                             assert seeded_graph.extraction_audit == expected_extraction_audit
-                            assert seeded_graph.use_value == expected_use
+                            assert use_value_protocol(seed_guard,seeded_graph.use_value) == use_value_protocol(None,expected_use)
                             assert seeded_graph.binding["source"]["resource_id"] == third
                             assert seeded_graph.source_binding["source"]["resource_id"] == data[5]
                             assert seeded_graph.binding["release"]["id"] == release["id"]
@@ -399,7 +413,7 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                                 generation_history=seeded_graph.generation_history,
                                 extraction_origin=[seeded_graph.extraction_origin[0].model_dump(),
                                     *seeded_graph.extraction_origin[1:]],
-                                use_value=[seeded_graph.use_value[0], seeded_graph.use_value[1].model_dump(),
+                                use_value=[seeded_graph.use_value[0], use_value_protocol(seed_guard,seeded_graph.use_value)[1],
                                     *seeded_graph.use_value[2:]]))
                         assert not seed_guard.active
                 after = snapshot(store)

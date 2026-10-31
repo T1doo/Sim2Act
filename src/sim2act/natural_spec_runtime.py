@@ -51,6 +51,7 @@ from . import _cold_policy_segment as _policy_segments
 from . import _cold_typed_native_candidate as _typed_native_code
 from . import db as _raw_seed_db
 from . import _cold_source_packet as _source_owned_code
+from . import _cold_use_manifest as _manifest_code
 _SOURCE_OWNED_CHECK = _source_owned_code.CHECK
 _SOURCE_BINDING_TYPE = _source_owned_code._BINDING
 _SOURCE_VIEW_TYPE = _source_owned_code.image.View
@@ -593,9 +594,16 @@ class _ColdRunFacts:
             else:
                 require(raw_seed is None, "Cold reader raw seed attachment changed")
             for manifest, name in self._manifests:
-                require(manifest.model_dump() == self.guard.inputs[f"{self.key}:{name}"]["manifest"]
-                    and manifest.runtime_limits is self.guard.inputs[f"{self.key}:{name}"]["limits"],
-                    "Complete counter Limits facet changed")
+                saved=self.guard.inputs[f"{self.key}:{name}"]
+                if _manifest_code.is_manifest(manifest):
+                    model=_manifest_code.current(self.guard,manifest)
+                    require(_source_owned_code.image.same(_manifest_code.dump(self.guard,manifest),saved['manifest'])
+                        and _source_owned_code.image.same(model.runtime_limits,saved['limits']),
+                        'Complete owned counter Limits facet changed')
+                else:
+                    require(manifest.model_dump() == saved['manifest']
+                        and manifest.runtime_limits is saved['limits'],
+                        "Complete counter Limits facet changed")
         except BaseException:
             _invalidate_cold_run_facts(self)
             raise
@@ -675,12 +683,21 @@ class _ColdRunFacts:
             from .contracts import AppManifest
 
             self.check(self.store, self.connection, self.job)
-            require(type(manifest) is AppManifest and type(manifest.runtime_limits) is Limits)
+            owned_manifest=_manifest_code.is_manifest(manifest)
+            if owned_manifest:
+                model=_manifest_code.current(self.guard,manifest)
+            else:
+                require(type(manifest) is AppManifest and type(manifest.runtime_limits) is Limits)
+                model=manifest
             for current, name in self._manifests:
-                if current is manifest:
+                if (current is manifest or owned_manifest and _manifest_code.is_manifest(current)
+                        and current[1]==manifest[1]
+                        and _source_owned_code.image.same(current[2],manifest[2])
+                        and _source_owned_code.image.same(current[3],manifest[3])):
                     return name
             name = f"counter-manifest:{len(self._manifests)}"
-            self._put(name, dict(manifest=manifest.model_dump(), limits=manifest.runtime_limits))
+            self._put(name, dict(manifest=_manifest_code.dump(self.guard,manifest) if owned_manifest
+                else manifest.model_dump(), limits=model.runtime_limits))
             self._manifests.append((manifest, name))
             return name
         except BaseException:
@@ -711,6 +728,21 @@ class _ColdRunFacts:
             for current, name in self._manifests:
                 if current is manifest:
                     return manifest
+                if _manifest_code.is_manifest(current):
+                    saved_raw=_manifest_code.dump(self.guard,current)
+                    if not _COUNTER_SERIALIZERS([(AppManifest,manifest,{})]):
+                        return manifest
+                    private=_COUNTER_SNAPSHOT([manifest])
+                    if private is _policy_segments._UNSUITABLE:
+                        return manifest
+                    try:
+                        dumped=AppManifest.model_dump(private[0],warnings='error')
+                    except PydanticSerializationError:
+                        return manifest
+                    if _COUNTER_EQUAL(dumped,_source_owned_code.image.plain(saved_raw)):
+                        self.check(self.store,self.connection,self.job)
+                        return current
+                    continue
                 saved = self._raw.get(name)
                 if type(current) is not AppManifest or type(saved) is not dict:
                     return manifest
@@ -1286,6 +1318,9 @@ def _counters(c, job, manifest, *, _facts=None):
         selected = _cold_counter_loaded(c, job, manifest, _facts)
         if selected is not _RAW_READ_MISS:
             return selected
+    if _manifest_code.is_manifest(manifest):
+        require(_facts is not None,'Owned manifest counters require their original fact scope')
+        manifest=_manifest_code.current(_facts.guard,manifest)
     rows = _facts.attempt_rows() if _facts is not None else (
         c.execute(
             select(attempts)
@@ -3049,9 +3084,18 @@ def _raw_read_eligible(facts, name):
         if type(entry) is not tuple or len(entry) != 2:
             return False
         model, key = entry
-        if type(model) is not AppManifest or type(key) is not str:
+        if type(key) is not str:
             return False
         saved = raw.get(key)
+        if _manifest_code.is_manifest(model):
+            current=_manifest_code.current(guard,model)
+            if (type(saved) is not dict
+                    or not _source_owned_code.image.same(saved.get('manifest'),_manifest_code.dump(guard,model))
+                    or not _source_owned_code.image.same(saved.get('limits'),current.runtime_limits)):
+                return False
+            continue
+        if type(model) is not AppManifest:
+            return False
         if type(saved) is not dict or type(saved.get('manifest')) is not dict:
             return False
         models.append((AppManifest, model, saved['manifest']))
@@ -3426,10 +3470,13 @@ def _cold_counter_loaded(c, job, manifest, facts):
     ):
         return _RAW_READ_MISS
     namespace = vars(facts)
-    if type(manifest) is not AppManifest or not any(
-        current is manifest for current, _ in namespace["_manifests"]
-    ):
+    manifest_owned=_manifest_code.is_manifest(manifest)
+    if (not manifest_owned and type(manifest) is not AppManifest) or not any(
+        current is manifest or manifest_owned and _manifest_code.is_manifest(current)
+            and current[1]==manifest[1] and _source_owned_code.image.same(current[2],manifest[2])
+            and _source_owned_code.image.same(current[3],manifest[3]) for current,_ in namespace['_manifests']):
         return _RAW_READ_MISS
+    immutable_manifest=_manifest_code.current(facts.guard,manifest) if manifest_owned else None
     raw, rows = namespace["_raw"], namespace["_raw"].get("attempts")
     if (
         type(rows) is not list
@@ -3489,10 +3536,11 @@ def _cold_counter_loaded(c, job, manifest, facts):
     # Retain original rows for the old caller's node proof and alias checks.
     originals = sorted(rows, key=_cold_attempt_order)
     originals.sort(key=lambda row: row["parameters"]["natural_spec"]["ordinal"])
-    snapshot = _COUNTER_SNAPSHOT([complete, manifest])
+    snapshot = _COUNTER_SNAPSHOT([complete] if manifest_owned else [complete,manifest])
     if snapshot is _policy_segments._UNSUITABLE:
         return _RAW_READ_MISS
-    private, private_manifest = snapshot
+    private=snapshot[0]
+    private_manifest=immutable_manifest if manifest_owned else snapshot[1]
     packet = _CounterPacket(facts, private["job"], private_manifest, private["raw"])
     try:
         _counter_packet_core(packet)
@@ -4263,8 +4311,14 @@ class _ColdTrialGraph:
             require(type(t.use_review.prefix.key) is str and type(t.use_prefix.key) is str)
             gate._trial_typed_hold(models, GoalCardRunSource, t.use_review.value[2],
                 raw_slot(t.use_review.prefix.key + ':review')['goal'])
-            gate._trial_typed_hold(models, AppManifest, t.use_value[1],
-                raw_slot(t.use_prefix.key + ':bound')['manifest'])
+            if _manifest_code.is_manifest(t.use_value[1]):
+                require(_source_owned_code.image.same(
+                    _manifest_code.dump(g,t.use_value[1],key=t.use_prefix.key+':manifest'),
+                    raw_slot(t.use_prefix.key+':bound')['manifest']),
+                    'Complete per-use manifest pair changed')
+            else:
+                gate._trial_typed_hold(models, AppManifest, t.use_value[1],
+                    raw_slot(t.use_prefix.key + ':bound')['manifest'])
             for release in (t.release, t.source_release):
                 require(type(release) is lifecycle._ColdReleaseFacts
                     and type(release.origin) is tuple and len(release.origin) == 4)
@@ -4360,7 +4414,13 @@ class _ColdTrialGraph:
         try:
             if getattr(self, '_owned_models', None) is not None:
                 self._owned_models.current()
-            value = model.model_dump()
+            if _SOURCE_VIEW_TYPE is not None:
+                checker,code,defaults=_SOURCE_OWNED_CHECK
+                require(_source_owned_code.current is checker and checker.__code__ is code
+                    and checker.__defaults__ is defaults,'Source checker code changed')
+                checker()
+            value = (_manifest_code.dump(self.guard,model) if _SOURCE_VIEW_TYPE is not None and _manifest_code.is_manifest(model)
+                else model.model_dump())
             self._base()
             return value
         except BaseException:
@@ -5784,7 +5844,7 @@ _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_
         _generation_fact_code._GenerationFactsReader,_generation_fact_code._ColdGenerationRawSeed,
         _release_fact_code._ColdReleasePrefix,_release_fact_code._ColdReleaseFacts,
         _release_apps_code._ColdCandidatePrefix,_release_apps_code._ColdGraphOriginFacts),
-    constants=('AppManifest','_COLD_RELEASE_ROW_ENTRY','_release_apps_code','_release_fact_code','_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_source_owned_code','_SOURCE_VIEW_TYPE','_SOURCE_VIEW_PIN','_SOURCE_OWNER_TYPE','_SOURCE_OWNER_PIN'),
+    constants=('AppManifest','_COLD_RELEASE_ROW_ENTRY','_release_apps_code','_release_fact_code','_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_source_owned_code','_manifest_code','_SOURCE_VIEW_TYPE','_SOURCE_VIEW_PIN','_SOURCE_OWNER_TYPE','_SOURCE_OWNER_PIN'),
     helpers=((vars(_generation_fact_code),('_generation_plain','_generation_mapping',
         '_history_core','_cold_generation_reader','_cold_generation_source','_cold_history_from_source',
         '_cold_candidate_from_history','_parse_candidate_core','_read_receipt_core',

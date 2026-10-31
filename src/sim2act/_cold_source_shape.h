@@ -33,7 +33,7 @@ static int source_image_shape(PyObject*data){
  unsigned char*states=PyMem_Calloc(n,1),*models=PyMem_Calloc(n,1);int ok=0;if(!states||!models)goto done;
  for(Py_ssize_t i=0;i<PyTuple_GET_SIZE(catalog);i++){
   PyObject*e=PyTuple_GET_ITEM(catalog,i);Py_ssize_t ref,kind;
-  if(!PyTuple_CheckExact(e)||PyTuple_GET_SIZE(e)!=2||!shape_ref(PyTuple_GET_ITEM(e,0),n,&ref)||!shape_ref(PyTuple_GET_ITEM(e,1),5,&kind)||models[ref])goto done;
+  if(!PyTuple_CheckExact(e)||PyTuple_GET_SIZE(e)!=2||!shape_ref(PyTuple_GET_ITEM(e,0),n,&ref)||!shape_ref(PyTuple_GET_ITEM(e,1),17,&kind)||models[ref])goto done;
   models[ref]=1;
  }
  for(Py_ssize_t i=0;i<n;i++){
