@@ -8,10 +8,12 @@ and are committed by the existing pa_spec_apps transaction only.
 from __future__ import annotations
 
 import builtins as _raw_read_builtins
+from builtins import type, vars, all, any, dict, str, list, tuple, set, bool, len, getattr, object, isinstance
 import copy
 import copyreg as _raw_read_copyreg
 import hashlib
 import json
+import sys as _graph_version_sys
 import math
 import time
 from collections.abc import Mapping
@@ -52,6 +54,7 @@ from . import _cold_typed_native_candidate as _typed_native_code
 from . import db as _raw_seed_db
 from . import _cold_source_packet as _source_owned_code
 from . import _cold_use_manifest as _manifest_code
+from . import _cold_graph_versions as _graph_versions
 from . import _sqlite_run_control as _raw_read_control
 _SOURCE_OWNED_CHECK = _source_owned_code.CHECK
 _SOURCE_BINDING_TYPE = _source_owned_code._BINDING
@@ -2338,7 +2341,11 @@ class _ColdGraphRead:
         # Counts of existing method entries, including failed/short-circuited
         # calls. Not graph inputs, authority, a cache, or extra graph checks.
         self._diagnostic_counts = [0, 0]
-        self.key = self.input_key(_validate=True)
+        _pin_raw, self.key = self.input_key(_validate=True, _with_bytes=True)
+        self._pin_journal = _graph_versions.create(self)
+        if self._pin_journal is not None:
+            _pin_previous = None
+            _graph_versions.publish(self, _pin_raw, predecessor=_pin_previous)
         self.check(self.store, c)
 
     def input_bytes(self, *, _validate=False, _frontier_inputs=None, _snapshot_values=False):
@@ -2384,18 +2391,61 @@ class _ColdGraphRead:
             _cold_graph_validate_inputs(values)
         return values if _snapshot_values else _cold_graph_bytes(values)
 
+    def content_version(self):
+        """The original issuer/current version, never re-created from live data."""
+        _pin_entry = "sim2act:pin-lookup-const.v1"
+        if _pin_entry is not None:
+            try:_pin_entry(self)
+            except ValueError:raise DomainError("VERSION_CONFLICT", "Graph entry code or instance changed") from None
+        return _graph_versions.current(self)
+
+    def export_version(self, expected=None):
+        """Export original complete V2 bytes after fresh current validation."""
+        _pin_entry = "sim2act:pin-lookup-const.v1"
+        if _pin_entry is not None:
+            try:_pin_entry(self)
+            except ValueError:raise DomainError("VERSION_CONFLICT", "Graph entry code or instance changed") from None
+        require(self._accounted_frontier is None,
+            "Native continuity cannot be exported as legacy origin bytes")
+        self.check(self.store, self.connection)
+        version = self.content_version()
+        if version is None:
+            require(expected is None)
+            raw = self.input_bytes()
+            self.check(self.store, self.connection)
+            require(hashlib.sha256(raw).hexdigest() == self.key)
+            return None, raw, self.key
+        require(expected is None or expected is version, "Graph export version changed")
+        raw, key = version.raw, version.key
+        require(self.content_version() is version)
+        return version, raw, key
+
+    def _content_matches(self):
+        _pin_entry = "sim2act:pin-lookup-const.v1"
+        if _pin_entry is not None:
+            try:_pin_entry(self)
+            except ValueError:raise DomainError("VERSION_CONFLICT", "Graph entry code or instance changed") from None
+        version = self.content_version()
+        if version is None:
+            return self.input_key() == self.key
+        raw, key = self.input_key(_with_bytes=True)
+        if key != version.key:return False
+        return _graph_versions.matches(self, raw, version)
+
     def _frontier_input_key(self, inputs):
         require(self.phase == 'pre' and type(inputs) is dict)
         digest = hashlib.sha256(b"SIM2ACT_NATIVE_ACCOUNTED_FRONTIER_V1\x00")
         digest.update(self.input_bytes(_frontier_inputs=inputs))
         return digest.hexdigest()
 
-    def input_key(self, *, _validate=False):
+    def input_key(self, *, _validate=False, _with_bytes=False):
         try:
             self._diagnostic_counts[1] += 1
         except Exception:
             pass  # Broken diagnostic state must not replace the original work.
-        return hashlib.sha256(self.input_bytes(_validate=_validate)).hexdigest()
+        raw = self.input_bytes(_validate=_validate)
+        key = hashlib.sha256(raw).hexdigest()
+        return (raw, key) if _with_bytes else key
 
     def _check_dynamic(self, store, c):
         """Original lifecycle/header predicates, without a content result/token.
@@ -2404,6 +2454,16 @@ class _ColdGraphRead:
         """
         from .pb_natural_specs import _source_reads_current
 
+        _pin_lookup = "sim2act:pin-lookup-const.v1"
+        if _pin_lookup is not None:
+            try:_pin_issued = _pin_lookup(self)
+            except ValueError:raise DomainError("VERSION_CONFLICT", "Graph dynamic entry changed") from None
+            if _pin_issued is not None:
+                checker, code, defaults = _SOURCE_OWNED_CHECK
+                require(_source_owned_code.current is checker and checker.__code__ is code
+                    and checker.__defaults__ is defaults)
+                checker()
+        _graph_versions.current(self)
         if (vars(self).get('_source_fact_bindings') is not None or
                 (type(self.inputs) is dict and any(type(v) is tuple and len(v) in (2,3) and type(v[0]) is str
                  and (len(v)==2 and v[0]=='sim2act:owned-source-fact.v1'
@@ -2481,22 +2541,45 @@ class _ColdGraphRead:
         except Exception:
             pass
         try:
+            _pin_entry = "sim2act:pin-lookup-const.v1"
+            if _pin_entry is not None:
+                try:_pin_entry(self)
+                except ValueError:raise DomainError("VERSION_CONFLICT", "Graph entry code or instance changed") from None
+            _pin_before = self.content_version()
+            _pin_frontier = self._accounted_frontier
+            _pin_frontier_before = (_graph_versions.current(_pin_frontier)
+                if _pin_frontier is not None else None)
             _ColdGraphRead._check_dynamic(self, store, c)
+            require(self.content_version() is _pin_before, "Graph version changed during dynamic check")
             selected = None
             if self._accounted_frontier is None:
                 from ._cold_graph_structure_guard import select
                 selected = select(self)
             else:
                 vars(self).pop("_structure_state", None)
-            require((self.input_key() == self.key if selected is None else selected)
+            require((self._content_matches() if selected is None else selected)
                     if self._accounted_frontier is None else self._accounted_frontier.check() is None,
                 "Cold graph read segment or complete role inputs changed")
+            require(self.content_version() is _pin_before, "Graph version changed during content check")
+            require(self._accounted_frontier is _pin_frontier and (_pin_frontier is None
+                or _graph_versions.current(_pin_frontier) is _pin_frontier_before),
+                "Graph frontier changed during content check")
         except BaseException:
-            self.invalidate()
+            _revoke = "sim2act:pin-revoke-const.v1"
+            if _revoke is not None and _revoke(self) is False:raise
+            _ColdGraphRead.invalidate(self)
             raise
 
     def add(self, name, value, *, _run_facts=None):
         try:
+            _pin_entry = "sim2act:pin-lookup-const.v1"
+            if _pin_entry is not None:
+                try:_pin_entry(self)
+                except ValueError:raise DomainError("VERSION_CONFLICT", "Graph entry code or instance changed") from None
+            _pin_previous = self.content_version()
+            _pin_frontier = self._accounted_frontier
+            _pin_frontier_previous = (_graph_versions.current(_pin_frontier)
+                if _pin_frontier is not None else None)
             self.check(self.store, self.connection)
             require(type(name) is str and name not in self.inputs, "Cold graph read inputs cannot be rebound")
             # Existing full bytes were checked above. Only this new edge can
@@ -2504,17 +2587,30 @@ class _ColdGraphRead:
             # direct/nested path to the actual root before inserting it.
             _cold_graph_validate_inputs(value, _forbid_root=self.inputs)
             vars(self).pop("_structure_state", None)
+            require(self.content_version() is _pin_previous
+                and self._accounted_frontier is _pin_frontier
+                and (_pin_frontier is None or _graph_versions.current(_pin_frontier) is _pin_frontier_previous),
+                "Graph changed during incoming validation")
             self.inputs[name] = value
             # Re-pin complete current bytes, retaining every field and alias.
             if self._accounted_frontier is None:
-                self.key = self.input_key()
+                if self.content_version() is None:
+                    self.key = self.input_key()
+                else:
+                    _pin_raw = self.input_bytes()
+                    _graph_versions.publish(self, _pin_raw, predecessor=_pin_previous)
             else:
                 self._accounted_frontier.added(name, run_facts=_run_facts)
         except BaseException:
-            self.invalidate()
+            _revoke = "sim2act:pin-revoke-const.v1"
+            if _revoke is not None and _revoke(self) is False:raise
+            _ColdGraphRead.invalidate(self)
             raise
 
     def invalidate(self):
+        _revoke = "sim2act:pin-revoke-const.v1"
+        if _revoke is not None and type(_revoke) is _ColdNativeFunctionType:
+            if _revoke(self) is False:return
         was_active = self.active
         self.active = False
         vars(self).pop('_source_owned_binding',None)
@@ -2534,6 +2630,8 @@ class _ColdGraphRead:
         if frontier is not None:
             from ._cold_accounted_native import _Frontier
             if type(frontier) is _Frontier:
+                if _revoke is not None and type(_revoke) is _ColdNativeFunctionType:
+                    _revoke(frontier)
                 vars(frontier).pop('_structure_state', None)
         # Valid flags are exact bools. A corrupt flag must neither dispatch
         # __bool__ nor retain an otherwise exact, scope-owned allocation.
@@ -2544,6 +2642,12 @@ class _ColdGraphRead:
                     and type(frontier.mode) is _OwnedPrewriteMode
                     and frontier.mode.graph is self):
                 frontier.mode.close()
+
+
+for _version_method in ('__init__','content_version','export_version','_content_matches',
+        '_check_dynamic','check','add','invalidate'):
+    _graph_versions.seal_entries(vars(_ColdGraphRead)[_version_method])
+del _version_method
 
 
 @contextmanager
@@ -5167,7 +5271,8 @@ class _ModelSettlementRead:
                 and self.post_graph is self._post_graph_initial
                 and self.post_graph.guard.phase == "post")
             self.post_graph.check()
-            require(self.post_graph.guard.key == self.inputs["post_graph"]["key"],
+            require(self.post_graph.guard.content_version() is getattr(self, '_post_graph_version', None)
+                and self.post_graph.guard.key == self.inputs["post_graph"]["key"],
                 "Completed postwrite graph changed")
 
     def add(self, **values):
@@ -5414,10 +5519,11 @@ def _model_settlement_read(worker, c, inputs):
                     graph.check()
                     # Complete serialized current graph, plus its independently
                     # rechecked live object, enter the original full input pin.
-                    graph_bytes = graph.guard.input_bytes()
+                    graph_version, graph_bytes, graph_key = graph.guard.export_version()
                     graph.check()
-                    require(hashlib.sha256(graph_bytes).hexdigest() == graph.guard.key)
-                    proof.add(post_graph=dict(raw=graph_bytes, key=graph.guard.key))
+                    require(hashlib.sha256(graph_bytes).hexdigest() == graph_key)
+                    proof.add(post_graph=dict(raw=graph_bytes, key=graph_key))
+                    proof._post_graph_version = graph_version
                     proof.post_graph = proof._post_graph_initial = graph
                     proof.authorities.update(authorities)
                     proof.live()
@@ -5915,6 +6021,11 @@ from . import apps as _release_apps_code
 _COLD_RELEASE_ROW_ENTRY = (_cold_release_row,
     _cold_release_row.__code__, _cold_release_row.__defaults__)
 
+from . import _cold_accounted_native as _graph_accounted_versions
+_graph_accounted_versions.rt = _graph_version_sys.modules[__name__]
+from . import _cold_accounted_values as _graph_version_values
+_graph_version_values._bind_row_storage(_cold_graph_row_storage)
+_graph_versions.register(_ColdGraphRead, _graph_accounted_versions._Frontier)
 _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_limit_values','_cold_release_row',
     'require','_cold_native_audit_fact','_cold_audit_seed','_cold_first_binding','_cold_generated_model_facet',
     '_source_data_kind','_source_fields_equal','_cold_seed_audit_rows','_cold_seed_fixed_rows','_cold_seed_fixed_check',
@@ -5925,15 +6036,17 @@ _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_
     '_counters_from_facts','_counters','_counter_checkpoint','_node_proof_inputs',
     '_prove_node_from_facts','_prove_node','_prove_pending_from_facts','_prove_pending',
     'messages','parse','_anchor','strict_json','response_archive'),
-    (_ColdGraphRead,_ColdTrialGraph,_ColdRunRawSeed,_ColdRunFacts,_ColdAuditSeed,
+    (_ColdGraphRead,_graph_accounted_versions._Frontier,_ColdTrialGraph,_ColdRunRawSeed,_ColdRunFacts,_ColdAuditSeed,
         _RAW_CONTROL_CLASS,_RAW_CONTROL_EPOCH,
         _generation_fact_code._GenerationFactsReader,_generation_fact_code._ColdGenerationRawSeed,
         _release_fact_code._ColdReleasePrefix,_release_fact_code._ColdReleaseFacts,
         _release_apps_code._ColdCandidatePrefix,_release_apps_code._ColdGraphOriginFacts),
-    constants=('AppManifest','_COLD_RELEASE_ROW_ENTRY','_release_apps_code','_release_fact_code','_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_source_owned_code','_manifest_code','_SOURCE_VIEW_TYPE','_SOURCE_VIEW_PIN','_SOURCE_OWNER_TYPE','_SOURCE_OWNER_PIN',
-        '_raw_read_control','_RAW_CONTROL_CLASS','_RAW_CONTROL_EPOCH','_RAW_CONTROL_CHECKPOINT',
+    constants=('DomainError','_ColdNativeFunctionType','type','vars','all','any','dict','str','list','tuple','set','bool','len','getattr','object','isinstance','AppManifest','_COLD_RELEASE_ROW_ENTRY','_release_apps_code','_release_fact_code','_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_source_owned_code','_manifest_code','_SOURCE_VIEW_TYPE','_SOURCE_VIEW_PIN','_SOURCE_OWNER_TYPE','_SOURCE_OWNER_PIN',
+        '_graph_versions','_raw_read_control','_RAW_CONTROL_CLASS','_RAW_CONTROL_EPOCH','_RAW_CONTROL_CHECKPOINT',
         '_RAW_CONTROL_CHECKPOINT_CODE','_RAW_CONTROL_LOCK_TYPE','_RAW_CONTROL_LOCAL_TYPE','_RAW_CONTROL_BUILTINS'),
-    helpers=((vars(_generation_fact_code),('_generation_plain','_generation_mapping',
+    helpers=((vars(_graph_version_values),('_bind_row_storage',)),
+        (vars(_graph_versions),('require','register','_scope','_code','create','publish','current','matches','close','seal_entries')),
+        (vars(_generation_fact_code),('_generation_plain','_generation_mapping',
         '_history_core','_cold_generation_reader','_cold_generation_source','_cold_history_from_source',
         '_cold_candidate_from_history','_parse_candidate_core','_read_receipt_core',
         '_check_counters_core','_check_counter_rows','_check_counters_from_facts',
@@ -5948,7 +6061,12 @@ _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_
         (vars(_release_apps_code),('validate_source_family','compile_preview',
             '_cold_candidate_prefix','_frozen_candidate_prefix','_record_candidate_origin',
             '_checkpoint_candidate_read','_cold_candidate_from_origin'))),
-    constant_helpers=((vars(_release_apps_code),('_ColdCandidatePrefix','_ColdGraphOriginFacts')),
+    constant_helpers=((vars(_graph_version_values),('_ROW_ROLE',)),
+        (vars(_raw_read_builtins),('type','vars','all','any','dict','str','list','tuple','set','bool','len','getattr','object','isinstance')),
+        (vars(hashlib),('sha256',)),
+        (vars(_graph_accounted_versions),('versions','rt')),
+        (vars(_graph_versions),('native','_MODULE','_NAMES','_ENTRIES','AVAILABLE','JOURNAL','VERSION','REVOKE','LOOKUP','_SHA','_REGISTERED','source','_SOURCE_CHECK','DomainError','object','type','tuple','vars','bool','getattr','bytes','all','hasattr','dict')),
+        (vars(_release_apps_code),('_ColdCandidatePrefix','_ColdGraphOriginFacts')),
         (vars(_release_fact_code),('_RELEASE_OWNED_CHECK','_release_owned_code','_ColdReleasePrefix','_ColdReleaseFacts','select','internal_releases','fingerprint','copy','DomainError')),
         (vars(_generation_fact_code),('_generation_owned','_GenerationFactsReader','_ColdGenerationRawSeed',
         'FrozenRunContract','copy','json','httpx')),))

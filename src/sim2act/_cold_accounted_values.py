@@ -10,12 +10,23 @@ import json
 import math
 from dataclasses import dataclass
 from typing import Any, NamedTuple
+from types import FunctionType
 
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.sql.elements import quoted_name
 
 from sim2act.errors import DomainError
-from sim2act.natural_spec_runtime import _cold_graph_row_storage
+
+
+_ROW_ROLE = None
+
+
+def _bind_row_storage(storage):
+    """Import bootstrap only; retain the original leaf, never a per-row alias."""
+    global _ROW_ROLE
+    if _ROW_ROLE is not None or type(storage) is not FunctionType:
+        raise DomainError('VERSION_CONFLICT','Original row storage already bound')
+    _ROW_ROLE=(storage,storage.__code__,storage.__defaults__,storage.__kwdefaults__,storage.__globals__)
 
 
 class _Rejected(DomainError):
@@ -106,7 +117,21 @@ def _freeze(value, bounds):
             node = ("list" if kind is list else "tuple", tuple(child(v) for v in item))
         elif kind is RowMapping:
             # Full keys/data/safe-index payload, including hidden positions.
-            storage = _cold_graph_row_storage(item)
+            if _ROW_ROLE is None:
+                # Only the legacy raw-row subdomain needs runtime bootstrap.
+                # Default prepared packets contain no RowMapping/import hook.
+                from sim2act import natural_spec_runtime
+            role=_ROW_ROLE
+            if type(role) is not tuple or len(role)!=5:
+                raise _Rejected('original row storage role is missing')
+            leaf,code,defaults,kwdefaults,namespace=role
+            if (type(leaf) is not FunctionType or leaf.__code__ is not code
+                    or leaf.__defaults__ is not defaults or leaf.__kwdefaults__ is not kwdefaults
+                    or leaf.__globals__ is not namespace or type(namespace) is not dict
+                    or not all(type(key) is str for key in namespace)
+                    or namespace.get('_cold_graph_row_storage') is not leaf):
+                raise _Rejected('original row storage role changed')
+            storage = leaf(item)
             names = tuple(str(key) for key in storage[0])
             if len(set(names)) != len(names):
                 raise _Rejected("duplicate row keys")

@@ -15,8 +15,8 @@ from sqlalchemy.engine import RowMapping
 
 from . import cold_accounted as o
 from . import natural_live_admission as gate
-from . import natural_spec_runtime as rt
 from . import production_trial_policy as policy
+from . import _cold_graph_versions as versions
 from ._cold_accounted_budget import _Capacity, _Ledger, _Projection, _Unsupported
 from ._cold_accounted_values import _Node, _Packet
 
@@ -401,7 +401,13 @@ class _Frontier:
             packet = mode.scope._issued[mode.inputs['cold-trial:accounted-' + role].handle][1]
             self.tokens[role] = ('owned-accounted-native-continuity.v1', role, packet.digest)
         self.run_token = ('owned-accounted-native-run.v1', self.tokens['generate'])
-        self.expected = self.key()
+        self._pin_journal = versions.create(self)
+        if self._pin_journal is None:
+            self.expected = self.key()
+        else:
+            _pin_previous = None
+            _pin_raw = self.graph.input_bytes(_frontier_inputs=self.values())
+            versions.publish(self, _pin_raw, predecessor=_pin_previous, frontier=True)
 
     @staticmethod
     def _refresh(destination, original, excluded):
@@ -432,8 +438,19 @@ class _Frontier:
             values['cold-trial:complete'] = self.replacement
         return values
 
-    def key(self):
-        return self.graph._frontier_input_key(self.values())
+    def key(self, *, _with_bytes=False):
+        if not _with_bytes:
+            return self.graph._frontier_input_key(self.values())
+        raw = self.graph.input_bytes(_frontier_inputs=self.values())
+        key = rt.hashlib.sha256(b'SIM2ACT_NATIVE_ACCOUNTED_FRONTIER_V1\x00' + raw).hexdigest()
+        return raw, key
+
+    def _content_matches(self):
+        version = versions.current(self)
+        if version is None:return self.key() == self.expected
+        raw, key = self.key(_with_bytes=True)
+        if key != version.key:return False
+        return versions.matches(self, raw, version)
 
     def check(self):
         gate.require(type(self.mode) is o._OwnedPrewriteMode and self.mode.graph is self.graph
@@ -443,14 +460,21 @@ class _Frontier:
         # Keep the original active short-circuit and final require value.
         active = self.mode.active
         if active:
+            _pin_entry = "sim2act:pin-lookup-const.v1"
+            if _pin_entry is not None:
+                try:_pin_entry(self)
+                except ValueError:raise rt.DomainError("VERSION_CONFLICT", "Frontier entry changed") from None
             from ._cold_graph_structure_guard import select_frontier
             selected = select_frontier(self)
-            current = self.key() == self.expected if selected is None else selected
+            if selected is None:
+                current=self._content_matches()
+            else:current=selected
         else:
             current = active
         gate.require(current, 'Native mutable frontier changed')
 
     def added(self, name, *, run_facts=None):
+        _pin_previous = versions.current(self)
         vars(self).pop('_structure_state', None)
         gate.require(name in self.mode._native.future_roots and name not in self.projected,
                      'Unexpected native continuation root')
@@ -468,7 +492,11 @@ class _Frontier:
             self.replacement['source'] = self.tokens['source']
             self.replacement['generated'] = self.tokens['generate']
             self.replacement['generation'] = self.gen_replacement
-        self.expected = self.key()
+        if versions.current(self) is None:
+            self.expected = self.key()
+        else:
+            _pin_raw = self.graph.input_bytes(_frontier_inputs=self.values())
+            versions.publish(self, _pin_raw, predecessor=_pin_previous, frontier=True)
 
 
 @dataclass(frozen=True)
@@ -756,8 +784,10 @@ class _NativeCandidate:
         self.completed.clear()
 
     def release(self):
+        _pin_revoke = "sim2act:pin-revoke-const.v1"
         frontier = getattr(self, 'frontier', None)
         if type(frontier) is _Frontier:
+            if _pin_revoke is not None:_pin_revoke(frontier)
             vars(frontier).pop('_structure_state', None)
         arena = getattr(self, 'arena', None)
         if arena is not None:
@@ -790,6 +820,10 @@ class _NativeCandidate:
         if self.mode is not None:
             self.mode.close()
         self.completed.clear()
+
+
+versions.seal_entries(_NativeCandidate.release)
+versions.seal_entries(_Frontier.check)
 
 
 @contextmanager
@@ -924,3 +958,8 @@ def _archive_native(family, state, resolved):
                      and o._scalar_same(capture.canonical_ascii_bytes, proof['canonical_ascii_bytes'])
                      and resolved.request_bodies[index] == chain.wire
                      and resolved.response_bodies[index] == chain.payload)
+
+
+# Complete native declarations before importing the runtime. Runtime bootstrap
+# records these exact classes; eager import above would observe a partial module.
+from . import natural_spec_runtime as rt

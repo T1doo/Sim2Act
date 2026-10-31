@@ -1,3 +1,4 @@
+#include <stddef.h>
 
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
@@ -242,10 +243,295 @@ static PyObject *same_classes(PyObject *self, PyObject *args) {
     Py_RETURN_TRUE;
 }
 
-static PyMethodDef methods[]={{"same_classes",same_classes,METH_VARARGS,"Fresh complete class namespace and MRO identity comparison without callbacks."},{"snapshot",snapshot,METH_VARARGS,"Bounded independent complete structure for one qualified scope."},{"matches_fast",matches_fast,METH_VARARGS,"Fresh complete structure and alias comparison in the same scope."},{NULL,NULL,0,NULL}};
+
+/* A publication owns the EXACT original V2 bytes, not a hash-only verdict or
+ * a tree reconstructed from later mutable inputs. Versions never change.
+ * The journal owns only its current version; retained old versions are data,
+ * and cannot become current again. No permission is stored here. */
+typedef struct {PyObject_HEAD PyObject *raw,*key,*scope,*sequence,*journal;} PinVersion;
+typedef struct {PyObject_HEAD PyObject *scope,*version,*frontier;size_t sequence;int closed;PyObject*weakrefs;} PinJournal;
+static PyTypeObject pin_version_type,pin_journal_type;
+static PyObject *pin_create_code,*pin_publish_code,*pin_constructors,*pin_publishers,*pin_issued,*pin_graph_class,*pin_frontier_class,*pin_source_verifier;
+static int pin_version_traverse(PinVersion*v,visitproc visit,void*arg){Py_VISIT(v->raw);Py_VISIT(v->key);Py_VISIT(v->scope);Py_VISIT(v->sequence);Py_VISIT(v->journal);return 0;}
+static int pin_version_clear(PinVersion*v){Py_CLEAR(v->raw);Py_CLEAR(v->key);Py_CLEAR(v->scope);Py_CLEAR(v->sequence);Py_CLEAR(v->journal);return 0;}
+static void pin_version_free(PinVersion*v){PyObject_GC_UnTrack(v);pin_version_clear(v);Py_TYPE(v)->tp_free((PyObject*)v);}
+static int pin_journal_traverse(PinJournal*j,visitproc visit,void*arg){Py_VISIT(j->scope);Py_VISIT(j->version);Py_VISIT(j->frontier);return 0;}
+static int pin_journal_clear(PinJournal*j){j->closed=1;Py_CLEAR(j->scope);Py_CLEAR(j->version);Py_CLEAR(j->frontier);return 0;}
+static void pin_journal_free(PinJournal*j){PyObject_GC_UnTrack(j);if(j->weakrefs)PyObject_ClearWeakRefs((PyObject*)j);pin_journal_clear(j);Py_TYPE(j)->tp_free((PyObject*)j);}
+#define PIN_GET(name) static PyObject*pin_get_##name(PinVersion*v,void*unused){(void)unused;if(!v->name){PyErr_SetString(PyExc_ValueError,"Closed version storage");return NULL;}return Py_NewRef(v->name);}
+PIN_GET(raw) PIN_GET(key) PIN_GET(sequence)
+static PyGetSetDef pin_getsets[]={
+ {"raw",(getter)pin_get_raw,NULL,"Exact publication V2 bytes.",NULL},
+ {"key",(getter)pin_get_key,NULL,"Original publication key.",NULL},
+ {"sequence",(getter)pin_get_sequence,NULL,"Monotone journal version.",NULL},{NULL}};
+static PyTypeObject pin_version_type={PyVarObject_HEAD_INIT(NULL,0)
+ .tp_name="sim2act._cold_graph_structure.PinVersion",.tp_basicsize=sizeof(PinVersion),
+ .tp_flags=Py_TPFLAGS_DEFAULT|Py_TPFLAGS_HAVE_GC|Py_TPFLAGS_IMMUTABLETYPE,
+ .tp_dealloc=(destructor)pin_version_free,.tp_traverse=(traverseproc)pin_version_traverse,
+ .tp_clear=(inquiry)pin_version_clear,.tp_getset=pin_getsets};
+static PyTypeObject pin_journal_type={PyVarObject_HEAD_INIT(NULL,0)
+ .tp_name="sim2act._cold_graph_structure.PinJournal",.tp_basicsize=sizeof(PinJournal),
+ .tp_flags=Py_TPFLAGS_DEFAULT|Py_TPFLAGS_HAVE_GC|Py_TPFLAGS_IMMUTABLETYPE,
+ .tp_dealloc=(destructor)pin_journal_free,.tp_traverse=(traverseproc)pin_journal_traverse,
+ .tp_clear=(inquiry)pin_journal_clear,.tp_weaklistoffset=offsetof(PinJournal,weakrefs)};
+static int pin_thread(PyObject*v){
+ if(!PyLong_CheckExact(v))return 0;
+ unsigned long long value=PyLong_AsUnsignedLongLong(v);
+ if(PyErr_Occurred()){PyErr_Clear();return 0;}
+ return value==(unsigned long long)PyThread_get_thread_ident();
+}
+static int pin_scope(PyObject*s){return PyTuple_CheckExact(s)&&PyTuple_GET_SIZE(s)==13
+ &&PyLong_CheckExact(PyTuple_GET_ITEM(s,9))&&PyUnicode_CheckExact(PyTuple_GET_ITEM(s,10))
+ &&pin_thread(PyTuple_GET_ITEM(s,12));}
+static int pin_same_scope(PyObject*a,PyObject*b){
+ if(!pin_scope(a)||!pin_scope(b))return 0;
+ for(Py_ssize_t i=0;i<13;i++)if(PyTuple_GET_ITEM(a,i)!=PyTuple_GET_ITEM(b,i))return 0;
+ return 1;
+}
+static PyObject*pin_error(void){PyErr_SetString(PyExc_ValueError,"Graph publication lifecycle changed");return NULL;}
+static PyObject*pin_fields(PyObject*subject){
+ PyObject*d=PyObject_GenericGetDict(subject,NULL);if(!d)return NULL;
+ if(!PyDict_CheckExact(d)){Py_DECREF(d);return pin_error();}
+ Py_ssize_t pos=0;PyObject*k,*v;
+ while(PyDict_Next(d,&pos,&k,&v))if(!PyUnicode_CheckExact(k)){Py_DECREF(d);return pin_error();}
+ return d;
+}
+static int pin_scope_items(PyObject*subject,PyObject**items){
+ if((PyObject*)Py_TYPE(subject)!=pin_graph_class&&(PyObject*)Py_TYPE(subject)!=pin_frontier_class){pin_error();return 0;}
+ PyObject*sf=pin_fields(subject);if(!sf)return 0;
+ PyObject*graph=(PyObject*)Py_TYPE(subject)==pin_graph_class?subject:PyDict_GetItemString(sf,"graph");
+ if(!graph||(PyObject*)Py_TYPE(graph)!=pin_graph_class){Py_DECREF(sf);pin_error();return 0;}
+ PyObject*gf=pin_fields(graph);if(!gf){Py_DECREF(sf);return 0;}
+ items[0]=subject;items[1]=graph;
+ const char*names[]={"nonce","inputs","role_limits","binding","connection","transaction","scope","epoch","phase","driver","thread"};
+ int ok=1;for(int i=0;i<11;i++){items[i+2]=PyDict_GetItemString(gf,names[i]);if(!items[i+2]){ok=0;break;}}
+ if(ok)ok=PyLong_CheckExact(items[9])&&PyUnicode_CheckExact(items[10])&&pin_thread(items[12]);
+ /* Caller borrows under the GIL and must hold every item before allocating. */
+ Py_DECREF(sf);Py_DECREF(gf);if(!ok)pin_error();return ok;
+}
+static int pin_actual_scope(PyObject*scope){
+ if(!pin_scope(scope))return 0;PyObject*items[13];
+ if(!pin_scope_items(PyTuple_GET_ITEM(scope,0),items))return 0;
+ for(int i=0;i<13;i++)if(items[i]!=PyTuple_GET_ITEM(scope,i))return 0;
+ return 1;
+}
+static PyObject*pin_read_scope(PyObject*self,PyObject*subject){
+ (void)self;PyObject*items[13];if(!pin_scope_items(subject,items))return NULL;
+ for(int i=0;i<13;i++)Py_INCREF(items[i]);
+ PyObject*scope=PyTuple_New(13);
+ if(!scope){for(int i=0;i<13;i++)Py_DECREF(items[i]);return NULL;}
+ for(int i=0;i<13;i++)PyTuple_SET_ITEM(scope,i,items[i]);
+ if(!pin_actual_scope(scope)){Py_DECREF(scope);if(!PyErr_Occurred())pin_error();return NULL;}
+ return scope;
+}
+static PyObject*pin_function(PyObject*fn){
+ if(!PyFunction_Check(fn))return pin_error();
+ return PyTuple_Pack(3,fn,PyFunction_GET_CODE(fn),PyFunction_GET_GLOBALS(fn));
+}
+static int pin_frame(PyFrameObject*f,PyObject*record){
+ if(!f||!PyTuple_CheckExact(record)||PyTuple_GET_SIZE(record)!=3)return 0;
+ PyCodeObject*c=PyFrame_GetCode(f);PyObject*g=PyFrame_GetGlobals(f);
+ int ok=(PyObject*)c==PyTuple_GET_ITEM(record,1)&&g==PyTuple_GET_ITEM(record,2)
+  &&PyFunction_GET_CODE(PyTuple_GET_ITEM(record,0))==PyTuple_GET_ITEM(record,1);
+ Py_DECREF(c);Py_DECREF(g);return ok;
+}
+static int pin_callsite(PyObject*helper,PyObject*allowed,PyObject*subject,PyObject*raw,PyObject*predecessor){
+ if(!helper||!PyTuple_CheckExact(allowed))return 0;
+ PyFrameObject*f=PyThreadState_GetFrame(PyThreadState_Get());if(!f)return 0;
+ int ok=pin_frame(f,helper);PyFrameObject*parent=ok?PyFrame_GetBack(f):NULL;Py_DECREF(f);if(!parent)return 0;
+ ok=0;for(Py_ssize_t i=0;i<PyTuple_GET_SIZE(allowed);i++)if(pin_frame(parent,PyTuple_GET_ITEM(allowed,i))){ok=1;break;}
+ if(ok){PyObject*local=PyFrame_GetLocals(parent);if(!local)ok=0;
+  else{ok=PyDict_CheckExact(local)&&PyDict_GetItemString(local,"self")==subject
+    &&(!raw||(PyDict_GetItemString(local,"_pin_raw")==raw
+      &&PyDict_GetItemString(local,"_pin_previous")==predecessor));Py_DECREF(local);}}
+ Py_DECREF(parent);return ok;
+}
+static PyObject*register_pin_code(PyObject*self,PyObject*args){
+ (void)self;PyObject*a,*b,*c,*d,*graph,*frontier,*verifier;if(!PyArg_ParseTuple(args,"OOOOOOO",&a,&b,&c,&d,&graph,&frontier,&verifier))return NULL;
+ if(!PyType_Check(graph)||!PyType_Check(frontier)||(verifier!=Py_None&&!PyCFunction_Check(verifier)))return pin_error();
+ if(pin_create_code||!PyFunction_Check(a)||!PyFunction_Check(b)||!PyTuple_CheckExact(c)||!PyTuple_CheckExact(d))return pin_error();
+ PyObject*constructors=PyTuple_New(2),*publishers=PyTuple_New(4),*ca=NULL,*cb=NULL;
+ if(!constructors||!publishers)goto bad;
+ for(int group=0;group<2;group++){PyObject*t=group?d:c,*out=group?publishers:constructors;
+  if(PyTuple_GET_SIZE(t)!=(group?4:2))goto bad;
+  for(Py_ssize_t i=0;i<PyTuple_GET_SIZE(t);i++){PyObject*record=pin_function(PyTuple_GET_ITEM(t,i));if(!record)goto bad;PyTuple_SET_ITEM(out,i,record);}}
+ ca=pin_function(a);cb=pin_function(b);if(!ca||!cb)goto bad;
+ pin_graph_class=Py_NewRef(graph);pin_frontier_class=Py_NewRef(frontier);pin_source_verifier=Py_NewRef(verifier);
+ pin_create_code=ca;pin_publish_code=cb;pin_constructors=constructors;pin_publishers=publishers;
+ pin_issued=PyDict_New();if(!pin_issued)return NULL;Py_RETURN_NONE;
+ bad:Py_XDECREF(constructors);Py_XDECREF(publishers);Py_XDECREF(ca);Py_XDECREF(cb);if(!PyErr_Occurred())return pin_error();return NULL;
+}
+static PyObject*pin_forget(PyObject*key,PyObject*weak){
+ if(pin_issued){PyObject*entry=PyDict_GetItemWithError(pin_issued,key);
+  if(entry&&PyTuple_CheckExact(entry)&&PyTuple_GET_ITEM(entry,0)==weak){if(PyDict_DelItem(pin_issued,key)<0)return NULL;}
+  else if(PyErr_Occurred())return NULL;}
+ Py_RETURN_NONE;
+}
+static PyMethodDef pin_forget_def={"_pin_forget",pin_forget,METH_O,NULL};
+static int pin_code_current(void){
+ if(!pin_source_verifier||pin_source_verifier==Py_None)return 0;
+ PyObject*ok=PyObject_CallNoArgs(pin_source_verifier);if(!ok)return 0;
+ int same=ok==Py_True;Py_DECREF(ok);return same;
+}
+static PyObject*pin_lookup_raw(PyObject*subject){
+ if(!pin_issued)return pin_error();PyObject*key=PyLong_FromVoidPtr(subject);if(!key)return NULL;
+ PyObject*entry=PyDict_GetItemWithError(pin_issued,key);Py_DECREF(key);
+ if(!entry){if(PyErr_Occurred())return NULL;Py_RETURN_NONE;}
+ if(!PyTuple_CheckExact(entry)||PyTuple_GET_SIZE(entry)!=2)return pin_error();
+ PyObject*owner=PyWeakref_GetObject(PyTuple_GET_ITEM(entry,0));
+ if(owner!=subject)return pin_error();
+ PyObject*journal=PyWeakref_GetObject(PyTuple_GET_ITEM(entry,1));
+ if(journal==Py_None||Py_TYPE(journal)!=&pin_journal_type)return pin_error();
+ return Py_NewRef(journal);
+}
+static PyObject*pin_lookup(PyObject*subject){
+ PyObject*j=pin_lookup_raw(subject);if(!j)return NULL;
+ if(j!=Py_None||((PyObject*)Py_TYPE(subject)==pin_graph_class&&pin_source_verifier!=Py_None)){
+  if(!pin_code_current()){Py_DECREF(j);if(!PyErr_Occurred())pin_error();return NULL;}
+  PyObject*fields=pin_fields(subject);if(!fields){Py_DECREF(j);return NULL;}
+  const char*names[]={"content_version","export_version","_content_matches","check","add","invalidate","input_key","input_bytes","_check_dynamic",NULL};
+  int shadow=0;for(int i=0;names[i];i++)if(PyDict_GetItemString(fields,names[i])){shadow=1;break;}
+  if((PyObject*)Py_TYPE(subject)==pin_frontier_class){
+   const char*frontier_names[]={"key","values","_refresh","added",NULL};
+   for(int i=0;frontier_names[i];i++)if(PyDict_GetItemString(fields,frontier_names[i])){shadow=1;break;}
+  }
+  Py_DECREF(fields);if(shadow){Py_DECREF(j);return pin_error();}
+ }
+ return j;
+}
+static PyObject*pin_registered(PyObject*self,PyObject*subject){(void)self;return pin_lookup(subject);}
+static PyObject*pin_create(PyObject*self,PyObject*scope){
+ (void)self;if(!pin_scope(scope)||!pin_callsite(pin_create_code,pin_constructors,PyTuple_GET_ITEM(scope,0),NULL,NULL))return pin_error();
+ PinJournal*j=PyObject_GC_New(PinJournal,&pin_journal_type);if(!j)return NULL;
+ j->scope=Py_NewRef(scope);j->version=NULL;j->frontier=NULL;j->sequence=0;j->closed=0;j->weakrefs=NULL;PyObject_GC_Track(j);
+ PyObject*subject=PyTuple_GET_ITEM(scope,0),*key=PyLong_FromVoidPtr(subject),*callback=NULL,*owner=NULL,*weak=NULL,*entry=NULL;
+ if(!key)goto bad_create;
+ if(PyDict_Contains(pin_issued,key)!=0){if(!PyErr_Occurred())pin_error();goto bad_create;}
+ callback=PyCFunction_NewEx(&pin_forget_def,key,NULL);if(!callback)goto bad_create;
+ owner=PyWeakref_NewRef(subject,callback);weak=PyWeakref_NewRef((PyObject*)j,NULL);
+ if(!owner||!weak)goto bad_create;entry=PyTuple_Pack(2,owner,weak);if(!entry||PyDict_SetItem(pin_issued,key,entry)<0)goto bad_create;
+ if(subject!=PyTuple_GET_ITEM(scope,1)){
+  PyObject*parent=pin_lookup(PyTuple_GET_ITEM(scope,1));
+  if(!parent||Py_TYPE(parent)!=&pin_journal_type){Py_XDECREF(parent);if(!PyErr_Occurred())pin_error();goto bad_create;}
+  PinJournal*parent_journal=(PinJournal*)parent;
+  if(parent_journal->closed||parent_journal->frontier){Py_DECREF(parent);pin_error();goto bad_create;}
+  parent_journal->frontier=Py_NewRef(owner);Py_DECREF(parent);
+ }
+ Py_DECREF(key);Py_DECREF(callback);Py_DECREF(owner);Py_DECREF(weak);Py_DECREF(entry);return(PyObject*)j;
+ bad_create:Py_XDECREF(key);Py_XDECREF(callback);Py_XDECREF(owner);Py_XDECREF(weak);Py_XDECREF(entry);Py_DECREF(j);return NULL;
+}
+static PyObject*pin_publish(PyObject*self,PyObject*args){
+ (void)self;PyObject*object,*raw,*key,*scope,*predecessor;if(!PyArg_ParseTuple(args,"OOOOO",&object,&raw,&key,&scope,&predecessor))return NULL;
+ if(Py_TYPE(object)!=&pin_journal_type||!pin_scope(scope)||!pin_callsite(pin_publish_code,pin_publishers,PyTuple_GET_ITEM(scope,0),raw,predecessor)
+  ||!PyBytes_CheckExact(raw)||!PyUnicode_CheckExact(key)||PyUnicode_GET_LENGTH(key)!=64)return pin_error();
+ PinJournal*j=(PinJournal*)object;
+ if(j->closed||!pin_same_scope(j->scope,scope)||!pin_actual_scope(scope)||j->sequence==SIZE_MAX
+  ||(j->version?j->version!=predecessor:predecessor!=Py_None))return pin_error();
+ static const char prefix[]="SIM2ACT_COLD_GRAPH_PICKLE_V2\0";
+ if(PyBytes_GET_SIZE(raw)<(Py_ssize_t)(sizeof(prefix)-1)||memcmp(PyBytes_AS_STRING(raw),prefix,sizeof(prefix)-1))return pin_error();
+ PinVersion*v=PyObject_GC_New(PinVersion,&pin_version_type);if(!v)return NULL;
+ v->raw=Py_NewRef(raw);v->key=Py_NewRef(key);v->scope=Py_NewRef(scope);v->journal=Py_NewRef(object);
+ v->sequence=PyLong_FromSize_t(j->sequence+1);
+ if(!v->sequence){pin_version_clear(v);PyObject_GC_Del(v);return NULL;}
+ /* All allocations precede the indivisible key/current-version update. */
+ PyObject*subject=PyTuple_GET_ITEM(scope,0),*registered=pin_lookup(subject);
+ if(!registered||registered!=object){Py_XDECREF(registered);pin_version_clear(v);PyObject_GC_Del(v);if(!PyErr_Occurred())pin_error();return NULL;}Py_DECREF(registered);
+ PyObject*fields=pin_fields(subject);
+ if(!fields||!PyDict_CheckExact(fields)){Py_XDECREF(fields);pin_version_clear(v);PyObject_GC_Del(v);if(!PyErr_Occurred())pin_error();return NULL;}
+ Py_ssize_t pos=0;PyObject*k,*item;int plain=1;while(PyDict_Next(fields,&pos,&k,&item))if(!PyUnicode_CheckExact(k)){plain=0;break;}
+ const char*name=subject==PyTuple_GET_ITEM(scope,1)?"key":"expected";
+ PyObject*old=PyDict_GetItemString(fields,name);
+ int prior=j->version?old==((PinVersion*)j->version)->key:
+  (old==NULL||(PyUnicode_CheckExact(old)&&PyUnicode_Compare(old,key)==0));
+ if(!pin_code_current()||!plain||!prior||PyDict_GetItemString(fields,"_pin_journal")!=object||j->closed
+   ||!pin_same_scope(j->scope,scope)||!pin_actual_scope(scope)
+   ||(j->version?j->version!=predecessor:predecessor!=Py_None)){
+  Py_DECREF(fields);pin_version_clear(v);PyObject_GC_Del(v);if(!PyErr_Occurred())pin_error();return NULL;
+ }
+ Py_XINCREF(old);
+ if(PyDict_SetItemString(fields,name,key)<0){Py_XDECREF(old);Py_DECREF(fields);pin_version_clear(v);PyObject_GC_Del(v);if(!PyErr_Occurred())pin_error();return NULL;}
+ Py_DECREF(fields);PyObject_GC_Track(v);j->sequence++;Py_XSETREF(j->version,Py_NewRef((PyObject*)v));Py_XDECREF(old);return(PyObject*)v;
+}
+static PyObject*pin_current(PyObject*self,PyObject*args){
+ (void)self;PyObject*object,*scope,*key;if(!PyArg_ParseTuple(args,"OOO",&object,&scope,&key))return NULL;
+ if(Py_TYPE(object)!=&pin_journal_type)return pin_error();PinJournal*j=(PinJournal*)object;
+ if(!pin_code_current()||j->closed||!pin_same_scope(j->scope,scope)||!pin_actual_scope(scope)||!j->version||Py_TYPE(j->version)!=&pin_version_type)return pin_error();
+ PinVersion*v=(PinVersion*)j->version;
+ PyObject*subject=PyTuple_GET_ITEM(scope,0),*fields=pin_fields(subject);if(!fields)return NULL;
+ const char*name=subject==PyTuple_GET_ITEM(scope,1)?"key":"expected";
+ PyObject*actual_key=PyDict_GetItemString(fields,name);
+ int actual=PyDict_GetItemString(fields,"_pin_journal")==object&&actual_key==v->key;
+ Py_DECREF(fields);
+ if(!actual||v->journal!=object||(key!=Py_None&&v->key!=key))return pin_error();
+ if(PyTuple_GET_ITEM(scope,0)==PyTuple_GET_ITEM(scope,1)){
+  PyObject*fields=PyObject_GenericGetDict(PyTuple_GET_ITEM(scope,0),NULL);if(!fields)return NULL;
+  PyObject*actual=PyDict_CheckExact(fields)?PyDict_GetItemString(fields,"_accounted_frontier"):NULL;
+  PyObject*expected=j->frontier?PyWeakref_GetObject(j->frontier):Py_None;
+  int ok=actual==expected;Py_DECREF(fields);if(!ok)return pin_error();
+ }
+ return Py_NewRef(j->version);
+}
+static PyObject*pin_matches(PyObject*self,PyObject*args){
+ (void)self;PyObject*object,*raw;if(!PyArg_ParseTuple(args,"OO",&object,&raw))return NULL;
+ if(Py_TYPE(object)!=&pin_version_type||!PyBytes_CheckExact(raw))return pin_error();
+ PinVersion*v=(PinVersion*)object;
+ if(!v->raw)return pin_error();
+ Py_ssize_t n=PyBytes_GET_SIZE(raw);
+ return PyBool_FromLong(n==PyBytes_GET_SIZE(v->raw)&&!memcmp(PyBytes_AS_STRING(raw),PyBytes_AS_STRING(v->raw),(size_t)n));
+}
+static PyObject*pin_close(PyObject*self,PyObject*object){
+ (void)self;if(Py_TYPE(object)!=&pin_journal_type)return pin_error();
+ pin_journal_clear((PinJournal*)object);Py_RETURN_NONE;
+}
+static void pin_inactive_plain(PyObject*subject){
+ if((PyObject*)Py_TYPE(subject)!=pin_graph_class)return;
+ PyObject*fields=PyObject_GenericGetDict(subject,NULL);if(!fields){PyErr_Clear();return;}
+ int plain=PyDict_Check(fields);Py_ssize_t pos=0;PyObject*k,*v;
+ if(plain)while(PyDict_Next(fields,&pos,&k,&v))if(!PyUnicode_CheckExact(k)){plain=0;break;}
+ PyObject*active=plain?PyDict_GetItemString(fields,"active"):NULL;
+ if(plain&&(!active||PyBool_Check(active)))if(PyDict_SetItemString(fields,"active",Py_False)<0)PyErr_Clear();
+ Py_DECREF(fields);
+}
+static PyObject*pin_revoke(PyObject*self,PyObject*subject){
+ (void)self;PyObject*j=pin_lookup_raw(subject);
+ if(!j){PyErr_Clear();pin_inactive_plain(subject);Py_RETURN_FALSE;}
+ if(j==Py_None){Py_DECREF(j);Py_RETURN_TRUE;} /* Original unissued route. */
+ PinJournal*journal=(PinJournal*)j;
+ if(journal->frontier){
+  PyObject*child=PyWeakref_GetObject(journal->frontier);Py_INCREF(child);
+  if(child!=Py_None){PyObject*cj=pin_lookup_raw(child);
+   if(cj&&cj!=Py_None)pin_journal_clear((PinJournal*)cj);Py_XDECREF(cj);PyErr_Clear();}
+  Py_DECREF(child);
+ }
+ pin_journal_clear(journal);Py_DECREF(j);
+ int safe=pin_code_current();if(PyErr_Occurred()){PyErr_Clear();safe=0;}
+ PyObject*fields=PyObject_GenericGetDict(subject,NULL);
+ if(!fields){PyErr_Clear();Py_RETURN_FALSE;}
+ int plain=PyDict_Check(fields);Py_ssize_t pos=0;PyObject*k,*value;
+ if(plain)while(PyDict_Next(fields,&pos,&k,&value))if(!PyUnicode_CheckExact(k)){plain=0;break;}
+ PyObject*active=plain?PyDict_GetItemString(fields,"active"):NULL;
+ int ordinary_active=!active||PyBool_Check(active);
+ safe=safe&&PyDict_CheckExact(fields)&&plain&&ordinary_active;
+ if(!safe&&plain&&ordinary_active&&(PyObject*)Py_TYPE(subject)==pin_graph_class){
+  if(PyDict_SetItemString(fields,"active",Py_False)<0)PyErr_Clear();
+ }
+ Py_DECREF(fields);return PyBool_FromLong(safe);
+}
+static PyMethodDef methods[]={
+ {"register_pin_code",register_pin_code,METH_VARARGS,"One-time fixed publication caller metadata."},
+ {"pin_read_scope",pin_read_scope,METH_O,"Exact instance roots without foreign attribute callbacks."},
+ {"pin_registered",pin_registered,METH_O,"Find the original issuer independently of Python fields."},
+ {"pin_create",pin_create,METH_O,"Create one scoped publication journal."},
+ {"pin_publish",pin_publish,METH_VARARGS,"Publish complete immutable original bytes."},
+ {"pin_current",pin_current,METH_VARARGS,"Require the same current scoped version."},
+ {"pin_matches",pin_matches,METH_VARARGS,"Full byte comparison, never a hash verdict."},
+ {"pin_revoke",pin_revoke,METH_O,"Idempotently revoke the original issuer with no Python callback."},
+ {"pin_close",pin_close,METH_O,"Revoke the journal, retaining immutable old data only."},{"same_classes",same_classes,METH_VARARGS,"Fresh complete class namespace and MRO identity comparison without callbacks."},{"snapshot",snapshot,METH_VARARGS,"Bounded independent complete structure for one qualified scope."},{"matches_fast",matches_fast,METH_VARARGS,"Fresh complete structure and alias comparison in the same scope."},{NULL,NULL,0,NULL}};
 static struct PyModuleDef module={PyModuleDef_HEAD_INIT,"_cold_graph_structure",NULL,-1,methods};
 PyMODINIT_FUNC PyInit__cold_graph_structure(void){
+ if(PyType_Ready(&pin_version_type)<0||PyType_Ready(&pin_journal_type)<0)return NULL;
  PyObject*m=PyModule_Create(&module);if(!m)return NULL;
+ if(PyModule_AddObjectRef(m,"PinVersion",(PyObject*)&pin_version_type)<0||PyModule_AddObjectRef(m,"PinJournal",(PyObject*)&pin_journal_type)<0){Py_DECREF(m);return NULL;}
  unsupported=PyCapsule_New((void*)&module,"sim2act.cold-graph-structure.unsupported",NULL);
  unsupported_error=PyErr_NewException("sim2act._cold_graph_structure._Unsupported",NULL,NULL);
  if(!unsupported||!unsupported_error||PyModule_AddObjectRef(m,"UNSUPPORTED",unsupported)<0||PyModule_AddStringConstant(m,"SOURCE_SHA256",SIM2ACT_GRAPH_SOURCE_SHA)<0){Py_XDECREF(unsupported);Py_XDECREF(unsupported_error);Py_DECREF(m);return NULL;}return m;

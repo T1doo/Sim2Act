@@ -17,6 +17,7 @@ from . import _cold_accounted_native as accounted
 from . import cold_accounted as owned
 from . import natural_live_admission as typed
 from . import natural_spec_runtime as r
+from . import _cold_graph_versions as versions
 from .spec_production import ProductionTrialBinding
 
 try:
@@ -37,8 +38,9 @@ _BUILTINS = tuple((name, getattr(builtins, name)) for name in (
     'type', 'object', 'str', 'len', 'dict', 'tuple', 'all', 'any', 'set', 'id', '__import__'))
 _FUNCTIONS = (
     r._ColdGraphRead.input_bytes, r._ColdGraphRead.input_key, r._ColdGraphRead._frontier_input_key,
-    r._ColdGraphRead.invalidate,
-    accounted._Frontier.check, accounted._Frontier.values, accounted._Frontier.key,
+    r._ColdGraphRead.invalidate, r._ColdGraphRead.content_version,
+    r._ColdGraphRead.export_version,r._ColdGraphRead._content_matches,
+    accounted._Frontier.check, accounted._Frontier.values, accounted._Frontier.key, accounted._Frontier._content_matches,
     accounted._Frontier._refresh, accounted._Frontier.added, accounted.gate.require,
     accounted._NativeCandidate.release, owned._OwnedPrewriteMode.close,
     accounted._NativeCandidate.qualify, accounted._SizingProjection.copy,
@@ -51,6 +53,7 @@ _FUNCTIONS = (
 _CODE = tuple((fn, fn.__code__, fn.__defaults__, fn.__kwdefaults__,
     tuple((fn.__kwdefaults__ or {}).items())) for fn in _FUNCTIONS)
 _ALIASES = tuple((owner, name, getattr(owner, name)) for owner, names in (
+    (versions, ('current','matches','publish','create')),
     (r, ('_cold_graph_bytes', '_cold_graph_row_storage', '_cold_graph_limit_values',
          '_cold_graph_pickle_marker', '_ColdGraphPickler', '_ColdGraphBytesIO',
          '_ColdGraphRowMapping', '_ColdGraphCursorMeta', '_ColdGraphSimpleMeta',
@@ -145,10 +148,11 @@ def _qualified(graph, *, _frontier=None):
 
 
 class _State:
-    __slots__ = ('scope', 'count', 'capsule', 'declined')
+    __slots__ = ('scope', 'count', 'capsule', 'declined', 'version')
 
-    def __init__(self, scope):
+    def __init__(self, scope, version=None):
         self.scope, self.count, self.capsule, self.declined = scope, 0, None, False
+        self.version = version
 
 
 _STATE_CLASS = _State
@@ -163,17 +167,20 @@ def select(graph):
     if not _qualified(graph):
         fields.pop('_structure_state', None)
         return None
+    version = versions.current(graph)
     scope = (graph, graph.nonce, graph.key, graph.epoch, graph.phase)
     state = fields.get('_structure_state')
-    if (type(state) is not _State or any(a is not b
+    if (type(state) is not _State or state.version is not version or any(a is not b
             for a, b in zip(state.scope, scope, strict=True))):
-        state = _State(scope)
+        state = _State(scope, version)
         fields['_structure_state'] = state
     if state.declined:
         return None
     if state.capsule is not None:
         current = graph.input_bytes(_snapshot_values=True)
         result = _NATIVE_MATCH(state.capsule, current, scope)
+        if version is not None:
+            versions.require(versions.current(graph) is version)
         if result is True:
             return True
         fields.pop('_structure_state', None)
@@ -189,11 +196,11 @@ def select(graph):
     source_facts = fields.get('_source_fact_bindings')
     if state.count < (1 if type(source_facts) is dict and source_facts else 4):
         return None
-    if graph.input_key() != graph.key:
+    if not graph._content_matches():
         return False
     values = graph.input_bytes(_snapshot_values=True)
     capsule = _NATIVE_SNAPSHOT(values, *_ARGS, scope, r._SOURCE_VIEW_TYPE, r._SOURCE_OWNER_TYPE)
-    if graph.input_key() != graph.key:
+    if not graph._content_matches():
         return False
     if capsule is _UNSUPPORTED:
         state.declined = True
@@ -205,6 +212,8 @@ def select(graph):
     if _NATIVE_MATCH(capsule, current, scope) is not True:
         fields.pop('_structure_state', None)
         return None
+    if version is not None:
+        versions.require(versions.current(graph) is version)
     state.capsule = capsule
     return True
 
@@ -245,28 +254,32 @@ def select_frontier(frontier):
     if not _qualified(graph, _frontier=frontier) or not _frontier_plain(frontier, graph):
         fields.pop('_structure_state', None)
         return None
+    version = versions.current(frontier)
     scope = (frontier, graph.nonce, frontier.expected, graph.epoch, graph.phase)
     state = fields.get('_structure_state')
-    if (type(state) is not _State or any(a is not b
+    if (type(state) is not _State or state.version is not version or any(a is not b
             for a, b in zip(state.scope, scope, strict=True))):
-        state = _State(scope)
+        state = _State(scope, version)
         fields['_structure_state'] = state
     if state.declined:
         return None
     if state.capsule is not None:
         current = _frontier_values(frontier, graph)
-        if _NATIVE_MATCH(state.capsule, current, scope) is True:
+        matched = _NATIVE_MATCH(state.capsule, current, scope)
+        if version is not None:
+            versions.require(versions.current(frontier) is version)
+        if matched is True:
             return True
         fields.pop('_structure_state', None)
         return None
     state.count += 1
     if state.count < 4:
         return None
-    if frontier.key() != frontier.expected:
+    if not frontier._content_matches():
         return False
     values = _frontier_values(frontier, graph)
     capsule = _NATIVE_SNAPSHOT(values, *_ARGS, scope, r._SOURCE_VIEW_TYPE, r._SOURCE_OWNER_TYPE)
-    if frontier.key() != frontier.expected:
+    if not frontier._content_matches():
         return False
     if capsule is _UNSUPPORTED:
         state.declined = True
@@ -274,5 +287,7 @@ def select_frontier(frontier):
     if _NATIVE_MATCH(capsule, _frontier_values(frontier, graph), scope) is not True:
         fields.pop('_structure_state', None)
         return None
+    if version is not None:
+        versions.require(versions.current(frontier) is version)
     state.capsule = capsule
     return True
