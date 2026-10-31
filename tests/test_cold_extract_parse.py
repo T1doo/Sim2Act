@@ -6,7 +6,9 @@ import sys
 
 import pytest
 from sqlalchemy import event, insert
-from test_cold_binding_fact_leaves import graph_origin as graph_origin
+from test_cold_binding_fact_leaves import origin_pin_data
+# Other focused legacy fixtures import this existing fixture from this module.
+from test_cold_binding_fact_leaves import local_origin as local_origin
 from test_cold_binding_fact_leaves import no_external_transport as no_external_transport
 from test_cold_release_stages import read_scope
 
@@ -17,11 +19,11 @@ from sim2act.errors import DomainError
 
 
 @pytest.fixture
-def malformed_extract(graph_origin):
+def malformed_extract(env):
     # Exercise the actual persisted-pair boundary with the complete default
     # code witness intact. The former fixture replaced unrelated origin and
     # scope producers before Graph creation and never reached this boundary.
-    f = graph_origin
+    f = origin_pin_data(env)
     key, rid = "synthetic-malformed-persisted-extract", new_id("run")
     request = dict(review=dict(source_run_id=rid,
         expected_source_proof_fingerprint="a" * 64,
