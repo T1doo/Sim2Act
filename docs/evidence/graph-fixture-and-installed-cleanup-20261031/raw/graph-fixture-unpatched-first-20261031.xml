@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="22" time="5.464" timestamp="2026-10-31T19:47:42.637138+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_cold_graph_structure" name="test_alias_split_merge_swap_matrix" time="0.004" /><testcase classname="tests.test_cold_graph_structure" name="test_complete_content_type_order_float_bits[&lt;lambda&gt;0]" time="0.000" /><testcase classname="tests.test_cold_graph_structure" name="test_complete_content_type_order_float_bits[&lt;lambda&gt;1]" time="0.000" /><testcase classname="tests.test_cold_graph_structure" name="test_complete_content_type_order_float_bits[&lt;lambda&gt;2]" time="0.000" /><testcase classname="tests.test_cold_graph_structure" name="test_complete_content_type_order_float_bits[&lt;lambda&gt;3]" time="0.000" /><testcase classname="tests.test_cold_graph_structure" name="test_complete_content_type_order_float_bits[&lt;lambda&gt;4]" time="0.000" /><testcase classname="tests.test_cold_graph_structure" name="test_complete_content_type_order_float_bits[&lt;lambda&gt;5]" time="0.000" /><testcase classname="tests.test_cold_graph_structure" name="test_limits_generated_fields_reducer_labels_and_global_aliases" time="0.001" /><testcase classname="tests.test_cold_graph_structure" name="test_row_hidden_data_and_metadata_cross_aliases" time="0.000" /><testcase classname="tests.test_cold_graph_structure" name="test_scope_binding_and_bounded_unsupported" time="0.000" /><testcase classname="tests.test_cold_graph_structure" name="test_complete_graph_match_drops_encoding_but_dynamic_is_live" time="0.708" /><testcase classname="tests.test_cold_graph_structure" name="test_current_dynamic_or_content_changes_still_reject[stop]" time="0.560" /><testcase classname="tests.test_cold_graph_structure" name="test_current_dynamic_or_content_changes_still_reject[epoch]" time="0.251" /><testcase classname="tests.test_cold_graph_structure" name="test_current_dynamic_or_content_changes_still_reject[scope]" time="0.494" /><testcase classname="tests.test_cold_graph_structure" name="test_current_dynamic_or_content_changes_still_reject[role]" time="0.286" /><testcase classname="tests.test_cold_graph_structure" name="test_current_dynamic_or_content_changes_still_reject[contract]" time="0.435" /><testcase classname="tests.test_cold_graph_structure" name="test_add_rebuilds_and_unknown_configuration_uses_original_sha" time="0.264" /><testcase classname="tests.test_cold_graph_structure" name="test_native_original_reducer_error_is_not_replayed" time="0.439" /><testcase classname="tests.test_cold_graph_structure" name="test_unknown_graph_binding_and_row_lookup_getters_deopt_before_callbacks" time="0.260" /><testcase classname="tests.test_cold_graph_structure" name="test_pre_scope_fresh_complete_walk_and_original_frontier_selection" time="0.458" /><testcase classname="tests.test_cold_graph_structure" name="test_pre_scope_content_change_still_invalidates" time="0.308" /><testcase classname="tests.test_cold_graph_structure" name="test_frontier_branch_clears_snapshot_and_keeps_original_rejection" time="0.440"><failure message="AttributeError: 'object' object has no attribute '_native'">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f1427b14c80&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f142d95cfe0&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+
+    def test_frontier_branch_clears_snapshot_and_keeps_original_rejection(local_origin):
+        from sim2act._cold_accounted_native import _Frontier
+    
+        f = local_origin
+        finished = False
+        with f.store.tx() as c, pb._source_reads(f.store, c):
+            with pytest.raises(DomainError):
+                with r._cold_graph_read(f.worker, c, f.inputs, f.roles, 'pre') as graph:
+                    warm(f, c, graph)
+                    # Deliberately unissued: the ORIGINAL frontier must reject it.
+                    # It supplies no mock check method, permit or accepted result.
+                    frontier = object.__new__(_Frontier)
+                    frontier.graph, frontier.mode = graph, object()
+                    vars(graph)['_accounted_frontier'] = frontier
+                    monitoring = sys.monitoring
+                    slot = next(i for i in (4, 3, 5) if monitoring.get_tool(i) is None)
+                    monitoring.use_tool_id(slot, 'original frontier branch witness')
+                    calls = []
+    
+                    def entered(*args):
+                        calls.append('_structure_state' not in vars(graph))
+    
+                    monitoring.register_callback(slot, monitoring.events.PY_START, entered)
+                    monitoring.set_local_events(slot, _Frontier.check.__code__, monitoring.events.PY_START)
+                    try:
+                        with pytest.raises(DomainError):
+&gt;                           graph.check(f.store, c)
+
+tests/test_cold_graph_structure.py:311: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/natural_spec_runtime.py:2484: in check
+    _ColdGraphRead._check_dynamic(self, store, c)
+src/sim2act/natural_spec_runtime.py:2457: in _check_dynamic
+    _receipt_for_frontier(self._accounted_frontier)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+frontier = &lt;sim2act._cold_accounted_native._Frontier object at 0x7f142c1ce390&gt;
+
+    def _receipt_for_frontier(frontier):
+        from ._cold_accounted_native import _Frontier, _NativeCandidate
+    
+&gt;       gate.require(type(frontier) is _Frontier and type(frontier.mode._native) is _NativeCandidate)
+                                                          ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'object' object has no attribute '_native'
+
+src/sim2act/_cold_accounted_receipts.py:20: AttributeError</failure></testcase></testsuite></testsuites>

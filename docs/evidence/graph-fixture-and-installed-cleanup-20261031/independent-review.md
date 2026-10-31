@@ -1,0 +1,15 @@
+# 独立只读复核摘要
+
+本文件由源码writer依据两名既有只读reviewer的本轮实际回执整理，不作为外部认证或另一次验收运行。writer仍是唯一源码编辑者。两审均在最终源码2d41ad38b84630cb817d87374122bce31e357d0d上收口，无遗留必须修复项。
+
+## 源码与边界复核：owned_pin_review
+
+首次要求在vars之后、任何迭代/get之前核exactdict，避免实例__dict__为dict子类时先触发外来__iter__；已补两处门及frontier/mode零回调反例。还发现新增poison测试误指pa_spec_apps而非sim2act.apps，已修导入并重新完整冻结回归。最终核src相对f960无变化，仅2d41测试导入变化；exacttype→vars→exactdict→exactstrkeys→candidate门以及原完整receipt／动态权限链均保留。tuple新外壳／元素原alias断言保留。
+
+## fixture、制品与证据复核：evidence_review
+
+独立指出旧trace fixture每次创建新外层tuple，而初次提取复用同一tuple；verify_origin原捕获局部origin，而初次重构读namespace字段会随重绑改变。两处实修及反例均已确认。原12项分类不是直接12个产品错误：原共同前置拒绝解除后11通过，1才暴露真实AttributeError；非法mode更早受控拒绝下calls=0合理，原失效/清理反例仍保留。
+
+复核实际源码293／安装59的XML零失败/错误/跳过；原环境依赖失败、f960测试导入错误/中止日志均保留。使用独立标准库核新ZIP3,188,641B、SHA85f4302bb32cadbdf45a484de653a6ae58c54aa25361473159fbc3063dfaf592及223条库存／内manifest；wheel1,718,624B、SHA49904302f774a50a56bb3d8f963d12a2570801d70b0d2a00dabf7e68c9c43c01，源码字节及4.so库存一致。当前封口53条清单size/SHA匹配、421嵌套条目当时当前Intern令牌比对零命中；新增本摘要及扫描器后由writer再封口，未假称reviewer重跑业务。
+
+实际CSV30/v1及首次重开／键保留、前版live结果copy-only9→9／0新请求、卸载保留6个workspace文件／30个共享METADATA，与文档一致。未将前版2次live改签为当前新执行，不将Windows／PG／大型Cold30秒缺口当已完成。两审均不修改文件、不启动服务或模型、不触碰DB。完整逐项来源仍以原JSON/XML/ZIP为准。
