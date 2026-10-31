@@ -244,8 +244,10 @@ def seeded_reader(f, c, guard, *, job_values=None, attempt_values=None, reserved
         prefix, prefix.key + ":complete", native, rows, "synthetic-digest"
     )
     guard.add(audit.key, audit.fields())
-    seed = runtime._cold_run_raw_seed(f.store, c, guard, audit)
-    current = seed.job
+    # An explicitly unseeded reader must not silently publish an owned seed or
+    # change its live job to a View. Both representations have separate tests.
+    seed = runtime._cold_run_raw_seed(f.store, c, guard, audit) if use_seed else None
+    current = seed.job if seed is not None else job
     if mapping_job:
         from sqlalchemy.engine import RowMapping
         from sqlalchemy.engine.result import SimpleResultMetaData
