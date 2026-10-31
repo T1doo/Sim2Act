@@ -16,9 +16,20 @@ from . import natural_specs as natural
 
 def _receipt_for_frontier(frontier):
     from ._cold_accounted_native import _Frontier, _NativeCandidate
+    from .cold_accounted import _OwnedPrewriteMode
 
-    gate.require(type(frontier) is _Frontier and type(frontier.mode._native) is _NativeCandidate)
-    candidate = frontier.mode._native
+    gate.require(type(frontier) is _Frontier, 'Exact native frontier required')
+    fields = vars(frontier)
+    gate.require(type(fields) is dict, 'Exact frontier storage required')
+    gate.require(all(type(key) is str for key in fields), 'Exact frontier fields required')
+    mode = fields.get('mode')
+    # Reject absent/foreign modes before dereferencing a method or descriptor.
+    gate.require(type(mode) is _OwnedPrewriteMode, 'Exact native frontier mode required')
+    fields = vars(mode)
+    gate.require(type(fields) is dict, 'Exact native mode storage required')
+    gate.require(all(type(key) is str for key in fields), 'Exact native mode fields required')
+    candidate = fields.get('_native')
+    gate.require(type(candidate) is _NativeCandidate, 'Exact native frontier candidate required')
     receipt = candidate.receipt
     if receipt is not None:
         gate.require(type(receipt) is _ReceiptClosure and receipt.candidate is candidate

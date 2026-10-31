@@ -48,8 +48,8 @@ def no_external_transport(monkeypatch):
                 monkeypatch.setattr(transport, method, forbidden)
 
 
-@pytest.fixture
-def local_origin(env, monkeypatch):
+def origin_pin_data(env):
+    """Synthetic pin values only; no producer replacements or execution permit."""
     store, settings, _, user, _, pid, _ = env
     old, target = material(1), material(2)
     limits = full_limits()
@@ -76,19 +76,56 @@ def local_origin(env, monkeypatch):
     worker.id, worker.stop, worker.goal_planner_transport = "synthetic-worker", threading.Event(), None
     worker._journal_trial_store, worker._journal_trial_binding = store, binding
     worker._journal_trial_drift = False
-    trace = []
-    monkeypatch.setattr(text_continuations, "draft_gate", lambda *a: trace.append("draft_gate"))
-    monkeypatch.setattr(store, "own_project", lambda *a: trace.append("own_project"))
-    monkeypatch.setattr(apps, "validate_source_family", lambda *a: trace.append("source_family"))
-    monkeypatch.setattr(apps, "compile_preview", lambda *a: (trace.append("compile") or (manifest, action, report)))
     origin = (manifest, report, source, goal.model_dump())
-    monkeypatch.setattr(spec, "verify_origin", lambda *a: (trace.append("verify_origin") or origin))
     roles = dict(source=full_limits(max_requests=2), generate=None, platform=limits,
         trial=full_limits(max_requests=3), per_use=full_limits(max_requests=2, max_repairs=0))
     inputs = dict(run=dict(id="synthetic-cold", runtime_id=draft["runtime_id"]),
         history=[{"id": "one", "body": b"full original bytes"}, {"id": "one", "body": b"duplicate retained"}])
     return SimpleNamespace(store=store, worker=worker, user=user, draft=draft, limits=limits,
-        origin=origin, roles=roles, inputs=inputs, trace=trace)
+        origin=origin, roles=roles, inputs=inputs, trace=[], compiled=(manifest,action,report))
+
+
+@pytest.fixture
+def graph_origin(env):
+    # Graph tests pin these values; they never call the origin/compile stubs
+    # below. Keep the full production-code witness active and unmodified.
+    data=origin_pin_data(env)
+    from sim2act import _cold_source_packet
+    _cold_source_packet.current()
+    return data
+
+
+@pytest.fixture
+def local_origin(env, monkeypatch):
+    data=origin_pin_data(env)
+    store,trace=data.store,data.trace
+    monkeypatch.setattr(text_continuations, "draft_gate", lambda *a: trace.append("draft_gate"))
+    monkeypatch.setattr(store, "own_project", lambda *a: trace.append("own_project"))
+    monkeypatch.setattr(apps, "validate_source_family", lambda *a: trace.append("source_family"))
+    # Preserve the original trace fixture's same compiled objects and aliases.
+    compiled=data.compiled
+    origin=data.origin
+    monkeypatch.setattr(apps, "compile_preview", lambda *a: (
+        trace.append("compile") or (compiled[0], compiled[1], compiled[2])))
+    monkeypatch.setattr(spec, "verify_origin", lambda *a: (trace.append("verify_origin") or origin))
+    return data
+
+
+def test_origin_trace_fixture_keeps_fresh_wrapper_and_element_aliases(local_origin):
+    f=local_origin
+    first=apps.compile_preview()
+    second=apps.compile_preview()
+    assert first is not second
+    assert all(a is b is original for a,b,original in zip(first,second,f.compiled,strict=True))
+    assert f.trace==['compile','compile']
+
+
+def test_origin_trace_fixture_keeps_captured_origin_after_rebinding(local_origin):
+    f=local_origin
+    original=f.origin
+    f.origin=object()
+    assert spec.verify_origin() is original
+    assert f.trace==['verify_origin']
 
 
 def handoff(f, c):

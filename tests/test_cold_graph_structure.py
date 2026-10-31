@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.engine.result import SimpleResultMetaData
 from sqlalchemy.sql.elements import quoted_name
-from test_cold_extract_parse import local_origin as local_origin
+from test_cold_binding_fact_leaves import graph_origin as local_origin
 from test_cold_extract_parse import no_external_transport as no_external_transport
 from test_loaded_raw_segment import scope
 
@@ -118,6 +118,22 @@ def warm(f, c, graph):
     for _ in range(5):
         graph.check(f.store, c)
     assert vars(graph)['_structure_state'].capsule is not None
+
+
+@pytest.mark.parametrize('producer',['compile_preview','validate_source_family'])
+def test_replaced_production_function_still_rejects_before_callback(local_origin,monkeypatch,producer):
+    from sim2act import pa_spec_apps as apps
+    f=local_origin
+    calls=[]
+    def foreign(*args,**kwargs):
+        calls.append(producer)
+        pytest.fail('Changed production code must not run')
+    monkeypatch.setattr(apps,producer,foreign)
+    with f.store.tx() as c,pb._source_reads(f.store,c):
+        with pytest.raises(DomainError,match='Complete Source code changed'):
+            with scope(f,c):
+                pytest.fail('Changed production code cannot open a graph')
+    assert calls==[]
 
 
 @contextmanager
@@ -312,7 +328,47 @@ def test_frontier_branch_clears_snapshot_and_keeps_original_rejection(local_orig
                 finally:
                     monitoring.set_local_events(slot, _Frontier.check.__code__, 0)
                     monitoring.free_tool_id(slot)
-                assert calls == [True]
+                # The newer complete receipt gate rejects this unissued mode
+                # before dispatching _Frontier.check; no authority is inferred.
+                assert calls == []
                 assert not graph.active and '_structure_state' not in vars(graph)
                 finished = True
         assert finished
+
+
+@pytest.mark.parametrize('mode',['absent','foreign','missing-candidate'])
+def test_malformed_frontier_fails_controlled_before_foreign_attribute(mode):
+    from sim2act._cold_accounted_native import _Frontier
+    from sim2act._cold_accounted_receipts import _receipt_for_frontier
+    from sim2act.cold_accounted import _OwnedPrewriteMode
+    frontier=object.__new__(_Frontier)
+    calls=[]
+    class Foreign:
+        @property
+        def _native(self):
+            calls.append('foreign descriptor')
+            raise AssertionError('Must reject the type before reading a foreign mode')
+    if mode=='foreign':frontier.mode=Foreign()
+    elif mode=='missing-candidate':frontier.mode=object.__new__(_OwnedPrewriteMode)
+    with pytest.raises(DomainError) as failed:_receipt_for_frontier(frontier)
+    assert failed.value.code=='VERSION_CONFLICT'
+    assert calls==[]
+
+
+@pytest.mark.parametrize('owner',['frontier','mode'])
+def test_frontier_storage_subclass_rejects_before_iteration(owner):
+    from sim2act._cold_accounted_native import _Frontier
+    from sim2act._cold_accounted_receipts import _receipt_for_frontier
+    from sim2act.cold_accounted import _OwnedPrewriteMode
+    frontier=object.__new__(_Frontier)
+    frontier.mode=object.__new__(_OwnedPrewriteMode)
+    calls=[]
+    class Foreign(dict):
+        def __iter__(self):
+            calls.append('foreign iteration')
+            raise AssertionError('Must reject foreign storage before iteration')
+    target=frontier if owner=='frontier' else frontier.mode
+    target.__dict__=Foreign(vars(target))
+    with pytest.raises(DomainError) as failed:_receipt_for_frontier(frontier)
+    assert failed.value.code=='VERSION_CONFLICT'
+    assert calls==[]
