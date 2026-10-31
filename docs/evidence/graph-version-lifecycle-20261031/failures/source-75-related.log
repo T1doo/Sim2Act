@@ -1,0 +1,205 @@
+............................F............................F.............. [ 64%]
+........................FF..............                                 [100%]
+=================================== FAILURES ===================================
+_______ test_cross_graph_frontier_swap_cannot_skip_other_mutable_inputs ________
+
+sql_facts = namespace(store=<sim2act.db.Store object at 0x7f665e7339b0>, settings=Settings(database_url='sqlite:////workspace/scra...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=<sim2act.worker.Worker object at 0x7f665eb5a240>)
+
+    def test_cross_graph_frontier_swap_cannot_skip_other_mutable_inputs(sql_facts):
+        f = sql_facts
+        with f.store.tx() as c, native_segment(f, c) as s:
+            roles = dict.fromkeys(('source', 'generate', 'platform', 'trial', 'per_use'))
+            with pytest.raises(DomainError), runtime._cold_graph_read(
+                f.worker, c, {'unowned-other-graph': {}}, roles, 'pre'
+            ) as other:
+                other._accounted_frontier = s.graph._accounted_frontier
+                other.inputs['unowned-other-graph']['modified'] = True
+                other.check(f.store, c)
+>           s.mode.assert_current()
+
+tests/test_cold_accounted_native.py:457: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/cold_accounted.py:549: in assert_current
+    self.scope._full_check()
+src/sim2act/cold_accounted.py:222: in _full_check
+    _ColdGraphRead.check(self._graph, self._graph.store, self._graph.connection)
+src/sim2act/natural_spec_runtime.py:2550: in check
+    _pin_frontier_before = (_graph_versions.current(_pin_frontier)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+subject = <sim2act._cold_accounted_native._Frontier object at 0x7f665e8e8560>
+
+    def current(subject):
+        _lookup = "sim2act:pin-lookup-const.v1"
+        if _lookup is None:return None  # Capability chosen before this Graph existed.
+        try:journal=_lookup(subject)
+        except ValueError:raise DomainError('VERSION_CONFLICT','Graph original issuer changed') from None
+        if journal is None:_scope(subject)
+        fields=vars(subject);require(type(fields) is dict)
+        if journal is None:
+            require('_pin_journal' not in fields or fields['_pin_journal'] is None)
+            return None
+        _code()
+        scope=_scope(subject)
+        require(fields.get('_pin_journal') is journal)
+        try:return native.pin_current(journal,scope,None)
+>       except ValueError:raise DomainError('VERSION_CONFLICT','Graph publication version changed') from None
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       sim2act.errors.DomainError: Graph publication version changed
+
+src/sim2act/_cold_graph_versions.py:108: DomainError
+______ test_issuer_order_registration_original_pin_and_no_runtime_callers ______
+
+lifecycle = <function lifecycle.<locals>.make at 0x7f665e7391c0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f6660b0d100>
+
+    def test_issuer_order_registration_original_pin_and_no_runtime_callers(lifecycle, monkeypatch):
+        facts = family("generate")
+        scope, g = lifecycle(facts)
+        original = owned._capture
+    
+        def observed(*args):
+            assert not scope._issued
+            g.events.append("copy")
+            return original(*args)
+    
+        monkeypatch.setattr(owned, "_capture", observed)
+        handle = scope.issue("generate", None, None, facts[0]["id"])
+        assert [e for e in g.events if e != "full-guard"] == ["producer", "copy"]
+        p, copied = g.events.index("producer"), g.events.index("copy")
+        assert g.events[p - 1] == g.events[copied - 1] == g.events[copied + 1] == "full-guard"
+        assert scope.read(handle, "generate").run.id == facts[0]["id"]
+        # Different but self-consistent third model after producer must NOT issue.
+        scope, g = lifecycle(family("generate"))
+    
+        def changed(facts, *args):
+            facts[2][2][1].__dict__["complete"] = False
+            return original(facts, *args)
+    
+        monkeypatch.setattr(owned, "_capture", changed)
+        assert (
+            rejects(lambda: scope.issue("generate", None, None, g.facts[0]["id"])) == "VERSION_CONFLICT"
+        )
+        assert not scope._active and not scope._issued
+        for path in (REPO / "src/sim2act").glob("*.py"):
+            if path.name not in ("cold_accounted.py", "_cold_accounted_values.py"):
+                assert "_scope_for_graph(" not in path.read_text()
+            if path.name not in (
+                "cold_accounted.py",
+                "_cold_accounted_values.py",
+                "natural_source_archives.py",
+                "pa_trial_dispatch.py",
+                "natural_live_admission.py",
+                "natural_spec_runtime.py",
+                "_cold_accounted_native.py",
+            ):
+                assert "import cold_accounted" not in path.read_text()
+>               assert "from .cold_accounted" not in path.read_text()
+E               assert 'from .cold_accounted' not in '"""Exact bo...\'CLOSED\'\n'
+E                 
+E                 'from .cold_accounted' is contained here:
+E                   idate
+E                       from .cold_accounted import _OwnedPrewriteMode
+E                 ?     ++++++++++++++++++++
+E                   
+E                       gate.require(type(frontier) is _Frontier, 'Exact native frontier required')...
+E                 
+E                 ...Full output truncated, use '-vv' to show
+
+tests/test_cold_accounted_component.py:349: AssertionError
+________ test_owned_malformed_extract_pair_matches_old_controlled_error ________
+
+malformed_extract = namespace(store=<sim2act.db.Store object at 0x7f6660c4c590>, worker=<sim2act.worker.Worker object at 0x7f6660dde4e0>, ...antic_status': 'UNKNOWN', 'semantic_goal_acceptance': 'NOT_RUN'}), extract_key='synthetic-malformed-persisted-extract')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f665ea7e120>
+
+    def test_owned_malformed_extract_pair_matches_old_controlled_error(malformed_extract, monkeypatch):
+        f, parsed = malformed_extract, []
+        original_parser = pb._persisted_extract_input
+    
+        def parser(value):
+            parsed.append("owned-parse")
+            return original_parser(value)
+    
+        monkeypatch.setattr(pb, "_persisted_extract_input", parser)
+        with f.store.tx() as c:
+            with pytest.raises(DomainError) as old:
+                pb.verify(f.store, c, f.user, f.draft, f.limits)
+        with f.store.tx() as c, pb._source_reads(f.store, c):
+            with pytest.raises(DomainError) as strict:
+                with read_scope(f, c) as guard:
+                    pb._cold_verify_prefix(f.store, c, f.user, f.draft, f.limits, guard, "cold")
+>           assert not guard.active
+                       ^^^^^
+E           UnboundLocalError: cannot access local variable 'guard' where it is not associated with a value
+
+tests/test_cold_extract_parse.py:66: UnboundLocalError
+__ test_guard_valueerror_is_original_and_stops_before_second_lookup_or_parse ___
+
+malformed_extract = namespace(store=<sim2act.db.Store object at 0x7f665ed896d0>, worker=<sim2act.worker.Worker object at 0x7f6660b84dd0>, ...antic_status': 'UNKNOWN', 'semantic_goal_acceptance': 'NOT_RUN'}), extract_key='synthetic-malformed-persisted-extract')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f665e94b590>
+
+    def test_guard_valueerror_is_original_and_stops_before_second_lookup_or_parse(
+            malformed_extract, monkeypatch):
+        f, lookups, parsed = malformed_extract, [], []
+        changed = [False]
+        original = ValueError("synthetic original read-pin callback")
+    
+        def after_sql(c, cursor, statement, params, context, executemany):
+            if "FROM delivery_graph_requests" in statement:
+                lookups.append(statement)
+                changed[0] = True
+    
+        def parser(value):
+            parsed.append(value)
+            pytest.fail("Owned parse ran after the first lookup's guard failure")
+    
+        monkeypatch.setattr(pb, "_persisted_extract_input", parser)
+        event.listen(f.store.engine, "after_cursor_execute", after_sql)
+        try:
+            with f.store.tx() as c, pb._source_reads(f.store, c):
+                with pytest.raises(ValueError) as caught:
+>                   with read_scope(f, c) as guard:
+                         ^^^^^^^^^^^^^^^^
+
+tests/test_cold_extract_parse.py:93: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/test_cold_release_stages.py:61: in read_scope
+    with runtime._cold_graph_read(f.worker, c, f.inputs, f.roles, "pre") as guard:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2658: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2309: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = <built-in function verify_code>
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+>           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cold_accounted_native.py::test_cross_graph_frontier_swap_cannot_skip_other_mutable_inputs
+FAILED tests/test_cold_accounted_component.py::test_issuer_order_registration_original_pin_and_no_runtime_callers
+FAILED tests/test_cold_extract_parse.py::test_owned_malformed_extract_pair_matches_old_controlled_error
+FAILED tests/test_cold_extract_parse.py::test_guard_valueerror_is_original_and_stops_before_second_lookup_or_parse
+4 failed, 108 passed, 1 warning in 262.59s (0:04:22)

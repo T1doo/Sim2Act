@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="112" time="262.588" timestamp="2026-10-31T23:28:42.333490+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_cold_accounted_native" name="test_original_order_once_and_packet_only_budget_is_joint_legacy" time="6.258" /><testcase classname="tests.test_cold_accounted_native" name="test_middle_error_precedes_generate_and_never_issues" time="2.215" /><testcase classname="tests.test_cold_accounted_native" name="test_owned_frontier_real_consumers_and_two_coordinator_checks" time="11.925" /><testcase classname="tests.test_cold_accounted_native" name="test_first_owned_source_facts_keep_frontier_and_real_consumers[finite-fixture]" time="11.789" /><testcase classname="tests.test_cold_accounted_native" name="test_first_owned_source_facts_keep_frontier_and_real_consumers[actual-closed-policy]" time="12.485" /><testcase classname="tests.test_cold_accounted_native" name="test_source_frontier_rejects_undeclared_late_fact" time="3.633" /><testcase classname="tests.test_cold_accounted_native" name="test_source_upstream_copy_has_budget_before_plain" time="4.661" /><testcase classname="tests.test_cold_accounted_native" name="test_source_frontier_keeps_actual_boundaries_live[anchor]" time="3.467" /><testcase classname="tests.test_cold_accounted_native" name="test_source_frontier_keeps_actual_boundaries_live[registry]" time="3.594" /><testcase classname="tests.test_cold_accounted_native" name="test_source_frontier_keeps_actual_boundaries_live[scope]" time="3.608" /><testcase classname="tests.test_cold_accounted_native" name="test_source_frontier_keeps_actual_boundaries_live[callee]" time="3.494" /><testcase classname="tests.test_cold_accounted_native" name="test_codec_frontier_removes_only_owned_nested_values" time="3.360" /><testcase classname="tests.test_cold_accounted_native" name="test_native_dynamic_and_frontier_invalidation[settings]" time="3.448" /><testcase classname="tests.test_cold_accounted_native" name="test_native_dynamic_and_frontier_invalidation[model]" time="3.590" /><testcase classname="tests.test_cold_accounted_native" name="test_native_dynamic_and_frontier_invalidation[max_tokens]" time="3.279" /><testcase classname="tests.test_cold_accounted_native" name="test_native_dynamic_and_frontier_invalidation[stop]" time="3.524" /><testcase classname="tests.test_cold_accounted_native" name="test_native_dynamic_and_frontier_invalidation[write]" time="3.450" /><testcase classname="tests.test_cold_accounted_native" name="test_native_dynamic_and_frontier_invalidation[rollback]" time="3.535" /><testcase classname="tests.test_cold_accounted_native" name="test_native_dynamic_and_frontier_invalidation[commit]" time="3.487" /><testcase classname="tests.test_cold_accounted_native" name="test_native_dynamic_and_frontier_invalidation[frontier]" time="3.593" /><testcase classname="tests.test_cold_accounted_native" name="test_native_dynamic_and_frontier_invalidation[rebind]" time="3.581" /><testcase classname="tests.test_cold_accounted_native" name="test_native_cannot_export_or_cross_stage" time="6.327" /><testcase classname="tests.test_cold_accounted_native" name="test_missing_original_entitlement_still_blocks_pb_accounting[limits0]" time="3.799" /><testcase classname="tests.test_cold_accounted_native" name="test_missing_original_entitlement_still_blocks_pb_accounting[limits1]" time="3.797" /><testcase classname="tests.test_cold_accounted_native" name="test_native_cache_and_arena_keep_original_source_and_reference_gates" time="3.762" /><testcase classname="tests.test_cold_accounted_native" name="test_native_archive_full_foreign_cycle_and_scalar_domain" time="6.274" /><testcase classname="tests.test_cold_accounted_native" name="test_native_foreign_frontier_cannot_exempt_current_graph" time="3.681" /><testcase classname="tests.test_cold_accounted_native" name="test_copy_to_issuance_keeps_original_typed_mutation_guard" time="3.348" /><testcase classname="tests.test_cold_accounted_native" name="test_cross_graph_frontier_swap_cannot_skip_other_mutable_inputs" time="3.505"><failure message="sim2act.errors.DomainError: Graph publication version changed">sql_facts = namespace(store=&lt;sim2act.db.Store object at 0x7f665e7339b0&gt;, settings=Settings(database_url='sqlite:////workspace/scra...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=&lt;sim2act.worker.Worker object at 0x7f665eb5a240&gt;)
+
+    def test_cross_graph_frontier_swap_cannot_skip_other_mutable_inputs(sql_facts):
+        f = sql_facts
+        with f.store.tx() as c, native_segment(f, c) as s:
+            roles = dict.fromkeys(('source', 'generate', 'platform', 'trial', 'per_use'))
+            with pytest.raises(DomainError), runtime._cold_graph_read(
+                f.worker, c, {'unowned-other-graph': {}}, roles, 'pre'
+            ) as other:
+                other._accounted_frontier = s.graph._accounted_frontier
+                other.inputs['unowned-other-graph']['modified'] = True
+                other.check(f.store, c)
+&gt;           s.mode.assert_current()
+
+tests/test_cold_accounted_native.py:457: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/cold_accounted.py:549: in assert_current
+    self.scope._full_check()
+src/sim2act/cold_accounted.py:222: in _full_check
+    _ColdGraphRead.check(self._graph, self._graph.store, self._graph.connection)
+src/sim2act/natural_spec_runtime.py:2550: in check
+    _pin_frontier_before = (_graph_versions.current(_pin_frontier)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+subject = &lt;sim2act._cold_accounted_native._Frontier object at 0x7f665e8e8560&gt;
+
+    def current(subject):
+        _lookup = "sim2act:pin-lookup-const.v1"
+        if _lookup is None:return None  # Capability chosen before this Graph existed.
+        try:journal=_lookup(subject)
+        except ValueError:raise DomainError('VERSION_CONFLICT','Graph original issuer changed') from None
+        if journal is None:_scope(subject)
+        fields=vars(subject);require(type(fields) is dict)
+        if journal is None:
+            require('_pin_journal' not in fields or fields['_pin_journal'] is None)
+            return None
+        _code()
+        scope=_scope(subject)
+        require(fields.get('_pin_journal') is journal)
+        try:return native.pin_current(journal,scope,None)
+&gt;       except ValueError:raise DomainError('VERSION_CONFLICT','Graph publication version changed') from None
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       sim2act.errors.DomainError: Graph publication version changed
+
+src/sim2act/_cold_graph_versions.py:108: DomainError</failure></testcase><testcase classname="tests.test_cold_accounted_native" name="test_native_original_run_context_rejects_separate_current_scalar_damage[version]" time="4.878" /><testcase classname="tests.test_cold_accounted_native" name="test_native_original_run_context_rejects_separate_current_scalar_damage[fence]" time="5.153" /><testcase classname="tests.test_cold_accounted_native" name="test_native_original_run_context_rejects_separate_current_scalar_damage[lease]" time="5.198" /><testcase classname="tests.test_cold_accounted_native" name="test_structural_classes_match_complete_domain_equality" time="0.003" /><testcase classname="tests.test_cold_accounted_native" name="test_issued_arena_tables_are_readonly_and_nodes_shape_gate_precedes_callbacks" time="3.599" /><testcase classname="tests.test_cold_accounted_native" name="test_sizing_rows_keep_depth_and_completed_shared_path_budget" time="0.001" /><testcase classname="tests.test_cold_accounted_receipts" name="test_real_receipt_pass_exact_pair_original_bytes_and_dynamic_m[False]" time="4.019" /><testcase classname="tests.test_cold_accounted_receipts" name="test_real_receipt_pass_exact_pair_original_bytes_and_dynamic_m[True]" time="3.904" /><testcase classname="tests.test_cold_accounted_receipts" name="test_exact_receipt_protocol_refuses_and_closes[reader]" time="3.914" /><testcase classname="tests.test_cold_accounted_receipts" name="test_exact_receipt_protocol_refuses_and_closes[job]" time="3.997" /><testcase classname="tests.test_cold_accounted_receipts" name="test_exact_receipt_protocol_refuses_and_closes[binding]" time="3.799" /><testcase classname="tests.test_cold_accounted_receipts" name="test_exact_receipt_protocol_refuses_and_closes[pending]" time="3.694" /><testcase classname="tests.test_cold_accounted_receipts" name="test_exact_receipt_protocol_refuses_and_closes[m]" time="4.143" /><testcase classname="tests.test_cold_accounted_receipts" name="test_exact_receipt_protocol_refuses_and_closes[intent]" time="3.849" /><testcase classname="tests.test_cold_accounted_receipts" name="test_exact_receipt_protocol_refuses_and_closes[rebind]" time="3.997" /><testcase classname="tests.test_cold_accounted_receipts" name="test_exact_receipt_protocol_refuses_and_closes[mutation]" time="4.308" /><testcase classname="tests.test_cold_accounted_receipts" name="test_exact_receipt_protocol_refuses_and_closes[twice]" time="4.251" /><testcase classname="tests.test_cold_accounted_receipts" name="test_receipt_capacity_chooses_legacy_before_pair_or_issuance" time="4.113" /><testcase classname="tests.test_cold_accounted_receipts" name="test_receipt_original_dynamic_guards_remain[write]" time="4.431" /><testcase classname="tests.test_cold_accounted_receipts" name="test_receipt_original_dynamic_guards_remain[revoke]" time="4.405" /><testcase classname="tests.test_cold_accounted_receipts" name="test_receipt_original_dynamic_guards_remain[rollback]" time="4.116" /><testcase classname="tests.test_cold_accounted_receipts" name="test_receipt_original_dynamic_guards_remain[stop]" time="4.003" /><testcase classname="tests.test_cold_accounted_receipts" name="test_longer_prefix_legacy_before_any_handle_and_original_failure_not_swallowed" time="3.442" /><testcase classname="tests.test_cold_accounted_receipts" name="test_original_preload_failure_never_becomes_legacy" time="3.963" /><testcase classname="tests.test_cold_accounted_receipts" name="test_shared_dag_and_quoted_unicode_cannot_undercharge_receipt_json" time="4.557" /><testcase classname="tests.test_cold_accounted_receipts" name="test_protocol_provenance_never_dispatches_foreign_callbacks[foreign]" time="5.190" /><testcase classname="tests.test_cold_accounted_receipts" name="test_protocol_provenance_never_dispatches_foreign_callbacks[owner]" time="4.971" /><testcase classname="tests.test_cold_accounted_receipts" name="test_protocol_provenance_never_dispatches_foreign_callbacks[pending_type]" time="4.226" /><testcase classname="tests.test_cold_accounted_component" name="test_issuer_order_registration_original_pin_and_no_runtime_callers" time="0.026"><failure message="assert 'from .cold_accounted' not in '&quot;&quot;&quot;Exact bo...\'CLOSED\'\n'&#10;  &#10;  'from .cold_accounted' is contained here:&#10;    idate&#10;        from .cold_accounted import _OwnedPrewriteMode&#10;  ?     ++++++++++++++++++++&#10;    &#10;        gate.require(type(frontier) is _Frontier, 'Exact native frontier required')...&#10;  &#10;  ...Full output truncated, use '-vv' to show">lifecycle = &lt;function lifecycle.&lt;locals&gt;.make at 0x7f665e7391c0&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f6660b0d100&gt;
+
+    def test_issuer_order_registration_original_pin_and_no_runtime_callers(lifecycle, monkeypatch):
+        facts = family("generate")
+        scope, g = lifecycle(facts)
+        original = owned._capture
+    
+        def observed(*args):
+            assert not scope._issued
+            g.events.append("copy")
+            return original(*args)
+    
+        monkeypatch.setattr(owned, "_capture", observed)
+        handle = scope.issue("generate", None, None, facts[0]["id"])
+        assert [e for e in g.events if e != "full-guard"] == ["producer", "copy"]
+        p, copied = g.events.index("producer"), g.events.index("copy")
+        assert g.events[p - 1] == g.events[copied - 1] == g.events[copied + 1] == "full-guard"
+        assert scope.read(handle, "generate").run.id == facts[0]["id"]
+        # Different but self-consistent third model after producer must NOT issue.
+        scope, g = lifecycle(family("generate"))
+    
+        def changed(facts, *args):
+            facts[2][2][1].__dict__["complete"] = False
+            return original(facts, *args)
+    
+        monkeypatch.setattr(owned, "_capture", changed)
+        assert (
+            rejects(lambda: scope.issue("generate", None, None, g.facts[0]["id"])) == "VERSION_CONFLICT"
+        )
+        assert not scope._active and not scope._issued
+        for path in (REPO / "src/sim2act").glob("*.py"):
+            if path.name not in ("cold_accounted.py", "_cold_accounted_values.py"):
+                assert "_scope_for_graph(" not in path.read_text()
+            if path.name not in (
+                "cold_accounted.py",
+                "_cold_accounted_values.py",
+                "natural_source_archives.py",
+                "pa_trial_dispatch.py",
+                "natural_live_admission.py",
+                "natural_spec_runtime.py",
+                "_cold_accounted_native.py",
+            ):
+                assert "import cold_accounted" not in path.read_text()
+&gt;               assert "from .cold_accounted" not in path.read_text()
+E               assert 'from .cold_accounted' not in '"""Exact bo...\'CLOSED\'\n'
+E                 
+E                 'from .cold_accounted' is contained here:
+E                   idate
+E                       from .cold_accounted import _OwnedPrewriteMode
+E                 ?     ++++++++++++++++++++
+E                   
+E                       gate.require(type(frontier) is _Frontier, 'Exact native frontier required')...
+E                 
+E                 ...Full output truncated, use '-vv' to show
+
+tests/test_cold_accounted_component.py:349: AssertionError</failure></testcase><testcase classname="tests.test_cold_accounted_component" name="test_handles_and_existing_views_refuse_changed_lifecycle[closed]" time="0.015" /><testcase classname="tests.test_cold_accounted_component" name="test_handles_and_existing_views_refuse_changed_lifecycle[scope]" time="0.015" /><testcase classname="tests.test_cold_accounted_component" name="test_handles_and_existing_views_refuse_changed_lifecycle[transaction]" time="0.015" /><testcase classname="tests.test_cold_accounted_component" name="test_handles_and_existing_views_refuse_changed_lifecycle[source_token]" time="0.014" /><testcase classname="tests.test_cold_accounted_component" name="test_handles_and_existing_views_refuse_changed_lifecycle[write_epoch]" time="0.016" /><testcase classname="tests.test_cold_accounted_component" name="test_handles_and_existing_views_refuse_changed_lifecycle[write_count]" time="0.014" /><testcase classname="tests.test_cold_accounted_component" name="test_handles_and_existing_views_refuse_changed_lifecycle[raw_commit]" time="0.017" /><testcase classname="tests.test_cold_accounted_component" name="test_handles_and_existing_views_refuse_changed_lifecycle[phase]" time="0.020" /><testcase classname="tests.test_cold_accounted_component" name="test_handles_and_existing_views_refuse_changed_lifecycle[binding]" time="0.018" /><testcase classname="tests.test_cold_accounted_component" name="test_handles_and_existing_views_refuse_changed_lifecycle[thread]" time="0.016" /><testcase classname="tests.test_cold_accounted_component" name="test_handles_and_existing_views_refuse_changed_lifecycle[schema]" time="0.015" /><testcase classname="tests.test_cold_accounted_component" name="test_forged_cross_scope_role_post_and_frozen_accessors" time="0.034" /><testcase classname="tests.test_cold_accounted_component" name="test_domain_equality_different_nodes_aliases_order_and_exact_types" time="0.039" /><testcase classname="tests.test_cold_accounted_component" name="test_all_aids_stage_usage_and_post_issue_source_isolation[generate]" time="0.044" /><testcase classname="tests.test_cold_accounted_component" name="test_all_aids_stage_usage_and_post_issue_source_isolation[source]" time="0.032" /><testcase classname="tests.test_cold_accounted_component" name="test_unknown_partial_none_usage_matches_original_normalization[None]" time="0.020" /><testcase classname="tests.test_cold_accounted_component" name="test_unknown_partial_none_usage_matches_original_normalization[usage1]" time="0.019" /><testcase classname="tests.test_cold_accounted_component" name="test_unknown_partial_none_usage_matches_original_normalization[usage2]" time="0.022" /><testcase classname="tests.test_cold_accounted_component" name="test_unknown_partial_none_usage_matches_original_normalization[usage3]" time="0.020" /><testcase classname="tests.test_cold_accounted_component" name="test_unknown_partial_none_usage_matches_original_normalization[usage4]" time="0.020" /><testcase classname="tests.test_cold_accounted_component" name="test_unknown_partial_none_usage_matches_original_normalization[usage5]" time="0.018" /><testcase classname="tests.test_cold_accounted_component" name="test_source_row_exchange_original_bytes_both_provenance_modes[offline]" time="0.032" /><testcase classname="tests.test_cold_accounted_component" name="test_source_row_exchange_original_bytes_both_provenance_modes[controller]" time="0.028" /><testcase classname="tests.test_cold_accounted_component" name="test_entire_archive_chain_against_extracted_original" time="0.067" /><testcase classname="tests.test_cold_accounted_component" name="test_issuer_rejects_entire_family_association_errors[duplicate]" time="0.010" /><testcase classname="tests.test_cold_accounted_component" name="test_issuer_rejects_entire_family_association_errors[swap]" time="0.011" /><testcase classname="tests.test_cold_accounted_component" name="test_issuer_rejects_entire_family_association_errors[wrong-run]" time="0.013" /><testcase classname="tests.test_cold_accounted_component" name="test_issuer_rejects_entire_family_association_errors[third-checked]" time="0.016" /><testcase classname="tests.test_cold_accounted_component" name="test_issuer_rejects_entire_family_association_errors[ns-aid]" time="0.013" /><testcase classname="tests.test_cold_accounted_component" name="test_foreign_leaf_and_key_callbacks_never_execute" time="0.018" /><testcase classname="tests.test_cold_accounted_component" name="test_explicit_bounds_and_retained_hidden_storage_surrogates" time="0.043" /><testcase classname="tests.test_cold_accounted_component" name="test_fixed_accessors_cover_every_current_model_and_row_field" time="0.004" /><testcase classname="tests.test_cold_accounted_component" name="test_nullable_row_usage_response_reject_without_attribute_error" time="0.034" /><testcase classname="tests.test_cold_accounted_component" name="test_multibyte_wire_preserves_distinct_character_and_byte_counts" time="0.021" /><testcase classname="tests.test_cold_accounted_component" name="test_external_ledger_full_slot_and_strict_receipt_scalar_contract" time="0.030" /><testcase classname="tests.test_cold_accounted_component" name="test_forged_wrapper_nested_fields_refuse_foreign_callbacks" time="0.015" /><testcase classname="tests.test_cold_accounted_component" name="test_producer_failure_invalidates_prior_handles_without_registering" time="0.014" /><testcase classname="tests.test_cold_accounted_component" name="test_native_candidate_has_no_default_runtime_activation" time="0.000" /><testcase classname="tests.test_cold_extract_parse" name="test_owned_malformed_extract_pair_matches_old_controlled_error" time="0.695"><failure message="UnboundLocalError: cannot access local variable 'guard' where it is not associated with a value">malformed_extract = namespace(store=&lt;sim2act.db.Store object at 0x7f6660c4c590&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f6660dde4e0&gt;, ...antic_status': 'UNKNOWN', 'semantic_goal_acceptance': 'NOT_RUN'}), extract_key='synthetic-malformed-persisted-extract')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f665ea7e120&gt;
+
+    def test_owned_malformed_extract_pair_matches_old_controlled_error(malformed_extract, monkeypatch):
+        f, parsed = malformed_extract, []
+        original_parser = pb._persisted_extract_input
+    
+        def parser(value):
+            parsed.append("owned-parse")
+            return original_parser(value)
+    
+        monkeypatch.setattr(pb, "_persisted_extract_input", parser)
+        with f.store.tx() as c:
+            with pytest.raises(DomainError) as old:
+                pb.verify(f.store, c, f.user, f.draft, f.limits)
+        with f.store.tx() as c, pb._source_reads(f.store, c):
+            with pytest.raises(DomainError) as strict:
+                with read_scope(f, c) as guard:
+                    pb._cold_verify_prefix(f.store, c, f.user, f.draft, f.limits, guard, "cold")
+&gt;           assert not guard.active
+                       ^^^^^
+E           UnboundLocalError: cannot access local variable 'guard' where it is not associated with a value
+
+tests/test_cold_extract_parse.py:66: UnboundLocalError</failure></testcase><testcase classname="tests.test_cold_extract_parse" name="test_guard_valueerror_is_original_and_stops_before_second_lookup_or_parse" time="0.356"><failure message="sim2act.errors.DomainError: Complete Source code changed">malformed_extract = namespace(store=&lt;sim2act.db.Store object at 0x7f665ed896d0&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f6660b84dd0&gt;, ...antic_status': 'UNKNOWN', 'semantic_goal_acceptance': 'NOT_RUN'}), extract_key='synthetic-malformed-persisted-extract')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f665e94b590&gt;
+
+    def test_guard_valueerror_is_original_and_stops_before_second_lookup_or_parse(
+            malformed_extract, monkeypatch):
+        f, lookups, parsed = malformed_extract, [], []
+        changed = [False]
+        original = ValueError("synthetic original read-pin callback")
+    
+        def after_sql(c, cursor, statement, params, context, executemany):
+            if "FROM delivery_graph_requests" in statement:
+                lookups.append(statement)
+                changed[0] = True
+    
+        def parser(value):
+            parsed.append(value)
+            pytest.fail("Owned parse ran after the first lookup's guard failure")
+    
+        monkeypatch.setattr(pb, "_persisted_extract_input", parser)
+        event.listen(f.store.engine, "after_cursor_execute", after_sql)
+        try:
+            with f.store.tx() as c, pb._source_reads(f.store, c):
+                with pytest.raises(ValueError) as caught:
+&gt;                   with read_scope(f, c) as guard:
+                         ^^^^^^^^^^^^^^^^
+
+tests/test_cold_extract_parse.py:93: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/test_cold_release_stages.py:61: in read_scope
+    with runtime._cold_graph_read(f.worker, c, f.inputs, f.roles, "pre") as guard:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2658: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/natural_spec_runtime.py:2309: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+src/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="tests.test_settlement_preparation_lifetime" name="test_signed_interval_cannot_book_after_earlier_state_deadline" time="0.954" /><testcase classname="tests.test_settlement_preparation_lifetime" name="test_signed_writer_commit_keeps_earliest_state_deadline[False]" time="1.327" /><testcase classname="tests.test_settlement_preparation_lifetime" name="test_signed_writer_commit_keeps_earliest_state_deadline[True]" time="1.423" /><testcase classname="tests.test_settlement_preparation_lifetime" name="test_heartbeat_after_g0_read_cannot_reuse_old_snapshot" time="0.377" /><testcase classname="tests.test_settlement_preparation_lifetime" name="test_same_snapshot_cannot_renew_itself_before_promotion" time="0.639" /><testcase classname="tests.test_settlement_preparation_lifetime" name="test_signed_interval_keeps_original_bound_for_none_or_later_state[None]" time="0.894" /><testcase classname="tests.test_settlement_preparation_lifetime" name="test_signed_interval_keeps_original_bound_for_none_or_later_state[later]" time="1.007" /><testcase classname="tests.test_settlement_preparation_lifetime" name="test_signed_interval_rejects_unknown_state_deadline_before_booking[True]" time="0.861" /><testcase classname="tests.test_settlement_preparation_lifetime" name="test_signed_interval_rejects_unknown_state_deadline_before_booking[nan]" time="1.046" /><testcase classname="tests.test_settlement_preparation_lifetime" name="test_signed_interval_rejects_unknown_state_deadline_before_booking[inf]" time="0.927" /><testcase classname="tests.test_settlement_preparation_lifetime" name="test_signed_interval_rejects_unknown_state_deadline_before_booking[not-a-clock]" time="0.912" /><testcase classname="tests.test_settlement_preparation_lifetime" name="test_signed_interval_rejects_unknown_state_deadline_before_booking[missing]" time="0.903" /><testcase classname="tests.test_settlement_preparation_lifetime" name="test_original_fatal_error_precedes_state_deadline_validation[False]" time="0.943" /><testcase classname="tests.test_settlement_preparation_lifetime" name="test_original_fatal_error_precedes_state_deadline_validation[True]" time="0.926" /></testsuite></testsuites>

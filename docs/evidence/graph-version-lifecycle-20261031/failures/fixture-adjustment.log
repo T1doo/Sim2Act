@@ -1,0 +1,104 @@
+F.F                                                                      [100%]
+=================================== FAILURES ===================================
+________ test_owned_malformed_extract_pair_matches_old_controlled_error ________
+
+malformed_extract = namespace(store=<sim2act.db.Store object at 0x7fb431efcc50>, worker=<sim2act.worker.Worker object at 0x7fb4316fc7d0>, ...antic_status': 'UNKNOWN', 'semantic_goal_acceptance': 'NOT_RUN'}), extract_key='synthetic-malformed-persisted-extract')
+
+    def test_owned_malformed_extract_pair_matches_old_controlled_error(malformed_extract):
+        f, parsed = malformed_extract, []
+        parser_code = pb.ExtractInput.model_validate.__func__.__code__
+        with f.store.tx() as c:
+            with pytest.raises(DomainError) as old:
+>               pb.pair(c, f.user, f.draft['id'], pb.EXTRACT, f.extract_key, pb.ExtractInput)
+
+tests/test_cold_extract_parse.py:76: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+c = <sqlalchemy.engine.base.Connection object at 0x7fb43185ca70>
+user = 'user_3d7c3c1f7a4640089d9fec4d1a18302f'
+lid = 'app_c9ea9b42e3574dff9a7f384f74950359', kind = 'pb_natural_spec_extract'
+key = 'synthetic-malformed-persisted-extract'
+model = <class 'sim2act.pb_natural_specs.ExtractInput'>
+
+    def pair(c, user, lid, kind, key, model):
+        rows = [graph.lookup(c, user, lid, k, key) for k in (kind, kind + "_seal")]
+        require(all(rows), "Independent text logic seals missing")
+        left, right = [graph.checked(r) for r in rows]
+        require(set(left) == {"request", "response"} and fingerprint(left) == fingerprint(right))
+>       body = model.model_validate(left["request"])
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for ExtractInput
+E       expected_review_fingerprint
+E         Field required [type=missing, input_value={'review': {'source_run_i...T_JSON_IN_THIS_PROJECT'}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.12/v/missing
+
+src/sim2act/text_logic_reuse.py:148: ValidationError
+______ test_issuer_order_registration_original_pin_and_no_runtime_callers ______
+
+lifecycle = <function lifecycle.<locals>.make at 0x7fb431bdf740>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fb431550710>
+
+    def test_issuer_order_registration_original_pin_and_no_runtime_callers(lifecycle, monkeypatch):
+        facts = family("generate")
+        scope, g = lifecycle(facts)
+        original = owned._capture
+    
+        def observed(*args):
+            assert not scope._issued
+            g.events.append("copy")
+            return original(*args)
+    
+        monkeypatch.setattr(owned, "_capture", observed)
+        handle = scope.issue("generate", None, None, facts[0]["id"])
+        assert [e for e in g.events if e != "full-guard"] == ["producer", "copy"]
+        p, copied = g.events.index("producer"), g.events.index("copy")
+        assert g.events[p - 1] == g.events[copied - 1] == g.events[copied + 1] == "full-guard"
+        assert scope.read(handle, "generate").run.id == facts[0]["id"]
+        # Different but self-consistent third model after producer must NOT issue.
+        scope, g = lifecycle(family("generate"))
+    
+        def changed(facts, *args):
+            facts[2][2][1].__dict__["complete"] = False
+            return original(facts, *args)
+    
+        monkeypatch.setattr(owned, "_capture", changed)
+        assert (
+            rejects(lambda: scope.issue("generate", None, None, g.facts[0]["id"])) == "VERSION_CONFLICT"
+        )
+        assert not scope._active and not scope._issued
+        for path in (REPO / "src/sim2act").glob("*.py"):
+            if path.name not in ("cold_accounted.py", "_cold_accounted_values.py"):
+                assert "_scope_for_graph(" not in path.read_text()
+            if path.name not in (
+                "cold_accounted.py",
+                "_cold_accounted_values.py",
+                "natural_source_archives.py",
+                "pa_trial_dispatch.py",
+                "natural_live_admission.py",
+                "natural_spec_runtime.py",
+                "_cold_accounted_native.py",
+                "_cold_accounted_receipts.py",
+            ):
+>               assert "import cold_accounted" not in path.read_text()
+E               assert 'import cold_accounted' not in '"""One invo...turn False\n'
+E                 
+E                 'import cold_accounted' is contained here:
+E                      from . import cold_accounted as owned
+E                       from . import natural_spec_runtime as rt
+E                       from ._cold_accounted_native import _NativeCandidate
+E                   
+E                       if type(trial) is not rt._ColdTrialGraph:...
+E                 
+E                 ...Full output truncated, use '-vv' to show
+
+tests/test_cold_accounted_component.py:349: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cold_extract_parse.py::test_owned_malformed_extract_pair_matches_old_controlled_error
+FAILED tests/test_cold_accounted_component.py::test_issuer_order_registration_original_pin_and_no_runtime_callers
+2 failed, 1 passed, 1 warning in 1.44s

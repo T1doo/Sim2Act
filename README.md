@@ -1,5 +1,7 @@
 # Sim2Act
 
+> **默认 Graph 完整版本协议源码：4d0b16f2（2026-10-31）**。Graph/Frontier按版本持有完整不可变V2期望，check、selector、fallback、export及G1 proof消费同版本，W5→G1仍原完整执行。相关172项零失败／零跳过；一次实际Cold五写、完整G1及SQL提交已验证，6次固定Mock、0real、文件SQLite、虚拟业务时钟，**不是原30秒性能验收**。[完整接线、失败对照、冻结版本和边界](docs/evidence/graph-version-lifecycle-20261031/README.md)。新源码未重新打包，以下2ad Linux候选保留；新Windows／正式PG／大型live及完整交付仍未验。
+
 > **当前更早截止修复候选：2ad32276（Linux x86_64／CPython3.12）**。[包身份及使用范围](deliverables/limited-text-candidate-deadline-20261031/README.md)。签120结算也受原更早state截止约束，原越界提交反例已实修；307／安装44项定向回归通过，范围重叠。匹配大型两笔保存／首次重开通过，但G0为31.09／30.96秒、writer45.45／49.60秒、total76.54／80.56秒，比基线更慢，**未解决原普通30秒目标**。[原失败、实际对照及未实现的最小完整架构](docs/evidence/cold-earliest-deadline-boundary-20261031/README.md)。本轮0新真实模型，未改main／Release、Windows／PG未验；不是全产品完成。
 
 > **前版图错误边界修复候选：2d41ad38（Linux x86_64／CPython3.12）**。[ZIP、准确身份、安装／停止／卸载范围](deliverables/limited-text-candidate-graph-fixed-20261031/README.md)。原12图失败逐项闭合：11项fixture替换生产函数违反原代码门，去替换后暴露1项真实frontier AttributeError，已修受控拒绝且完整门保留。冻结293及新安装59项零失败／零跳过；新包CSV=30保存／首次重开／原键、正常关闭及专用环境卸载后数据保留实测通过。[失败原件、逐项对照和实际流程](docs/evidence/graph-fixture-and-installed-cleanup-20261031/README.md)。本轮0新真实模型调用，仅核前版真实结果兼容；非Windows EXE／全产品／正式Release，PG／大型Cold live及30秒稳定性能缺口仍保留。
@@ -46,7 +48,7 @@
 本增量支持：本地身份、三个工作区、项目内文本材料、异步持久任务、独立 API/worker、受控工具与回执、幂等提交、租约/fencing、暂停/取消、授权撤回、有限模型循环和跨进程配额账本。
 默认 **MOCK 工程模式**；显式单文本合同已有真实 Intern 的执行、独立验收、保存及重开证据，正式 PG／大型 Cold 真实模型整链尚未验收。普通未声明有限合同的 F1 工具链仍显示 `PARTIAL`，不代表任意目标语义、应用生成或 R0 验收通过。P-A、P-B、发布、增量修改在 F2 实现；不会用空按钮冒充。
 
-本轮补充：[原30秒预算诊断修正与未启用的PB候选切片对照](docs/evidence/pb-candidate-slice-refusal-20261031/README.md)。运行应用仍精确保留2ad32276；本轮无大型Cold或新live验收，原30秒大型保存缺口未解决。
+前轮记录：[原30秒预算诊断修正与未启用的PB候选切片对照](docs/evidence/pb-candidate-slice-refusal-20261031/README.md)。当轮应用保留2ad32276，未执行大型Cold或新live；其原负例与本轮版本协议语义验收分开记录，原30秒大型保存缺口仍未解决。
 
 ## 运行边界
 
