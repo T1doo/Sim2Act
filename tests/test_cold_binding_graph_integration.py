@@ -54,7 +54,7 @@ def material_goal(store, user, resource, goal, content):
         goal_version=goal["version"], goal_fingerprint=goal["fingerprint"], goal_snapshot=saved["snapshot"])
 
 
-def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_path, monkeypatch, *, _post_facts_case=False, _base_probe=None):
+def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_path, monkeypatch, *, _post_facts_case=False, _base_probe=None, _effective_probe=None):
     from test_natural_spec_apps import SOURCE
 
     mock_calls = []
@@ -195,7 +195,8 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                     (apps, ("validate_frozen_candidate",)), (lifecycle, ("read_release", "_read_release")),
                     (app_jobs, ("load_binding",)), (text_apps, ("verify_origin",))]
                 from cold_use_base_probe import observe_base
-                with monkeypatch.context() as barrier, observe_base(barrier,_base_probe):
+                from cold_use_effective_probe import observe_effective, check_effective
+                with monkeypatch.context() as barrier, observe_base(barrier,_base_probe), observe_effective(_effective_probe):
                     for module, names in tripwires:
                         for name in names:
                             barrier.setattr(module, name, partial(ancestry_forbidden, module.__name__ + "." + name))
@@ -206,6 +207,20 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                             platform=full, trial=full.model_copy(deep=True), per_use=full.model_copy(deep=True))
                         with runtime._cold_graph_read(worker, c, dict(current=current), roles, "pre") as guard:
                             graph = runtime._cold_first_binding(worker, c, guard, current, full)
+                            check_effective(graph, guard, _effective_probe)
+                            if _effective_probe is not None and _effective_probe['mode'] == 'facet':
+                                from sim2act import _cold_source_packet as effective_owned
+                                facet = use._cold_review_facet_from_review(store, c, user,
+                                    graph.use_prefix, graph.use_review, roles['trial'], role='trial')
+                                facet_prefix, facet_value = use._cold_bound_facet(store, c, user,
+                                    graph.use_prefix, graph.use_review, facet, role='trial')
+                                value = facet.prefix.value
+                                assert value.owner() is not graph.use_review.prefix.value.owner()
+                                assert effective_owned.image.plain(value) == effective_owned.image.plain(graph.use_review.prefix.value)
+                                assert effective_owned.image.same(value, facet.value[0]['effective_candidate'])
+                                assert effective_owned.image.same(value, facet_value[0]['candidate'])
+                                assert facet_prefix.role == 'trial'
+                                _effective_probe['facet_checked'] = True
                             assert graph.guard is guard and guard.active and not blocked
                             from sim2act._cold_source_image import compat as original_value_domain
                             assert original_value_domain(graph.binding) == expected_cold

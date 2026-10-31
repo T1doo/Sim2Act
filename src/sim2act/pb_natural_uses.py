@@ -757,6 +757,29 @@ def _bound_review_from_facts(job, snapshot, release, limits, family, body, froze
         raise
 
 
+def _cold_effective_candidate(guard, key, value):
+    """Transfer one complete producer JSON; never freeze live use authority."""
+    if guard._accounted_frontier is not None or not pb._owned_source_enabled():
+        return value
+    name = key + ":effective-candidate"
+    try:
+        return _use_fact_code.own_fact(guard, name, value)
+    except (_use_fact_code.image.Bounds, _use_fact_code.image.Unsupported):
+        # Preserve the original raw path only before any ownership root escapes.
+        # Never replay expand/SQL or normalize a late callback/native failure.
+        fields = vars(guard)
+        inputs, registry = fields.get('inputs'), fields.get('_source_fact_bindings', {})
+        if (fields.get('active') is not True or type(inputs) is not dict
+                or type(registry) is not dict
+                or not all(type(k) is str for k in inputs)
+                or not all(type(k) is str for k in registry)
+                or name in inputs or name in registry):
+            raise
+        pb._owned_source_enabled()
+        _use_read_checkpoint(guard.store, guard.connection, guard)
+        return value
+
+
 def _audit_from_facts(base_digest, meta, seal_meta, body, frozen, *, _graph_read=None):
     """Digest complete paired facts, after the original current scope/base audit."""
     return fingerprint(dict(base=base_digest, meta=_use_dump(RunScopeInput, meta, _graph_read),
@@ -793,6 +816,12 @@ def _review_effective_from_target(store, c, user, instance, release, body, limit
             for marker in ("goal_application", "spec_binding"):
                 if marker in base["candidate"]:
                     value[marker] = copy.deepcopy(base["candidate"][marker])
+        if _graph_read is not None:
+            # Transfer the COMPLETE freshly expanded JSON before any graph
+            # root or review/bound consumer can retain its mutable producer.
+            # Live Limits, goal/body models, Grants and Run/epoch state stay
+            # on their original interfaces and freshly checked boundaries.
+            value = _cold_effective_candidate(_graph_read, key, value)
         if _graph_read is not None:
             _graph_read.add(key + ":expanded", dict(effective_candidate=value, declared_limits=declared))
         _, _, report = natural.compile_candidate(value, limits)

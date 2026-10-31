@@ -678,6 +678,7 @@ def pure(ref, args, source, goal):
 
 
 def preview(source, candidate, input_value):
+    from ._cold_source_image import plain
     validate_value(candidate["manifest"]["input_schema"], input_value)
     bounded_source(source)
     return dict(
@@ -687,8 +688,8 @@ def preview(source, candidate, input_value):
         project_writes=0,
         source_hash=source["hash"],
         source_content=source["content"],
-        recipe=copy.deepcopy(candidate["spec_recipe"]),
-        human_unresolved=copy.deepcopy(candidate["goal"]["unresolved"]),
+        recipe=copy.deepcopy(plain(candidate["spec_recipe"])),
+        human_unresolved=copy.deepcopy(plain(candidate["goal"]["unresolved"])),
         citation_status="NOT_RUN",
         semantic_status="UNKNOWN",
         semantic_goal_acceptance="NOT_RUN",
