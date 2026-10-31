@@ -366,9 +366,11 @@ def create_app(store=None, settings=None):
             from .exact_read import select_policy
             with db.tx() as c:
                 project = db.lock_project(c, user, pid)
+                prior = c.execute(select(runs).where(runs.c.principal_id == user,
+                    runs.c.project_id == pid, runs.c.request_key == body.request_key)).mappings().first()
                 policy = select_policy(db, c, user, project, body.goal, body.resource_refs,
                     {"limits": platform_limits.model_dump(), "mode": s.mode, "request_model": s.model},
-                    s.quota_subject)
+                    s.quota_subject, prior=prior)
                 rid = db.submit_tx(c, user, pid, body.goal, body.resource_refs, body.request_key, policy=policy)
             return {"run_id": rid, "mode": s.mode.upper()}
         return {

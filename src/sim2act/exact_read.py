@@ -23,6 +23,7 @@ RULES = ["仅限所选单一TXT/MD、版本1、4096 UTF-8字节以内。",
          "恰好一次resource.read；禁止写工具、额外材料或补造内容。",
          "最终严格JSON仅含content字符串，字符串内部逐字相等；通用语义未验、人工待确认。"]
 KEY_PREFIX = "exact-read:"
+DIRECT_PROTOCOL = "exact-read-direct.v1"
 
 
 def require(value, message="Exact text-read contract or evidence changed"):
@@ -34,13 +35,20 @@ def tools():
     return [tool for tool in definitions() if tool["function"]["name"] == "resource.read"]
 
 
-def select_policy(store, c, user, project, goal, refs, policy, quota_subject):
+def select_policy(store, c, user, project, goal, refs, policy, quota_subject, *, prior=None):
     require(store.test_only and store.sqlite, "本有限示例只支持明确的合成SQLite工作区")
     require(goal == GOAL and len(refs) == 1, "请选择明确的完整读取目标和唯一文本材料")
     source = authorized_read(store, c, user, project["runtime_id"], project["id"],
                              "resource.read", {"resource_id": refs[0]})
     require(source["format"] in {"txt", "md"} and len(source["content"].encode()) <= 4096,
             "完整读取合同仅支持4096字节以内的TXT/MD")
+    if prior is not None:
+        old = store.frozen_contract(c, prior)
+        require(old.exact_read is not None and prior["goal"] == goal and prior["resource_refs"] == refs
+            and old.mode == policy["mode"] and old.request_model == policy["request_model"]
+            and old.exact_read.quota_subject == quota_subject, "Original request key has a different scope")
+        return {"limits": old.limits.model_dump(), "mode": old.mode, "request_model": old.request_model,
+                "exact_read": old.exact_read.model_dump(exclude_none=True)}
     limits = Limits(**policy["limits"])
     require(limits.max_requests >= 2, "完整读取需要至少两次模型请求额度；未发送请求")
     tightened = limits.model_copy(update={"max_requests": min(2, limits.max_requests),
@@ -50,8 +58,8 @@ def select_policy(store, c, user, project, goal, refs, policy, quota_subject):
     return {**policy, "limits": tightened.model_dump(), "exact_read": ExactResourceRead(
         version=VERSION, resource_id=refs[0], revision=1, source_hash=source["hash"],
         format=source["format"], max_source_bytes=4096,
-        output_rule="strict-json-content-verbatim.v1", request_timeout_seconds=8,
-        quota_subject=quota_subject).model_dump()}
+        output_rule="strict-json-content-verbatim.v1", request_timeout_seconds=25,
+        request_protocol=DIRECT_PROTOCOL, quota_subject=quota_subject).model_dump(exclude_none=True)}
 
 
 def validate(store, c, run, contract):
@@ -78,9 +86,10 @@ def validate(store, c, run, contract):
         and contract.resources[0].format == spec.format
         and contract.limits.max_requests <= 2 and contract.limits.max_tools == 1
         and contract.limits.max_repairs == 0 and contract.limits.max_total_tokens <= 16384
-        and contract.limits.run_seconds <= 90 and (run["request_key"] or "").startswith(KEY_PREFIX))
+        and contract.limits.run_seconds <= 90 and (run["request_key"] or "").startswith(KEY_PREFIX)
+        and spec.request_timeout_seconds == (25 if spec.request_protocol == DIRECT_PROTOCOL else 8))
     policy = {"limits": contract.limits.model_dump(), "mode": contract.mode,
-              "request_model": contract.request_model, "exact_read": spec.model_dump()}
+              "request_model": contract.request_model, "exact_read": spec.model_dump(exclude_none=True)}
     request_fp = fingerprint({"goal": GOAL, "resource_refs": [spec.resource_id], "policy": policy})
     expected = {"contract_fingerprint": fingerprint(contract.model_dump(exclude_none=True)),
                 "request_fingerprint": request_fp,
@@ -88,7 +97,7 @@ def validate(store, c, run, contract):
     require(run["fingerprint"] == request_fp and marker == expected and seals == [expected])
     accepted = c.execute(select(events.c.data).where(events.c.run_id == run["id"],
                                                      events.c.kind == "ACCEPTED")).scalars().all()
-    require(accepted == [{"input_fingerprint": request_fp, "exact_read": spec.model_dump()}])
+    require(accepted == [{"input_fingerprint": request_fp, "exact_read": spec.model_dump(exclude_none=True)}])
     return spec
 
 
@@ -119,17 +128,37 @@ def enforce_selection(store, c, run, contract=None):
     return contract
 
 
+def wire_payload(contract, messages, requested_tools, max_output):
+    payload = {"model": contract.request_model, "messages": messages, "tools": requested_tools,
+               "stream": False, "max_tokens": max_output}
+    if contract.exact_read.request_protocol == DIRECT_PROTOCOL:
+        payload.update(thinking_mode=False, tool_choice=(
+            {"type": "function", "function": {"name": "resource.read"}} if len(messages) == 2 else "none"))
+    return payload
+
+
+def request_basis(contract, messages, requested_tools, max_output):
+    if contract.exact_read.request_protocol is not None:
+        payload = wire_payload(contract, messages, requested_tools, max_output)
+        return fingerprint(payload), len(json.dumps(payload, ensure_ascii=False).encode()) + max_output
+    return (fingerprint({"messages": messages, "tools": requested_tools, "model": contract.request_model}),
+            len(json.dumps({"messages": messages, "tools": requested_tools}, ensure_ascii=False).encode()) + max_output)
+
+
 def check_attempt(row, contract, prefix, response=None, *, started=False):
     params = row["parameters"]
+    protocol_keys = {"exact_read_request_protocol"} if contract.exact_read.request_protocol is not None else set()
     require(type(params) is dict and set(params) == {"stream", "max_tokens", "adapter_version",
-        "model_identity_policy_version", "weight_version", "request_fingerprint"} | (set() if started else {"model_identity"}))
+        "model_identity_policy_version", "weight_version", "request_fingerprint"} | protocol_keys | (set() if started else {"model_identity"}))
+    if protocol_keys:
+        require(params["exact_read_request_protocol"] == contract.exact_read.request_protocol)
     require(row["error"] is None and row["mode"] == contract.mode.upper()
         and row["request_model"] == contract.request_model and params["stream"] is False
         and params["adapter_version"] == "1" and params["weight_version"] == "unknown"
         and params["model_identity_policy_version"] == MODEL_IDENTITY_POLICY_VERSION
         and type(params["max_tokens"]) is int and 1 <= params["max_tokens"] <= contract.limits.max_output_tokens
-        and params["request_fingerprint"] == fingerprint({"messages": prefix, "tools": tools(), "model": contract.request_model}))
-    envelope = len(json.dumps({"messages": prefix, "tools": tools()}, ensure_ascii=False).encode()) + params["max_tokens"]
+        and params["request_fingerprint"] == request_basis(contract, prefix, tools(), params["max_tokens"])[0])
+    envelope = request_basis(contract, prefix, tools(), params["max_tokens"])[1]
     require(row["reserved_tokens"] == envelope)
     if started:
         require(row["status"] == "STARTED" and row["response"] is None and row["response_model"] is None
@@ -179,7 +208,7 @@ def initial_messages(run, contract):
     return [{"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": json.dumps({"goal": GOAL,
                 "resource_refs": [contract.exact_read.resource_id],
-                "exact_read_contract": contract.exact_read.model_dump()}, ensure_ascii=False)}]
+                "exact_read_contract": contract.exact_read.model_dump(exclude_none=True)}, ensure_ascii=False)}]
 
 
 def before_send(worker, c, run, context, requested_tools, *, recorded=True, attempt_id=None, wire_max_tokens=None):
@@ -216,47 +245,47 @@ def before_send(worker, c, run, context, requested_tools, *, recorded=True, atte
     return contract
 
 
-def send(worker, run_id, fence, attempt_id, context, requested_tools):
+def send(worker, run_id, fence, attempt_id, context, requested_tools, contract):
     # This is the same original sender with a late transactional wire guard;
     # no LIVE return is injected or supplied by the local synthetic harness.
     if worker.s.mode == "mock":
         return worker.model.request(context["messages"], requested_tools)
-    settings, store = worker.s, worker.store
+    settings, store, stop = worker.s, worker.store, worker.stop
     selected = (settings.mode, settings.live_enabled, settings.model, settings.max_output_tokens,
                 settings.token, settings.quota_subject)
     require(settings.live_enabled and bool(settings.token), "Existing explicit LIVE settings required")
-    wire = json.dumps({"model": selected[2], "messages": context["messages"],
-        "tools": requested_tools, "stream": False,
-        "max_tokens": selected[3]}, ensure_ascii=False).encode()
+    wire = json.dumps(wire_payload(contract, context["messages"], requested_tools, selected[3]),
+                      ensure_ascii=False).encode()
     wire_max = selected[3]
     def guard(request):
-        def check_wire():
+        def check_wire(current_contract):
             require(str(request.url) == "https://chat.intern-ai.org.cn/api/v1/chat/completions"
                 and request.method == "POST" and request.content == wire
-                and strict_json(wire, 32768) == {"model": selected[2], "messages": context["messages"],
-                    "tools": requested_tools, "stream": False, "max_tokens": wire_max})
-        check_wire()
+                and strict_json(wire, 32768) == wire_payload(
+                    current_contract, context["messages"], requested_tools, wire_max))
+        check_wire(contract)
         cutoff = {}
         def clock():
-            require(worker.s is settings and worker.store is store
+            require(worker.s is settings and worker.store is store and worker.stop is stop
                     and (settings.mode, settings.live_enabled, settings.model, settings.max_output_tokens,
                          settings.token, settings.quota_subject) == selected
                     and not worker.stop.is_set() and time.time() < cutoff["wall"]
                     and time.monotonic() < cutoff["mono"], "Original send interval ended")
         def recheck():
             current = worker.store.guard(c, run_id, fence)
-            before_send(worker, c, current, context, requested_tools, attempt_id=attempt_id, wire_max_tokens=wire_max)
-            check_wire()
+            current_contract = before_send(worker, c, current, context, requested_tools, attempt_id=attempt_id, wire_max_tokens=wire_max)
+            check_wire(current_contract)
             clock()
         with worker.store.tx(_commit_check=recheck, _commit_clock_check=clock) as c:
             run = worker.store.guard(c, run_id, fence)
-            contract = before_send(worker, c, run, context, requested_tools, attempt_id=attempt_id, wire_max_tokens=wire_max)
-            deadline = min(run["lease_until"], run["created_at"] + contract.limits.run_seconds,
-                           time.time() + contract.exact_read.request_timeout_seconds)
+            current_contract = before_send(worker, c, run, context, requested_tools, attempt_id=attempt_id, wire_max_tokens=wire_max)
+            check_wire(current_contract)
+            deadline = min(run["lease_until"], run["created_at"] + current_contract.limits.run_seconds,
+                           time.time() + current_contract.exact_read.request_timeout_seconds)
             cutoff.update(wall=deadline, mono=time.monotonic() + max(0, deadline-time.time()))
         clock()
         return {"deadline": deadline}
-    return InternModel(settings).request_serialized_captured(wire, guard).parsed
+    return InternModel(settings).request_serialized_captured(wire, guard, _stop_event=stop).parsed
 
 
 def dispatch_gate(store, c, run, call):
@@ -326,8 +355,9 @@ def _accepted_result(store, c, run, contract, answer):
                 for r in reserved)
         and context["reserved_tokens"] == sum(r["reserved_tokens"] for r in actual))
     for prefix, response in [(messages[:2], messages[2]), (messages[:4], messages[4])]:
-        request_fp = fingerprint({"messages": prefix, "tools": tools(), "model": contract.request_model})
-        rows = [r for r in actual if r["parameters"].get("request_fingerprint") == request_fp]
+        rows = [r for r in actual if type(r["parameters"]) is dict and "max_tokens" in r["parameters"]
+                and r["parameters"].get("request_fingerprint") == request_basis(
+                    contract, prefix, tools(), r["parameters"]["max_tokens"])[0]]
         require(len(rows) == 1)
         check_attempt(rows[0], contract, prefix, response)
     return {"mode": contract.mode.upper(), "answer": answer, "receipts": [receipt],

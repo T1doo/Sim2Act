@@ -14,6 +14,8 @@ powershell -NoProfile -File scripts/windows/Build-Desktop.ps1 -CandidateRoot 'E:
 
 后台继续使用包内 `runtime/python.exe`，数据沿用 `workspace data`，WebView2 profile、缓存、temp、exports 与日志均在应用目录下。旧 Chrome profile 不修改。当前入口明确是合成 SQLite 工作台，不等于正式 PG/真实模型资格；原后端权限与安全门不变。
 
+本次源码额外接受显式 `Sim2Act.exe --exact-read-live`，沿同一宿主、READY／STOPPED 和持久目录启动有限文本真实模型入口；默认双击仍不启用模型。只读取当前进程环境已有的令牌别名，不安装运行时、创建凭据或改变系统环境。使用范围见[有限文本目标](../../docs/F2/BlankSyntheticWorkspaceQuickstart.md#显式开启有限文本目标)。这个新增参数尚未对新版 EXE 进行 Windows 编译或窗口验收，旧安装包不能当作包含本次功能。
+
 桌面私有控制入口现在在 `workspace data/desktop-origin.json` 保存已实际绑定的回环端口。完整关闭重开后只重绑此端口，保留同一 WebView2 profile 时，规范运行的原请求键可继续按原协议只读核对，不会因随机端口丢失同源存储。记录绑定已认证工作区身份，只是启动元数据，不授予材料、模型或审批权限。
 
 若端口已占用，后台报告 `PORT_UNAVAILABLE`，不会扫描、换端口或访问占用者。先核是否有此软件原窗口/后台仍未安全退出；保留数据、原键与日志，不删除 origin 记录或强杀不明进程。记录损坏、路径链接或身份变化也停止启动，不自动覆盖。Windows 使用独占监听及无覆盖原子移动，真实 WebView2 存储与窗口生命周期仍须目标机验收。

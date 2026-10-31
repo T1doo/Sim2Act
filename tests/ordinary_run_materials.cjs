@@ -101,7 +101,9 @@ async function flow(){
   const result=JSON.parse($('raw-result').textContent);w.__candidate=result;
   check(w.eval('exactReadPassed(__candidate)')&&$('run-goal-acceptance').textContent.includes('完整读取合同 PASS'),'served UI displays actual independently accepted finite goal');
   const escaped=structuredClone(result);escaped.result.answer='{"\\u0063ontent":'+JSON.stringify(result.result.read_result.content)+'}';w.__candidate=escaped;check(w.eval('exactReadPassed(__candidate)')===true,'legal JSON escaped key matches backend semantics');
+  const legacy=structuredClone(result);delete legacy.contract.snapshot.exact_read.request_protocol;legacy.contract.snapshot.exact_read.request_timeout_seconds=8;w.__candidate=legacy;check(w.eval('exactReadPassed(__candidate)')===true,'original eight-second finite contract is still displayed');
   const faults=[r=>r.contract.snapshot.resources=[null],r=>delete r.result.receipts,r=>r.result.receipts[0].receipt_ref='op_wrong',r=>r.result.receipts[0].check_results[0].status='FAIL',r=>delete r.contract.snapshot.exact_read.source_hash,r=>r.result.answer='{"content":"wrong","content":'+JSON.stringify(result.result.read_result.content)+'}'];
+  faults.push(r=>r.contract.snapshot.exact_read.request_timeout_seconds=8,r=>r.contract.snapshot.exact_read.request_protocol='unknown-profile');
   for(const damage of faults){const r=structuredClone(result);damage(r);w.__candidate=r;check(w.eval('exactReadPassed(__candidate)')===false,'malformed result fails closed without a PASS label');}
   await action('identity-switch');$('token').value='synthetic-test-B';await action('connect');
   check(select.value===''&&select.dataset.freeGoal===undefined&&!$('run-materials').textContent.includes(target.name),'identity switch clears finite choice and former material labels');

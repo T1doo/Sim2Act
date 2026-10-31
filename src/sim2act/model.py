@@ -4,6 +4,7 @@ import asyncio
 import json
 import math
 import time
+from threading import Event as _StopEvent
 from dataclasses import dataclass
 from typing import Any
 
@@ -201,13 +202,18 @@ class InternModel:
             raise DomainError("PERMISSION_DENIED", "Frozen wire and validator required")
         return self._request_serialized(body, wire_guard)
 
-    def request_serialized_captured(self, body, wire_guard):
+    def request_serialized_captured(self, body, wire_guard, *, _stop_event=None):
         """The same single send, additionally retaining its bounded body evidence."""
         if not isinstance(body, bytes) or not callable(wire_guard):
             raise DomainError("PERMISSION_DENIED", "Frozen wire and validator required")
-        return self._request_serialized(body, wire_guard, capture=True)
+        if _stop_event is not None and type(_stop_event) is not _StopEvent:
+            raise DomainError("PERMISSION_DENIED", "Original worker stop event required")
+        return self._request_serialized(body, wire_guard, capture=True,
+            **({"_stop_event": _stop_event} if _stop_event is not None else {}))
 
-    def _request_serialized(self, body, wire_guard=None, *, capture=False):
+    def _request_serialized(self, body, wire_guard=None, *, capture=False, _stop_event=None):
+        if _stop_event is not None and (not capture or not callable(wire_guard) or type(_stop_event) is not _StopEvent):
+            raise DomainError("PERMISSION_DENIED", "Captured guarded stop event required")
         s = self.settings
         if not s.live_enabled or not s.token:
             raise DomainError(
@@ -236,7 +242,10 @@ class InternModel:
                                 or not math.isfinite(envelope["deadline"])):
                             raise DomainError("PERMISSION_DENIED", "Invalid total request deadline")
                         return asyncio.run(self._deadline_request(
-                            request, envelope["deadline"], capture=capture))
+                            request, envelope["deadline"], capture=capture,
+                            **({"_stop_event": _stop_event} if _stop_event is not None else {})))
+                    if _stop_event is not None:
+                        raise DomainError("PERMISSION_DENIED", "Stopped execution requires a finite request deadline")
                 response = client.send(request)
                 if response.status_code == 429:
                     error = DomainError("RATE_LIMITED", "Upstream quota denied", retryable=True)
@@ -257,19 +266,31 @@ class InternModel:
             ) from e
 
 
-    async def _deadline_request(self, request, deadline, *, capture=False):
+    async def _deadline_request(self, request, deadline, *, capture=False, _stop_event=None):
         remaining = deadline - time.time()
         if remaining <= 0:
             raise DomainError("MODEL_TIMEOUT_OR_TRUNCATED", "Total request deadline elapsed")
+        if _stop_event is not None and _stop_event.is_set():
+            raise DomainError("MODEL_TIMEOUT_OR_TRUNCATED", "Execution stopped before send; usage may be unknown")
         payload = bytearray()
         client = httpx.AsyncClient(timeout=min(130, remaining), transport=self.transport,
                                   follow_redirects=False)
         response = None
+        watcher = None
+        if _stop_event is not None:
+            owner = asyncio.current_task()
+            async def watch_stop():
+                while not _stop_event.is_set():
+                    await asyncio.sleep(.025)
+                owner.cancel()
+            watcher = asyncio.create_task(watch_stop())
         try:
             # One deadline covers headers and every body read, without phase resets.
             async with asyncio.timeout(remaining):
                 request.extensions["timeout"] = {k: min(130, remaining)
                     for k in ("connect", "read", "write", "pool")}
+                if _stop_event is not None and _stop_event.is_set():
+                    raise DomainError("MODEL_TIMEOUT_OR_TRUNCATED", "Execution stopped before send; usage may be unknown")
                 response = await client.send(request, stream=True)
                 if response.status_code == 429:
                     raise DomainError("RATE_LIMITED", "Upstream quota denied", retryable=True)
@@ -279,7 +300,27 @@ class InternModel:
                     if len(payload) + len(chunk) > 131072:
                         raise DomainError("MODEL_OUTPUT_INVALID", "Bounded response exceeded")
                     payload.extend(chunk)
+                if _stop_event is not None and _stop_event.is_set():
+                    failure = _RequestDeadlineError("MODEL_TIMEOUT_OR_TRUNCATED", "Execution stopped after response; no tool dispatched")
+                    if capture:
+                        _body_failure(failure, payload, True)
+                        try:
+                            parsed = strict_json(bytes(payload), 131072)
+                            if isinstance(parsed, dict):
+                                failure._received_response = parsed
+                        except DomainError:
+                            pass
+                    raise failure
                 return _parsed_body(bytes(payload), capture)
+        except asyncio.CancelledError as error:
+            if _stop_event is None or not _stop_event.is_set():
+                raise
+            failure = _RequestDeadlineError("MODEL_TIMEOUT_OR_TRUNCATED", "Execution stopped; usage may be unknown")
+            if capture:
+                _body_failure(failure, payload, False)
+                if response is not None:
+                    failure._received_status_code = response.status_code
+            raise failure from error
         except (TimeoutError, httpx.TimeoutException, httpx.NetworkError) as error:
             if not capture and not isinstance(error, TimeoutError):
                 raise
@@ -304,6 +345,9 @@ class InternModel:
                 _body_failure(error, payload, False)
             raise
         finally:
+            if watcher is not None:
+                watcher.cancel()
+                await asyncio.gather(watcher, return_exceptions=True)
             # Cleanup has its own small grace, outside the cancelled request context.
             # Only the trusted cancellation-cooperative HTTP transport is supported.
             for closer in ([response.aclose] if response is not None else []) + [client.aclose]:

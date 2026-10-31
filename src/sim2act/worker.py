@@ -196,8 +196,10 @@ class Worker:
             if verify_goal_source:
                 self.store.frozen_contract(c, run)
             if _exact_read_request:
-                from .exact_read import before_send
+                from .exact_read import before_send, request_basis
                 before_send(self, c, run, context, request_tools, recorded=False)
+                exact_contract = self.store.frozen_contract(c, run)
+                exact_fp, envelope = request_basis(exact_contract, context["messages"], request_tools, s.max_output_tokens)
             if run["status"] != "RUNNING":
                 raise DomainError("VERSION_CONFLICT")
             for rid in run["resource_refs"]:
@@ -293,13 +295,15 @@ class Worker:
                                 "run_version": run["version"], "fence": fence}
                                if hasattr(self.pa_trial, "account_id") else {}),
                         }} if self.pa_trial is not None else {}),
-                        "request_fingerprint": fingerprint(
+                        "request_fingerprint": exact_fp if _exact_read_request else fingerprint(
                             {
                                 "messages": context["messages"],
                                 "tools": request_tools,
                                 "model": s.model,
                             }
                         ),
+                        **({"exact_read_request_protocol": exact_contract.exact_read.request_protocol}
+                           if _exact_read_request and exact_contract.exact_read.request_protocol is not None else {}),
                         **({"planning_wire" if planner_request else "protocol_wire": wire_seal}
                            if wire_seal is not None and not generation_request and natural_spec_request is None else {}),
                         **({"natural_spec": natural_spec_request, "natural_spec_wire": wire_seal}
@@ -659,7 +663,7 @@ class Worker:
         if contract.exact_read is not None:
             from .exact_read import tools as exact_tools
             goal_tools = exact_tools()
-            goal_input["exact_read_contract"] = contract.exact_read.model_dump()
+            goal_input["exact_read_contract"] = contract.exact_read.model_dump(exclude_none=True)
         if contract.source_goal_card is not None:
             goal_tools = [t for t in goal_tools if t["function"]["name"] in
                           ({"resource.read", "data.aggregate_csv", "artifact.save_text"} if contract.artifact_delivery else
@@ -794,7 +798,7 @@ class Worker:
                             from .exact_read import before_send, send
                             with self.store.tx() as c:
                                 before_send(self, c, self.store.guard(c, rid, fence), ctx, goal_tools, attempt_id=aid)
-                            raw = send(self, rid, fence, aid, ctx, goal_tools)
+                            raw = send(self, rid, fence, aid, ctx, goal_tools, contract)
                         else:
                             raw = self.model.request(ctx["messages"], goal_tools)
                         msg, pending = parse_response(raw)
@@ -820,6 +824,12 @@ class Worker:
                                 )
                             )
                     except DomainError as e:
+                        if contract.exact_read is not None and raw is None:
+                            received = getattr(e, "_received_response", None)
+                            if type(received) is dict:
+                                # A stopped response is never executed or accepted,
+                                # but actually received usage must not be discarded.
+                                raw = received
                         repair = (
                             e.code
                             in {
@@ -887,11 +897,17 @@ class Worker:
                     for call in pending:
                         if call["id"] in completed_ids:
                             continue
+                        if contract.exact_read is not None and self.stop.is_set():
+                            self.finish(rid, fence, "PAUSED")
+                            return
                         renew_foreground()
                         if contract.source_goal_card is not None:
                             with self.store.tx() as c:
                                 self.store.frozen_contract(c, self.store.guard(c, rid, fence))
                         check_heartbeat()
+                        if contract.exact_read is not None and self.stop.is_set():
+                            self.finish(rid, fence, "PAUSED")
+                            return
                         receipt = dispatch(self.store, rid, fence, call)
                         ctx["messages"].append(
                             {
