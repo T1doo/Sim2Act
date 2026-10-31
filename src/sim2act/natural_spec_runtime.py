@@ -5446,7 +5446,12 @@ def _model_writer_connection(worker, candidate, plan):
     """Default is the original transaction; private candidate is explicit only."""
     if candidate is None:
         from ._sqlite_model_snapshot import transaction
-        with transaction(worker.store, settlement_interval=getattr(worker, '_settlement_interval', None)) as c:
+        from .model_settlement import commit_checkpoint
+        interval, stop = getattr(worker, '_settlement_interval', None), worker.stop
+        with transaction(worker.store, settlement_interval=interval,
+                **({'_commit_check': lambda: commit_checkpoint(worker, interval, stop),
+                    '_commit_clock_check': lambda: commit_checkpoint(worker, interval, stop, control=False)}
+                   if worker.store.sqlite else {})) as c:
             yield c, None
     else:
         with candidate.connection(worker, plan) as selected:

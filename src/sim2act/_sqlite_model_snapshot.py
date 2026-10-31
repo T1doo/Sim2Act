@@ -102,9 +102,24 @@ def promote(c):
 
 
 @contextmanager
-def transaction(store, *, settlement_interval=None):
+def transaction(store, *, settlement_interval=None, _commit_check=None, _commit_clock_check=None):
+    def final_check():
+        # A control callback may consume time: it precedes the last pure clock
+        # checks. The admission-only 30s remaining() must not bound all G1.
+        if _commit_check is not None:
+            _commit_check()
+    def final_clock():
+        if _commit_clock_check is not None:
+            _commit_clock_check()
+        if settlement_interval is not None and (time.monotonic() >= settlement_interval[0]
+                or time.time() >= settlement_interval[1]):
+            raise SnapshotChanged('Original model settlement expired before commit')
     if not store._local_model_snapshots:
-        with store.tx() as c:
+        # Legacy callers historically ignore this optional snapshot token.
+        # The real writer supplies its own original worker interval check.
+        selected = _commit_check if store.sqlite else None
+        with store.tx(**({'_commit_check': selected, '_commit_clock_check': _commit_clock_check}
+                        if selected is not None or _commit_clock_check is not None else {})) as c:
             yield c
         return
     with store.engine.connect() as c:
@@ -116,31 +131,54 @@ def transaction(store, *, settlement_interval=None):
         c.info['local_model_snapshot'] = scope
         event.listen(c, 'before_cursor_execute', scope.before)
         committed = rolled_back = False
+        boundary = None
         try:
             try:
                 yield c
                 if scope.phase != 'WRITE':
                     raise SnapshotChanged('Local model snapshot did not reach its original write boundary')
-                c.commit()
+                selected = final_check if settlement_interval is not None or _commit_check is not None or _commit_clock_check is not None else None
+                if selected is None:
+                    c.commit()
+                else:
+                    with store._sqlite_commit_boundary(c, selected, final_clock) as boundary:
+                        boundary.commit()
                 committed = True
             except BaseException as error:
-                c.rollback()
-                rolled_back = True
+                committed = boundary is not None and boundary.committed
+                if settlement_interval is None and _commit_check is None and _commit_clock_check is None:
+                    c.rollback()
+                else:
+                    try:c.rollback()
+                    except BaseException as cleanup:
+                        try:c.invalidate(cleanup)
+                        except BaseException:pass
+                rolled_back = not committed
                 if (isinstance(error, OperationalError)
                         and getattr(error.orig, 'sqlite_errorcode', None) in
                         (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_BUSY_SNAPSHOT, sqlite3.SQLITE_LOCKED)):
                     raise SnapshotChanged('Concurrent SQLite writer invalidated the read-to-write settlement') from error
                 raise
         finally:
+            primary = sys.exc_info()[1]
+            def cleanup(operation):
+                try:operation()
+                except BaseException as error:
+                    if primary is None:raise
+                    try:c.invalidate(error)
+                    except BaseException:pass
             try:
-                event.remove(c, 'before_cursor_execute', scope.before)
+                cleanup(lambda:event.remove(c, 'before_cursor_execute', scope.before))
             finally:
                 try:
-                    c.info.pop('local_model_snapshot', None)
-                    for key in ('correction_scope_segment', 'project_scope_segments', 'pb_source_reads'):
-                        c.info.pop(key, None)
-                    if scope.prior_timeout is not None:
-                        raw.execute('PRAGMA busy_timeout='+str(scope.prior_timeout))
+                    def restore():
+                        if not c.invalidated:
+                            c.info.pop('local_model_snapshot', None)
+                            for key in ('correction_scope_segment', 'project_scope_segments', 'pb_source_reads'):
+                                c.info.pop(key, None)
+                        if scope.prior_timeout is not None and not c.invalidated:
+                            raw.execute('PRAGMA busy_timeout='+str(scope.prior_timeout))
+                    cleanup(restore)
                 finally:
                     try:
                         if scope.admission is not None:

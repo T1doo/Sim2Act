@@ -826,6 +826,9 @@ class Store:
         sqlalchemy_event.listen(self.engine, "before_cursor_execute", proof_write_boundary)
         self.sqlite = self.engine.dialect.name == "sqlite"
         self.test_only = test_only  # Explicit fixture guard; production entrypoints leave False.
+        if self.sqlite:
+            from ._sqlite_commit_boundary import install
+            self._sqlite_commit_boundary = install(self.engine)
         self._local_model_snapshots = False
         self._local_model_snapshot_records = deque(maxlen=256)
         if local_model_snapshots:
@@ -863,7 +866,10 @@ class Store:
             and module.connection_owned(self, c))
 
     @contextmanager
-    def tx(self, *, wait_seconds=None, _cap_wait=False):
+    def tx(self, *, wait_seconds=None, _cap_wait=False, _commit_check=None, _commit_clock_check=None):
+        checked_commit = _commit_check is not None or _commit_clock_check is not None
+        if checked_commit and not self.sqlite:
+            raise ValueError('Finite SQLite commit check requires SQLite')
         if self.sqlite and wait_seconds is not None:
             if type(wait_seconds) not in (int, float) or not 0 < wait_seconds <= 30:
                 raise ValueError("Bounded transaction wait required")
@@ -895,18 +901,35 @@ class Store:
                     c.exec_driver_sql("BEGIN IMMEDIATE")
                 else:
                     c.begin()
-                try:
-                    yield c
-                    c.commit()
-                except BaseException:
-                    c.rollback()
-                    raise
+                boundary = (self._sqlite_commit_boundary(c, _commit_check or (lambda: None), _commit_clock_check)
+                            if checked_commit else nullcontext(None))
+                with boundary as finite:
+                    try:
+                        yield c
+                        finite.commit() if finite is not None else c.commit()
+                    except BaseException:
+                        if finite is None:
+                            c.rollback()
+                        else:
+                            try:c.rollback()
+                            except BaseException as cleanup:
+                                try:c.invalidate(cleanup)
+                                except BaseException:pass
+                        raise
             finally:
-                c.info.pop("correction_scope_segment", None)
-                c.info.pop("project_scope_segments", None)
-                c.info.pop("pb_source_reads", None)
-                if prior_timeout is not None and raw is not None:
-                    raw.execute(f"PRAGMA busy_timeout = {prior_timeout}")
+                primary = sys.exc_info()[1]
+                try:
+                    if not c.invalidated:
+                        c.info.pop("correction_scope_segment", None)
+                        c.info.pop("project_scope_segments", None)
+                        c.info.pop("pb_source_reads", None)
+                    if prior_timeout is not None and raw is not None and not c.invalidated:
+                        raw.execute(f"PRAGMA busy_timeout = {prior_timeout}")
+                except BaseException as cleanup:
+                    if not checked_commit or primary is None:
+                        raise
+                    try:c.invalidate(cleanup)
+                    except BaseException:pass
 
     def initialize(self, quota_subject="default-intern-account", *, fresh_test_schema=None):
         # Explicit migration command only, never implicitly from API/worker.

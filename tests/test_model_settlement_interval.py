@@ -148,3 +148,21 @@ def test_writer_reentry_rejects_before_reservation_without_deadlock(received, mo
         pass
     assert worker._settlement_lock.acquire(blocking=False)
     worker._settlement_lock.release()
+
+
+def test_reservation_commit_callback_cannot_spend_original_owner_interval(received,monkeypatch):
+    from sqlalchemy import event
+    worker,job,aid,deadline,state=received
+    original=worker.store.event
+    def booked(c,rid,kind,data):
+        value=original(c,rid,kind,data)
+        if kind==settlement.RESERVED:event.listen(c,'commit',lambda _:worker.stop.set())
+        return value
+    monkeypatch.setattr(worker.store,'event',booked)
+    with pytest.raises(DomainError,match='expired before commit'):
+        with settlement.interval(worker,job,aid,deadline,state):
+            pytest.fail('Stopped booking must not publish the extended lease')
+    assert state['lease_until']==job['lease_until'] and not hasattr(worker,'_settlement_interval')
+    with worker.store.tx() as c:
+        assert c.execute(select(events.c.id).where(events.c.kind==settlement.RESERVED)).first() is None
+        assert c.execute(select(runs.c.lease_until).where(runs.c.id==job['id'])).scalar_one()==job['lease_until']

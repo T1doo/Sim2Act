@@ -57,7 +57,12 @@ def interval(worker, job, attempt_id, deadline, state):
             fatal = state.get("fatal_heartbeat")
         if fatal is not None:
             raise fatal
-    with store.tx(wait_seconds=5, _cap_wait=True) as c:
+    def booking_check():
+        _require(not worker.stop.is_set() and time.monotonic() < booking_deadline
+            and time.time() < min(current['lease_until'], lease, cutoff),
+            'Settlement expired before commit')
+    with store.tx(wait_seconds=5, _cap_wait=True, _commit_check=booking_check,
+                  _commit_clock_check=booking_check) as c:
         current = store.guard(c, job["id"], job["fence"])
         _require(current["worker_id"] == worker.id
             and current["version"] == job["version"]
@@ -78,6 +83,7 @@ def interval(worker, job, attempt_id, deadline, state):
         now = time.time()
         lease = min(now + caps.settlement_seconds, cutoff)
         monotonic_deadline = origin_mono + min(caps.settlement_seconds, cutoff - now)
+        booking_deadline = origin_mono + min(current['lease_until']-now, lease-now, cutoff-now)
         _require(not worker.stop.is_set() and now < min(current["lease_until"], lease),
             "Settlement cannot revive an expired interval")
         changed = c.execute(update(runs).where(runs.c.id == job["id"],
@@ -140,3 +146,13 @@ def checkpoint(worker):
     if token is not None and (worker.stop.is_set() or time.monotonic() >= token[0]
             or time.time() >= token[1]):
         raise DomainError("BUDGET_EXHAUSTED", "Finite model settlement interval ended")
+
+
+def commit_checkpoint(worker, interval, stop, *, control=True):
+    """Original control callback first; immutable scope/time/stop checks last."""
+    if control:checkpoint(worker)
+    _require(worker.stop is stop and getattr(worker, '_settlement_interval', None) is interval,
+             'Finite model commit scope changed')
+    if stop.is_set() or interval is not None and (time.monotonic() >= interval[0]
+            or time.time() >= interval[1]):
+        raise DomainError('BUDGET_EXHAUSTED', 'Finite model settlement interval ended')
