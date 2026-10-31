@@ -1,0 +1,341 @@
+diff --git a/src/sim2act/pb_natural_specs.py b/src/sim2act/pb_natural_specs.py
+index cd6a481a..01d960a4 100644
+--- a/src/sim2act/pb_natural_specs.py
++++ b/src/sim2act/pb_natural_specs.py
+@@ -987,6 +987,38 @@ def _review_source_from_facts(body, proof):
+             and proof["recipe_fingerprint"] == body.expected_source_recipe_fingerprint)
+ 
+ 
++def _cold_review_candidate(guard, name, value, *, _vars=vars, _type=type,
++        _all=all, _dict=dict, _str=str):
++    """Own the complete first expanded value, before any review consumer.
++
++    Only the producer's JSON changes ownership. Review inputs, Limits, source
++    lineage, target IO and dynamic authority retain their original live checks.
++    A separate expansion/facet always receives a separate owner.
++    """
++    if guard._accounted_frontier is not None or not _owned_source_enabled():
++        guard.add(name, value)
++        return value
++    try:
++        return _source_fact_code.own_fact(guard, name, value)
++    except (_source_fact_code.image.Bounds, _source_fact_code.image.Unsupported):
++        # Fall back only before publication, without repeating the producer or
++        # any callback/IO. Late failures keep the original invalidated scope.
++        fields = _vars(guard)
++        if _type(fields) is not _dict:
++            raise
++        inputs, registry = fields.get('inputs'), fields.get('_source_fact_bindings', {})
++        if (fields.get('active') is not True or _type(inputs) is not _dict
++                or _type(registry) is not _dict
++                or not _all(_type(k) is _str for k in inputs)
++                or not _all(_type(k) is _str for k in registry)
++                or name in inputs or name in registry):
++            raise
++        _owned_source_enabled()
++        _checkpoint_graph_owner(guard)
++        guard.add(name, value)
++        return value
++
++
+ def _review_from_facts(user, pid, body, limits, binding, proof, material, goal, *, _graph_read=None, _graph_key=None):
+     """Original target/candidate tail after source comparison and current target gates.
+ 
+@@ -1016,7 +1048,7 @@ def _review_from_facts(user, pid, body, limits, binding, proof, material, goal,
+     _checkpoint_graph_owner(_graph_read)
+     if review_read is not None:
+         review_read.check()
+-        _graph_read.add(review_read.key + ":candidate", value)
++        value = _cold_review_candidate(_graph_read, review_read.key + ":candidate", value)
+     compiled = natural.compile_candidate(value, limits)
+     _checkpoint_graph_owner(_graph_read)
+     if review_read is not None:
+@@ -1629,7 +1661,7 @@ _source_fact_code.register(6,globals(),(
+     '_cold_source_facet_from_source','_cold_review_from_source',
+     '_cold_verify_from_review','_cold_verify_facet_from_review','_cold_audit_from_source',
+     '_audit_prefix','_cold_audit_prefix','_cold_extract_pair',
+-    '_review_source_from_facts','_review_from_facts','_verify_from_review','_audit_from_source',
++    '_review_source_from_facts','_cold_review_candidate','_review_from_facts','_verify_from_review','_audit_from_source',
+     '_check_review_read','_cold_persisted_pair','_persisted_pair_input','_persisted_extract_input',
+     '_review_preview','candidate','frozen_for','_extraction_name','_invalidate_cold_inputs',
+     'source_gate','require','fingerprint'),
+diff --git a/src/sim2act/production_software_qualification.json b/src/sim2act/production_software_qualification.json
+index 18473ea4..4a5ff595 100644
+--- a/src/sim2act/production_software_qualification.json
++++ b/src/sim2act/production_software_qualification.json
+@@ -111,7 +111,7 @@
+     "pa_trial_dispatch.py": "8faf9295bd8d3499e668206c16f4ae78e1bbc32ec39efcd931e07cb4616fd964",
+     "pb_extraction_terminals.py": "2a11d4f99e8d218cc346749ae89726490fca5aac5cf0e7408883136dacccd1d4",
+     "pb_live_source_contract.py": "d5c799627eb76a720afae3ef39f0225733ad4b9673f5a60aa7c1b68842e92229",
+-    "pb_natural_specs.py": "c47ee0e59f8909a548141c5d8b8493df5f67455acbc38155a6db32053e652ef0",
++    "pb_natural_specs.py": "cd9094850d17ec68762dc03dd95b19419c48d425d882ebc8efd0da358367a552",
+     "pb_natural_uses.py": "5940118bea0a7a709967fe52ed373fdc629191471a264c36094e13876ae65e1e",
+     "planning.py": "82d0803e382c3be77f47bcd58577ca818e5d827b441991046956ceaf1977bfc1",
+     "preflight.py": "1b0d5d03602a53bb1e33cbd2d92cea7cc47f3e5616667c35c529a16875a45a61",
+diff --git a/src/sim2act/production_trial_admission.py b/src/sim2act/production_trial_admission.py
+index 70122c53..9ab1ec93 100644
+--- a/src/sim2act/production_trial_admission.py
++++ b/src/sim2act/production_trial_admission.py
+@@ -24,7 +24,7 @@ from .db import attempts, fingerprint, runs
+ from .errors import DomainError
+ from .text_continuations import ANCHOR_HASH
+ 
+-PRODUCTION_QUALIFICATION_HASH = "c5ade55106b32b90c059914395642fd6b0ed16bee9487a46280850c6f38c82fe"
++PRODUCTION_QUALIFICATION_HASH = "f265e7c8ad2d5fc020707dd0809d9540c1eecbd0c08a129a8a27e8945f744621"
+ 
+ 
+ class AccountEvidence(Strict):
+diff --git a/src/sim2act/text_continuations.py b/src/sim2act/text_continuations.py
+index 2e3d83d7..07dfbdaf 100644
+--- a/src/sim2act/text_continuations.py
++++ b/src/sim2act/text_continuations.py
+@@ -41,7 +41,7 @@ PREPARE, META, COMMIT, INDEX = ("text_software_" + s for s in ("prepare", "metad
+ CANCEL, REVOKE = "text_software_cancel", "text_software_revoke"
+ MAX = 64
+ ANCHOR_HASH = "24f26f3621b8fc49a24fa3566484b568148d9317f2d279d79f264416b994193a"
+-QUALIFICATION_HASH = "097ce770c2257004d39ddc2ed0d169ac3955c95f43757b16f42594d5f6dd20c5"
++QUALIFICATION_HASH = "074378a02398ba7e6ba94409c98c8d40ff22f8352bfbd892ab23ea6b3f94388c"
+ CHANGED = {"api.py", "app_jobs.py", "internal_api.py", "owner_acceptance.py", "app_owner_goals.py",
+            "apps.py", "lifecycle.py", "text_logic_reuse.py", "text_continuations.py", "text_run_checks.py",
+            "text_workflows.py"}  # Closed new family; old literal compiler/kernel stays byte-identical.
+diff --git a/src/sim2act/text_software_qualification.json b/src/sim2act/text_software_qualification.json
+index 26df501f..0c3f9e27 100644
+--- a/src/sim2act/text_software_qualification.json
++++ b/src/sim2act/text_software_qualification.json
+@@ -100,14 +100,14 @@
+     "pa_trial_dispatch.py": "8faf9295bd8d3499e668206c16f4ae78e1bbc32ec39efcd931e07cb4616fd964",
+     "pb_extraction_terminals.py": "2a11d4f99e8d218cc346749ae89726490fca5aac5cf0e7408883136dacccd1d4",
+     "pb_live_source_contract.py": "d5c799627eb76a720afae3ef39f0225733ad4b9673f5a60aa7c1b68842e92229",
+-    "pb_natural_specs.py": "c47ee0e59f8909a548141c5d8b8493df5f67455acbc38155a6db32053e652ef0",
++    "pb_natural_specs.py": "cd9094850d17ec68762dc03dd95b19419c48d425d882ebc8efd0da358367a552",
+     "pb_natural_uses.py": "5940118bea0a7a709967fe52ed373fdc629191471a264c36094e13876ae65e1e",
+     "planning.py": "82d0803e382c3be77f47bcd58577ca818e5d827b441991046956ceaf1977bfc1",
+     "preflight.py": "1b0d5d03602a53bb1e33cbd2d92cea7cc47f3e5616667c35c529a16875a45a61",
+     "probe.py": "55dbc4f56436b53f4c3c394cdcaec38fa4916e180146c3479cc39262e8d539d7",
+     "process_env.py": "780f05f37c936f7ee70653f9c4f18299b64cfd5a89b0a38d23fc46da2ae3def9",
+     "production_evidence.py": "03e8ef11d90108ec4148360d65d074d9de3746d2a541cc81db66d2e688f96a5b",
+-    "production_trial_admission.py": "c203ca266b4c8eaef8e9dba5215a9e14660d968f7d8601f4f6cde65b92ffefa7",
++    "production_trial_admission.py": "ff36f9684a5309324f9015f13c30c8a2386e500052f0836e3a7850a2bfb89760",
+     "production_trial_journal.py": "7e400c1b063389a0b279b3c05141edc86202d9748e95967f8c0c4d7628a7cc45",
+     "production_trial_policy.py": "65b0b8203f2c17b964c9db828d3f688fa9cc014d6ad38b6e9bca0c8d6237270f",
+     "production_trial_sender.py": "743c7ea51b2bcbb04b193798bd09972b4fb6f49c77aa5c7814d6579046c011ed",
+--- /dev/null
++++ b/tests/test_cold_extraction_candidate_owned.py
+@@ -0,0 +1,152 @@
++"""Complete first PB expansion ownership, with live graph inputs left mutable."""
++from contextlib import contextmanager
++import sys
++import subprocess
++
++import pytest
++from test_cold_accounted_sqlite import forbid_execution as forbid_execution
++from test_cold_accounted_sqlite import sql_facts as sql_facts
++from test_cold_use_manifest_owned import graph_scope, compare_storage
++from sim2act import _cold_source_packet as owned, pb_natural_specs as pb
++from sim2act.errors import DomainError
++
++
++def test_complete_expansion_retired_alias_storage_and_independent_owner(sql_facts):
++    import copy
++    f = sql_facts
++    value = copy.deepcopy(f.extraction[0]['candidate'])
++    with graph_scope(f) as (graph, limits):
++        left = pb._cold_review_candidate(graph, 'test-extraction:candidate', value)
++        compare_storage(left, value)
++        expected = owned.image.plain(left)
++        value['manifest']['name'] = 'retired producer alias'
++        graph.check(f.store, graph.connection)
++        assert owned.image.plain(left) == expected
++        right = pb._cold_review_candidate(graph, 'test-second:candidate', copy.deepcopy(expected))
++        assert left.owner() is not right.owner()
++        assert owned.image.plain(right) == expected
++        assert owned.image.same(owned.fact(graph, 'test-extraction:candidate'), left)
++        with pytest.raises(TypeError):left['manifest']['name'] = 'not mutable'
++    with pytest.raises(DomainError):owned.fact(graph, 'test-extraction:candidate')
++
++
++def test_shared_external_alias_remains_a_live_graph_dependency(sql_facts):
++    import copy
++    f = sql_facts
++    value = copy.deepcopy(f.extraction[0]['candidate'])
++    with pytest.raises(DomainError), graph_scope(f) as (graph, limits):
++        graph.add('test-external-candidate-alias', value['manifest'])
++        pb._cold_review_candidate(graph, 'test-extraction:candidate', value)
++        value['manifest']['name'] = 'live outside alias mutation'
++        graph.check(f.store, graph.connection)
++    assert not graph.active
++
++
++@contextmanager
++def publication_probe(mode, state):
++    monitor = sys.monitoring
++    slot = next(i for i in (3, 5, 4) if monitor.get_tool(i) is None)
++    code = owned.own_fact.__code__
++    state['calls'] = 0
++    def entering(code, offset):
++        frame = sys._getframe(1)
++        if frame.f_locals['name'] != 'test-extraction:candidate':return
++        state['calls'] += 1
++        if mode in ('pre-bounds', 'root-and-bounds', 'dict-subclass-bounds'):
++            if mode == 'root-and-bounds':frame.f_locals['graph'].inputs['test-extraction:candidate'] = None
++            if mode == 'dict-subclass-bounds':
++                class Foreign(dict):
++                    def get(self, *args):state.setdefault('foreign_calls', []).append('get');return super().get(*args)
++                    def __iter__(self):state.setdefault('foreign_calls', []).append('iter');return super().__iter__()
++                graph=frame.f_locals['graph']
++                graph.__dict__=Foreign(graph.__dict__)
++            raise state['error']
++    def returned(code, offset, value):
++        frame = sys._getframe(1)
++        if frame.f_locals['name'] == 'test-extraction:candidate' and mode == 'late-bounds':
++            raise state['error']
++    monitor.use_tool_id(slot, 'Complete extraction publication boundary')
++    try:
++        monitor.register_callback(slot, monitor.events.PY_START, entering)
++        monitor.register_callback(slot, monitor.events.PY_RETURN, returned)
++        monitor.set_local_events(slot, code, monitor.events.PY_START | monitor.events.PY_RETURN)
++        yield
++    finally:
++        monitor.set_local_events(slot, code, 0)
++        monitor.register_callback(slot, monitor.events.PY_START, None)
++        monitor.register_callback(slot, monitor.events.PY_RETURN, None)
++        monitor.free_tool_id(slot)
++
++
++def test_prepublication_capacity_fallback_has_original_root_no_replay(sql_facts):
++    f = sql_facts
++    value = {'complete': ['original', 'expanded', 'candidate']}
++    state = {'error': owned.image.Bounds('synthetic prepublication refusal')}
++    with graph_scope(f) as (graph, limits), publication_probe('pre-bounds', state):
++        assert pb._cold_review_candidate(graph, 'test-extraction:candidate', value) is value
++        assert graph.inputs['test-extraction:candidate'] is value
++        graph.check(f.store, graph.connection)
++    assert state['calls'] == 1
++
++
++@pytest.mark.parametrize('mode', ['root-and-bounds', 'late-bounds', 'dict-subclass-bounds'])
++def test_capacity_after_scope_change_never_becomes_raw_fallback(sql_facts, mode):
++    f = sql_facts
++    state = {'error': owned.image.Bounds('synthetic changed publication')}
++    with pytest.raises(owned.image.Bounds) as caught, graph_scope(f) as (graph, limits), publication_probe(mode, state):
++        pb._cold_review_candidate(graph, 'test-extraction:candidate', {'complete': ['value']})
++    assert caught.value is state['error'] and state['calls'] == 1
++    assert not graph.active
++    assert not state.get('foreign_calls')
++
++
++def test_module_vars_shadow_is_never_a_fallback_callback(sql_facts, monkeypatch):
++    f=sql_facts;calls=[]
++    def foreign(*args):calls.append(True);raise AssertionError('Foreign vars callback')
++    state={'error':owned.image.Bounds('synthetic early bounds')}
++    with graph_scope(f) as (graph, limits), publication_probe('pre-bounds',state):
++        monkeypatch.setattr(pb,'vars',foreign,raising=False)
++        value={'complete':['original candidate']}
++        assert pb._cold_review_candidate(graph,'test-extraction:candidate',value) is value
++        assert graph.inputs['test-extraction:candidate'] is value
++        graph.check(f.store,graph.connection)
++    assert calls==[] and state['calls']==1
++
++
++@pytest.mark.parametrize('role',['_vars','_type','_all','_dict','_str'])
++def test_handoff_keyword_role_replacement_refuses_before_foreign_callback(sql_facts, monkeypatch, role):
++    f=sql_facts;calls=[]
++    def foreign(*args):calls.append(True);raise AssertionError('Foreign builtin role')
++    with pytest.raises(DomainError),graph_scope(f) as (graph, limits):
++        monkeypatch.setitem(pb._cold_review_candidate.__kwdefaults__,role,foreign)
++        pb._cold_review_candidate(graph,'test-extraction:candidate',{'complete':['value']})
++    assert calls==[] and not graph.active
++
++
++def test_expansion_handoff_callee_is_qualified_before_dispatch(monkeypatch):
++    calls = []
++    def changed(*args, **kwargs):calls.append(True)
++    monkeypatch.setattr(pb, '_cold_review_candidate', changed)
++    with pytest.raises(DomainError):owned.current()
++    assert calls == []
++
++
++def test_optional_native_absence_keeps_original_complete_root():
++    code = r'''
++import importlib.abc,sys
++class MissingNative(importlib.abc.MetaPathFinder):
++ def find_spec(self,fullname,path=None,target=None):
++  if fullname=='sim2act._cold_source_owned_impl':raise ImportError('synthetic absent optional extension')
++sys.meta_path.insert(0,MissingNative())
++from types import SimpleNamespace
++from sim2act import pb_natural_specs as pb
++value={'complete':['original','candidate']};published=[]
++guard=SimpleNamespace(_accounted_frontier=None,add=lambda *args:published.append(args))
++assert pb._owned_source_enabled() is False
++assert pb._cold_review_candidate(guard,'candidate',value) is value
++assert published==[('candidate',value)] and published[0][1] is value
++'''
++    result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, timeout=15)
++    assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
++
++
+--- /dev/null
++++ b/tests/test_cold_extraction_candidate_integration.py
+@@ -0,0 +1,62 @@
++"""Actual original five-Mock prefix; no Cold settlement or live acceptance."""
++import sys
++from test_cold_use_manifest_owned import compare_storage
++from sim2act import _cold_source_packet as owned, pb_natural_specs as pb
++
++
++def test_actual_producer_compile_preview_and_all_review_consumers_use_same_owner(tmp_path, monkeypatch):
++    from test_cold_binding_graph_integration import test_plain_pb_first_binding_producer_equals_public_complete_ancestry as original
++    from sim2act import natural_specs as natural, natural_spec_runtime as runtime
++    monitor = sys.monitoring
++    slot = next(i for i in (3, 5, 4) if monitor.get_tool(i) is None)
++    active = {};done = [];compiles = [];previews = [];graphs = []
++    targets = (owned.own_fact.__code__, natural.compile_candidate.__code__,
++        pb._review_preview.__code__, pb._review_from_facts.__code__, runtime._cold_first_binding.__code__)
++    def entering(code, offset):
++        frame = sys._getframe(1)
++        if code is natural.compile_candidate.__code__:
++            value=frame.f_locals['candidate']
++            if type(value) is owned.image.View and value.owner() in active:compiles.append(value.owner())
++        elif code is pb._review_preview.__code__:
++            value=frame.f_locals['value']
++            if type(value) is owned.image.View and value.owner() in active:previews.append(value.owner())
++    def returned(code, offset, result):
++        frame = sys._getframe(1)
++        if code is owned.own_fact.__code__:
++            name = frame.f_locals['name']
++            if not name.endswith(':review:inputs:candidate'):return
++            raw, graph = frame.f_locals['value'], frame.f_locals['graph']
++            compare_storage(result, raw)
++            expected=owned.image.plain(result)
++            active[result.owner()] = dict(view=result, name=name, graph=graph, expected=expected)
++            # The producer's old mutable alias is no longer any review consumer.
++            raw['manifest']['name'] = 'retired full extraction candidate'
++            graph.check(graph.store, graph.connection)
++            assert owned.image.plain(result)==expected
++        elif code is pb._review_from_facts.__code__ and frame.f_locals['_graph_read'] is not None:
++            checked, material, goal = result
++            view=checked['candidate'];entry=active[view.owner()]
++            assert owned.image.same(view, entry['view'])
++            assert owned.image.same(view,owned.fact(entry['graph'],entry['name']))
++            done.append(view.owner())
++        elif code is runtime._cold_first_binding.__code__:
++            view=result.extraction_review.checked['candidate']
++            entry=active[view.owner()];guard=result.guard
++            assert entry['graph'] is guard
++            assert owned.image.same(guard.inputs[result.extraction_review.key]['checked']['candidate'],view)
++            assert owned.image.plain(view)==entry['expected']
++            graphs.append(guard)
++    monitor.use_tool_id(slot, 'Actual first extraction expansion and complete consumers')
++    try:
++        monitor.register_callback(slot, monitor.events.PY_START, entering)
++        monitor.register_callback(slot, monitor.events.PY_RETURN, returned)
++        for code in targets:monitor.set_local_events(slot, code, monitor.events.PY_START | monitor.events.PY_RETURN)
++        original(tmp_path, monkeypatch)
++    finally:
++        for code in targets:monitor.set_local_events(slot, code, 0)
++        monitor.register_callback(slot, monitor.events.PY_START, None)
++        monitor.register_callback(slot, monitor.events.PY_RETURN, None)
++        monitor.free_tool_id(slot)
++    assert len(graphs)==2 and all(not graph.active for graph in graphs)
++    assert active and len(done)==len(active) and set(done)==set(compiles)==set(previews)
++    assert all(not entry['graph'].active for entry in active.values())

@@ -46,6 +46,8 @@
 本增量支持：本地身份、三个工作区、项目内文本材料、异步持久任务、独立 API/worker、受控工具与回执、幂等提交、租约/fencing、暂停/取消、授权撤回、有限模型循环和跨进程配额账本。
 默认 **MOCK 工程模式**；显式单文本合同已有真实 Intern 的执行、独立验收、保存及重开证据，正式 PG／大型 Cold 真实模型整链尚未验收。普通未声明有限合同的 F1 工具链仍显示 `PARTIAL`，不代表任意目标语义、应用生成或 R0 验收通过。P-A、P-B、发布、增量修改在 F2 实现；不会用空按钮冒充。
 
+本轮补充：[原30秒预算诊断修正与未启用的PB候选切片对照](docs/evidence/pb-candidate-slice-refusal-20261031/README.md)。运行应用仍精确保留2ad32276；本轮无大型Cold或新live验收，原30秒大型保存缺口未解决。
+
 ## 运行边界
 
 - 目标：Windows 11 x64 原生、Python 3.12 x64、PowerShell 7、PostgreSQL。Windows 精确 OS/依赖组合及脚本实测 **BLOCKED**。

@@ -1,0 +1,88 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_actual_producer_compile_preview_and_all_review_consumers_use_same_owner _
+
+tmp_path = PosixPath('/workspace/scratch/extraction-candidate-real-consumers-20261031/test_actual_producer_compile_p0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe65d7a51c0>
+
+    def test_actual_producer_compile_preview_and_all_review_consumers_use_same_owner(tmp_path, monkeypatch):
+        from test_cold_binding_graph_integration import test_plain_pb_first_binding_producer_equals_public_complete_ancestry as original
+        from sim2act import natural_specs as natural, natural_spec_runtime as runtime
+        monitor = sys.monitoring
+        slot = next(i for i in (3, 5, 4) if monitor.get_tool(i) is None)
+        active = {};done = [];compiles = [];previews = [];graphs = []
+        targets = (owned.own_fact.__code__, natural.compile_candidate.__code__,
+            pb._review_preview.__code__, pb._review_from_facts.__code__, runtime._cold_first_binding.__code__)
+        def entering(code, offset):
+            frame = sys._getframe(1)
+            if code is natural.compile_candidate.__code__:
+                value=frame.f_locals['candidate']
+                if type(value) is owned.image.View and value.owner() in active:compiles.append(value.owner())
+            elif code is pb._review_preview.__code__:
+                value=frame.f_locals['value']
+                if type(value) is owned.image.View and value.owner() in active:previews.append(value.owner())
+        def returned(code, offset, result):
+            frame = sys._getframe(1)
+            if code is owned.own_fact.__code__:
+                name = frame.f_locals['name']
+                if not name.endswith(':review:inputs:candidate'):return
+                raw, graph = frame.f_locals['value'], frame.f_locals['graph']
+                compare_storage(result, raw)
+                expected=owned.image.plain(result)
+                active[result.owner()] = dict(view=result, name=name, graph=graph, expected=expected)
+                # The producer's old mutable alias is no longer any review consumer.
+                raw['manifest']['name'] = 'retired full extraction candidate'
+                graph.check(graph.store, graph.connection)
+                assert owned.image.plain(result)==expected
+            elif code is pb._review_from_facts.__code__ and frame.f_locals['_graph_read'] is not None:
+                checked, material, goal = result
+                view=checked['candidate'];entry=active[view.owner()]
+                assert owned.image.same(view, entry['view'])
+                assert owned.image.same(view,owned.fact(entry['graph'],entry['name']))
+                done.append(view.owner())
+            elif code is runtime._cold_first_binding.__code__:
+                view=result.extraction_review.checked['candidate']
+                entry=active[view.owner()];guard=result.guard
+                assert entry['graph'] is guard
+                assert owned.image.same(guard.inputs[result.extraction_review.key]['checked']['candidate'],view)
+                assert owned.image.plain(view)==entry['expected']
+                graphs.append(guard)
+        monitor.use_tool_id(slot, 'Actual first extraction expansion and complete consumers')
+        try:
+            monitor.register_callback(slot, monitor.events.PY_START, entering)
+            monitor.register_callback(slot, monitor.events.PY_RETURN, returned)
+            for code in targets:monitor.set_local_events(slot, code, monitor.events.PY_START | monitor.events.PY_RETURN)
+>           original(tmp_path, monkeypatch)
+
+tests/test_cold_extraction_candidate_owned.py:170: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_cold_binding_graph_integration.py:107: in test_plain_pb_first_binding_producer_equals_public_complete_ancestry
+    prepared = prepare((store, settings, client, user, other, pid, None),
+tests/test_pb_natural_specs.py:82: in prepare
+    _, aid, release, inst, _ = ready(data, style)
+                               ^^^^^^^^^^^^^^^^^^
+tests/test_natural_spec_apps.py:255: in ready
+    rid, result, sent = generate(data, style, repair)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_natural_spec_apps.py:247: in generate
+    assert Worker(store, settings, goal_planner_transport=model_transport).once()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<sim2act.worker.Worker object at 0x7fe6575db890>, <sim2act.db.Store object at 0x7fe65d5ecce0>, Settings(database_url=...se, natural_activation_live_id='', application_generation_activation_enabled=False, application_generation_live_id=''))
+kwargs = {'goal_planner_transport': <httpx.MockTransport object at 0x7fe6575dbaa0>}
+
+    def forbidden(*args, **kwargs):
+>       pytest.fail("Offline SQLite integration cannot run Worker/model/transport")
+E       Failed: Offline SQLite integration cannot run Worker/model/transport
+
+tests/test_cold_accounted_sqlite.py:29: Failed
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cold_extraction_candidate_owned.py::test_actual_producer_compile_preview_and_all_review_consumers_use_same_owner
+1 failed, 7 deselected, 1 warning in 1.14s
