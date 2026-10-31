@@ -15,21 +15,34 @@ def test_owned_loaded_read_qualifies_and_reduces_complete_pins(local_origin,monk
     with f.store.tx() as c,pb._source_reads(f.store,c),scope(f,c) as guard:
         facts,seed=prepared(f,c,guard,count=2,marker=True)
         assert r._raw_read_eligible(facts,'model-reserved') is True
+        monitor=sys.monitoring;slot=next(i for i in (3,5,4) if monitor.get_tool(i) is None)
+        dynamic=[];code=r._ColdGraphRead._check_dynamic.__code__
+        def entering(code,offset):dynamic.append(True)
+        monitor.use_tool_id(slot,'Count every original live boundary, not only full pins')
+        monitor.register_callback(slot,monitor.events.PY_START,entering)
+        monitor.set_local_events(slot,code,monitor.events.PY_START)
         start=guard._diagnostic_counts[0]
         actual=facts.model_reserved()
         fast=guard._diagnostic_counts[0]-start
+        fast_dynamic=len(dynamic);dynamic.clear()
         with monkeypatch.context() as patch:
             patch.setattr(r,'_raw_read_eligible',lambda *args:False)
             start=guard._diagnostic_counts[0]
             expected=facts.model_reserved()
             slow=guard._diagnostic_counts[0]-start
+        slow_dynamic=len(dynamic)
+        monitor.set_local_events(slot,code,0)
+        monitor.register_callback(slot,monitor.events.PY_START,None)
+        monitor.free_tool_id(slot)
         assert r._source_owned_code.image.same(actual,expected)
         assert fast<slow
+        assert fast_dynamic==slow_dynamic==8
         with observe_core() as calls:
             assert len(r._counters(c,facts.job,f.origin[0],_facts=facts))==2
         assert calls==[]  # No new View counter/snapshot backend.
         assert r._raw_read_eligible(facts,'model-reserved') is True
         (tmp_path/'owned-read-pins.json').write_text(json.dumps(dict(fast=fast,original=slow,
+            fast_dynamic=fast_dynamic,original_dynamic=slow_dynamic,
             same_owned_node=True,counter_core_calls=0,classification='SYNTHETIC_EXISTING_READ_SEGMENT_NOT_WHOLE_FLOW_PERFORMANCE'),indent=2)+'\n')
 
 

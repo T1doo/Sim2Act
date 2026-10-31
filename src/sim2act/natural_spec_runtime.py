@@ -641,12 +641,19 @@ class _ColdRunFacts:
     def _read_loaded(self, name):
         """One late complete pin for a fixed presence/read pair, not a cache.
 
-        Misses, seeded readers and unknown code take the original two checks.
+        Misses and unqualified code take the original presence/get checks.
         No value is captured until the final complete check has returned.
         """
         if not _raw_read_eligible(self, name):
             return _RAW_READ_MISS
         try:
+            if vars(self).get('_raw_seed') is not None:
+                # Each original seeded check has four dynamic boundaries.
+                # Replace only its full content work, retaining all four live
+                # stop/deadline/owner/epoch checks before the final full check.
+                _ColdGraphRead._check_dynamic(self.guard, self.store, self.connection)
+                _ColdGraphRead._check_dynamic(self.guard, self.store, self.connection)
+                _ColdGraphRead._check_dynamic(self.guard, self.store, self.connection)
             _ColdGraphRead._check_dynamic(self.guard, self.store, self.connection)
             _ColdRunFacts.check(self, self.store, self.connection, self.job)
             value = self._raw[name]
