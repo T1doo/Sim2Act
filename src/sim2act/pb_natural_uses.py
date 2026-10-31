@@ -1218,6 +1218,37 @@ def _audit_prefix(store, c, user, draft, *, family=PB, _logic_out=None, _release
     base = c.execute(select(app_drafts).where(app_drafts.c.id == draft["id"],
         app_drafts.c.project_id == draft["project_id"])).mappings().one()
     _use_read_checkpoint(store, c, _graph_read)
+    if _graph_read is not None:
+        require(type(_USE_OWNED_ENABLED) is bool
+            and _USE_OWNED_ENABLED is _use_fact_code._SOURCE_OK
+            and type(_USE_OWNED_CHECK) is tuple and len(_USE_OWNED_CHECK)==3,
+            'Exact Use audit ownership configuration required')
+    if _graph_read is not None and _USE_OWNED_ENABLED:
+        check,code,defaults=_USE_OWNED_CHECK
+        if (type(check) is not _UseFunctionType or _use_fact_code.current is not check or check.__code__ is not code
+                or check.__defaults__ is not defaults):
+            raise DomainError('VERSION_CONFLICT','Use audit ownership qualifier changed')
+        check()
+        # This independent complete SQL row has not escaped into :paired or
+        # a prefix. Keep its full hidden RowMapping storage and alias domain;
+        # later audit readers consume this same immutable value.
+        try:
+            base=_use_fact_code.own_fact(_graph_read,key+':base-row',base)
+        except (_use_fact_code.image.Bounds,_use_fact_code.image.Unsupported):
+            # Only bounded representation/capacity refusal before publication
+            # can retain the original independently read row. Never replay SQL
+            # or catch native match, authority, callback or postpublish errors.
+            fields=vars(_graph_read)
+            inputs=fields.get('inputs')
+            registry=fields.get('_source_fact_bindings',{})
+            if (fields.get('active') is not True or type(inputs) is not dict
+                    or type(registry) is not dict
+                    or not all(type(k) is str for k in inputs)
+                    or not all(type(k) is str for k in registry)
+                    or key+':base-row' in inputs or key+':base-row' in registry):
+                raise  # Late/native/callback errors keep their exact identity.
+            check()
+            _use_read_checkpoint(store,c,_graph_read)
     meta, seal_meta = _use_pair(c, user, rid, family.meta, 'accepted', RunScopeInput, _graph_read=_graph_read)
     _use_read_checkpoint(store, c, _graph_read)
     snapshot = c.execute(select(internal_run_bindings.c.snapshot).where(internal_run_bindings.c.run_id == rid)).scalar_one()
@@ -1393,10 +1424,13 @@ def mount(app, store, limits, identity, *, family=PB):
 from types import FunctionType as _UseFunctionType
 from . import _cold_source_packet as _use_fact_code
 from . import delivery_graph_apps as _use_pair_code
+_USE_OWNED_CHECK=_use_fact_code.CHECK
+_USE_OWNED_ENABLED=_use_fact_code._SOURCE_OK
 _use_fact_code.register(8,globals(),tuple(name for name,value in tuple(globals().items())
     if type(value) is _UseFunctionType and value.__module__==__name__
     and (name.startswith('_') or name in ('scope_gate','use_hint','saved_family')))+('fingerprint','require'),
     (_ColdUseReviewPrefix,_ColdUseReviewFacts,_ColdUseBoundPrefix,_ColdUseAuditPrefix,Family),
     constants=('PB','PA','FAMILIES','_USE_FAMILY_STATES','Family','CommitInput','ReviewInput','RunScopeInput',
-        'GoalCardRunSource','Limits','natural','pb','spec','copy','_use_fact_code','_use_pair_code'),
+        'GoalCardRunSource','Limits','natural','pb','spec','copy','_use_fact_code','_use_pair_code',
+        '_USE_OWNED_CHECK','_USE_OWNED_ENABLED'),
     helpers=((vars(_use_pair_code),('lookup','checked')),))

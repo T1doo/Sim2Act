@@ -1628,9 +1628,13 @@ _source_fact_code.register(6,globals(),(
     '_cold_source_prefix','_cold_source_typed','_cold_source_from_audit',
     '_cold_source_facet_from_source','_cold_review_from_source',
     '_cold_verify_from_review','_cold_verify_facet_from_review','_cold_audit_from_source',
+    '_audit_prefix','_cold_audit_prefix','_cold_extract_pair',
     '_review_source_from_facts','_review_from_facts','_verify_from_review','_audit_from_source',
     '_check_review_read','_cold_persisted_pair','_persisted_pair_input','_persisted_extract_input',
     '_review_preview','candidate','frozen_for','_extraction_name','_invalidate_cold_inputs',
     'source_gate','require','fingerprint'),
     (_ColdSourcePrefix,_ColdSourceTyped,_ColdSourceFacts,_ColdSourceAuditPrefix,
-     _ColdSourceAuditFacts,_ColdExtractionReview,_ColdReviewRead),constants=('natural','_source_fact_code'))
+     _ColdSourceAuditFacts,_ColdExtractionReview,_ColdReviewRead,_ColdExtractionAuditPrefix,
+     Metadata,ExtractInput,ReviewInput),
+    constants=('natural','_source_fact_code','app_drafts','task_extractions','select','copy',
+        'Metadata','ExtractInput','ReviewInput','GoalCardRunSource','Limits','META','EXTRACT'))

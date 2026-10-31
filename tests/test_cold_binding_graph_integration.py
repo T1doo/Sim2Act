@@ -54,7 +54,7 @@ def material_goal(store, user, resource, goal, content):
         goal_version=goal["version"], goal_fingerprint=goal["fingerprint"], goal_snapshot=saved["snapshot"])
 
 
-def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_path, monkeypatch, *, _post_facts_case=False):
+def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_path, monkeypatch, *, _post_facts_case=False, _base_probe=None):
     from test_natural_spec_apps import SOURCE
 
     mock_calls = []
@@ -194,7 +194,8 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                     (runtime, ("counters", "prove_node", "prove_pending", "ledger_digest")),
                     (apps, ("validate_frozen_candidate",)), (lifecycle, ("read_release", "_read_release")),
                     (app_jobs, ("load_binding",)), (text_apps, ("verify_origin",))]
-                with monkeypatch.context() as barrier:
+                from cold_use_base_probe import observe_base
+                with monkeypatch.context() as barrier, observe_base(barrier,_base_probe):
                     for module, names in tripwires:
                         for name in names:
                             barrier.setattr(module, name, partial(ancestry_forbidden, module.__name__ + "." + name))
@@ -228,6 +229,21 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                                 assert type(graph.use_prefix.body.review) is use.ReviewInput
                                 assert type(guard.inputs[graph.use_prefix.key+':pair']['request']) is dict
                                 assert type(graph.use_audit_prefix.seal_meta) is dict
+                                base=graph.use_audit_prefix.base
+                                assert native_owned.image.is_kind(base,'r')
+                                assert native_owned.image.same(base,native_owned.fact(guard,
+                                    graph.use_audit_prefix.key+':base-row'))
+                                assert native_owned.image.plain(base)==next(row for row in before['app_drafts']
+                                    if row['id']==base['id'])
+                                # Pre binding consumes its independently checked
+                                # Release/review base; post audit-first consumes
+                                # the Use audit row below. Never merge domains.
+                                assert graph.extraction_audit_prefix.draft is graph.use_review.prefix.base
+                                # The subsequent original SELECT remains its
+                                # independent complete mutable SQL row/domain.
+                                from sqlalchemy.engine import RowMapping
+                                assert type(graph.extraction_audit_prefix.actual) is RowMapping
+                                assert graph.extraction_audit_prefix.actual is not base
                             assert graph.extraction_origin == expected_extraction_origin
                             assert graph.extraction_audit == expected_extraction_audit
                             assert graph.use_value == expected_use
@@ -324,6 +340,9 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                                 assert native_owned.image.is_kind(audit_seed.use_prefix.frozen,'d')
                                 assert not native_owned.image.same(seeded_graph.use_prefix.frozen,
                                     audit_seed.use_prefix.frozen)
+                                assert native_owned.image.is_kind(audit_seed.use_prefix.base,'r')
+                                assert audit_seed.extraction_prefix.draft is audit_seed.use_prefix.base
+                                assert not native_owned.image.same(audit_seed.use_prefix.base,base)
                             assert seeded_graph.source_audit is audit_seed.source_audit
                             assert seeded_graph.extraction_audit_prefix is audit_seed.extraction_prefix
                             assert seeded_graph.use_audit_prefix is audit_seed.use_prefix

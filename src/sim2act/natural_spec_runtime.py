@@ -3638,7 +3638,8 @@ def _cold_first_binding(worker, c, guard, current, limits, *, audit_seed=None):
             extraction_audit_prefix, extraction_audit = audit_seed.extraction_prefix, audit_seed.extraction_audit
             seeded_draft = extraction_audit_prefix.draft
             require(set(review_prefix.base) <= set(seeded_draft)
-                and _trial_typed_equal({name: seeded_draft[name] for name in review_prefix.base},
+                and _trial_typed_equal(_source_owned_code.image.compat(
+                    {name: seeded_draft[name] for name in review_prefix.base}),
                     review_prefix.base))
         use_review = use._cold_review_from_audit(store, c, user, review_prefix, extraction_audit)
         use_value = use._cold_bound_from_review(store, c, user, use_prefix, use_review)
