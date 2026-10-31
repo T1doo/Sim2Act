@@ -2742,6 +2742,10 @@ def _raw_dynamic_eligible(facts, guard):
         keys, data, lookup = _cold_graph_row_storage(job)
         if type(data[lookup['id']]) is not str:
             return False
+    elif (_SOURCE_VIEW_TYPE is not None and type(job) is _SOURCE_VIEW_TYPE
+            and _source_owned_code.image.is_kind(job,'d','r')):
+        if type(job.get('id')) is not str:
+            return False
     else:
         return False
     return True
@@ -2783,6 +2787,7 @@ _RAW_SEED_METADATA_CODE = tuple((fn, fn.__code__) for _, _, value in _RAW_SEED_M
 def _raw_seed_plain(values):
     """Fresh no-hook eligibility walk, not equality or a remembered content pin."""
     active, done = set(), set()
+    owned_code_checked = False
     frames = [(None, iter((values,)))]
     while frames:
         try:
@@ -2794,6 +2799,20 @@ def _raw_seed_plain(values):
                 done.add(identity)
             continue
         kind = type(value)
+        if _SOURCE_VIEW_TYPE is not None and kind is _SOURCE_VIEW_TYPE:
+            # Exact native View getters read immutable C-owned data only, not
+            # Binding anchors or model/Python getters. This is a no-hook type
+            # qualification for THIS invocation, never a saved content/permit
+            # verdict. Entry/final full graph checks still compare all anchors
+            # and every mutable input, including original SQL row storage.
+            if not owned_code_checked:
+                checker,code,defaults=_SOURCE_OWNED_CHECK
+                if (_source_owned_code.current is not checker or checker.__code__ is not code
+                        or checker.__defaults__ is not defaults):
+                    return False
+                checker()
+                owned_code_checked=True
+            continue
         if (kind is str or kind is int or kind is float or kind is bool
                 or kind is bytes or kind is type(None) or kind is _ColdGraphQuotedName):
             continue
@@ -2926,7 +2945,9 @@ def _raw_seed_eligible(facts, guard):
     if (any(type(d.get(key)) is not str for d, keys in (
             (sd, ('key',)), (ad, ('key', 'digest')), (pd, ('key', 'user', 'pid', 'rid')))
             for key in keys)
-            or not (type(pd.get('original')) is dict or type(pd.get('original')) is _ColdGraphRowMapping)):
+            or not (type(pd.get('original')) is dict or type(pd.get('original')) is _ColdGraphRowMapping
+                or _SOURCE_VIEW_TYPE is not None and type(pd.get('original')) is _SOURCE_VIEW_TYPE
+                    and _source_owned_code.image.is_kind(pd.get('original'),'d','r'))):
         return False
     contract = object.__getattribute__(guard.binding, '__dict__').get('contract')
     if type(contract) is not _row_native_code.PBTrialContract:
@@ -2941,7 +2962,10 @@ def _raw_seed_eligible(facts, guard):
     for key in (sd['key'], ad['key'], pd['key'], pd['key'] + ':native'):
         if key not in guard.inputs:
             return False
-        values.append(guard.inputs[key])
+        # The fixed seed predicates consume these scoped facts, not the raw
+        # Binding marker. fact() freshly checks owner/root/scope identity; the
+        # original roots/pins/anchors remain in every complete Graph check.
+        values.append(_source_owned_code.fact(guard,key))
     return _raw_seed_plain(values)
 
 
@@ -3005,6 +3029,14 @@ def _raw_read_eligible(facts, name):
     early_graph = object.__getattribute__(early_guard, '__dict__')
     if type(early_graph.get('phase')) is not str or early_graph['phase'] != 'post':
         return False
+    if _SOURCE_VIEW_TYPE is not None:
+        # Qualify ALL added Source roles before dispatching any of them. A
+        # changed alias is refused without executing its replacement callback.
+        checker,code,defaults=_SOURCE_OWNED_CHECK
+        if (_source_owned_code.current is not checker or checker.__code__ is not code
+                or checker.__defaults__ is not defaults):
+            return False
+        checker()
     if (type(facts) is not _ColdRunFacts or type(name) is not str
             or _raw_read_builtins.__import__ is not _RAW_READ_IMPORT
             or _counter_getattr_static(_ColdRunFacts, '__getattribute__') is not object.__getattribute__
@@ -3119,6 +3151,12 @@ def _raw_read_eligible(facts, name):
     except DomainError:
         return False
     return _raw_seed_eligible(facts, guard)
+
+
+# Source witnesses the original qualification CODE through a fixed alias.
+# Tests can still select a conservative miss through the ordinary binding;
+# the implementation code and added Source helpers remain witnessed.
+_RAW_READ_SOURCE_BODY = _raw_read_eligible
 
 
 
@@ -5837,6 +5875,7 @@ _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_
     '_cold_run_raw_seed','_cold_run_facts','_check_run_facts','_cold_read_checkpoint',
     '_cold_sqlite_order','_cold_attempt_order','_model_value','_model_inputs',
     '_invalidate_cold_run_raw_seed','_invalidate_cold_run_facts','fingerprint',
+    '_raw_seed_plain','_raw_seed_eligible','_raw_dynamic_eligible','_RAW_READ_SOURCE_BODY',
     '_counters_from_facts','_counters','_counter_checkpoint','_node_proof_inputs',
     '_prove_node_from_facts','_prove_node','_prove_pending_from_facts','_prove_pending',
     'messages','parse','_anchor','strict_json','response_archive'),
