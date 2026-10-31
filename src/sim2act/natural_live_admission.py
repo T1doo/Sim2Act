@@ -1614,7 +1614,10 @@ def _graph_trial_extraction_models_from_raw(models, extraction, raw):
     raw = _trial_pure_mapping(raw)
     require(type(extraction) is tuple and len(extraction) == 4)
     draft, body, target, goal = extraction
-    require(_trial_typed_equal(_trial_pure_data(draft), _trial_pure_data(raw['draft']))
+    # Both sides retain their complete original raw comparison protocol;
+    # only exact immutable views are decoded at this temporary boundary.
+    require(_trial_typed_equal(_trial_pure_data(_source_owned_code.image.plain(draft)),
+            _trial_pure_data(_source_owned_code.image.plain(raw['draft'])))
         and _trial_typed_equal(_trial_pure_data(target), _trial_pure_data(raw['target']))
         and _trial_typed_equal(_trial_pure_data(goal), _trial_pure_data(raw['goal'])))
     _trial_typed_hold(models, pb.ExtractInput, body, raw['request'])

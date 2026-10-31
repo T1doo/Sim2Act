@@ -12,8 +12,14 @@ from test_loaded_raw_segment import scope
 
 from sim2act import _model_input_structure as selected
 from sim2act import natural_spec_runtime as r
+from sim2act import apps
 from sim2act import pb_natural_specs as pb
 from sim2act.contracts import Limits
+
+
+# These pure proof-input units never call compiler/lifecycle callbacks. Keep
+# their actual qualified implementations instead of unrelated origin trace spies.
+_FIXED_APPS = tuple((name,getattr(apps,name)) for name in ("compile_preview","validate_source_family"))
 
 
 def limit():
@@ -24,27 +30,29 @@ def limit():
 @contextmanager
 def content(f, inputs=None):
     """Real graph/SQL lifetime, unvalidated identity shell for pure data units."""
-    with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as graph:
-        p = object.__new__(r._ModelSettlementRead)
-        p.inputs = inputs if inputs is not None else dict(nested=[dict(version=1)], limits=limit())
-        p.connection, p.transaction = c, c.get_transaction()
-        p.driver = c.connection.driver_connection
-        p.changes, p.thread = p.driver.total_changes, r.get_ident()
-        p.scope_nonce = object()
-        c.info["_model_settlement_scope"] = p.scope_nonce
-        p.active, p.state, p.authorities = True, "READY", set()
-        p._input_structure, p._byte_digests = None, {}
-        p._input_key_calls = p._input_structure_hits = 0
-        p.input_fingerprint = p._inputs_key()
-        # No graph/check/permission result is supplied by this carrier.
-        p.post_graph = object.__new__(r._ColdTrialGraph)
-        p.post_graph.guard = graph
-        assert selected._qualified(p)
-        try:
-            yield p
-        finally:
-            p.invalidate()
-            c.info.pop("_model_settlement_scope", None)
+    with pytest.MonkeyPatch.context() as fixed:
+        for name,function in _FIXED_APPS:fixed.setattr(apps,name,function)
+        with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as graph:
+            p = object.__new__(r._ModelSettlementRead)
+            p.inputs = inputs if inputs is not None else dict(nested=[dict(version=1)], limits=limit())
+            p.connection, p.transaction = c, c.get_transaction()
+            p.driver = c.connection.driver_connection
+            p.changes, p.thread = p.driver.total_changes, r.get_ident()
+            p.scope_nonce = object()
+            c.info["_model_settlement_scope"] = p.scope_nonce
+            p.active, p.state, p.authorities = True, "READY", set()
+            p._input_structure, p._byte_digests = None, {}
+            p._input_key_calls = p._input_structure_hits = 0
+            p.input_fingerprint = p._inputs_key()
+            # No graph/check/permission result is supplied by this carrier.
+            p.post_graph = object.__new__(r._ColdTrialGraph)
+            p.post_graph.guard = graph
+            assert selected._qualified(p)
+            try:
+                yield p
+            finally:
+                p.invalidate()
+                c.info.pop("_model_settlement_scope", None)
 
 
 def test_current_full_walk_replaces_repeated_canonical_encoding(local_origin):
@@ -159,3 +167,40 @@ def test_unknown_exception_origin_is_not_a_representation_miss():
         raise DomainError("VERSION_CONFLICT", "synthetic unknown callback")
     except DomainError as error:
         assert not selected._representation_miss(error)
+
+
+def test_complete_owned_sql_view_keeps_native_content_path_and_canonical_fallback(local_origin):
+    from sim2act import _cold_source_packet as owned
+    raw=RowMapping(SimpleResultMetaData(['visible']),None,{'visible':0},
+        ({'complete':[1,2]},['hidden original storage']))
+    with content(local_origin) as proof:
+        graph=proof.post_graph.guard
+        view=owned.own_fact(graph,'proof-owned-complete-row',raw)
+        assert owned.native.match_node(view.owner(),view.ref(),raw,owned._config(graph))
+        proof.inputs['release']=view
+        proof.input_fingerprint=proof._inputs_key()
+        assert proof._inputs_current() and proof._input_structure is not None
+        start=proof._input_key_calls
+        assert proof._inputs_current() and proof._input_key_calls==start
+        raw._data[0]['complete'].append(3)
+        assert proof._inputs_current() and proof._input_key_calls==start
+        assert owned.image.plain(view)=={'visible':{'complete':[1,2]}}
+        # Replacing the strict native row with equal visible JSON selects the
+        # ORIGINAL canonical check. It cannot fabricate content authority.
+        proof.inputs['release']=owned.image.plain(view)
+        assert proof._inputs_current()
+        assert proof._input_key_calls>start and proof._input_structure is None
+
+
+def test_legacy_extraction_unknown_key_rejects_without_extra_hash_callback():
+    from sim2act import natural_live_admission as admission
+    from sim2act.errors import DomainError
+    calls=[]
+    class ForeignKey:
+        def __hash__(self):calls.append(True);return 1
+    draft={ForeignKey():1}
+    calls.clear()
+    raw=dict(draft=draft,request={},target={},goal={})
+    with pytest.raises(DomainError):
+        admission._graph_trial_extraction_models_from_raw([], (draft,None,{},{}),raw)
+    assert calls==[]

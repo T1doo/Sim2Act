@@ -277,6 +277,24 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                                 assert admission._trial_typed_equal(contract_raw,
                                     FrozenRunContract.model_dump(graph.generation_contract, warnings=False))
                             admission._trial_typed_values(typed)
+                            # Exercise the actual Cold-stage extraction collector,
+                            # not only the ancestry collector with stage_facts=None.
+                            extraction_models=[]
+                            extraction=(graph.extraction_prefix.draft, graph.extraction_prefix.body,
+                                graph.extraction_review.material, graph.extraction_review.goal.model_dump())
+                            extraction_raw=dict(draft=extraction[0],
+                                request=pb.ExtractInput.model_dump(extraction[1]),
+                                target=extraction[2], goal=extraction[3])
+                            admission._graph_trial_extraction_models_from_raw(
+                                extraction_models, extraction, extraction_raw)
+                            admission._trial_typed_values(extraction_models)
+                            altered=original_value_domain(extraction_raw)
+                            altered['draft']['candidate']['source_hash']='0'*64
+                            from sim2act.errors import DomainError
+                            with pytest.raises(DomainError):
+                                admission._graph_trial_extraction_models_from_raw([],extraction,altered)
+                            assert any(kind is pb.ExtractInput and model is extraction[1]
+                                for kind,model,_ in extraction_models)
                             assert generation_image.compat(graph.native_audit["attempts"]) == sorted(generation_attempts, key=lambda row: row["id"])
                             assert dict(graph.source_facts.typed.typed) == next(row
                                 for row in before["internal_instance_data"]

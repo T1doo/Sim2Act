@@ -22,7 +22,7 @@ _PROOF_METHODS = tuple(name for name, value in _PROOF_ITEMS if type(value) is Fu
 _DUMP = getattr_static(r.Limits, "model_dump")
 _ALIASES = tuple((owner, name, getattr(owner, name)) for owner, names in (
     (r, ("_ModelSettlementRead", "_ColdTrialGraph", "_model_value", "fingerprint",
-         "Mapping", "Limits", "require", "hashlib", "json")),
+         "Mapping", "Limits", "require", "hashlib", "json", "_SOURCE_VIEW_TYPE", "_SOURCE_OWNER_TYPE")),
     (db, ("fingerprint", "json", "hashlib")),
     (builtins, ("isinstance",)),
     (abc, ("_abc_instancecheck", "_abc_subclasscheck")),
@@ -142,7 +142,8 @@ def same(proof):
     if proof._inputs_key() != proof.input_fingerprint:
         return None
     try:
-        capsule = structure._NATIVE_SNAPSHOT(proof.inputs, *structure._ARGS, scope)
+        capsule = structure._NATIVE_SNAPSHOT(proof.inputs, *structure._ARGS, scope,
+            r._SOURCE_VIEW_TYPE, r._SOURCE_OWNER_TYPE)
         if capsule is structure._UNSUPPORTED:
             return None
         # Independent current walk closes calibration ABA. No hash-only result.
