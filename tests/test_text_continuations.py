@@ -1,6 +1,8 @@
 """Exact old SQLite fixture -> explicit compatible software -> cold actual Worker.
 
 Fixtures were created by accepted Git software, never by rewriting current seals.
+The documented explicit schema initializer adds empty current tables to a copy;
+all original tables, columns and rows must remain unchanged before API startup.
 Time is fixed inside their original TTL for reproducible synthetic offline proof.
 """
 
@@ -13,7 +15,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, event, select, update
+from sqlalchemy import MetaData, delete, event, select, update
 from test_persistent_app_runs import NoModel
 
 from sim2act import text_continuations as cont
@@ -60,6 +62,20 @@ def open_legacy(name, tmp_path, monkeypatch):
     monkeypatch.setattr(time, "time", lambda: info["fixture_time"])
     settings = Settings("sqlite:///" + str(database), tmp_path, mode="mock", live_enabled=False)
     store = Store(settings.database_url, test_only=True)
+    original = rows(store)
+    with store.engine.connect() as c:
+        original_schema = c.exec_driver_sql("SELECT type, name, tbl_name, sql FROM sqlite_master").all()
+    store.initialize()  # Explicit fixture upgrade, never an implicit API migration.
+    upgraded = rows(store)
+    assert all(upgraded[name] == values for name, values in original.items())
+    assert all(not values for name, values in upgraded.items() if name not in original)
+    with store.engine.connect() as c:
+        upgraded_schema = c.exec_driver_sql("SELECT type, name, tbl_name, sql FROM sqlite_master").all()
+    assert all(value in upgraded_schema for value in original_schema)
+    added_tables = upgraded.keys() - original.keys()
+    assert added_tables <= meta.tables.keys()
+    assert all(value.type in {"table", "index"} and value.tbl_name in added_tables
+               for value in upgraded_schema if value not in original_schema)
     with TestClient(create_app(store, settings)) as client:
         client.headers["Authorization"] = "Bearer synthetic-test-A"
         yield store, settings, client, info
@@ -68,7 +84,12 @@ def open_legacy(name, tmp_path, monkeypatch):
 
 def rows(store):
     with store.tx() as c:
-        return {t.name: [dict(r) for r in c.execute(select(t)).mappings()] for t in meta.sorted_tables}
+        # Preserve every actual historical table/column, including unknown ones;
+        # querying today's metadata invents tables that the original DB never had.
+        historical = MetaData()
+        historical.reflect(bind=c)
+        return {t.name: [dict(r) for r in c.execute(select(t)).mappings()]
+                for t in historical.sorted_tables}
 
 
 def path(info):

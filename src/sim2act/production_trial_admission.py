@@ -5,6 +5,7 @@ fixed data sender cannot perform IO. It is not a network dispatch implementation
 or evidence that a DB transaction can fence an external provider request.
 """
 
+import ast
 import hashlib
 import json
 import time
@@ -23,7 +24,7 @@ from .db import attempts, fingerprint, runs
 from .errors import DomainError
 from .text_continuations import ANCHOR_HASH
 
-PRODUCTION_QUALIFICATION_HASH = "239c75fbcac4e76e4a5a9035530d5d446ea5bc8e311b00ddea1a69136ff7a38c"
+PRODUCTION_QUALIFICATION_HASH = "583295f4d86f60b25bdee53d21bf85ff3f2699519f76c1cc15c971e4e0eea82f"
 
 
 class AccountEvidence(Strict):
@@ -90,26 +91,78 @@ def _qualified():
     """Exact reviewed production target; historical compatibility stays separate."""
     root = Path(__file__).parent
     try:
-        gate.require(hashlib.sha256((root / "text_software_anchors.json").read_bytes()).hexdigest()
+        anchor_raw = (root / "text_software_anchors.json").read_bytes()
+        gate.require(hashlib.sha256(anchor_raw).hexdigest()
                      == ANCHOR_HASH, "Software anchors changed")
         raw = (root / "production_software_qualification.json").read_bytes()
         gate.require(hashlib.sha256(raw).hexdigest() == PRODUCTION_QUALIFICATION_HASH,
                      "Production software manifest changed")
-        proof = json.loads(raw)
+        def unique(pairs):
+            value = {}
+            for key, item in pairs:
+                gate.require(key not in value, "Duplicate software qualification field")
+                value[key] = item
+            return value
+
+        def pin(source, name, expected=None):
+            tree = ast.parse(source)
+            writes = [n for n in ast.walk(tree) if isinstance(n, ast.Name)
+                      and isinstance(n.ctx, ast.Store) and n.id == name]
+            assignments = [n for n in tree.body if isinstance(n, ast.Assign)
+                           and len(n.targets) == 1 and n.targets[0] in writes]
+            gate.require(len(writes) == len(assignments) == 1
+                         and assignments[0].targets[0] is writes[0]
+                         and isinstance(assignments[0].value, ast.Constant),
+                         "Qualification pin must be one exact module-level literal")
+            value = assignments[0].value.value
+            gate.require(type(value) is str and len(value) == 64
+                         and all(c in "0123456789abcdef" for c in value)
+                         and (expected is None or value == expected), "Invalid qualification pin")
+            literal = (name + ' = "' + value + '"').encode()
+            gate.require(source.count(literal) == 1
+                         and ast.get_source_segment(source.decode(), assignments[0]) == literal.decode(),
+                         "Qualification pin must have the exact simple source spelling")
+            return value, source.replace(literal, (name + ' = "' + '0' * 64 + '"').encode())
+
+        proof = json.loads(raw, object_pairs_hook=unique)
         gate.require(set(proof) == {"version", "baseline", "files"}
-            and proof["version"] == "production-software-qualification.v1"
+            and proof["version"] == "production-software-qualification.v2"
             and proof["baseline"] == "206153da27edb5353e7106ab52b6e5bcaad86627")
-        current = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+        # Read once: the literal proof below must describe these same bytes,
+        # not an unrelated second directory scan or a replaceable callback.
+        sources = {p.name: p.read_bytes()
                    for p in (*root.glob("*.py"), *root.glob("*.c"), *root.glob("*.h")) if p.name != "config.py"}
-        current["_owned_sql_catalog.json"] = hashlib.sha256((root / "_owned_sql_catalog.json").read_bytes()).hexdigest()
-        source = Path(__file__).read_bytes()
-        literal = ('PRODUCTION_QUALIFICATION_HASH = "' + PRODUCTION_QUALIFICATION_HASH + '"').encode()
-        gate.require(source.count(literal) == 1, "Exact production manifest pin required")
-        current[Path(__file__).name] = hashlib.sha256(source.replace(literal,
-            ('PRODUCTION_QUALIFICATION_HASH = "' + '0' * 64 + '"').encode())).hexdigest()
+        sources["_owned_sql_catalog.json"] = (root / "_owned_sql_catalog.json").read_bytes()
+        current = {name: hashlib.sha256(data).hexdigest() for name, data in sources.items()}
+        _, production_source = pin(sources[Path(__file__).name],
+                                   "PRODUCTION_QUALIFICATION_HASH", PRODUCTION_QUALIFICATION_HASH)
+        text_pin, text_source = pin(sources["text_continuations.py"], "QUALIFICATION_HASH")
+        current[Path(__file__).name] = hashlib.sha256(production_source).hexdigest()
+        current["text_continuations.py"] = hashlib.sha256(text_source).hexdigest()
         gate.require(proof["files"] == current,
                      "Current production software differs from the reviewed target")
-    except (OSError, ValueError, TypeError, KeyError) as exc:
+        # The second normalized literal is not a filename exemption. Its data
+        # closes against the exact Python bytes that just passed the first proof;
+        # in this proof the actual production pin is included, so no hash cycle.
+        text_raw = (root / "text_software_qualification.json").read_bytes()
+        gate.require(hashlib.sha256(text_raw).hexdigest() == text_pin,
+                     "Literal software qualification changed")
+        text_proof = json.loads(text_raw, object_pairs_hook=unique)
+        anchors = json.loads(anchor_raw, object_pairs_hook=unique)
+        gate.require(set(text_proof) == {"version", "anchor_hash", "sources", "review_baseline",
+            "review_candidate", "normalization", "files"}
+            and text_proof["version"] == "literal-software-qualification.v1"
+            and text_proof["anchor_hash"] == ANCHOR_HASH and text_proof["sources"] == sorted(anchors)
+            and text_proof["review_baseline"] == "9ecdb8038334b31ba4c5fe5919cf0e24f8688ee7"
+            and text_proof["review_candidate"] == "4508a8e36f67a9e1870cadabb38a885b0261e96d"
+            and text_proof["normalization"] == "sole-qualification-hash-literal-zero64.v1",
+            "Literal software qualification scope changed")
+        text_expected = {name: hashlib.sha256(data).hexdigest() for name, data in sources.items()
+                         if name.endswith(".py")}
+        text_expected["text_continuations.py"] = hashlib.sha256(text_source).hexdigest()
+        gate.require(text_proof["files"] == text_expected,
+                     "Literal target differs from the same reviewed production bytes")
+    except (OSError, ValueError, TypeError, KeyError, SyntaxError) as exc:
         raise DomainError("VERSION_CONFLICT", "Unavailable exact production software qualification") from exc
 
 
