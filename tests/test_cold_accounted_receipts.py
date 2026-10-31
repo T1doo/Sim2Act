@@ -107,7 +107,12 @@ def test_exact_receipt_protocol_refuses_and_closes(sql_facts, damage):
     ) as s:
         job, binding, reader, pending = f.cold_job, f.cold_bound, r.reader, r.pending
         if damage == 'reader':
-            reader = copy.copy(reader)
+            # copy.copy lazily adds __slotnames__ to the globally qualified
+            # class. This test needs only a distinct shallow instance, not a
+            # change to shared compiler metadata for all following tests.
+            other=object.__new__(type(reader))
+            vars(other).update(vars(reader))
+            reader=other
         elif damage == 'job':
             job = dict(job)
         elif damage == 'binding':
@@ -180,14 +185,25 @@ def test_original_preload_failure_never_becomes_legacy(sql_facts, monkeypatch):
     r = seed_receipts(f)
     marker = DomainError('VERSION_CONFLICT', 'original reader failed')
 
-    def failed(self):
+    # Inject at the actual original reader invocation; replacing its code
+    # correctly fails fixed-source qualification before this boundary.
+    import sys
+    monitor=sys.monitoring;slot=next(i for i in (3,5,4) if monitor.get_tool(i) is None)
+    code=rt._ColdRunFacts.receipt_operations.__code__;entered=[]
+    def failed(actual,offset):
+        entered.append(True)
         raise marker
-
-    monkeypatch.setattr(rt._ColdRunFacts, 'receipt_operations', failed)
-    with pytest.raises(DomainError) as refusal, f.store.tx() as c:
-        with native_segment(f, c, receipt_setup=setup(f, c, r)):
-            pytest.fail('original failure cannot issue or fall back')
-    assert refusal.value is marker
+    monitor.use_tool_id(slot,'Original receipt preload reader failure')
+    try:
+        monitor.register_callback(slot,monitor.events.PY_START,failed)
+        monitor.set_local_events(slot,code,monitor.events.PY_START)
+        with pytest.raises(DomainError) as refusal, f.store.tx() as c:
+            with native_segment(f,c,receipt_setup=setup(f,c,r)):
+                pytest.fail('original failure cannot issue or fall back')
+    finally:
+        monitor.set_local_events(slot,code,0)
+        monitor.register_callback(slot,monitor.events.PY_START,None);monitor.free_tool_id(slot)
+    assert entered and refusal.value is marker
 
 
 def test_shared_dag_and_quoted_unicode_cannot_undercharge_receipt_json(sql_facts):

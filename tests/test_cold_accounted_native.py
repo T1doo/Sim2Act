@@ -55,7 +55,7 @@ def observed_stage_entries(events):
 
 
 @contextmanager
-def native_segment(f, c, *, limits=NATIVE_LIMITS, middle=None, before_choose=None, receipt_setup=None, joint=False, upstream_setup=None, config=None):
+def native_segment(f, c, *, limits=NATIVE_LIMITS, middle=None, before_choose=None, receipt_setup=None, joint=False, upstream_setup=None, config=None, binding_setup=None):
     inputs = {'synthetic-native-candidate': True}
     roles = dict.fromkeys(('source', 'generate', 'platform', 'trial', 'per_use'))
     with pb._source_reads(f.store, c), runtime._cold_graph_read(
@@ -63,6 +63,7 @@ def native_segment(f, c, *, limits=NATIVE_LIMITS, middle=None, before_choose=Non
     ) as graph, native._native_candidate(graph, config or native._NativeConfig(BOUNDS, limits, joint_handoff=joint)) as candidate:
         state, cursor, revision = dispatch._graph_journal_state(graph, f.store, c, f.binding)
         graph.add('trial-generated-model-facet', dict(frozen=f.frozen.model_dump()))
+        if binding_setup is not None:binding_setup(graph)
         graph.add('cold-trial:bound', dict(binding=getattr(f, 'cold_bound', f.bound), source_binding=f.bound))
         # Producer calls remain on their original sides of the recipe/version
         # validations. choose() consumes these exact complete batches only.

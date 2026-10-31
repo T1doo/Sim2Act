@@ -2049,6 +2049,22 @@ def _cold_release_row(graph, key, row):
     inputs = fields.get('inputs')
     require(type(inputs) is dict and type(key) is str and fields.get('active') is True,
         'Exact active unpublished Release scope required')
+    frontier = fields.get('_accounted_frontier')
+    if frontier is not None:
+        from ._cold_accounted_native import _Frontier, _NativeCandidate
+        from .cold_accounted import _OwnedPrewriteMode
+        require(type(frontier) is _Frontier and frontier.graph is graph
+            and type(frontier.mode) is _OwnedPrewriteMode and frontier.mode.graph is graph
+            and frontier.mode.active is True
+            and type(frontier.mode._native) is _NativeCandidate
+            and frontier.mode._native.graph is graph and frontier.mode._native.mode is frontier.mode
+            and frontier.mode._native.frontier is frontier and frontier.mode._native.owned_ready is True
+            and key in frontier.mode._native.future_roots,
+            'Exact issued Release continuation required')
+        # This independent late SELECT stays on the original complete raw
+        # continuation. No new Source root or forbidden legacy byte export.
+        frontier.mode.assert_current()
+        return row
     name = key + ':complete-row:' + str(len(inputs))
     try:
         return _source_owned_code.own_fact(graph, name, row)

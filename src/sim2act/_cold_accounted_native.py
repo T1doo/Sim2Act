@@ -613,7 +613,7 @@ class _NativeCandidate:
                     gate.require(ledger.equal(expected, o._node(raw)), 'Full upstream Run differs')
                     del raw, expected
         ticket = ledger.reserve()
-        sizing = copied = header = bound = release = None
+        sizing = copied = header = bound = release = original = actual = entry = registry = release_id = None
         try:
             self.observe(phase='native:frontier-sizing')
             sizing = _SizingProjection(ledger, ticket)
@@ -638,17 +638,59 @@ class _NativeCandidate:
                     raise _Unsupported('native_bound_snapshot')
                 release = bound.get('release')
                 rid = bound['snapshot'].get('release_id')
-                if type(user) is not str or type(rid) is not str or type(release) is not dict:
+                if type(user) is not str or type(rid) is not str:
                     raise _Unsupported('native_release_key')
-                gate.require(type(release.get('id')) is str and rid == release['id'],
+                if type(release) is dict:
+                    release_id = release.get('id')
+                else:
+                    # Sizing deliberately stores the COMPLETE immutable pin,
+                    # not a visible dict projection. Read only this scalar from
+                    # the exact original View whose full copy is still held.
+                    # Two simultaneous registry sets plus per-root scope/view
+                    # scratch. Root count is covered by this complete sizing.
+                    if type(self.graph.inputs) is not dict:
+                        raise _Unsupported('native_release_inputs')
+                    registry = vars(self.graph).get('_source_fact_bindings', {})
+                    gate.require(type(registry) is dict and len(registry) <= len(self.graph.inputs),
+                        'Native Release registry exceeds sized roots')
+                    sizing.alloc(65536 + 1024 * (len(self.graph.inputs) + 1))
+                    # Fixed software qualification plus complete metered
+                    # registry/input scan and bounded native row lookup.
+                    ledger.spend(65536 + 64 * (sizing.nodes + sizing.edges + sizing.leaf + 1))
+                    source = rt._source_owned_code
+                    from types import FunctionType
+                    check = rt._SOURCE_OWNED_CHECK
+                    gate.require(type(check) is tuple and len(check) == 3,
+                        'Exact Source qualifier metadata required')
+                    checker, code, defaults = check
+                    gate.require(type(checker) is FunctionType and source.current is checker
+                        and checker.__code__ is code and checker.__defaults__ is defaults,
+                        'Native Release qualifier changed')
+                    checker()
+                    source.fact_current(self.graph)
+                    original = self.graph.inputs['cold-trial:bound']
+                    if type(original) is not dict or type(original.get(role)) is not dict:
+                        raise _Unsupported('native_release_key')
+                    actual = original[role].get('release')
+                    if not source.image.is_kind(actual, 'd', 'r'):
+                        raise _Unsupported('native_release_key')
+                    entry = sizing.done.get((id(actual), True))
+                    gate.require(type(entry) is tuple and len(entry) == 3
+                        and entry[0] is actual and entry[1] is release,
+                        'Native Release sizing source changed')
+                    # Native View lookup is bounded by the complete metered
+                    # carrier. Charge temporary views/lookup work beforehand.
+                    release_id = actual['id']
+                gate.require(type(release_id) is str and rid == release_id,
                              'Native bound Release relation changed')
                 ledger.reserve('resident', 256 + 16 * (len(user) + len(rid) + 32))
                 ledger.spend(len(user) + len(rid) + 32)
                 future.add('release-pointer:' + user + ':' + rid)
+            self.frontier_metrics['units'] = sizing.units
             self.future_roots = frozenset(future)
         finally:
             # Drop every data-dependent temporary before refunding its ticket.
-            sizing = copied = header = bound = release = None
+            sizing = copied = header = bound = release = original = actual = entry = registry = release_id = None
             ticket.close()
         self.observe(phase='native:arena')
         self.arena = _Arena(ledger, packets, joint=self.config.joint_handoff)
