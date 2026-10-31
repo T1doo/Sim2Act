@@ -55,6 +55,8 @@ The two existing borrowed-snapshot/ABA counterexamples also passed. They show th
 
 The next candidate is an owned **expected-post data plan**, retaining original G1 as a differential oracle until the following conditions are implemented and tested:
 
+Subsequent status: [the implemented SQL endpoint shadow](../expected-post-shadow-20261031/README.md) now observes and replays actual W5 against a complete G0 backup alongside original G1. It reports DATA_MATCH only, keeps reuse disabled and leaves the six larger dependency/authorization gaps open; it is not the full bridge described below.
+
 1. Capture complete pure dependencies: full ordered query results, duplicates, missing-row/range results, complete raw model/row values and all relevant code/schema/serializer configuration. If a reader uses external bytes, those actual bytes belong to the closure too. Do not reduce the set to already observed row IDs or hashes.
 2. Prove the same WAL snapshot upgrade and actual writer ownership/lifetime. Record exact original DML shapes, bound parameters, rowcounts and complete postimages. `total_changes + 5` is necessary at most; it is not the certificate. Unknown triggers, UDFs or callbacks must retain the original path or fail safely. Do not clear security callbacks to qualify a path.
 3. Give G1 a **new** Graph/scope/Binding. Re-read and fully compare actual post dependencies with the expected owned data, then reuse only complete pure data outputs. Do not transfer Graph/reader/seed, authority, permission results or PASS; do not combine independent role/facet alias domains. Old mutable aliases must be retired across all consumers or remain completely checked anchors.
