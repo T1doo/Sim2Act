@@ -9,10 +9,11 @@ from sim2act import natural_spec_runtime as r,pb_natural_specs as pb
 from sim2act.errors import DomainError
 
 
-def test_owned_loaded_read_qualifies_and_reduces_complete_pins(local_origin,monkeypatch,tmp_path):
+@pytest.mark.parametrize('phase',['pre','post'])
+def test_owned_loaded_read_qualifies_and_reduces_complete_pins(local_origin,monkeypatch,tmp_path,phase):
     import json
     f=local_origin
-    with f.store.tx() as c,pb._source_reads(f.store,c),scope(f,c) as guard:
+    with f.store.tx() as c,pb._source_reads(f.store,c),r._cold_graph_read(f.worker,c,f.inputs,f.roles,phase) as guard:
         facts,seed=prepared(f,c,guard,count=2,marker=True)
         assert r._raw_read_eligible(facts,'model-reserved') is True
         monitor=sys.monitoring;slot=next(i for i in (3,5,4) if monitor.get_tool(i) is None)
@@ -46,7 +47,8 @@ def test_owned_loaded_read_qualifies_and_reduces_complete_pins(local_origin,monk
             same_owned_node=True,counter_core_calls=0,classification='SYNTHETIC_EXISTING_READ_SEGMENT_NOT_WHOLE_FLOW_PERFORMANCE'),indent=2)+'\n')
 
 
-def test_fixed_seed_still_has_late_complete_mutable_graph_check(local_origin):
+@pytest.mark.parametrize('phase',['pre','post'])
+def test_fixed_seed_still_has_late_complete_mutable_graph_check(local_origin,phase):
     f=local_origin;calls=[];monitor=sys.monitoring
     slot=next(i for i in (3,5,4) if monitor.get_tool(i) is None)
     code=r._cold_seed_fixed_check.__code__
@@ -55,7 +57,7 @@ def test_fixed_seed_still_has_late_complete_mutable_graph_check(local_origin):
         f.inputs['history'][0]['body']+=b' synthetic actual live input mutation'
     with f.store.tx() as c,pb._source_reads(f.store,c):
         with pytest.raises(DomainError):
-            with scope(f,c) as guard:
+            with r._cold_graph_read(f.worker,c,f.inputs,f.roles,phase) as guard:
                 facts,_=prepared(f,c,guard)
                 assert r._raw_read_eligible(facts,'model-reserved') is True
                 monitor.use_tool_id(slot,'Mutate only after entry complete pin')
@@ -90,15 +92,18 @@ def test_changed_source_role_never_dispatches_foreign_callback(local_origin,monk
         assert calls==[] and not guard.active
 
 
-def test_prewrite_remains_original_read_domain(local_origin):
+@pytest.mark.parametrize('mapping_job',[False,True,'cursor'])
+def test_prewrite_mutable_current_run_remains_original_read_domain(local_origin,mapping_job):
     f=local_origin
     with f.store.tx() as c,pb._source_reads(f.store,c),r._cold_graph_read(f.worker,c,f.inputs,f.roles,'pre') as guard:
-        facts,_=prepared(f,c,guard)
+        facts,_=prepared(f,c,guard,use_seed=False,mapping_job=mapping_job)
+        assert facts._source_owned is False
         assert r._raw_read_eligible(facts,'model-reserved') is False
         assert facts.model_reserved()==[]
 
 
-def test_unknown_control_mutate_then_restore_keeps_original_full_order(local_origin):
+@pytest.mark.parametrize('phase',['pre','post'])
+def test_unknown_control_mutate_then_restore_keeps_original_full_order(local_origin,phase):
     f=local_origin;calls=[];saved=f.inputs['history'][0]['body']
     class UnknownControl:
         def checkpoint(self,worker):
@@ -106,7 +111,7 @@ def test_unknown_control_mutate_then_restore_keeps_original_full_order(local_ori
             f.inputs['history'][0]['body']=(saved+b' transient drift') if len(calls)==1 else saved
     with f.store.tx() as c,pb._source_reads(f.store,c):
         with pytest.raises(DomainError):
-            with scope(f,c) as guard:
+            with r._cold_graph_read(f.worker,c,f.inputs,f.roles,phase) as guard:
                 facts,_=prepared(f,c,guard)
                 f.store._local_model_control=UnknownControl()
                 assert r._raw_read_eligible(facts,'model-reserved') is False
@@ -165,3 +170,35 @@ def test_shadowed_settlement_getattr_keeps_original_full_order(local_origin,monk
                     assert r._raw_read_eligible(facts,'model-reserved') is False
                     facts.model_reserved()
         assert calls==[True] and not guard.active
+
+
+@pytest.mark.parametrize('field',['_accounted_frontier','_typed_native_candidate','phase'])
+def test_pre_owned_unknown_frontier_candidate_or_phase_is_not_fused(local_origin,field):
+    f=local_origin;calls=[]
+    class Unknown:
+        def __getattr__(self,name):calls.append(name);raise AssertionError('Foreign qualifier call')
+    with f.store.tx() as c,pb._source_reads(f.store,c),r._cold_graph_read(f.worker,c,f.inputs,f.roles,'pre') as guard:
+        facts,_=prepared(f,c,guard)
+        assert r._raw_read_eligible(facts,'model-reserved') is True
+        old=vars(guard)[field]
+        try:
+            setattr(guard,field,'foreign' if field=='phase' else Unknown())
+            assert r._raw_read_eligible(facts,'model-reserved') is False
+        finally:setattr(guard,field,old)
+        assert calls==[]
+        facts.check(f.store,c,facts.job)
+
+
+def test_pre_owned_missing_collection_keeps_original_sql(local_origin):
+    from sqlalchemy import event
+    f=local_origin;queries=[]
+    def sql(connection,cursor,statement,*args):queries.append(statement)
+    with f.store.tx() as c,pb._source_reads(f.store,c),r._cold_graph_read(f.worker,c,f.inputs,f.roles,'pre') as guard:
+        facts,_=prepared(f,c,guard,omit='model-operations')
+        event.listen(f.store.engine,'before_cursor_execute',sql)
+        try:
+            assert r._raw_read_eligible(facts,'model-operations') is False
+            with observe_core() as calls:
+                assert r._counters(c,facts.job,f.origin[0],_facts=facts)==[]
+            assert calls==[] and any('FROM operations' in q for q in queries)
+        finally:event.remove(f.store.engine,'before_cursor_execute',sql)

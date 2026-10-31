@@ -3085,7 +3085,11 @@ def _raw_read_eligible(facts, name):
             or _counter_getattr_static(_ColdGraphRead, '__dict__') is not _RAW_READ_GRAPH_DICT):
         return False
     early_graph = object.__getattribute__(early_guard, '__dict__')
-    if type(early_graph.get('phase')) is not str or early_graph['phase'] != 'post':
+    if type(early_graph.get('phase')) is not str or early_graph['phase'] not in {'pre','post'}:
+        return False
+    if early_graph['phase']=='pre' and not (early.get('_source_owned') is True
+            and early.get('_source_owned_origin') is True and _SOURCE_VIEW_TYPE is not None
+            and type(early.get('job')) is _SOURCE_VIEW_TYPE):
         return False
     if _SOURCE_VIEW_TYPE is not None:
         # Qualify ALL added Source roles before dispatching any of them. A
@@ -3149,7 +3153,7 @@ def _raw_read_eligible(facts, name):
             or _counter_getattr_static(guard, 'check') is not _RAW_READ_GRAPH_CHECK):
         return False
     graph_values = object.__getattribute__(guard, '__dict__')
-    if (type(graph_values.get('phase')) is not str or graph_values['phase'] != 'post'
+    if (type(graph_values.get('phase')) is not str or graph_values['phase'] not in {'pre','post'}
             or graph_values.get('_accounted_frontier') is not None
             or graph_values.get('_typed_native_candidate') is not None):
         return False
