@@ -122,7 +122,7 @@ def warm(f, c, graph):
 
 @pytest.mark.parametrize('producer',['compile_preview','validate_source_family'])
 def test_replaced_production_function_still_rejects_before_callback(local_origin,monkeypatch,producer):
-    from sim2act import pa_spec_apps as apps
+    from sim2act import apps
     f=local_origin
     calls=[]
     def foreign(*args,**kwargs):
