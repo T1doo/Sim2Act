@@ -1,0 +1,50 @@
+........................................................................ [ 73%]
+.....F....................                                               [100%]
+=================================== FAILURES ===================================
+______________ test_model_sync_renewal_publishes_committed_lease _______________
+
+env = (<sim2act.db.Store object at 0x7fe6de80df10>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-151/test_mo...b7f02ee736427fb4d12e020bdcee6e', 'user_3f5d44dc43fb4e5eaa8130ca4936d0e5', 'proj_21a36a89a73645069a8bcc672cfe0be9', ...)
+
+    def test_model_sync_renewal_publishes_committed_lease(env):
+        from sim2act.natural_spec_runtime import renew
+    
+        store, settings = env[:2]
+        rid = enqueue(env, "model-heartbeat-publication")
+        run = store.claim("original-worker", 30)
+        state = dict(lock=threading.Lock(), lease_until=0)
+        worker = SimpleNamespace(store=store, s=settings, id="original-worker", stop=threading.Event())
+>       renew(worker, run, run["created_at"] + settings.run_seconds, _heartbeat_state=state)
+
+tests/test_workflow_heartbeat_failure.py:259: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/natural_spec_runtime.py:153: in renew
+    renew_sync(worker, job, _heartbeat_state, deadline=deadline)
+src/sim2act/text_workflows.py:940: in renew_sync
+    return _renew_sync_locked(worker, run, state, deadline=deadline, lease_seconds=lease_seconds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+worker = namespace(store=<sim2act.db.Store object at 0x7fe6de80df10>, s=Settings(database_url='sqlite:////tmp/pytest-of-agent/p...abled=False, application_generation_live_id=''), id='original-worker', stop=<threading.Event at 0x7fe6dcc6d670: unset>)
+run = {'id': 'run_f95bd9629c1e41a9bc57ca981bd2cc78', 'project_id': 'proj_21a36a89a73645069a8bcc672cfe0be9', 'principal_id': 'user_43b7f02ee736427fb4d12e020bdcee6e', 'runtime_id': 'runtime_22ef2116ac0043ccaf2bdcaeaaceb067', ...}
+state = {'lock': <unlocked _thread.lock object at 0x7fe6dc2bbc80>, 'lease_until': 0, 'renewal_lock': <unlocked _thread.lock object at 0x7fe6dc1ba4c0>}
+deadline = 1793472159.074885, lease_seconds = None
+
+    def _renew_sync_locked(worker, run, state, *, deadline=None, lease_seconds=None):
+        """Original guarded renewal; caller already holds the renewal writer lock."""
+        with state["lock"]:
+            fatal = state.get("fatal_heartbeat")
+            bounds = [state["lease_until"], run["created_at"] + worker.s.run_seconds]
+>           if state["deadline"] is not None:
+               ^^^^^^^^^^^^^^^^^
+E           KeyError: 'deadline'
+
+src/sim2act/text_workflows.py:914: KeyError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_workflow_heartbeat_failure.py::test_model_sync_renewal_publishes_committed_lease
+1 failed, 97 passed, 1 warning in 50.27s

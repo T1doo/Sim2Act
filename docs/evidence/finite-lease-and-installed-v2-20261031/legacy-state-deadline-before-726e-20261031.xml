@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="2.333" timestamp="2026-10-31T19:12:57.402714+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_legacy_settlement_interval" name="test_narrower_original_state_deadline_is_not_lost_at_writer_commit[False]" time="1.133"><failure message="AssertionError: {'persisted': {'state-deadline': 'must-rollback'}, 'caught': None, 'expired_state_deadline': True}&#10;assert {'state-deadline': 'must-rollback'} is None">env = (&lt;sim2act.db.Store object at 0x7f3d45894da0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-157/test_na...efba53c29341718964d3641a4864a6', 'user_5670db00a39d45068864e65dc9c75887', 'proj_7a7a8907a23f415ab54cc734d35c89ba', ...)
+snapshot = False
+
+    @pytest.mark.parametrize('snapshot',[False,True])
+    def test_narrower_original_state_deadline_is_not_lost_at_writer_commit(env,snapshot):
+        worker,job=started(env,1.5)
+        if snapshot:worker.store._enable_local_model_snapshots()
+        original_deadline=time.time()+.6
+        state=dict(lock=threading.Lock(),lease_until=job['lease_until'],deadline=original_deadline)
+        caught=None;callback=[]
+        try:
+            with runtime._model_settlement_writer(worker,job,time.time()+5,state):
+                with runtime._model_writer_connection(worker,None,None) as (c,_):
+                    if snapshot:snapshots.promote(c)
+                    c.execute(update(runs).where(runs.c.id==job['id']).values(result={'state-deadline':'must-rollback'}))
+                    def consume(connection):
+                        callback.append(time.time()&lt;original_deadline)
+                        threading.Event().wait(max(0,original_deadline-time.time())+.03)
+                    event.listen(c,'commit',consume)
+        except (DomainError,snapshots.SnapshotChanged) as error:caught=type(error).__name__
+        with worker.store.engine.connect() as c:
+            value=c.execute(select(runs.c.result).where(runs.c.id==job['id'])).scalar_one()
+        assert callback==[True]
+&gt;       assert value is None,{'persisted':value,'caught':caught,'expired_state_deadline':time.time()&gt;original_deadline}
+E       AssertionError: {'persisted': {'state-deadline': 'must-rollback'}, 'caught': None, 'expired_state_deadline': True}
+E       assert {'state-deadline': 'must-rollback'} is None
+
+tests/test_legacy_settlement_interval.py:175: AssertionError</failure></testcase><testcase classname="tests.test_legacy_settlement_interval" name="test_narrower_original_state_deadline_is_not_lost_at_writer_commit[True]" time="0.899"><failure message="AssertionError: {'persisted': {'state-deadline': 'must-rollback'}, 'caught': None, 'expired_state_deadline': True}&#10;assert {'state-deadline': 'must-rollback'} is None">env = (&lt;sim2act.db.Store object at 0x7f3d44e7dfd0&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-157/test_na...a13fc350f8411a82fd6c72599735a9', 'user_10430f52850149d9846536b9804acee5', 'proj_6f028870c49443a5a309afb619753d93', ...)
+snapshot = True
+
+    @pytest.mark.parametrize('snapshot',[False,True])
+    def test_narrower_original_state_deadline_is_not_lost_at_writer_commit(env,snapshot):
+        worker,job=started(env,1.5)
+        if snapshot:worker.store._enable_local_model_snapshots()
+        original_deadline=time.time()+.6
+        state=dict(lock=threading.Lock(),lease_until=job['lease_until'],deadline=original_deadline)
+        caught=None;callback=[]
+        try:
+            with runtime._model_settlement_writer(worker,job,time.time()+5,state):
+                with runtime._model_writer_connection(worker,None,None) as (c,_):
+                    if snapshot:snapshots.promote(c)
+                    c.execute(update(runs).where(runs.c.id==job['id']).values(result={'state-deadline':'must-rollback'}))
+                    def consume(connection):
+                        callback.append(time.time()&lt;original_deadline)
+                        threading.Event().wait(max(0,original_deadline-time.time())+.03)
+                    event.listen(c,'commit',consume)
+        except (DomainError,snapshots.SnapshotChanged) as error:caught=type(error).__name__
+        with worker.store.engine.connect() as c:
+            value=c.execute(select(runs.c.result).where(runs.c.id==job['id'])).scalar_one()
+        assert callback==[True]
+&gt;       assert value is None,{'persisted':value,'caught':caught,'expired_state_deadline':time.time()&gt;original_deadline}
+E       AssertionError: {'persisted': {'state-deadline': 'must-rollback'}, 'caught': None, 'expired_state_deadline': True}
+E       assert {'state-deadline': 'must-rollback'} is None
+
+tests/test_legacy_settlement_interval.py:175: AssertionError</failure></testcase></testsuite></testsuites>

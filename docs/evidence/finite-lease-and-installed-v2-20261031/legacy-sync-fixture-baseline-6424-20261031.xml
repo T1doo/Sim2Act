@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.995" timestamp="2026-10-31T18:39:17.046591+00:00" hostname="ebba0266b3c5"><testcase classname="" name="test_model_sync_renewal_publishes_committed_lease" time="0.761"><failure message="KeyError: 'deadline'">env = (&lt;sim2act.db.Store object at 0x7f25a1c93830&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-152/test_mo...4caf15d16749b0beb1b1d342d9cb34', 'user_1f2c2824cccf45988e504a510a070c95', 'proj_d7bb1f79e6044dcebd818d55df8284c2', ...)
+
+    def test_model_sync_renewal_publishes_committed_lease(env):
+        from sim2act.natural_spec_runtime import renew
+    
+        store, settings = env[:2]
+        rid = enqueue(env, "model-heartbeat-publication")
+        run = store.claim("original-worker", 30)
+        state = dict(lock=threading.Lock(), lease_until=0)
+        worker = SimpleNamespace(store=store, s=settings, id="original-worker", stop=threading.Event())
+&gt;       renew(worker, run, run["created_at"] + settings.run_seconds, _heartbeat_state=state)
+
+../Sim2Act/tests/test_workflow_heartbeat_failure.py:259: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+limited-text-installed-6424cc04-20261031/lib/python3.12/site-packages/sim2act/natural_spec_runtime.py:153: in renew
+    renew_sync(worker, job, _heartbeat_state, deadline=deadline)
+limited-text-installed-6424cc04-20261031/lib/python3.12/site-packages/sim2act/text_workflows.py:940: in renew_sync
+    return _renew_sync_locked(worker, run, state, deadline=deadline, lease_seconds=lease_seconds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+worker = namespace(store=&lt;sim2act.db.Store object at 0x7f25a1c93830&gt;, s=Settings(database_url='sqlite:////tmp/pytest-of-agent/p...abled=False, application_generation_live_id=''), id='original-worker', stop=&lt;threading.Event at 0x7f25a0b0e990: unset&gt;)
+run = {'id': 'run_ea884444cd664043a3af2bdaedf7f02d', 'project_id': 'proj_d7bb1f79e6044dcebd818d55df8284c2', 'principal_id': 'user_034caf15d16749b0beb1b1d342d9cb34', 'runtime_id': 'runtime_aaf6b7f03b0a4dcca7def5e9fd2cb493', ...}
+state = {'lock': &lt;unlocked _thread.lock object at 0x7f25a0aee7c0&gt;, 'lease_until': 0, 'renewal_lock': &lt;unlocked _thread.lock object at 0x7f25a13c96c0&gt;}
+deadline = 1793472257.8605802, lease_seconds = None
+
+    def _renew_sync_locked(worker, run, state, *, deadline=None, lease_seconds=None):
+        """Original guarded renewal; caller already holds the renewal writer lock."""
+        with state["lock"]:
+            fatal = state.get("fatal_heartbeat")
+            bounds = [state["lease_until"], run["created_at"] + worker.s.run_seconds]
+&gt;           if state["deadline"] is not None:
+               ^^^^^^^^^^^^^^^^^
+E           KeyError: 'deadline'
+
+limited-text-installed-6424cc04-20261031/lib/python3.12/site-packages/sim2act/text_workflows.py:914: KeyError</failure></testcase></testsuite></testsuites>

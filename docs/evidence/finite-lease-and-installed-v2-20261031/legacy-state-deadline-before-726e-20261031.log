@@ -1,0 +1,72 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+__ test_narrower_original_state_deadline_is_not_lost_at_writer_commit[False] ___
+
+env = (<sim2act.db.Store object at 0x7f3d45894da0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-157/test_na...efba53c29341718964d3641a4864a6', 'user_5670db00a39d45068864e65dc9c75887', 'proj_7a7a8907a23f415ab54cc734d35c89ba', ...)
+snapshot = False
+
+    @pytest.mark.parametrize('snapshot',[False,True])
+    def test_narrower_original_state_deadline_is_not_lost_at_writer_commit(env,snapshot):
+        worker,job=started(env,1.5)
+        if snapshot:worker.store._enable_local_model_snapshots()
+        original_deadline=time.time()+.6
+        state=dict(lock=threading.Lock(),lease_until=job['lease_until'],deadline=original_deadline)
+        caught=None;callback=[]
+        try:
+            with runtime._model_settlement_writer(worker,job,time.time()+5,state):
+                with runtime._model_writer_connection(worker,None,None) as (c,_):
+                    if snapshot:snapshots.promote(c)
+                    c.execute(update(runs).where(runs.c.id==job['id']).values(result={'state-deadline':'must-rollback'}))
+                    def consume(connection):
+                        callback.append(time.time()<original_deadline)
+                        threading.Event().wait(max(0,original_deadline-time.time())+.03)
+                    event.listen(c,'commit',consume)
+        except (DomainError,snapshots.SnapshotChanged) as error:caught=type(error).__name__
+        with worker.store.engine.connect() as c:
+            value=c.execute(select(runs.c.result).where(runs.c.id==job['id'])).scalar_one()
+        assert callback==[True]
+>       assert value is None,{'persisted':value,'caught':caught,'expired_state_deadline':time.time()>original_deadline}
+E       AssertionError: {'persisted': {'state-deadline': 'must-rollback'}, 'caught': None, 'expired_state_deadline': True}
+E       assert {'state-deadline': 'must-rollback'} is None
+
+tests/test_legacy_settlement_interval.py:175: AssertionError
+___ test_narrower_original_state_deadline_is_not_lost_at_writer_commit[True] ___
+
+env = (<sim2act.db.Store object at 0x7f3d44e7dfd0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-157/test_na...a13fc350f8411a82fd6c72599735a9', 'user_10430f52850149d9846536b9804acee5', 'proj_6f028870c49443a5a309afb619753d93', ...)
+snapshot = True
+
+    @pytest.mark.parametrize('snapshot',[False,True])
+    def test_narrower_original_state_deadline_is_not_lost_at_writer_commit(env,snapshot):
+        worker,job=started(env,1.5)
+        if snapshot:worker.store._enable_local_model_snapshots()
+        original_deadline=time.time()+.6
+        state=dict(lock=threading.Lock(),lease_until=job['lease_until'],deadline=original_deadline)
+        caught=None;callback=[]
+        try:
+            with runtime._model_settlement_writer(worker,job,time.time()+5,state):
+                with runtime._model_writer_connection(worker,None,None) as (c,_):
+                    if snapshot:snapshots.promote(c)
+                    c.execute(update(runs).where(runs.c.id==job['id']).values(result={'state-deadline':'must-rollback'}))
+                    def consume(connection):
+                        callback.append(time.time()<original_deadline)
+                        threading.Event().wait(max(0,original_deadline-time.time())+.03)
+                    event.listen(c,'commit',consume)
+        except (DomainError,snapshots.SnapshotChanged) as error:caught=type(error).__name__
+        with worker.store.engine.connect() as c:
+            value=c.execute(select(runs.c.result).where(runs.c.id==job['id'])).scalar_one()
+        assert callback==[True]
+>       assert value is None,{'persisted':value,'caught':caught,'expired_state_deadline':time.time()>original_deadline}
+E       AssertionError: {'persisted': {'state-deadline': 'must-rollback'}, 'caught': None, 'expired_state_deadline': True}
+E       assert {'state-deadline': 'must-rollback'} is None
+
+tests/test_legacy_settlement_interval.py:175: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_legacy_settlement_interval.py::test_narrower_original_state_deadline_is_not_lost_at_writer_commit[False]
+FAILED tests/test_legacy_settlement_interval.py::test_narrower_original_state_deadline_is_not_lost_at_writer_commit[True]
+2 failed, 1 warning in 2.39s

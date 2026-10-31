@@ -1,5 +1,7 @@
 # Sim2Act
 
+> **最终限制候选：1a23c032（Linux x86_64／CPython3.12）**。[ZIP、一次启动步骤、版本与哈希](deliverables/limited-text-candidate-final-20261031/README.md)。已新安装并从源码目录外执行：新direct.v2单文本目标2次真实Intern、1739 tokens、6.39秒独立验收保存及首次重开，原键不重放；历史UNKNOWN和格式失败保留。旧SQLite30秒续租／提交及更窄state截止已补尾检，原120秒合同未改；安全修复不冒充性能达标。[分版本测试、失败及实际证据](docs/evidence/finite-lease-and-installed-v2-20261031/README.md)。默认模型关闭，非Windows EXE／正式Release，PG／大型Cold live及30秒稳定性能仍未验。
+
 > **可启动的限制候选：6424cc04（Linux x86_64／CPython3.12）**。[ZIP、版本与哈希](deliverables/limited-text-candidate-20261031/README.md)。已从wheel新安装并实际启动，显式单文本目标2次真实Intern、1477 tokens、5.16秒完成保存及首次重开；默认CLI关闭模型，自由目标明确拒绝。包不含运行时／依赖wheelhouse，也不是Windows EXE或正式Release。[实际安装、额外失败和范围](docs/evidence/limited-text-installed-20261031/README.md)。
 
 > **最新有限真实目标源码：fc978d31（2026-10-31）**。普通任务入口显式选择单文本逐字合同后，真实 Intern→原授权工具→独立验收→保存→首次新进程重开已通过：2次真实请求、1513 tokens、5.69秒，`SUCCEEDED / PASS_EXACT_READ_CONTRACT`，原键无重放；前次8秒超时的UNKNOWN保留在同一账本。302＋84项定向回归零失败／零跳过。[完整源码、真实失败／成功证据与范围](docs/evidence/intern-exact-goal-live-20261031/README.md)。默认模型仍关闭；通用语义、人工验收、正式PG／大型Cold真实模型整链及新版Windows不据此通过，30秒目标仍未稳定达到。旧实例续接与原58项修复见[前版记录](docs/evidence/text-current-target-20261031/README.md)。
