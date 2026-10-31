@@ -96,3 +96,72 @@ def test_prewrite_remains_original_read_domain(local_origin):
         facts,_=prepared(f,c,guard)
         assert r._raw_read_eligible(facts,'model-reserved') is False
         assert facts.model_reserved()==[]
+
+
+def test_unknown_control_mutate_then_restore_keeps_original_full_order(local_origin):
+    f=local_origin;calls=[];saved=f.inputs['history'][0]['body']
+    class UnknownControl:
+        def checkpoint(self,worker):
+            calls.append(True)
+            f.inputs['history'][0]['body']=(saved+b' transient drift') if len(calls)==1 else saved
+    with f.store.tx() as c,pb._source_reads(f.store,c):
+        with pytest.raises(DomainError):
+            with scope(f,c) as guard:
+                facts,_=prepared(f,c,guard)
+                f.store._local_model_control=UnknownControl()
+                assert r._raw_read_eligible(facts,'model-reserved') is False
+                facts.model_reserved()
+        assert calls==[True] and not guard.active
+
+
+def test_exact_local_registry_active_epoch_is_callback_free_read_domain(local_origin):
+    import time
+    from sim2act._sqlite_run_control import Registry
+    f=local_origin
+    with f.store.tx() as c,pb._source_reads(f.store,c),scope(f,c) as guard:
+        facts,_=prepared(f,c,guard,count=2,job_extra={'lease_until':time.time()+60})
+        control=Registry(f.store);f.store._local_model_control=control
+        with control.settlement(f.worker,facts.job,time.time()+60) as epoch:
+            assert r._raw_read_eligible(facts,'model-reserved') is True
+            before=epoch.checks
+            value=facts.model_reserved()
+            assert len(value)==2 and r._source_owned_code.image.same(value,facts._raw['model-reserved'])
+            assert epoch.checks-before==8
+            assert r._raw_read_eligible(facts,'model-reserved') is True
+        assert epoch.closed
+
+
+def test_real_registry_instance_shadow_is_not_fused(local_origin):
+    from sim2act._sqlite_run_control import Registry
+    f=local_origin;calls=[];saved=f.inputs['history'][0]['body']
+    def changed(worker):
+        calls.append(True)
+        f.inputs['history'][0]['body']=(saved+b' transient shadow') if len(calls)==1 else saved
+    with f.store.tx() as c,pb._source_reads(f.store,c):
+        with pytest.raises(DomainError):
+            with scope(f,c) as guard:
+                facts,_=prepared(f,c,guard)
+                control=Registry(f.store);control.checkpoint=changed
+                f.store._local_model_control=control
+                assert r._raw_read_eligible(facts,'model-reserved') is False
+                facts.model_reserved()
+        assert calls==[True] and not guard.active
+
+
+def test_shadowed_settlement_getattr_keeps_original_full_order(local_origin,monkeypatch):
+    import builtins
+    original=builtins.getattr;f=local_origin;calls=[];saved=f.inputs['history'][0]['body']
+    def shadow(value,name,default=None):
+        if name=='_local_model_control':
+            calls.append(True)
+            f.inputs['history'][0]['body']=(saved+b' transient getter') if len(calls)==1 else saved
+        return original(value,name,default)
+    with f.store.tx() as c,pb._source_reads(f.store,c):
+        with pytest.raises(DomainError):
+            with scope(f,c) as guard:
+                facts,_=prepared(f,c,guard)
+                with monkeypatch.context() as patch:
+                    patch.setattr(r._raw_read_settlement,'getattr',shadow,raising=False)
+                    assert r._raw_read_eligible(facts,'model-reserved') is False
+                    facts.model_reserved()
+        assert calls==[True] and not guard.active

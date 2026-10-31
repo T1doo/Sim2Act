@@ -52,6 +52,7 @@ from . import _cold_typed_native_candidate as _typed_native_code
 from . import db as _raw_seed_db
 from . import _cold_source_packet as _source_owned_code
 from . import _cold_use_manifest as _manifest_code
+from . import _sqlite_run_control as _raw_read_control
 _SOURCE_OWNED_CHECK = _source_owned_code.CHECK
 _SOURCE_BINDING_TYPE = _source_owned_code._BINDING
 _SOURCE_VIEW_TYPE = _source_owned_code.image.View
@@ -2633,7 +2634,9 @@ _RAW_READ_GRAPH_FIELDS = ('phase', '_accounted_frontier', '_typed_native_candida
 _RAW_DYNAMIC_SPECS = (
     (_RawWorker, ('store', '_store', 's', 'id', 'pa_trial', 'stop', 'goal_planner_transport',
         '_journal_trial_store', '_journal_trial_binding', '_journal_trial_drift', '_settlement_interval')),
-    (Store, ('engine', 'test_only', 'sqlite')),
+    (Store, ('engine', 'test_only', 'sqlite', '_local_model_control')),
+    (_raw_read_control.Registry, ('store','local','lock','active','checkpoint')),
+    (_raw_read_control.Epoch, ('worker','closed','checks','last_check','max_check_gap','commands','__setattr__')),
     (_ColdRunRawSeed, ('store', 'connection', 'guard', '_origin_guard', 'audit', 'key', 'job', 'attempt_rows', 'operation_rows')),
     (_raw_read_pb._ColdSourceAuditFacts, ('prefix', 'key', 'original_audit_rows', 'rows', 'digest')),
     (_raw_read_pb._ColdSourceAuditPrefix, ('guard', '_origin_guard', 'key', 'user', 'pid', 'rid', 'scope', 'seal', 'original', 'rows')),
@@ -2659,6 +2662,15 @@ _RAW_DYNAMIC_TIME = _raw_read_settlement.time
 _RAW_DYNAMIC_CLOCKS = (_RAW_DYNAMIC_TIME.time, _RAW_DYNAMIC_TIME.monotonic)
 _RAW_DYNAMIC_IDENT = (get_ident, _raw_read_pb.get_ident)
 _RAW_DYNAMIC_SHA = hashlib.sha256
+_RAW_CONTROL_CLASS = _raw_read_control.Registry
+_RAW_CONTROL_EPOCH = _raw_read_control.Epoch
+_RAW_CONTROL_CHECKPOINT = _raw_read_control.Registry.checkpoint
+_RAW_CONTROL_CHECKPOINT_CODE = _RAW_CONTROL_CHECKPOINT.__code__
+_RAW_CONTROL_LOCK_TYPE = type(Lock())
+_RAW_CONTROL_LOCAL_TYPE = type(_raw_read_control.threading.local())
+_RAW_CONTROL_BUILTINS = tuple((name,vars(_raw_read_builtins)[name],
+    vars(_raw_read_control).get(name,_RAW_READ_MISS),
+    vars(_raw_read_settlement).get(name,_RAW_READ_MISS)) for name in ('getattr','max','tuple'))
 
 
 def _raw_dynamic_eligible(facts, guard):
@@ -2686,6 +2698,45 @@ def _raw_dynamic_eligible(facts, guard):
             or type(wd.get('pa_trial')) is not _RawBinding
             or wd['pa_trial'] is not g.get('binding') or wd.get('stop') is not g.get('stop')):
         return False
+    if any(vars(_raw_read_builtins).get(name) is not original
+            or vars(_raw_read_control).get(name,_RAW_READ_MISS) is not control_shadow
+            or vars(_raw_read_settlement).get(name,_RAW_READ_MISS) is not settlement_shadow
+            for name,original,control_shadow,settlement_shadow in _RAW_CONTROL_BUILTINS):
+        return False
+    control=sd.get('_local_model_control')
+    if control is not None:
+        # checkpoint() is an original dynamic boundary. Unknown controls can
+        # mutate/restore inputs BETWEEN checks, so keep their original full
+        # ordering. Only the exact callback-free local Registry may be fused.
+        if (type(control) is not _RAW_CONTROL_CLASS
+                or _counter_getattr_static(control,'checkpoint') is not _RAW_CONTROL_CHECKPOINT
+                or _RAW_CONTROL_CHECKPOINT.__code__ is not _RAW_CONTROL_CHECKPOINT_CODE
+                or vars(_raw_read_control).get('time') is not _RAW_DYNAMIC_TIME):
+            return False
+        control_values=object.__getattribute__(control,'__dict__')
+        if (type(control_values) is not dict or not all(type(key) is str for key in control_values)
+                or control_values.get('store') is not store
+                or type(control_values.get('lock')) is not _RAW_CONTROL_LOCK_TYPE
+                or type(control_values.get('local')) is not _RAW_CONTROL_LOCAL_TYPE):
+            return False
+        # _thread._local exposes its per-thread dict through its own fixed C
+        # getter, not object.__getattribute__. Exact type above excludes user
+        # __getattribute__/__getattr__ hooks.
+        local_values=_RAW_CONTROL_LOCAL_TYPE.__getattribute__(control_values['local'],'__dict__')
+        if type(local_values) is not dict or not all(type(key) is str for key in local_values):
+            return False
+        epoch=local_values.get('epoch')
+        if epoch is not None:
+            if type(epoch) is not _RAW_CONTROL_EPOCH:
+                return False
+            epoch_values=object.__getattribute__(epoch,'__dict__')
+            if (type(epoch_values) is not dict or not all(type(key) is str for key in epoch_values)
+                    or epoch_values.get('worker') is not w or type(epoch_values.get('closed')) is not bool
+                    or type(epoch_values.get('checks')) is not int
+                    or type(epoch_values.get('last_check')) is not float
+                    or type(epoch_values.get('max_check_gap')) is not float
+                    or type(epoch_values.get('commands')) is not set):
+                return False
     settings = object.__getattribute__(wd['s'], '__dict__')
     saved = g.get('settings_values')
     if (type(settings) is not dict or type(saved) is not dict
@@ -5887,10 +5938,13 @@ _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_
     '_prove_node_from_facts','_prove_node','_prove_pending_from_facts','_prove_pending',
     'messages','parse','_anchor','strict_json','response_archive'),
     (_ColdGraphRead,_ColdTrialGraph,_ColdRunRawSeed,_ColdRunFacts,_ColdAuditSeed,
+        _RAW_CONTROL_CLASS,_RAW_CONTROL_EPOCH,
         _generation_fact_code._GenerationFactsReader,_generation_fact_code._ColdGenerationRawSeed,
         _release_fact_code._ColdReleasePrefix,_release_fact_code._ColdReleaseFacts,
         _release_apps_code._ColdCandidatePrefix,_release_apps_code._ColdGraphOriginFacts),
-    constants=('AppManifest','_COLD_RELEASE_ROW_ENTRY','_release_apps_code','_release_fact_code','_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_source_owned_code','_manifest_code','_SOURCE_VIEW_TYPE','_SOURCE_VIEW_PIN','_SOURCE_OWNER_TYPE','_SOURCE_OWNER_PIN'),
+    constants=('AppManifest','_COLD_RELEASE_ROW_ENTRY','_release_apps_code','_release_fact_code','_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_source_owned_code','_manifest_code','_SOURCE_VIEW_TYPE','_SOURCE_VIEW_PIN','_SOURCE_OWNER_TYPE','_SOURCE_OWNER_PIN',
+        '_raw_read_control','_RAW_CONTROL_CLASS','_RAW_CONTROL_EPOCH','_RAW_CONTROL_CHECKPOINT',
+        '_RAW_CONTROL_CHECKPOINT_CODE','_RAW_CONTROL_LOCK_TYPE','_RAW_CONTROL_LOCAL_TYPE','_RAW_CONTROL_BUILTINS'),
     helpers=((vars(_generation_fact_code),('_generation_plain','_generation_mapping',
         '_history_core','_cold_generation_reader','_cold_generation_source','_cold_history_from_source',
         '_cold_candidate_from_history','_parse_candidate_core','_read_receipt_core',
