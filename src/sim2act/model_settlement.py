@@ -105,8 +105,13 @@ def interval(worker, job, attempt_id, deadline, state):
     if state is not None:
         with state["lock"]:
             fatal = state.get("fatal_heartbeat")
+            original_deadline = state.get("deadline", False)
         if fatal is not None:
             raise fatal
+        if original_deadline is not None:
+            _require(type(original_deadline) in (int, float) and math.isfinite(original_deadline),
+                     "Finite original state deadline required")
+            cutoff = min(cutoff, original_deadline)
     def booking_check():
         _require(not worker.stop.is_set() and time.monotonic() < booking_deadline
             and time.time() < min(current['lease_until'], lease, cutoff),
