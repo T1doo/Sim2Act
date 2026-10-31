@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="12" skipped="28" tests="57" time="5.365" timestamp="2026-10-31T18:23:36.021985+00:00" hostname="ebba0266b3c5"><testcase classname="" name="test_complete_builtin_capture_preserves_types_and_duplicates_dag" time="0.001" /><testcase classname="" name="test_unfamiliar_cycle_and_deep_values_select_original_before_capture" time="0.001" /><testcase classname="" name="test_native_execution_failure_is_not_retried" time="0.000" /><testcase classname="" name="test_left_capture_precedes_right_and_neither_borrows" time="0.000" /><testcase classname="" name="test_unknown_mapping_helper_uses_original_once" time="0.000" /><testcase classname="" name="test_native_equality_keeps_exact_types_and_nan_semantics" time="0.000" /><testcase classname="" name="test_alias_split_merge_swap_matrix" time="0.004" /><testcase classname="" name="test_complete_content_type_order_float_bits[&lt;lambda&gt;0]" time="0.000" /><testcase classname="" name="test_complete_content_type_order_float_bits[&lt;lambda&gt;1]" time="0.000" /><testcase classname="" name="test_complete_content_type_order_float_bits[&lt;lambda&gt;2]" time="0.000" /><testcase classname="" name="test_complete_content_type_order_float_bits[&lt;lambda&gt;3]" time="0.000" /><testcase classname="" name="test_complete_content_type_order_float_bits[&lt;lambda&gt;4]" time="0.000" /><testcase classname="" name="test_complete_content_type_order_float_bits[&lt;lambda&gt;5]" time="0.000" /><testcase classname="" name="test_limits_generated_fields_reducer_labels_and_global_aliases" time="0.001" /><testcase classname="" name="test_row_hidden_data_and_metadata_cross_aliases" time="0.000" /><testcase classname="" name="test_scope_binding_and_bounded_unsupported" time="0.000" /><testcase classname="" name="test_complete_graph_match_drops_encoding_but_dynamic_is_live" time="0.456"><failure message="AssertionError: The body must reach its own rejection assertions&#10;assert False">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f521e2a9490&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f521e0f0920&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+
+    def test_complete_graph_match_drops_encoding_but_dynamic_is_live(local_origin):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), rejecting_scope(f, c) as graph:
+                                                              ^^^^^^^^^^^^^^^^^^^^^
+
+../Sim2Act/tests/test_cold_graph_structure.py:136: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=&lt;sim2act.db.Store object at 0x7f521e2a9490&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f521e0f0920&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f521e2a9730&gt;
+
+    @contextmanager
+    def rejecting_scope(f, c):
+        finished = False
+        with pytest.raises(DomainError):
+            with scope(f, c) as graph:
+                yield graph
+                finished = True
+&gt;       assert finished, "The body must reach its own rejection assertions"
+E       AssertionError: The body must reach its own rejection assertions
+E       assert False
+
+../Sim2Act/tests/test_cold_graph_structure.py:130: AssertionError</failure></testcase><testcase classname="" name="test_current_dynamic_or_content_changes_still_reject[stop]" time="0.471"><failure message="AssertionError: The body must reach its own rejection assertions&#10;assert False">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f521e139220&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f521c70a420&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+change = 'stop'
+
+    @pytest.mark.parametrize('change', ['stop', 'epoch', 'scope', 'role', 'contract'])
+    def test_current_dynamic_or_content_changes_still_reject(local_origin, change):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), rejecting_scope(f, c) as graph:
+                                                              ^^^^^^^^^^^^^^^^^^^^^
+
+../Sim2Act/tests/test_cold_graph_structure.py:151: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=&lt;sim2act.db.Store object at 0x7f521e139220&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f521c70a420&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f521e173620&gt;
+
+    @contextmanager
+    def rejecting_scope(f, c):
+        finished = False
+        with pytest.raises(DomainError):
+            with scope(f, c) as graph:
+                yield graph
+                finished = True
+&gt;       assert finished, "The body must reach its own rejection assertions"
+E       AssertionError: The body must reach its own rejection assertions
+E       assert False
+
+../Sim2Act/tests/test_cold_graph_structure.py:130: AssertionError</failure></testcase><testcase classname="" name="test_current_dynamic_or_content_changes_still_reject[epoch]" time="0.282"><failure message="AssertionError: The body must reach its own rejection assertions&#10;assert False">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f521d9a2420&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f5217c2a420&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+change = 'epoch'
+
+    @pytest.mark.parametrize('change', ['stop', 'epoch', 'scope', 'role', 'contract'])
+    def test_current_dynamic_or_content_changes_still_reject(local_origin, change):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), rejecting_scope(f, c) as graph:
+                                                              ^^^^^^^^^^^^^^^^^^^^^
+
+../Sim2Act/tests/test_cold_graph_structure.py:151: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=&lt;sim2act.db.Store object at 0x7f521d9a2420&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f5217c2a420&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f521d9a2ea0&gt;
+
+    @contextmanager
+    def rejecting_scope(f, c):
+        finished = False
+        with pytest.raises(DomainError):
+            with scope(f, c) as graph:
+                yield graph
+                finished = True
+&gt;       assert finished, "The body must reach its own rejection assertions"
+E       AssertionError: The body must reach its own rejection assertions
+E       assert False
+
+../Sim2Act/tests/test_cold_graph_structure.py:130: AssertionError</failure></testcase><testcase classname="" name="test_current_dynamic_or_content_changes_still_reject[scope]" time="0.457"><failure message="AssertionError: The body must reach its own rejection assertions&#10;assert False">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f521e0f1700&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f521dd9eb40&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+change = 'scope'
+
+    @pytest.mark.parametrize('change', ['stop', 'epoch', 'scope', 'role', 'contract'])
+    def test_current_dynamic_or_content_changes_still_reject(local_origin, change):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), rejecting_scope(f, c) as graph:
+                                                              ^^^^^^^^^^^^^^^^^^^^^
+
+../Sim2Act/tests/test_cold_graph_structure.py:151: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=&lt;sim2act.db.Store object at 0x7f521e0f1700&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f521dd9eb40&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f5217cf0d10&gt;
+
+    @contextmanager
+    def rejecting_scope(f, c):
+        finished = False
+        with pytest.raises(DomainError):
+            with scope(f, c) as graph:
+                yield graph
+                finished = True
+&gt;       assert finished, "The body must reach its own rejection assertions"
+E       AssertionError: The body must reach its own rejection assertions
+E       assert False
+
+../Sim2Act/tests/test_cold_graph_structure.py:130: AssertionError</failure></testcase><testcase classname="" name="test_current_dynamic_or_content_changes_still_reject[role]" time="0.242"><failure message="AssertionError: The body must reach its own rejection assertions&#10;assert False">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f5217c91fa0&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f521c426c60&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+change = 'role'
+
+    @pytest.mark.parametrize('change', ['stop', 'epoch', 'scope', 'role', 'contract'])
+    def test_current_dynamic_or_content_changes_still_reject(local_origin, change):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), rejecting_scope(f, c) as graph:
+                                                              ^^^^^^^^^^^^^^^^^^^^^
+
+../Sim2Act/tests/test_cold_graph_structure.py:151: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=&lt;sim2act.db.Store object at 0x7f5217c91fa0&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f521c426c60&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f5217c91520&gt;
+
+    @contextmanager
+    def rejecting_scope(f, c):
+        finished = False
+        with pytest.raises(DomainError):
+            with scope(f, c) as graph:
+                yield graph
+                finished = True
+&gt;       assert finished, "The body must reach its own rejection assertions"
+E       AssertionError: The body must reach its own rejection assertions
+E       assert False
+
+../Sim2Act/tests/test_cold_graph_structure.py:130: AssertionError</failure></testcase><testcase classname="" name="test_current_dynamic_or_content_changes_still_reject[contract]" time="0.410"><failure message="AssertionError: The body must reach its own rejection assertions&#10;assert False">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f521788dfa0&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f521d9c2d20&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+change = 'contract'
+
+    @pytest.mark.parametrize('change', ['stop', 'epoch', 'scope', 'role', 'contract'])
+    def test_current_dynamic_or_content_changes_still_reject(local_origin, change):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), rejecting_scope(f, c) as graph:
+                                                              ^^^^^^^^^^^^^^^^^^^^^
+
+../Sim2Act/tests/test_cold_graph_structure.py:151: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=&lt;sim2act.db.Store object at 0x7f521788dfa0&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f521d9c2d20&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f521c18f350&gt;
+
+    @contextmanager
+    def rejecting_scope(f, c):
+        finished = False
+        with pytest.raises(DomainError):
+            with scope(f, c) as graph:
+                yield graph
+                finished = True
+&gt;       assert finished, "The body must reach its own rejection assertions"
+E       AssertionError: The body must reach its own rejection assertions
+E       assert False
+
+../Sim2Act/tests/test_cold_graph_structure.py:130: AssertionError</failure></testcase><testcase classname="" name="test_add_rebuilds_and_unknown_configuration_uses_original_sha" time="0.241"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f5217bf1d90&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f52178a5c40&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f5217f81250&gt;
+
+    def test_add_rebuilds_and_unknown_configuration_uses_original_sha(local_origin, monkeypatch):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as graph:
+                                                              ^^^^^^^^^^^
+
+../Sim2Act/tests/test_cold_graph_structure.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+limited-text-installed-6424cc04-20261031/lib/python3.12/site-packages/sim2act/natural_spec_runtime.py:2554: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+limited-text-installed-6424cc04-20261031/lib/python3.12/site-packages/sim2act/natural_spec_runtime.py:2306: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+limited-text-installed-6424cc04-20261031/lib/python3.12/site-packages/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="" name="test_native_original_reducer_error_is_not_replayed" time="0.397"><failure message="AssertionError: The body must reach its own rejection assertions&#10;assert False">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f5217ab3440&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f521c1d4050&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+
+    def test_native_original_reducer_error_is_not_replayed(local_origin):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), rejecting_scope(f, c) as graph:
+                                                              ^^^^^^^^^^^^^^^^^^^^^
+
+../Sim2Act/tests/test_cold_graph_structure.py:203: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+f = namespace(store=&lt;sim2act.db.Store object at 0x7f5217ab3440&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f521c1d4050&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+c = &lt;sqlalchemy.engine.base.Connection object at 0x7f521da8c920&gt;
+
+    @contextmanager
+    def rejecting_scope(f, c):
+        finished = False
+        with pytest.raises(DomainError):
+            with scope(f, c) as graph:
+                yield graph
+                finished = True
+&gt;       assert finished, "The body must reach its own rejection assertions"
+E       AssertionError: The body must reach its own rejection assertions
+E       assert False
+
+../Sim2Act/tests/test_cold_graph_structure.py:130: AssertionError</failure></testcase><testcase classname="" name="test_unknown_graph_binding_and_row_lookup_getters_deopt_before_callbacks" time="0.227"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f5217fc3290&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f5217c0a420&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f5217fc34d0&gt;
+
+    def test_unknown_graph_binding_and_row_lookup_getters_deopt_before_callbacks(local_origin, monkeypatch):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as graph:
+                                                              ^^^^^^^^^^^
+
+../Sim2Act/tests/test_cold_graph_structure.py:218: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+limited-text-installed-6424cc04-20261031/lib/python3.12/site-packages/sim2act/natural_spec_runtime.py:2554: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+limited-text-installed-6424cc04-20261031/lib/python3.12/site-packages/sim2act/natural_spec_runtime.py:2306: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+limited-text-installed-6424cc04-20261031/lib/python3.12/site-packages/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="" name="test_pre_scope_fresh_complete_walk_and_original_frontier_selection" time="0.428"><failure message="sim2act.errors.DomainError: Complete Source code changed">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f521d9c3800&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f5217f9c1d0&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+
+    def test_pre_scope_fresh_complete_walk_and_original_frontier_selection(local_origin):
+        f = local_origin
+&gt;       with f.store.tx() as c, pb._source_reads(f.store, c), r._cold_graph_read(
+            f.worker, c, f.inputs, f.roles, 'pre'
+        ) as graph:
+
+../Sim2Act/tests/test_cold_graph_structure.py:241: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+limited-text-installed-6424cc04-20261031/lib/python3.12/site-packages/sim2act/natural_spec_runtime.py:2554: in _cold_graph_read
+    guard = _ColdGraphRead(worker, c, inputs, role_limits, phase, scope)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+limited-text-installed-6424cc04-20261031/lib/python3.12/site-packages/sim2act/natural_spec_runtime.py:2306: in __init__
+    checker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_verify = &lt;built-in function verify_code&gt;
+
+    def current(_verify=None if not _SOURCE_OK else native.verify_code):
+        # The immutable native callable is an import-time default, independent of
+        # mutable require/module aliases. A changed qualifier cannot ignore False.
+        if (_verify is None or _verify() is not True or native is not _MODULE or not _SOURCE_OK
+                or any(vars(native).get(name) is not value for name,value in _ENTRIES)):
+&gt;           raise DomainError('VERSION_CONFLICT','Complete Source code changed')
+E           sim2act.errors.DomainError: Complete Source code changed
+
+limited-text-installed-6424cc04-20261031/lib/python3.12/site-packages/sim2act/_cold_source_packet.py:85: DomainError</failure></testcase><testcase classname="" name="test_pre_scope_content_change_still_invalidates" time="0.444"><failure message="assert False">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f521c75d7f0&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f521dea36e0&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+
+    def test_pre_scope_content_change_still_invalidates(local_origin):
+        f = local_origin
+        finished = False
+        with f.store.tx() as c, pb._source_reads(f.store, c):
+            with pytest.raises(DomainError):
+                with r._cold_graph_read(f.worker, c, f.inputs, f.roles, 'pre') as graph:
+                    graph.add('pre-structure', [[1]])
+                    warm(f, c, graph)
+                    graph.inputs['pre-structure'][0].append(2)
+                    with pytest.raises(DomainError):
+                        graph.check(f.store, c)
+                    assert not graph.active and '_structure_state' not in vars(graph)
+                    finished = True
+&gt;           assert finished
+E           assert False
+
+../Sim2Act/tests/test_cold_graph_structure.py:282: AssertionError</failure></testcase><testcase classname="" name="test_frontier_branch_clears_snapshot_and_keeps_original_rejection" time="0.301"><failure message="assert False">local_origin = namespace(store=&lt;sim2act.db.Store object at 0x7f521c364f50&gt;, worker=&lt;sim2act.worker.Worker object at 0x7f521d979c40&gt;, ...}, 'history': [{'id': 'one', 'body': b'full original bytes'}, {'id': 'one', 'body': b'duplicate retained'}]}, trace=[])
+
+    def test_frontier_branch_clears_snapshot_and_keeps_original_rejection(local_origin):
+        from sim2act._cold_accounted_native import _Frontier
+    
+        f = local_origin
+        finished = False
+        with f.store.tx() as c, pb._source_reads(f.store, c):
+            with pytest.raises(DomainError):
+                with r._cold_graph_read(f.worker, c, f.inputs, f.roles, 'pre') as graph:
+                    warm(f, c, graph)
+                    # Deliberately unissued: the ORIGINAL frontier must reject it.
+                    # It supplies no mock check method, permit or accepted result.
+                    frontier = object.__new__(_Frontier)
+                    frontier.graph, frontier.mode = graph, object()
+                    vars(graph)['_accounted_frontier'] = frontier
+                    monitoring = sys.monitoring
+                    slot = next(i for i in (4, 3, 5) if monitoring.get_tool(i) is None)
+                    monitoring.use_tool_id(slot, 'original frontier branch witness')
+                    calls = []
+    
+                    def entered(*args):
+                        calls.append('_structure_state' not in vars(graph))
+    
+                    monitoring.register_callback(slot, monitoring.events.PY_START, entered)
+                    monitoring.set_local_events(slot, _Frontier.check.__code__, monitoring.events.PY_START)
+                    try:
+                        with pytest.raises(DomainError):
+                            graph.check(f.store, c)
+                    finally:
+                        monitoring.set_local_events(slot, _Frontier.check.__code__, 0)
+                        monitoring.free_tool_id(slot)
+                    assert calls == [True]
+                    assert not graph.active and '_structure_state' not in vars(graph)
+                    finished = True
+&gt;           assert finished
+E           assert False
+
+../Sim2Act/tests/test_cold_graph_structure.py:318: AssertionError</failure></testcase><testcase classname="" name="test_original_four_counterexamples[test_reusing_actual_caps_dict_merges_an_originally_separate_graph_alias]" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:50: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_original_four_counterexamples[test_reused_equal_keys_change_pickle_alias_to_the_current_graph]" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:50: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_original_four_counterexamples[test_copy_before_fresh_dfs_can_hide_a_later_current_scalar]" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:50: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_original_four_counterexamples[test_unconditional_patch_does_not_repair_early_key_identity_or_order]" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:50: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_actual_contract_fresh_bytes_key_identity_and_aliases" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:57: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_original_row_hidden_storage_and_index_alias_wire" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:72: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_strict_types_dag_omissions_and_cycles" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:126: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_unknown_types_and_mixed_error_priority[value0]" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:144: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_unknown_types_and_mixed_error_priority[value1]" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:144: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_unknown_types_and_mixed_error_priority[value2]" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:144: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_unknown_types_and_mixed_error_priority[value3]" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:144: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_unknown_types_and_mixed_error_priority[value4]" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:144: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_unknown_types_and_mixed_error_priority[1]" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:144: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_incomplete_storage[&lt;lambda&gt;0]" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:152: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_incomplete_storage[&lt;lambda&gt;1]" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:152: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_incomplete_storage[&lt;lambda&gt;2]" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:152: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_incomplete_storage[&lt;lambda&gt;3]" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:152: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_incomplete_storage[&lt;lambda&gt;4]" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:152: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_descriptor_exception_once_and_short_circuit" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:166: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_builtin_getters_and_metadata_order" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:188: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_foreign_omission_key_after_original_gate" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:232: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_real_iterators_observe_child_callback_mutations" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:260: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_bad_native_abi_and_require_fail_closed" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:298: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_adapter_unknown_helpers_retains_python_before_native" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:308: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_repeated_cleanup_and_recursion_safety" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:318: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_recursion_difference_blocks_runtime_qualification" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:335: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_signal_failure_propagates_and_next_call_is_fresh" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:346: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_actual_pb_component_cost" time="0.000"><skipped type="pytest.skip" message="Explicit native test build not requested">/workspace/Sim2Act/tests/test_cold_typed_native.py:366: Explicit native test build not requested</skipped></testcase><testcase classname="" name="test_semantically_malformed_view_nodes_rejected_in_isolated_process" time="0.021" /></testsuite></testsuites>
