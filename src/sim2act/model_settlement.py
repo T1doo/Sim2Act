@@ -55,6 +55,13 @@ def original_interval(worker, job, deadline, state):
         and 0 < lease_seconds <= 30, 'Finite original ordinary lease required')
     started_mono, started_wall = time.monotonic(), time.time()
     cutoff = min(deadline, run_deadline)
+    if state is not None:
+        with state['lock']:
+            original_deadline = state['deadline']
+        if original_deadline is not None:
+            _require(type(original_deadline) in (int, float) and math.isfinite(original_deadline),
+                     'Finite original state deadline required')
+            cutoff = min(cutoff, original_deadline)
     _require(not stop.is_set() and started_wall < cutoff, 'Original settlement interval ended')
     if state is None:
         lease = store.heartbeat(owner, job['id'], job['fence'], lease_seconds,

@@ -150,3 +150,27 @@ def test_expired_publication_state_cannot_fabricate_committed_renewal(env):
     with worker.store.engine.connect() as c:
         assert c.execute(select(runs.c.lease_until).where(runs.c.id==job['id'])).scalar_one()==job['lease_until']
     assert state['lease_until']==0 and 'sync_renewal' not in state
+
+
+@pytest.mark.parametrize('snapshot',[False,True])
+def test_narrower_original_state_deadline_is_not_lost_at_writer_commit(env,snapshot):
+    worker,job=started(env,1.5)
+    if snapshot:worker.store._enable_local_model_snapshots()
+    original_deadline=time.time()+.6
+    state=dict(lock=threading.Lock(),lease_until=job['lease_until'],deadline=original_deadline)
+    caught=None;callback=[]
+    try:
+        with runtime._model_settlement_writer(worker,job,time.time()+5,state):
+            with runtime._model_writer_connection(worker,None,None) as (c,_):
+                if snapshot:snapshots.promote(c)
+                c.execute(update(runs).where(runs.c.id==job['id']).values(result={'state-deadline':'must-rollback'}))
+                def consume(connection):
+                    callback.append(time.time()<original_deadline)
+                    threading.Event().wait(max(0,original_deadline-time.time())+.03)
+                event.listen(c,'commit',consume)
+    except (DomainError,snapshots.SnapshotChanged) as error:caught=type(error).__name__
+    with worker.store.engine.connect() as c:
+        value=c.execute(select(runs.c.result).where(runs.c.id==job['id'])).scalar_one()
+    assert callback==[True]
+    assert value is None,{'persisted':value,'caught':caught,'expired_state_deadline':time.time()>original_deadline}
+    assert caught is not None
