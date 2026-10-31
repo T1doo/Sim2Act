@@ -2629,10 +2629,15 @@ class _ColdGraphRead:
         frontier = getattr(self, '_accounted_frontier', None)
         if frontier is not None:
             from ._cold_accounted_native import _Frontier
-            if type(frontier) is _Frontier:
-                if _revoke is not None and type(_revoke) is _ColdNativeFunctionType:
-                    _revoke(frontier)
+            # A substituted foreign frontier is not ours to revoke. The C
+            # issuer above already closes our original child independently
+            # of this mutable field, including a removed/replaced child.
+            fields = vars(frontier) if type(frontier) is _Frontier else None
+            if (type(fields) is dict and all(type(key) is str for key in fields)
+                    and fields.get('graph') is self):
                 vars(frontier).pop('_structure_state', None)
+            else:
+                frontier = None
         # Valid flags are exact bools. A corrupt flag must neither dispatch
         # __bool__ nor retain an otherwise exact, scope-owned allocation.
         if was_active is not False and frontier is not None:

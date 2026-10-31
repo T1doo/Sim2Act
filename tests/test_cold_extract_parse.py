@@ -1,22 +1,27 @@
 """Synthetic persisted pair error ownership; zero model/worker execution."""
 
+from contextlib import contextmanager
 import copy
+import sys
 
 import pytest
 from sqlalchemy import event, insert
-from test_cold_binding_fact_leaves import local_origin as local_origin
+from test_cold_binding_fact_leaves import graph_origin as graph_origin
 from test_cold_binding_fact_leaves import no_external_transport as no_external_transport
 from test_cold_release_stages import read_scope
 
-from sim2act import pa_spec_apps as spec
 from sim2act import pb_natural_specs as pb
+from sim2act import natural_spec_runtime as runtime
 from sim2act.db import delivery_graph_requests, fingerprint, new_id, task_extractions
 from sim2act.errors import DomainError
 
 
 @pytest.fixture
-def malformed_extract(local_origin, monkeypatch):
-    f = local_origin
+def malformed_extract(graph_origin):
+    # Exercise the actual persisted-pair boundary with the complete default
+    # code witness intact. The former fixture replaced unrelated origin and
+    # scope producers before Graph creation and never reached this boundary.
+    f = graph_origin
     key, rid = "synthetic-malformed-persisted-extract", new_id("run")
     request = dict(review=dict(source_run_id=rid,
         expected_source_proof_fingerprint="a" * 64,
@@ -42,27 +47,40 @@ def malformed_extract(local_origin, monkeypatch):
                 principal_id=f.user, kind=kind, request_key=key,
                 request_fingerprint=fingerprint(request), snapshot=snapshot,
                 fingerprint=fingerprint(snapshot)))
-    monkeypatch.setattr(spec, "scope_gate", lambda *a, **k: True)
     f.extract_key = key
     return f
 
 
-def test_owned_malformed_extract_pair_matches_old_controlled_error(malformed_extract, monkeypatch):
+@contextmanager
+def observe_entries(callback, *codes):
+    monitor = sys.monitoring
+    slot = next(i for i in (3, 5, 4) if monitor.get_tool(i) is None)
+    monitor.use_tool_id(slot, "Persisted-pair error boundary observation")
+    try:
+        monitor.register_callback(slot, monitor.events.PY_START, callback)
+        for code in codes:
+            monitor.set_local_events(slot, code, monitor.events.PY_START)
+        yield
+    finally:
+        for code in codes:
+            monitor.set_local_events(slot, code, 0)
+        monitor.register_callback(slot, monitor.events.PY_START, None)
+        monitor.free_tool_id(slot)
+
+
+def test_owned_malformed_extract_pair_matches_old_controlled_error(malformed_extract):
     f, parsed = malformed_extract, []
-    original_parser = pb._persisted_extract_input
-
-    def parser(value):
-        parsed.append("owned-parse")
-        return original_parser(value)
-
-    monkeypatch.setattr(pb, "_persisted_extract_input", parser)
+    parser_code = pb.ExtractInput.model_validate.__func__.__code__
     with f.store.tx() as c:
         with pytest.raises(DomainError) as old:
-            pb.verify(f.store, c, f.user, f.draft, f.limits)
+            # Use the same original controlled boundary as pb.verify, without
+            # replacing its unrelated scope authorization just to reach pair.
+            pb.controlled(pb.pair)(c, f.user, f.draft['id'], pb.EXTRACT, f.extract_key, pb.ExtractInput)
     with f.store.tx() as c, pb._source_reads(f.store, c):
-        with pytest.raises(DomainError) as strict:
+        with pytest.raises(DomainError) as strict, observe_entries(
+                lambda *args: parsed.append('owned-parse'), parser_code):
             with read_scope(f, c) as guard:
-                pb._cold_verify_prefix(f.store, c, f.user, f.draft, f.limits, guard, "cold")
+                pb._cold_extract_pair(f.store, c, f.user, f.draft['id'], f.extract_key, guard)
         assert not guard.active
     assert strict.value.public() == old.value.public()
     assert strict.value.code == "VERSION_CONFLICT"
@@ -70,8 +88,7 @@ def test_owned_malformed_extract_pair_matches_old_controlled_error(malformed_ext
     assert parsed == ["owned-parse"]
 
 
-def test_guard_valueerror_is_original_and_stops_before_second_lookup_or_parse(
-        malformed_extract, monkeypatch):
+def test_guard_valueerror_is_original_and_stops_before_second_lookup_or_parse(malformed_extract):
     f, lookups, parsed = malformed_extract, [], []
     changed = [False]
     original = ValueError("synthetic original read-pin callback")
@@ -81,25 +98,22 @@ def test_guard_valueerror_is_original_and_stops_before_second_lookup_or_parse(
             lookups.append(statement)
             changed[0] = True
 
-    def parser(value):
-        parsed.append(value)
-        pytest.fail("Owned parse ran after the first lookup's guard failure")
+    guard_code = runtime._ColdGraphRead.check.__code__
+    parser_code = pb.ExtractInput.model_validate.__func__.__code__
 
-    monkeypatch.setattr(pb, "_persisted_extract_input", parser)
+    def entered(code, offset):
+        if code is parser_code:
+            parsed.append('unexpected-parse')
+            pytest.fail("Owned parse ran after the first lookup's guard failure")
+        if changed[0]:
+            raise original
+
     event.listen(f.store.engine, "after_cursor_execute", after_sql)
     try:
         with f.store.tx() as c, pb._source_reads(f.store, c):
             with pytest.raises(ValueError) as caught:
-                with read_scope(f, c) as guard:
-                    check = guard.check
-
-                    def checked(store, connection):
-                        if changed[0]:
-                            raise original
-                        return check(store, connection)
-
-                    monkeypatch.setattr(guard, "check", checked)
-                    pb._cold_verify_prefix(f.store, c, f.user, f.draft, f.limits, guard, "cold")
+                with read_scope(f, c) as guard, observe_entries(entered, guard_code, parser_code):
+                    pb._cold_extract_pair(f.store, c, f.user, f.draft['id'], f.extract_key, guard)
         assert caught.value is original and not guard.active
         assert len(lookups) == 1 and parsed == []
     finally:
