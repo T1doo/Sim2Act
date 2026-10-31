@@ -74,7 +74,7 @@ class Worker:
 
     def reserve(self, run_id, fence, context, *, request_tools=None, verify_goal_source=False,
                 planner_request=False, generation_request=False, natural_spec_request=None,
-                _generation_heartbeat_state=None, _natural_heartbeat_state=None):
+                _generation_heartbeat_state=None, _natural_heartbeat_state=None, _exact_read_request=False):
         if _natural_heartbeat_state is not None and (natural_spec_request is None
                 or planner_request or generation_request or not self.store.sqlite):
             raise DomainError("PERMISSION_DENIED", "Natural heartbeat has the wrong request family")
@@ -102,7 +102,9 @@ class Worker:
             if planner_request or generation_request:
                 raise DomainError("PERMISSION_DENIED", "Reservation families cannot be combined")
             s = reservation_settings(self, natural_spec_request)
-        protocol_request = request_tools is not None and not planner_request and not generation_request and natural_spec_request is None
+        protocol_request = request_tools is not None and not planner_request and not generation_request and natural_spec_request is None and not _exact_read_request
+        if _exact_read_request and (request_tools is None or planner_request or generation_request or natural_spec_request is not None):
+            raise DomainError("PERMISSION_DENIED", "Exact-read request cannot borrow another request family")
         request_tools = definitions() if request_tools is None else request_tools
         wire_seal = None
         # Conservative byte envelope, not a claim of actual tokenizer usage.
@@ -145,7 +147,7 @@ class Worker:
                 dict(id=run_id, fence=fence, created_at=natural_spec_request["created_at"]),
                 _natural_heartbeat_state, deadline=natural_spec_request["deadline"])
         with reservation_writer, self.store.tx() as c:
-            if protocol_request or verify_goal_source:
+            if protocol_request or verify_goal_source or _exact_read_request:
                 owner = (
                     c.execute(
                         select(runs.c.principal_id, runs.c.project_id).where(runs.c.id == run_id)
@@ -165,6 +167,10 @@ class Worker:
                 and type(self.pa_trial.contract) is PBTrialContract else nullcontext())
             with proof_reads:
                 run = self.store.guard(c, run_id, fence)
+                from .exact_read import enforce_selection
+                selected_exact = enforce_selection(self.store, c, run)
+                if selected_exact is not None and selected_exact.exact_read is not None and not _exact_read_request:
+                    raise DomainError("PERMISSION_DENIED", "Original exact-read request family required")
                 from .natural_trial_runs import check_worker_tx
                 check_worker_tx(self, c, run_id)
                 if self.store.frozen_contract(c, run).ordinary_csv_report is not None:
@@ -189,6 +195,9 @@ class Worker:
                     raise DomainError("VERSION_CONFLICT", "Planner request changed")
             if verify_goal_source:
                 self.store.frozen_contract(c, run)
+            if _exact_read_request:
+                from .exact_read import before_send
+                before_send(self, c, run, context, request_tools, recorded=False)
             if run["status"] != "RUNNING":
                 raise DomainError("VERSION_CONFLICT")
             for rid in run["resource_refs"]:
@@ -356,8 +365,25 @@ class Worker:
             context["tools"] = max(context["tools"], run["context"]["tools"])
             c.execute(update(runs).where(runs.c.id == run_id).values(context=context))
 
-    def finish(self, run_id, fence, state, error=None, result=None, *, verify_goal_source=False):
-        with self.store.tx() as c:
+    def finish(self, run_id, fence, state, error=None, result=None, *, verify_goal_source=False, _exact_read=False):
+        tail = {}
+        def exact_clock():
+            if (self.stop.is_set() or self.id != tail["worker"]
+                    or time.time() >= tail["wall"] or time.monotonic() >= tail["mono"]):
+                raise DomainError("VERSION_CONFLICT", "Original exact-read completion interval ended")
+        def exact_check():
+            current = dict(c.execute(select(runs).where(runs.c.id == run_id)).mappings().one())
+            if fingerprint(current) != tail["postimage"]:
+                raise DomainError("VERSION_CONFLICT", "Exact-read terminal ownership changed")
+            if current["status"] == "SUCCEEDED":
+                from .exact_read import accepted_result
+                frozen_exact = self.store.frozen_contract(c, current)
+                if current["result"] != accepted_result(self.store, c, current, frozen_exact, current["result"]["answer"]):
+                    raise DomainError("VERIFICATION_FAILED", "Exact-read completion proof changed")
+            exact_clock()
+        commit_args = ({"_commit_check": exact_check, "_commit_clock_check": exact_clock}
+                       if _exact_read and self.store.sqlite else {})
+        with self.store.tx(**commit_args) as c:
             from .db import run_contracts
             from .goal_applications import source_scope_gate
 
@@ -373,6 +399,19 @@ class Worker:
                 )).mappings().one()
                 self.store.lock_project(c, owner["principal_id"], owner["project_id"])
             run = self.store.guard(c, run_id, fence)
+            from .exact_read import enforce_selection
+            selected_exact = enforce_selection(self.store, c, run)
+            if (not _exact_read and state in {"SUCCEEDED", "PARTIAL"}
+                    and selected_exact is not None and selected_exact.exact_read is not None):
+                raise DomainError("VERIFICATION_FAILED", "Exact-read success requires its complete terminal proof")
+            if _exact_read:
+                exact_contract = self.store.frozen_contract(c, run)
+                if exact_contract.exact_read is None:
+                    raise DomainError("PERMISSION_DENIED", "No prospective exact-read contract")
+                if run["worker_id"] != self.id:
+                    raise DomainError("VERSION_CONFLICT", "Original exact-read worker changed")
+                wall = min(run["lease_until"], run["created_at"] + exact_contract.limits.run_seconds)
+                tail.update(worker=self.id, wall=wall, mono=time.monotonic() + max(0, wall-time.time()))
             if verify_goal_source:
                 frozen = self.store.frozen_contract(c, run)
                 if frozen.application_generation is not None and state in {"SUCCEEDED", "PARTIAL"}:
@@ -404,6 +443,13 @@ class Worker:
                 state = "PAUSED"
             if self.store.has_unknown(c, run_id):
                 state = "RECONCILING" if run["cancel_intent"] else "WAITING_RESOURCE"
+            if _exact_read:
+                from .exact_read import accepted_result
+                if state == "SUCCEEDED":
+                    if not isinstance(result, dict) or result != accepted_result(self.store, c, run, exact_contract, result.get("answer")):
+                        raise DomainError("VERIFICATION_FAILED", "Whole exact-read goal has not passed")
+                else:
+                    result = None
             if csv_report:
                 # Only the complete independent composite check can authorize success.
                 from .ordinary_csv import accepted_result, active, confirmation
@@ -440,6 +486,9 @@ class Worker:
                         "resource.read",
                     )
                 self.store.authorize_receipts(c, run)
+            if _exact_read:
+                tail["postimage"] = fingerprint({**run, "status": state, "result": result,
+                    "error": error, "lease_until": 0.0, "version": run["version"] + 1})
             c.execute(
                 update(runs)
                 .where(runs.c.id == run_id)
@@ -452,6 +501,8 @@ class Worker:
                 )
             )
             self.store.event(c, run_id, "STATE", {"status": state, "error": error})
+            if _exact_read:
+                exact_check()
             if csv_report:
                 from .csv_full_report_instances import finish_tx as finish_report_instance
                 finish_report_instance(self.store, c, run_id, state, error)
@@ -546,6 +597,9 @@ class Worker:
         return None
 
     def process(self, run):
+        from .exact_read import enforce_selection
+        with self.store.tx() as c:
+            enforce_selection(self.store, c, run)
         from .natural_trial_runs import check_worker
         check_worker(self, run["id"])
         from .csv_dag import is_job as is_csv_dag
@@ -602,6 +656,10 @@ class Worker:
         ctx["messages"] = list(ctx["messages"])
         goal_tools = definitions()
         goal_input = {"goal": run["goal"], "resource_refs": run["resource_refs"]}
+        if contract.exact_read is not None:
+            from .exact_read import tools as exact_tools
+            goal_tools = exact_tools()
+            goal_input["exact_read_contract"] = contract.exact_read.model_dump()
         if contract.source_goal_card is not None:
             goal_tools = [t for t in goal_tools if t["function"]["name"] in
                           ({"resource.read", "data.aggregate_csv", "artifact.save_text"} if contract.artifact_delivery else
@@ -640,6 +698,10 @@ class Worker:
                     ),
                 },
             ]
+        if contract.exact_read is not None:
+            from .exact_read import initial_messages
+            if ctx["messages"][:2] != initial_messages(run, contract):
+                raise DomainError("VERSION_CONFLICT", "Exact-read resumed input changed")
         hb_stop = threading.Event()
         hb_committed = dict(lock=threading.Lock(), lease_until=run["lease_until"], failure=None)
 
@@ -722,12 +784,19 @@ class Worker:
                     # A validated final response imported by reconciliation is already complete.
                     pending = []
                 else:
-                    aid = self.reserve(rid, fence, ctx, verify_goal_source=contract.source_goal_card is not None)
+                    aid = self.reserve(rid, fence, ctx, verify_goal_source=contract.source_goal_card is not None,
+                        **({"request_tools": goal_tools, "_exact_read_request": True} if contract.exact_read is not None else {}))
                     start = time.monotonic()
                     raw = None
                     try:
                         check_heartbeat()
-                        raw = self.model.request(ctx["messages"], goal_tools)
+                        if contract.exact_read is not None:
+                            from .exact_read import before_send, send
+                            with self.store.tx() as c:
+                                before_send(self, c, self.store.guard(c, rid, fence), ctx, goal_tools, attempt_id=aid)
+                            raw = send(self, rid, fence, aid, ctx, goal_tools)
+                        else:
+                            raw = self.model.request(ctx["messages"], goal_tools)
                         msg, pending = parse_response(raw)
                         identity = returned_model_identity(
                             self.s.model, raw.get("model"), enforced=self.s.mode == "live"
@@ -855,6 +924,13 @@ class Worker:
                             current = self.store.guard(c, rid, fence)
                             artifact_result["artifact_delivery"] = report(self.store, c, current, contract, required=True)
                     # F1 only: receipts verified, semantic goal acceptance belongs to F2/F3.
+                    if contract.exact_read is not None:
+                        from .exact_read import accepted_result
+                        with self.store.tx() as c:
+                            current = self.store.guard(c, rid, fence)
+                            exact_result = accepted_result(self.store, c, current, contract, ctx["messages"][-1]["content"])
+                        self.finish(rid, fence, "SUCCEEDED", result=exact_result, _exact_read=True)
+                        return
                     self.finish(
                         rid,
                         fence,

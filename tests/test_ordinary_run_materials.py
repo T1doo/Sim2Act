@@ -41,7 +41,7 @@ def test_ordinary_run_explicit_materials_actual_http(env, tmp_path, case):
         with (tmp_path / "node.stderr").open("w") as errors:
             process = subprocess.Popen(["node", "tests/ordinary_run_materials.cjs", str(path)],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors, text=True,
-                env={**os.environ, "NODE_PATH": str(Path.cwd() / "scripts/engineering-ci/node_modules")})
+                env={**os.environ, "NODE_PATH": os.environ.get("NODE_PATH", str(Path.cwd() / "scripts/engineering-ci/node_modules"))})
             for line in process.stdout:
                 request = json.loads(line)
                 if request.get("done"):

@@ -179,12 +179,22 @@ def _bind_desktop_origin(root, marker, port, prior):
     return saved
 
 
-def settings_for(root):
-    # Deliberately no Settings.from_env, dotenv, provider or credential discovery.
+def settings_for(root, *, exact_read_live=False):
+    # Default: no Settings.from_env, dotenv, provider or credential discovery.
+    # Only the explicit finite-example flag reads the two existing token aliases.
     # The original CHECK/version API can hold this engineering database while
     # the service heartbeat competes for its writer lock. Use Store.tx's same
     # bounded 30-second ceiling on every SQLite connection in this entry only.
-    return Settings("sqlite:///" + str(root / DATABASE) + "?timeout=30", root, mode="mock")
+    settings = Settings("sqlite:///" + str(root / DATABASE) + "?timeout=30", root, mode="mock")
+    if exact_read_live:
+        from dataclasses import replace
+        from .production_evidence import configured_token
+        token = configured_token()
+        require(bool(token), "EXACT_READ_EXISTING_TOKEN_MISSING")
+        settings = replace(settings, mode="live", live_enabled=True, token=token,
+                           max_requests=2, max_repairs=0, max_total_tokens=16384,
+                           max_output_tokens=1024, run_seconds=90)
+    return settings
 
 
 def open_workspace(path, *, new=False):
@@ -237,7 +247,13 @@ def workspace_app(store, settings):
     @app.get("/")
     def synthetic_page():
         page = Path(__file__).with_name("web").joinpath("index.html").read_text(encoding="utf-8")
-        return HTMLResponse(page.replace("<body>", "<body>" + BANNER, 1))
+        banner = BANNER
+        if settings.mode == "live" and settings.live_enabled:
+            banner = ('<section id="synthetic-workspace-banner" role="status">'
+                '<strong>合成工程 · 仅供非敏感练习材料</strong> '
+                '已显式启用“完整读取文本”的有限真实Intern：每任务至多2请求、1次只读、0修复；'
+                '其他模型生成及正式发布关闭。公开测试登录：<code>' + TOKEN + '</code></section>')
+        return HTMLResponse(page.replace("<body>", "<body>" + banner, 1))
 
     # Only this explicit entry's root page changes; original security middleware
     # still checks Origin and supplies CSP, nosniff and no-store to every route.
@@ -286,7 +302,7 @@ def _read_owned_control(stream, worker_id, request_stop):
             return
 
 
-def serve(path, *, new=False, port=0, control_stdin=False):
+def serve(path, *, new=False, port=0, control_stdin=False, exact_read_live=False):
     require(type(port) is int and 0 <= port <= 65535, "INVALID_PORT")
     require(type(control_stdin) is bool, "INVALID_CONTROL_MODE")
     require(not control_stdin or (sys.stdin is not None and not sys.stdin.isatty()), "OWNED_STDIN_PIPE_REQUIRED")
@@ -305,6 +321,8 @@ def serve(path, *, new=False, port=0, control_stdin=False):
             listener.listen(128)
         except OSError as error:
             raise WorkspaceError("PORT_UNAVAILABLE") from error
+        # Check the explicitly selected existing credential before creating data.
+        settings = settings_for(checked_path(path), exact_read_live=exact_read_live)
         root, store, marker = open_workspace(path, new=new)
         try:
             desktop_origin = (_bind_desktop_origin(root, marker, listener.getsockname()[1], prior_origin)
@@ -312,7 +330,6 @@ def serve(path, *, new=False, port=0, control_stdin=False):
         except Exception:
             store.engine.dispose()
             raise
-        settings = settings_for(root)
         worker = Worker(store, settings, NeverModel())
         server = uvicorn.Server(uvicorn.Config(workspace_app(store, settings), host="127.0.0.1",
             log_level="error", access_log=False, timeout_graceful_shutdown=5))

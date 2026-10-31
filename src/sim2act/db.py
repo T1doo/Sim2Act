@@ -1208,6 +1208,9 @@ class Store:
         rid = new_id("run")
         created_at = time.time()
         from .ordinary_csv import RULES as csv_report_rules
+        from .exact_read import KEY_PREFIX, RULES as exact_read_rules
+        if policy.get("exact_read") is not None and not key.startswith(KEY_PREFIX):
+            raise DomainError("INVALID_INPUT", "Exact-read request key must use its explicit namespace")
 
         snapshot = FrozenRunContract(
             run_id=rid,
@@ -1218,9 +1221,10 @@ class Store:
                 project_id=project_id,
                 owner_id=principal,
                 goal=goal,
-                constraints=(csv_report_rules
+                constraints=(exact_read_rules if policy.get("exact_read") else csv_report_rules
                              if policy.get("ordinary_csv_report") else source.snapshot["content"]["constraints"] if source else []),
-                acceptance_version="ordinary-csv-report.v1" if policy.get("ordinary_csv_report") else "F1-tool-chain.v1",
+                acceptance_version=("exact-resource-read.v1" if policy.get("exact_read") else
+                                    "ordinary-csv-report.v1" if policy.get("ordinary_csv_report") else "F1-tool-chain.v1"),
                 resource_refs=refs,
                 unresolved=source.snapshot["content"]["unresolved"] if source else ["Semantic goal acceptance NOT_RUN"],
             ),
@@ -1279,8 +1283,15 @@ class Store:
             context = c.execute(select(runs.c.context).where(runs.c.id == rid)).scalar_one()
             c.execute(update(runs).where(runs.c.id == rid).values(
                 context={**context, "natural_run_deadline": deadline}))
+        if snapshot.get("exact_read") is not None:
+            marker = {"contract_fingerprint": fingerprint(snapshot), "request_fingerprint": fp,
+                      "deadline": created_at + snapshot["limits"]["run_seconds"]}
+            context = c.execute(select(runs.c.context).where(runs.c.id == rid)).scalar_one()
+            c.execute(update(runs).where(runs.c.id == rid).values(context={**context, "exact_read_frozen": marker}))
+            self.event(c, rid, "EXACT_READ_FROZEN", marker)
         self.event(c, rid, "ACCEPTED", {
             "input_fingerprint": fp,
+            **({"exact_read": policy["exact_read"]} if policy.get("exact_read") is not None else {}),
             **({"goal_source": {"card_id": source.card_id, "version": source.version,
                                 "fingerprint": source.fingerprint}} if source else {}),
             **({"natural_planning": policy["natural_planning"]}
@@ -1387,6 +1398,11 @@ class Store:
         from .ordinary_corrections import validate as validate_correction
 
         validate_correction(self, c, run, contract, raw=saved["snapshot"].get("ordinary_correction"))
+        if (contract.exact_read is not None or "exact_read_frozen" in run["context"]
+                or (run["request_key"] or "").startswith("exact-read:")
+                or contract.goal.acceptance_version == "exact-resource-read.v1"):
+            from .exact_read import validate as validate_exact_read
+            validate_exact_read(self, c, run, contract)
         return contract
 
     def claim(self, worker_id, lease_seconds, *, trial_binding=None):
@@ -1629,11 +1645,30 @@ class Store:
                 run_contracts.c.run_id == run_id,
             )).scalar_one_or_none()
             if source_contract and (source_contract.get("natural_planning") is not None
-                                    or source_contract.get("ordinary_csv_report") is not None):
+                                    or source_contract.get("ordinary_csv_report") is not None
+                                    or source_contract.get("exact_read") is not None):
                 self.lock_project(c, principal, r["project_id"])
             for rid in r["resource_refs"]:
                 self.authorize(c, principal, r["runtime_id"], r["project_id"], rid, "resource.read")
             self.authorize_receipts(c, r)
+            if (source_contract and source_contract.get("exact_read") is not None
+                    or "exact_read_frozen" in r["context"]
+                    or (r["request_key"] or "").startswith("exact-read:")
+                    or c.execute(select(events.c.id).where(events.c.run_id == run_id,
+                        events.c.kind == "EXACT_READ_FROZEN")).first()):
+                from .exact_read import accepted_result
+                exact_contract = self.frozen_contract(c, r)
+                from .exact_read import validate as validate_exact_read
+                selected = validate_exact_read(self, c, r, exact_contract)
+                if selected is not None and r["status"] == "SUCCEEDED":
+                    if not isinstance(r["result"], dict):
+                        raise DomainError("VERIFICATION_FAILED", "Exact-read stored result has invalid shape")
+                    expected = accepted_result(self, c, r, exact_contract,
+                                               r["result"].get("answer"))
+                    if r["result"] != expected:
+                        raise DomainError("VERIFICATION_FAILED", "Exact-read stored result changed")
+                elif selected is not None and r["result"] is not None:
+                    raise DomainError("VERIFICATION_FAILED", "Unaccepted exact-read task has a result")
             from .goal_runs import has_goal_source
 
             if (source_contract and source_contract.get("source_goal_card") is not None
@@ -1761,6 +1796,9 @@ class Store:
             .all()
         )
         for receipt in receipts:
+            if (type(receipt) is not dict or type(receipt.get("artifact_refs", [])) is not list
+                    or any(type(rid) is not str for rid in receipt.get("artifact_refs", []))):
+                raise DomainError("VERSION_CONFLICT", "Invalid durable receipt shape")
             for rid in receipt.get("artifact_refs", []):
                 self.authorize(
                     c,
@@ -1826,7 +1864,8 @@ class Store:
             if source and (
                 isinstance(source["snapshot"], dict)
                 and (source["snapshot"].get("natural_planning") is not None
-                     or source["snapshot"].get("ordinary_csv_report") is not None)
+                     or source["snapshot"].get("ordinary_csv_report") is not None
+                     or source["snapshot"].get("exact_read") is not None)
                 or isinstance(source["context"], dict)
                 and source["context"].get("natural_plan") is not None
             ):

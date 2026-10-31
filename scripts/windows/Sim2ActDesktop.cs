@@ -18,8 +18,10 @@ using Microsoft.Web.WebView2.WinForms;
 
 static class Program {
     [DllImport("shell32.dll", CharSet=CharSet.Unicode)] static extern int SetCurrentProcessExplicitAppUserModelID(string id);
-    [STAThread] static int Main() {
+    [STAThread] static int Main(string[] args) {
         try {
+            if(args.Length>1 || (args.Length==1 && args[0]!="--exact-read-live")) throw new Exception("未知启动参数");
+            bool exactReadLive=args.Length==1;
             string root = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
             Paths.Check(root);
             foreach (string name in new [] { "runtime\\python.exe", "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll", "WebView2Loader.dll" })
@@ -27,7 +29,7 @@ static class Program {
             string runtime = Paths.RuntimeFolder(); // Read only; never installs or starts Edge.
             Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
             SetCurrentProcessExplicitAppUserModelID("Sim2Act.Desktop");
-            using (Host host = new Host(root,runtime)) { Application.Run(host); return host.ExitCode; }
+            using (Host host = new Host(root,runtime,exactReadLive)) { Application.Run(host); return host.ExitCode; }
         } catch (Exception error) {
             MessageBox.Show("Sim2Act 无法启动：" + error.Message, "Sim2Act", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
@@ -83,8 +85,10 @@ sealed class Host : Form {
     bool initialized,stopping,stopSent,childStarted,stdoutEof,stderrEof,finished,closingAllowed,failed,timeoutShown;
     double startAt,stopAt,exitAt=-1,eofAt=-1;
     public int ExitCode = 1;
-    public Host(string root,string runtime) {
+    readonly bool exactReadLive;
+    public Host(string root,string runtime,bool exactReadLive) {
         this.root=root; this.runtime=runtime;
+        this.exactReadLive=exactReadLive;
         Text="Sim2Act 工作台"; StartPosition=FormStartPosition.CenterScreen; ShowInTaskbar=true;
         BackColor=ColorTranslator.FromHtml("#FAF9F5"); MinimumSize=new Size(1024,680);
         Rectangle work=Screen.PrimaryScreen.WorkingArea;
@@ -129,6 +133,7 @@ sealed class Host : Form {
         string data=Path.Combine(root,"workspace data"); Paths.Check(data);
         ProcessStartInfo info=new ProcessStartInfo(Path.Combine(root,"runtime","python.exe"));
         info.Arguments="-I -B -u -m sim2act.cli synthetic-workspace --data-dir \""+data+"\" --control-stdin"+(System.IO.Directory.Exists(data)?"":" --new");
+        if(exactReadLive) info.Arguments+=" --exact-read-live";
         info.WorkingDirectory=root; info.UseShellExecute=false; info.CreateNoWindow=true;
         info.RedirectStandardInput=true; info.RedirectStandardOutput=true; info.RedirectStandardError=true;
         info.StandardOutputEncoding=Encoding.UTF8; info.StandardErrorEncoding=Encoding.UTF8;

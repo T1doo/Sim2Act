@@ -16,16 +16,18 @@ def main():
     parser.add_argument("--new", action="store_true")
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--control-stdin", action="store_true", help="Private desktop-owned synthetic shutdown pipe")
+    parser.add_argument("--exact-read-live", action="store_true", help="Explicit bounded Intern verbatim-read example; synthetic materials only")
     args = parser.parse_args()
-    if args.command != "synthetic-workspace" and (args.data_dir or args.new or args.port != 0 or args.control_stdin):
-        parser.error("--data-dir, --new, --port and --control-stdin belong to synthetic-workspace only")
+    if args.command != "synthetic-workspace" and (args.data_dir or args.new or args.port != 0 or args.control_stdin or args.exact_read_live):
+        parser.error("--data-dir, --new, --port, --control-stdin and --exact-read-live belong to synthetic-workspace only")
     if args.command == "synthetic-workspace":
         from .synthetic_workspace import WorkspaceError, serve
 
         if not args.data_dir:
             parser.error("synthetic-workspace requires an explicit --data-dir")
         try:
-            serve(args.data_dir, new=args.new, port=args.port, control_stdin=args.control_stdin)
+            serve(args.data_dir, new=args.new, port=args.port, control_stdin=args.control_stdin,
+                  exact_read_live=args.exact_read_live)
         except WorkspaceError as error:
             parser.exit(1, "Synthetic workspace stopped; existing data preserved: " + str(error) + "\n")
         except Exception:

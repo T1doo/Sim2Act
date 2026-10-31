@@ -92,6 +92,8 @@ def dispatch(store, run_id, fence, call, *, crash_before_commit=False,
         if activated or csv_report or md_delivery:
             store.lock_project(c, source["principal_id"], source["project_id"])
         run = store.guard(c, run_id, fence)
+        from .exact_read import dispatch_gate as exact_read_dispatch_gate
+        exact_read_dispatch_gate(store, c, run, call)
         if csv_report:
             from .ordinary_csv import dispatch_gate as csv_dispatch_gate
 

@@ -41,7 +41,7 @@ PREPARE, META, COMMIT, INDEX = ("text_software_" + s for s in ("prepare", "metad
 CANCEL, REVOKE = "text_software_cancel", "text_software_revoke"
 MAX = 64
 ANCHOR_HASH = "24f26f3621b8fc49a24fa3566484b568148d9317f2d279d79f264416b994193a"
-QUALIFICATION_HASH = "3ef01e3ec5b89390fd56a5412136f5f6964dab6b4541246f1e94aeb1c1c5d03b"
+QUALIFICATION_HASH = "b82642f55c8ef9888e77e23bfdd6d3efb7ea3cfed7aeb0832661f35c6851ac68"
 CHANGED = {"api.py", "app_jobs.py", "internal_api.py", "owner_acceptance.py", "app_owner_goals.py",
            "apps.py", "lifecycle.py", "text_logic_reuse.py", "text_continuations.py", "text_run_checks.py",
            "text_workflows.py"}  # Closed new family; old literal compiler/kernel stays byte-identical.
@@ -130,8 +130,8 @@ def qualified_target(current, anchors):
             "review_candidate", "normalization", "files"}
             and proof["version"] == "literal-software-qualification.v1"
             and proof["anchor_hash"] == ANCHOR_HASH and proof["sources"] == sorted(anchors)
-            and proof["review_baseline"] == "9ecdb8038334b31ba4c5fe5919cf0e24f8688ee7"
-            and proof["review_candidate"] == "4508a8e36f67a9e1870cadabb38a885b0261e96d"
+            and proof["review_baseline"] == "7e29ffb397d7d7560ebdf617aa345830bc34ee33"
+            and proof["review_candidate"] == "94e60ca3ffe25fc1fdf427f6e31f724c4b2c8dd5"
             and proof["normalization"] == "sole-qualification-hash-literal-zero64.v1")
         source = Path(__file__).read_bytes()
         literal = ('QUALIFICATION_HASH = "' + QUALIFICATION_HASH + '"').encode()

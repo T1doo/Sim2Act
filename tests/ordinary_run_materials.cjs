@@ -36,7 +36,7 @@ async function boot(){
  $('token').value='synthetic-test-A';await action('connect');await project(info.project);$('goal').value='读取明确选择的这一份合成材料';
 }
 async function flow(){
- const target=info.materials[5],path=`/api/projects/${info.project}/runs`;
+ const target=info.materials[info.case==='exact'?1:5],path=`/api/projects/${info.project}/runs`;
  if(info.case==='use'){
   if($('run-materials')){
    for(const option of $('goal-card-resources').options)option.selected=option.value===info.materials[2].id;
@@ -79,6 +79,32 @@ async function flow(){
   await choose([target.id]);await action('identity-switch');$('token').value='synthetic-test-B';await action('connect');
   check(chosen().length===0&&!$('run-materials').textContent.includes(target.name),'identity switch clears prior choices and protected names');
   check(posts().length===before,'all selection/list/navigation operations issue zero product POST');
+ }else if(info.case==='exact'){
+  const select=$('run-acceptance');check(!!select,'normal task form exposes an explicit finite-goal choice');
+  $('goal').value='A private synthetic draft';select.value='exact-resource-read.v1';await action(select,'change');
+  await choose([info.materials[0].id]);check($('run-submit').disabled,'CSV cannot enter text verbatim contract');
+  await choose([info.materials[3].id]);check($('run-submit').disabled,'JSON cannot enter text verbatim contract');
+  await choose([target.id]);check(!$('run-submit').disabled&&$('goal').readOnly,'single TXT explicitly selects the fixed goal');
+  await project(info.other);check(select.value===''&&select.dataset.freeGoal===undefined&&$('goal').value==='','project switch clears exact choice and former free goal');
+  await project(info.project);await choose([target.id]);select.value='exact-resource-read.v1';await action(select,'change');
+  lose=true;hold={method:'POST',path};const started=action('run-submit');await wait(()=>!!release,'actual exact Run reply held');
+  const original=structuredClone(posts().at(-1).body);
+  check(original.acceptance==='exact-resource-read.v1'&&original.request_key.startsWith('exact-read:'),'finite selection and original request key are submitted together');
+  select.value='';select.dispatchEvent(new w.Event('change',{bubbles:true}));check(select.value==='exact-resource-read.v1'&&select.disabled,'pending intent cannot silently change acceptance mode');
+  const deliver=release;release=null;deliver();await started;
+  check(w.eval('runSubmissionEntry().state')==='unknown','lost reply keeps original finite intent unknown');
+  await project(info.other);await project(info.project);
+  check(select.value==='exact-resource-read.v1'&&JSON.stringify(w.eval('runSubmissionEntry().body'))===JSON.stringify(original),'project ABA restores only original UNKNOWN body and key');
+  await action('run-submit-recover');check(posts().length===2&&JSON.stringify(posts()[1].body)===JSON.stringify(original)&&posts()[1].response.run_id===posts()[0].response.run_id,'explicit recovery uses same finite intent and durable Run');
+  const rid=posts()[0].response.run_id;assert.equal((await rpc({command:'worker',run:rid,resource:target.id})).status,200);
+  await action('run-history-refresh');await action($('runs').querySelector('button'));
+  const result=JSON.parse($('raw-result').textContent);w.__candidate=result;
+  check(w.eval('exactReadPassed(__candidate)')&&$('run-goal-acceptance').textContent.includes('完整读取合同 PASS'),'served UI displays actual independently accepted finite goal');
+  const escaped=structuredClone(result);escaped.result.answer='{"\\u0063ontent":'+JSON.stringify(result.result.read_result.content)+'}';w.__candidate=escaped;check(w.eval('exactReadPassed(__candidate)')===true,'legal JSON escaped key matches backend semantics');
+  const faults=[r=>r.contract.snapshot.resources=[null],r=>delete r.result.receipts,r=>r.result.receipts[0].receipt_ref='op_wrong',r=>r.result.receipts[0].check_results[0].status='FAIL',r=>delete r.contract.snapshot.exact_read.source_hash,r=>r.result.answer='{"content":"wrong","content":'+JSON.stringify(result.result.read_result.content)+'}'];
+  for(const damage of faults){const r=structuredClone(result);damage(r);w.__candidate=r;check(w.eval('exactReadPassed(__candidate)')===false,'malformed result fails closed without a PASS label');}
+  await action('identity-switch');$('token').value='synthetic-test-B';await action('connect');
+  check(select.value===''&&select.dataset.freeGoal===undefined&&!$('run-materials').textContent.includes(target.name),'identity switch clears finite choice and former material labels');
  }else{
   await choose([target.id]);lose=true;hold={method:'POST',path};const started=action('run-submit');await wait(()=>!!release,'actual accepted Run reply held');
   $('run-form').dispatchEvent(new w.Event('submit',{cancelable:true}));await new Promise(r=>setImmediate(r));check(posts().length===1&&$('run-materials').disabled,'sending locks picker and blocks a duplicate submit');

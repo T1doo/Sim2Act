@@ -178,7 +178,7 @@ class GoalSpec(Strict):
     owner_id: str = Field(pattern=ID)
     goal: str = Field(min_length=1, max_length=4000)
     constraints: list[str] = Field(max_length=16)
-    acceptance_version: Literal["F1-tool-chain.v1", "ordinary-csv-report.v1"]
+    acceptance_version: Literal["F1-tool-chain.v1", "ordinary-csv-report.v1", "exact-resource-read.v1"]
     resource_refs: list[str] = Field(max_length=8)
     unresolved: list[str] = Field(max_length=16)
 
@@ -272,6 +272,18 @@ class OrdinaryCsvReport(Strict):
     model_requests: Literal[0]
 
 
+class ExactResourceRead(Strict):
+    version: Literal["exact-resource-read.v1"]
+    resource_id: str = Field(pattern=r"^res_[a-f0-9]{32}$")
+    revision: Literal[1]
+    source_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    format: Literal["txt", "md"]
+    max_source_bytes: Literal[4096]
+    output_rule: Literal["strict-json-content-verbatim.v1"]
+    request_timeout_seconds: Literal[8]
+    quota_subject: str = Field(min_length=1, max_length=200)
+
+
 class OrdinaryHumanReview(Strict):
     """Explicit prospective user rubric; no automated semantic claim or delegated role."""
 
@@ -347,6 +359,7 @@ class FrozenRunContract(Strict):
     natural_planning: NaturalPlanningPolicy | None = None
     application_generation: ApplicationGenerationPolicy | None = None
     ordinary_csv_report: OrdinaryCsvReport | None = None
+    exact_read: ExactResourceRead | None = None
     human_review: OrdinaryHumanReview | None = None
     artifact_delivery: OrdinaryArtifactDelivery | None = None
     ordinary_correction: OrdinaryCorrection | None = None

@@ -24,7 +24,7 @@ from .db import attempts, fingerprint, runs
 from .errors import DomainError
 from .text_continuations import ANCHOR_HASH
 
-PRODUCTION_QUALIFICATION_HASH = "583295f4d86f60b25bdee53d21bf85ff3f2699519f76c1cc15c971e4e0eea82f"
+PRODUCTION_QUALIFICATION_HASH = "9cada414a0cae79ca854bdc941f09955203263b2f03df20102626fde43354bfb"
 
 
 class AccountEvidence(Strict):
@@ -153,8 +153,8 @@ def _qualified():
             "review_candidate", "normalization", "files"}
             and text_proof["version"] == "literal-software-qualification.v1"
             and text_proof["anchor_hash"] == ANCHOR_HASH and text_proof["sources"] == sorted(anchors)
-            and text_proof["review_baseline"] == "9ecdb8038334b31ba4c5fe5919cf0e24f8688ee7"
-            and text_proof["review_candidate"] == "4508a8e36f67a9e1870cadabb38a885b0261e96d"
+            and text_proof["review_baseline"] == "7e29ffb397d7d7560ebdf617aa345830bc34ee33"
+            and text_proof["review_candidate"] == "94e60ca3ffe25fc1fdf427f6e31f724c4b2c8dd5"
             and text_proof["normalization"] == "sole-qualification-hash-literal-zero64.v1",
             "Literal software qualification scope changed")
         text_expected = {name: hashlib.sha256(data).hexdigest() for name, data in sources.items()

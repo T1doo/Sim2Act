@@ -1,6 +1,7 @@
 import re
 import time
 from pathlib import Path
+from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, Request, Response
 from fastapi.exception_handlers import request_validation_exception_handler
@@ -119,6 +120,7 @@ class RunInput(Strict):
     goal: str = Field(min_length=1, max_length=4000)
     resource_refs: list[str] = Field(max_length=8)
     request_key: str = Field(min_length=1, max_length=100)
+    acceptance: Literal["exact-resource-read.v1"] | None = None
 
 
 class CommandInput(Strict):
@@ -360,6 +362,15 @@ def create_app(store=None, settings=None):
     def create_run(pid: str, body: RunInput, user=user_dependency):
         for rid in body.resource_refs:
             resource_id(rid)
+        if body.acceptance is not None:
+            from .exact_read import select_policy
+            with db.tx() as c:
+                project = db.lock_project(c, user, pid)
+                policy = select_policy(db, c, user, project, body.goal, body.resource_refs,
+                    {"limits": platform_limits.model_dump(), "mode": s.mode, "request_model": s.model},
+                    s.quota_subject)
+                rid = db.submit_tx(c, user, pid, body.goal, body.resource_refs, body.request_key, policy=policy)
+            return {"run_id": rid, "mode": s.mode.upper()}
         return {
             "run_id": db.submit(
                 user,
