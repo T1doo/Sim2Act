@@ -1,4 +1,4 @@
-"""Existing fixed read segment accepts fully owned data, never a stored PASS."""
+"""Owned reads retain original checks; raw fusion retains live safety gates."""
 import sys
 
 import pytest
@@ -10,12 +10,12 @@ from sim2act.errors import DomainError
 
 
 @pytest.mark.parametrize('phase',['pre','post'])
-def test_owned_loaded_read_qualifies_and_reduces_complete_pins(local_origin,monkeypatch,tmp_path,phase):
+def test_owned_loaded_read_keeps_original_complete_pins(local_origin,monkeypatch,tmp_path,phase):
     import json
     f=local_origin
     with f.store.tx() as c,pb._source_reads(f.store,c),r._cold_graph_read(f.worker,c,f.inputs,f.roles,phase) as guard:
         facts,seed=prepared(f,c,guard,count=2,marker=True)
-        assert r._raw_read_eligible(facts,'model-reserved') is True
+        assert r._raw_read_eligible(facts,'model-reserved') is False
         monitor=sys.monitoring;slot=next(i for i in (3,5,4) if monitor.get_tool(i) is None)
         dynamic=[];code=r._ColdGraphRead._check_dynamic.__code__
         def entering(code,offset):dynamic.append(True)
@@ -36,22 +36,22 @@ def test_owned_loaded_read_qualifies_and_reduces_complete_pins(local_origin,monk
         monitor.register_callback(slot,monitor.events.PY_START,None)
         monitor.free_tool_id(slot)
         assert r._source_owned_code.image.same(actual,expected)
-        assert fast<slow
+        assert fast==slow==8
         assert fast_dynamic==slow_dynamic==8
         with observe_core() as calls:
             assert len(r._counters(c,facts.job,f.origin[0],_facts=facts))==2
         assert calls==[]  # No new View counter/snapshot backend.
-        assert r._raw_read_eligible(facts,'model-reserved') is True
+        assert r._raw_read_eligible(facts,'model-reserved') is False
         (tmp_path/'owned-read-pins.json').write_text(json.dumps(dict(fast=fast,original=slow,
             fast_dynamic=fast_dynamic,original_dynamic=slow_dynamic,
             same_owned_node=True,counter_core_calls=0,classification='SYNTHETIC_EXISTING_READ_SEGMENT_NOT_WHOLE_FLOW_PERFORMANCE'),indent=2)+'\n')
 
 
 @pytest.mark.parametrize('phase',['pre','post'])
-def test_fixed_seed_still_has_late_complete_mutable_graph_check(local_origin,phase):
+def test_original_seed_still_has_late_complete_mutable_graph_check(local_origin,phase):
     f=local_origin;calls=[];monitor=sys.monitoring
     slot=next(i for i in (3,5,4) if monitor.get_tool(i) is None)
-    code=r._cold_seed_fixed_check.__code__
+    code=r._ColdRunRawSeed.check.__code__
     def entering(code,offset):
         calls.append(True)
         f.inputs['history'][0]['body']+=b' synthetic actual live input mutation'
@@ -59,7 +59,7 @@ def test_fixed_seed_still_has_late_complete_mutable_graph_check(local_origin,pha
         with pytest.raises(DomainError):
             with r._cold_graph_read(f.worker,c,f.inputs,f.roles,phase) as guard:
                 facts,_=prepared(f,c,guard)
-                assert r._raw_read_eligible(facts,'model-reserved') is True
+                assert r._raw_read_eligible(facts,'model-reserved') is False
                 monitor.use_tool_id(slot,'Mutate only after entry complete pin')
                 try:
                     monitor.register_callback(slot,monitor.events.PY_START,entering)
@@ -112,7 +112,8 @@ def test_unknown_control_mutate_then_restore_keeps_original_full_order(local_ori
     with f.store.tx() as c,pb._source_reads(f.store,c):
         with pytest.raises(DomainError):
             with r._cold_graph_read(f.worker,c,f.inputs,f.roles,phase) as guard:
-                facts,_=prepared(f,c,guard)
+                facts,_=prepared(f,c,guard,use_seed=False)
+                assert r._raw_read_eligible(facts,'model-reserved') is (phase=='post')
                 f.store._local_model_control=UnknownControl()
                 assert r._raw_read_eligible(facts,'model-reserved') is False
                 facts.model_reserved()
@@ -124,14 +125,15 @@ def test_exact_local_registry_active_epoch_is_callback_free_read_domain(local_or
     from sim2act._sqlite_run_control import Registry
     f=local_origin
     with f.store.tx() as c,pb._source_reads(f.store,c),scope(f,c) as guard:
-        facts,_=prepared(f,c,guard,count=2,job_extra={'lease_until':time.time()+60})
+        facts,_=prepared(f,c,guard,count=2,use_seed=False,job_extra={'lease_until':time.time()+60})
+        assert r._raw_read_eligible(facts,'model-reserved') is True
         control=Registry(f.store);f.store._local_model_control=control
         with control.settlement(f.worker,facts.job,time.time()+60) as epoch:
             assert r._raw_read_eligible(facts,'model-reserved') is True
             before=epoch.checks
             value=facts.model_reserved()
             assert len(value)==2 and r._source_owned_code.image.same(value,facts._raw['model-reserved'])
-            assert epoch.checks-before==8
+            assert epoch.checks-before==2
             assert r._raw_read_eligible(facts,'model-reserved') is True
         assert epoch.closed
 
@@ -145,7 +147,8 @@ def test_real_registry_instance_shadow_is_not_fused(local_origin):
     with f.store.tx() as c,pb._source_reads(f.store,c):
         with pytest.raises(DomainError):
             with scope(f,c) as guard:
-                facts,_=prepared(f,c,guard)
+                facts,_=prepared(f,c,guard,use_seed=False)
+                assert r._raw_read_eligible(facts,'model-reserved') is True
                 control=Registry(f.store);control.checkpoint=changed
                 f.store._local_model_control=control
                 assert r._raw_read_eligible(facts,'model-reserved') is False
@@ -164,7 +167,8 @@ def test_shadowed_settlement_getattr_keeps_original_full_order(local_origin,monk
     with f.store.tx() as c,pb._source_reads(f.store,c):
         with pytest.raises(DomainError):
             with scope(f,c) as guard:
-                facts,_=prepared(f,c,guard)
+                facts,_=prepared(f,c,guard,use_seed=False)
+                assert r._raw_read_eligible(facts,'model-reserved') is True
                 with monkeypatch.context() as patch:
                     patch.setattr(r._raw_read_settlement,'getattr',shadow,raising=False)
                     assert r._raw_read_eligible(facts,'model-reserved') is False
@@ -179,7 +183,7 @@ def test_pre_owned_unknown_frontier_candidate_or_phase_is_not_fused(local_origin
         def __getattr__(self,name):calls.append(name);raise AssertionError('Foreign qualifier call')
     with f.store.tx() as c,pb._source_reads(f.store,c),r._cold_graph_read(f.worker,c,f.inputs,f.roles,'pre') as guard:
         facts,_=prepared(f,c,guard)
-        assert r._raw_read_eligible(facts,'model-reserved') is True
+        assert r._raw_read_eligible(facts,'model-reserved') is False
         old=vars(guard)[field]
         try:
             setattr(guard,field,'foreign' if field=='phase' else Unknown())

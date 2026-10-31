@@ -2800,10 +2800,6 @@ def _raw_dynamic_eligible(facts, guard):
         keys, data, lookup = _cold_graph_row_storage(job)
         if type(data[lookup['id']]) is not str:
             return False
-    elif (_SOURCE_VIEW_TYPE is not None and type(job) is _SOURCE_VIEW_TYPE
-            and _source_owned_code.image.is_kind(job,'d','r')):
-        if type(job.get('id')) is not str:
-            return False
     else:
         return False
     return True
@@ -2845,7 +2841,6 @@ _RAW_SEED_METADATA_CODE = tuple((fn, fn.__code__) for _, _, value in _RAW_SEED_M
 def _raw_seed_plain(values):
     """Fresh no-hook eligibility walk, not equality or a remembered content pin."""
     active, done = set(), set()
-    owned_code_checked = False
     frames = [(None, iter((values,)))]
     while frames:
         try:
@@ -2857,20 +2852,6 @@ def _raw_seed_plain(values):
                 done.add(identity)
             continue
         kind = type(value)
-        if _SOURCE_VIEW_TYPE is not None and kind is _SOURCE_VIEW_TYPE:
-            # Exact native View getters read immutable C-owned data only, not
-            # Binding anchors or model/Python getters. This is a no-hook type
-            # qualification for THIS invocation, never a saved content/permit
-            # verdict. Entry/final full graph checks still compare all anchors
-            # and every mutable input, including original SQL row storage.
-            if not owned_code_checked:
-                checker,code,defaults=_SOURCE_OWNED_CHECK
-                if (_source_owned_code.current is not checker or checker.__code__ is not code
-                        or checker.__defaults__ is not defaults):
-                    return False
-                checker()
-                owned_code_checked=True
-            continue
         if (kind is str or kind is int or kind is float or kind is bool
                 or kind is bytes or kind is type(None) or kind is _ColdGraphQuotedName):
             continue
@@ -3003,9 +2984,7 @@ def _raw_seed_eligible(facts, guard):
     if (any(type(d.get(key)) is not str for d, keys in (
             (sd, ('key',)), (ad, ('key', 'digest')), (pd, ('key', 'user', 'pid', 'rid')))
             for key in keys)
-            or not (type(pd.get('original')) is dict or type(pd.get('original')) is _ColdGraphRowMapping
-                or _SOURCE_VIEW_TYPE is not None and type(pd.get('original')) is _SOURCE_VIEW_TYPE
-                    and _source_owned_code.image.is_kind(pd.get('original'),'d','r'))):
+            or not (type(pd.get('original')) is dict or type(pd.get('original')) is _ColdGraphRowMapping)):
         return False
     contract = object.__getattribute__(guard.binding, '__dict__').get('contract')
     if type(contract) is not _row_native_code.PBTrialContract:
@@ -3020,10 +2999,7 @@ def _raw_seed_eligible(facts, guard):
     for key in (sd['key'], ad['key'], pd['key'], pd['key'] + ':native'):
         if key not in guard.inputs:
             return False
-        # The fixed seed predicates consume these scoped facts, not the raw
-        # Binding marker. fact() freshly checks owner/root/scope identity; the
-        # original roots/pins/anchors remain in every complete Graph check.
-        values.append(_source_owned_code.fact(guard,key))
+        values.append(guard.inputs[key])
     return _raw_seed_plain(values)
 
 
@@ -3085,11 +3061,12 @@ def _raw_read_eligible(facts, name):
             or _counter_getattr_static(_ColdGraphRead, '__dict__') is not _RAW_READ_GRAPH_DICT):
         return False
     early_graph = object.__getattribute__(early_guard, '__dict__')
-    if type(early_graph.get('phase')) is not str or early_graph['phase'] not in {'pre','post'}:
+    if type(early_graph.get('phase')) is not str or early_graph['phase'] != 'post':
         return False
-    if early_graph['phase']=='pre' and not (early.get('_source_owned') is True
-            and early.get('_source_owned_origin') is True and _SOURCE_VIEW_TYPE is not None
-            and type(early.get('job')) is _SOURCE_VIEW_TYPE):
+    # Matched default-workflow measurements did not justify owned read fusion.
+    # Preserve its complete original checks; only the existing raw domain is
+    # qualified below. A type-domain miss is never a saved content verdict.
+    if _SOURCE_VIEW_TYPE is not None and type(early.get('job')) is _SOURCE_VIEW_TYPE:
         return False
     if _SOURCE_VIEW_TYPE is not None:
         # Qualify ALL added Source roles before dispatching any of them. A
@@ -3153,7 +3130,7 @@ def _raw_read_eligible(facts, name):
             or _counter_getattr_static(guard, 'check') is not _RAW_READ_GRAPH_CHECK):
         return False
     graph_values = object.__getattribute__(guard, '__dict__')
-    if (type(graph_values.get('phase')) is not str or graph_values['phase'] not in {'pre','post'}
+    if (type(graph_values.get('phase')) is not str or graph_values['phase'] != 'post'
             or graph_values.get('_accounted_frontier') is not None
             or graph_values.get('_typed_native_candidate') is not None):
         return False
