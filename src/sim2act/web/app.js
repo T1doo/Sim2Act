@@ -322,7 +322,7 @@ function exactReadPassed(r) {
   if(!spec||spec.version!=="exact-resource-read.v1"||r.contract?.snapshot?.goal?.acceptance_version!==spec.version)return false;
   const source=r.contract.snapshot.resources;
   const profileValid=spec.request_protocol==null?spec.request_timeout_seconds===8:
-    spec.request_protocol==="exact-read-direct.v1"&&spec.request_timeout_seconds===25;
+    ["exact-read-direct.v1","exact-read-direct.v2"].includes(spec.request_protocol)&&spec.request_timeout_seconds===25;
   if(!["txt","md"].includes(spec.format)||spec.max_source_bytes!==4096||!profileValid||
      spec.output_rule!=="strict-json-content-verbatim.v1"||!Array.isArray(source)||source.length!==1||!source[0]||typeof source[0]!=="object"||
      source[0].resource_id!==spec.resource_id||source[0].content_hash!==spec.source_hash||source[0].format!==spec.format||

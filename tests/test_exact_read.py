@@ -87,6 +87,11 @@ def test_no_success_for_wrong_final_json_or_effect(env, fault):
         if fault != "tool":
             assert len(c.execute(select(attempts).where(attempts.c.run_id == rid)).all()) == 2
             assert len(c.execute(select(operations).where(operations.c.run_id == rid)).all()) == 1
+        if fault in {'duplicate','markdown'}:
+            assert row['error']['code']=='MODEL_OUTPUT_INVALID'
+            saved=c.execute(select(attempts.c.response).where(attempts.c.run_id==rid)
+                            .order_by(attempts.c.created_at.desc())).scalars().first()
+            if fault=='markdown':assert saved['content'].startswith('```json')
 
 
 @pytest.mark.parametrize("fault", ["result", "response", "receipt", "intent", "context", "usage",

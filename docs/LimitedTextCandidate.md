@@ -34,7 +34,7 @@ python -m sim2act.cli synthetic-workspace --data-dir "/同一个绝对路径/合
 
 1. 普通“项目”工作区创建项目；材料保存一份TXT／MD，例如两行 `Keep every line.`、`Save the exact text.`，保留最后换行。
 2. “任务”表单选择“完整读取所选文本”的逐字合同，只选这一份材料，提交。固定目标由页面明确显示；不能把自由目标偷偷改成该合同。
-3. 模型执行一次原授权`resource.read`，再返回仅含`content`的严格JSON。独立核对全部原文和保存证据后，才显示`SUCCEEDED / PASS_EXACT_READ_CONTRACT`。不符、超时或用量未知会保留失败，不补造结果或自动重试。
+3. 模型执行一次原授权`resource.read`，再返回仅含`content`的严格JSON。新请求的direct.v2协议明确要求不加解释／Markdown围栏并正确转义换行；旧协议仍使用原提示和原键。独立核对全部原文和保存证据后，才显示`SUCCEEDED / PASS_EXACT_READ_CONTRACT`。模型格式错误明确报`MODEL_OUTPUT_INVALID`，原响应／回执保留；不剥围栏、补造结果或自动重试。超时或未知用量也保留失败。
 4. 在终端按Ctrl+C，等待`SYNTHETIC_WORKSPACE_STOPPED`、`clean:true`及进程退出。数据目录保留。页面关闭本身不等于取消；取消要使用任务的原取消入口，未知结果先读状态。
 5. 用同一路径、同一启动模式重开，**不要再加--new**。普通CLI使用本次新READY URL进入，从历史选择同一Run查看结果；原任务和数据库请求键保留，但默认随机端口不保证浏览器中的原键记录仍同源。未知提交先读服务器历史，不要直接创建新任务。需要复用同一浏览器origin时，首次及后续启动可显式使用同一个自己选择的未占用 `--port`；不能据此找回旧随机端口中的浏览器记录。已验的桌面owned-stdin入口才有保存端口、独占重绑／拒绝占用保证。目录链接或身份／schema不符会停止，不初始化既有数据。
 

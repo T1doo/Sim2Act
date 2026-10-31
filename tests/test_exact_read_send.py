@@ -93,14 +93,16 @@ def test_late_send_rechecks_actual_reserved_attempt_and_original_owner(env, monk
         if fault=='lower-wire-budget':assert r['error']['message']=='Reserved output budget differs from the actual wire'
 
 
-def test_original_eight_second_contract_keeps_old_wire_and_duplicate_key(env,monkeypatch):
+@pytest.mark.parametrize('protocol',[None,'exact-read-direct.v1'])
+def test_original_contract_keeps_old_wire_prompt_and_duplicate_key(env,monkeypatch,protocol):
     from sim2act import exact_read
     original=exact_read.select_policy
     def legacy(*args,**kwargs):
         policy=original(*args,**kwargs)
         if kwargs.get('prior') is None:
-            policy['exact_read'].pop('request_protocol')
-            policy['exact_read']['request_timeout_seconds']=8
+            if protocol is None:policy['exact_read'].pop('request_protocol')
+            else:policy['exact_read']['request_protocol']=protocol
+            policy['exact_read']['request_timeout_seconds']=8 if protocol is None else 25
         return policy
     monkeypatch.setattr(exact_read,'select_policy',legacy)
     rid,_,body,_=prepare(env)
@@ -110,13 +112,29 @@ def test_original_eight_second_contract_keeps_old_wire_and_duplicate_key(env,mon
     result=env[2].get('/api/runs/'+rid).json()
     assert result['status']=='SUCCEEDED'
     spec=result['contract']['snapshot']['exact_read']
-    assert spec['request_timeout_seconds']==8 and 'request_protocol' not in spec
+    assert spec['request_timeout_seconds']==(8 if protocol is None else 25)
+    assert spec.get('request_protocol')==protocol
     with env[0].engine.connect() as c:
         aa=c.execute(select(attempts).where(attempts.c.run_id==rid)).mappings().all()
-        assert len(aa)==2 and all('exact_read_request_protocol' not in a['parameters'] for a in aa)
+        assert len(aa)==2 and all(a['parameters'].get('exact_read_request_protocol')==protocol for a in aa)
         contract=env[0].frozen_contract(c,c.execute(select(runs).where(runs.c.id==rid)).mappings().one())
         payload=exact_read.wire_payload(contract,[],[],1024)
-        assert set(payload)=={'model','messages','tools','stream','max_tokens'}
+        assert set(payload)=={'model','messages','tools','stream','max_tokens'}|({'thinking_mode','tool_choice'} if protocol else set())
+        from sim2act.model import SYSTEM_PROMPT
+        assert exact_read.system_prompt(contract)==SYSTEM_PROMPT
+
+
+def test_new_system_format_instruction_is_in_original_reserved_messages(env):
+    from sim2act import exact_read
+    rid,_,_,_=prepare(env)
+    assert Worker(env[0],env[1],ExactModel()).once()
+    with env[0].engine.connect() as c:
+        run=c.execute(select(runs).where(runs.c.id==rid)).mappings().one()
+        contract=env[0].frozen_contract(c,run)
+        assert contract.exact_read.request_protocol=='exact-read-direct.v2'
+        assert run['context']['messages'][0]==exact_read.initial_messages(run,contract)[0]
+        assert 'Do not add explanations' in run['context']['messages'][0]['content']
+        assert 'A\\nB\\n' in run['context']['messages'][0]['content']
 
 
 @pytest.mark.parametrize('stopped_response',['returned','captured-error'])

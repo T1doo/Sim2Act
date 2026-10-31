@@ -281,7 +281,7 @@ class ExactResourceRead(Strict):
     max_source_bytes: Literal[4096]
     output_rule: Literal["strict-json-content-verbatim.v1"]
     request_timeout_seconds: Literal[8, 25]
-    request_protocol: Literal["exact-read-direct.v1"] | None = None
+    request_protocol: Literal["exact-read-direct.v1", "exact-read-direct.v2"] | None = None
     quota_subject: str = Field(min_length=1, max_length=200)
 
 

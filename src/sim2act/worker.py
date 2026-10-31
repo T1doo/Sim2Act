@@ -659,10 +659,12 @@ class Worker:
         ctx = dict(run["context"])
         ctx["messages"] = list(ctx["messages"])
         goal_tools = definitions()
+        goal_system_prompt = SYSTEM_PROMPT
         goal_input = {"goal": run["goal"], "resource_refs": run["resource_refs"]}
         if contract.exact_read is not None:
-            from .exact_read import tools as exact_tools
+            from .exact_read import tools as exact_tools, system_prompt as exact_system_prompt
             goal_tools = exact_tools()
+            goal_system_prompt = exact_system_prompt(contract)
             goal_input["exact_read_contract"] = contract.exact_read.model_dump(exclude_none=True)
         if contract.source_goal_card is not None:
             goal_tools = [t for t in goal_tools if t["function"]["name"] in
@@ -692,7 +694,7 @@ class Worker:
             ctx["messages"] = [
                 {
                     "role": "system",
-                    "content": SYSTEM_PROMPT,
+                    "content": goal_system_prompt,
                 },
                 {
                     "role": "user",
