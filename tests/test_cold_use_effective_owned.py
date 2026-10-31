@@ -57,7 +57,11 @@ from types import SimpleNamespace
 from sim2act import pb_natural_uses as use
 assert use._USE_OWNED_ENABLED is False
 value={'complete':['original','candidate']}
-assert use._cold_effective_candidate(SimpleNamespace(_accounted_frontier=None),'original',value) is value
+declared=object();published=[]
+guard=SimpleNamespace(_accounted_frontier=None,add=lambda *args:published.append(args))
+assert use._cold_effective_candidate(guard,'original',value,declared) is value
+assert published==[('original:expanded',{'effective_candidate':value,'declared_limits':declared})]
+assert published[0][1]['effective_candidate'] is value and published[0][1]['declared_limits'] is declared
 '''
     result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, timeout=15)
     assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)

@@ -2362,8 +2362,10 @@ class _ColdGraphRead:
         from .pb_natural_specs import _source_reads_current
 
         if (vars(self).get('_source_fact_bindings') is not None or
-                (type(self.inputs) is dict and any(type(v) is tuple and len(v)==2
-                 and type(v[0]) is str and v[0]=='sim2act:owned-source-fact.v1' for v in self.inputs.values()))):
+                (type(self.inputs) is dict and any(type(v) is tuple and len(v) in (2,3) and type(v[0]) is str
+                 and (len(v)==2 and v[0]=='sim2act:owned-source-fact.v1'
+                      or len(v)==3 and v[0]=='sim2act:owned-source-with-mutable.v1')
+                 for v in self.inputs.values()))):
             checker,code,defaults=_SOURCE_OWNED_CHECK
             if (_source_owned_code.current is not checker or checker.__code__ is not code
                     or checker.__defaults__ is not defaults):

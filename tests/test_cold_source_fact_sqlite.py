@@ -34,6 +34,63 @@ def test_fact_cannot_forget_registry_or_transfer_scope(sql_facts):
  assert reached, "Expected rejection was not reached"
 
 
+@pytest.mark.parametrize('damage',['value','hidden','registry','pin','arity'])
+def test_mixed_fact_keeps_live_limits_and_original_binding_checks(sql_facts,damage):
+ from sim2act.contracts import Limits
+ f=sql_facts;reached=False
+ with pytest.raises(DomainError),f.store.tx() as c,segment(f,c,phase='pre') as s:
+  limits=Limits(max_requests=1,max_tools=1,max_repairs=0,max_total_tokens=128,max_output_tokens=32,run_seconds=30)
+  view=owned.own_fact(s.graph,'source-test:mixed',{'value':['synthetic']},_mutable=limits)
+  root=s.graph.inputs['source-test:mixed']
+  assert root[0]==owned.MIXED_FACT_TAG and len(root)==3 and root[2] is limits
+  assert owned.image.same(owned.fact(s.graph,'source-test:mixed'),view)
+  s.graph.check(f.store,c)
+  if damage=='value':limits.max_requests+=1
+  elif damage=='hidden':limits.__dict__['synthetic_hidden']='not in model_dump'
+  elif damage=='registry':del s.graph._source_fact_bindings
+  elif damage=='pin':s.graph.inputs['source-test:mixed']=(root[0],tuple(list(root[1])),limits)
+  else:s.graph.inputs['source-test:mixed']=(root[0],root[1])
+  reached=True
+  s.graph.check(f.store,c)
+ assert reached,"Expected rejection was not reached"
+
+
+@pytest.mark.parametrize('damage',['content','split-alias'])
+def test_mixed_fact_shared_mutable_descendant_remains_joint_boundary(sql_facts,damage):
+ f=sql_facts;reached=False
+ with pytest.raises(DomainError),f.store.tx() as c,segment(f,c,phase='pre') as s:
+  shared=[{'value':'synthetic'}];live={'shared':shared}
+  view=owned.own_fact(s.graph,'source-test:mixed-alias',{'shared':shared},_mutable=live)
+  assert owned.image.plain(view)=={'shared':[{'value':'synthetic'}]}
+  assert owned.native.owned_data(view.owner())[3]
+  root=s.graph.inputs['source-test:mixed-alias']
+  assert any(anchor is shared for anchor in root[1][2])
+  s.graph.check(f.store,c)
+  if damage=='content':shared[0]['value']='changed'
+  else:live['shared']=[{'value':'synthetic'}]
+  reached=True
+  s.graph.check(f.store,c)
+ assert reached,"Expected rejection was not reached"
+
+
+@pytest.mark.parametrize('tag',['FACT_TAG','MIXED_FACT_TAG'])
+@pytest.mark.parametrize('reader',['fact','fields_ref','fact_current'])
+def test_fact_marker_poison_is_refused_without_foreign_equality(sql_facts,monkeypatch,tag,reader):
+ f=sql_facts;calls=[]
+ class Foreign:
+  def __eq__(self,other):calls.append(other);return False
+ with f.store.tx() as c,segment(f,c,phase='pre') as s:
+  name='source-test:marker-poison';value={'value':'synthetic'}
+  owned.own_fact(s.graph,name,value,**({'_mutable':{'live':True}} if tag=='MIXED_FACT_TAG' else {}))
+  with monkeypatch.context() as changed:
+   changed.setattr(owned,tag,Foreign())
+   with pytest.raises(DomainError):
+    if reader=='fact':owned.fact(s.graph,name)
+    elif reader=='fields_ref':owned.fields_ref(s.graph,name,value)
+    else:owned.fact_current(s.graph)
+   assert calls==[]
+
+
 def test_fact_cannot_capture_graph_root(sql_facts):
  f=sql_facts
  reached=False

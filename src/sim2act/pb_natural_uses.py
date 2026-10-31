@@ -757,13 +757,14 @@ def _bound_review_from_facts(job, snapshot, release, limits, family, body, froze
         raise
 
 
-def _cold_effective_candidate(guard, key, value):
+def _cold_effective_candidate(guard, key, value, declared):
     """Transfer one complete producer JSON; never freeze live use authority."""
+    name = key + ":expanded"
     if guard._accounted_frontier is not None or not pb._owned_source_enabled():
+        guard.add(name, dict(effective_candidate=value, declared_limits=declared))
         return value
-    name = key + ":effective-candidate"
     try:
-        return _use_fact_code.own_fact(guard, name, value)
+        return _use_fact_code.own_fact(guard, name, value, _mutable=declared)
     except (_use_fact_code.image.Bounds, _use_fact_code.image.Unsupported):
         # Preserve the original raw path only before any ownership root escapes.
         # Never replay expand/SQL or normalize a late callback/native failure.
@@ -777,6 +778,7 @@ def _cold_effective_candidate(guard, key, value):
             raise
         pb._owned_source_enabled()
         _use_read_checkpoint(guard.store, guard.connection, guard)
+        guard.add(name, dict(effective_candidate=value, declared_limits=declared))
         return value
 
 
@@ -821,9 +823,7 @@ def _review_effective_from_target(store, c, user, instance, release, body, limit
             # root or review/bound consumer can retain its mutable producer.
             # Live Limits, goal/body models, Grants and Run/epoch state stay
             # on their original interfaces and freshly checked boundaries.
-            value = _cold_effective_candidate(_graph_read, key, value)
-        if _graph_read is not None:
-            _graph_read.add(key + ":expanded", dict(effective_candidate=value, declared_limits=declared))
+            value = _cold_effective_candidate(_graph_read, key, value, declared)
         _, _, report = natural.compile_candidate(value, limits)
         if _graph_read is not None:
             _review_inputs_current(store, c, _graph_read, key + ":inputs", user,

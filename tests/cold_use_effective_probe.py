@@ -17,7 +17,7 @@ def observe_effective(probe):
 
     def entering(code, offset):
         frame = sys._getframe(1)
-        if not frame.f_locals['name'].endswith(':effective-candidate'):
+        if not frame.f_locals['name'].endswith(':expanded') or frame.f_locals.get('_mutable') is None:
             return
         raw = frame.f_locals['value']
         assert type(raw) is dict
@@ -31,7 +31,7 @@ def observe_effective(probe):
     def returned(code, offset, view):
         frame = sys._getframe(1)
         name = frame.f_locals['name']
-        if not name.endswith(':effective-candidate'):
+        if not name.endswith(':expanded') or frame.f_locals.get('_mutable') is None:
             return
         graph, raw = frame.f_locals['graph'], frame.f_locals['value']
         assert owned.image.is_kind(view, 'd')
@@ -53,7 +53,7 @@ def observe_effective(probe):
             graph.check(graph.store, graph.connection)
         elif probe['mode'] == 'pin-rebind':
             root = graph.inputs[name]
-            graph.inputs[name] = (root[0], tuple(list(root[1])))
+            graph.inputs[name] = (root[0], tuple(list(root[1])), root[2])
             graph.check(graph.store, graph.connection)
         elif probe['mode'] == 'late-bounds':
             raise probe['error']
@@ -85,5 +85,7 @@ def check_effective(binding, graph, probe):
     else:
         assert all(owned.image.same(consumer, value) for consumer in consumers)
         assert owned.image.same(owned.fact(graph,
-            binding.use_review.prefix.key + ':effective-candidate'), value)
+            binding.use_review.prefix.key + ':expanded'), value)
+        root = graph.inputs[binding.use_review.prefix.key + ':expanded']
+        assert len(root) == 3 and root[0] == owned.MIXED_FACT_TAG
     probe['consumers_checked'] = True

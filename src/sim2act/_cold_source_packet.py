@@ -16,6 +16,7 @@ except ImportError:
 
 KEY = 'cold-trial:accounted-source'
 FACT_TAG = 'sim2act:owned-source-fact.v1'
+MIXED_FACT_TAG = 'sim2act:owned-source-with-mutable.v1'
 _MODULE = native
 _FILES = ('_cold_source_owned_impl.c','_cold_source_live_match.h','_cold_source_code.h','_cold_source_view.h','_cold_source_shape.h')
 _SOURCE_OK = native is not None and native.SOURCE_SHA256 == hashlib.sha256(
@@ -104,7 +105,9 @@ def fact_current(graph):
     require(type(registry) is dict and type(graph.inputs) is dict)
     require(all(type(name) is str for name in registry))
     marked={name for name,value in graph.inputs.items() if type(value) is tuple
-        and len(value)==2 and type(value[0]) is str and value[0]==FACT_TAG}
+        and len(value) in (2,3) and type(value[0]) is str
+        and (len(value)==2 and value[0]=='sim2act:owned-source-fact.v1'
+             or len(value)==3 and value[0]=='sim2act:owned-source-with-mutable.v1')}
     require(set(registry)==marked)
     if not marked:return
     current()
@@ -128,7 +131,8 @@ def fact(graph,name):
     registry=vars(graph).get('_source_fact_bindings',{})
     require(type(registry) is dict and type(graph.inputs) is dict and type(name) is str)
     root=graph.inputs[name]
-    marked=type(root) is tuple and len(root)==2 and type(root[0]) is str and root[0]==FACT_TAG
+    marked=(type(root) is tuple and len(root) in (2,3) and type(root[0]) is str
+        and (len(root)==2 and root[0]=='sim2act:owned-source-fact.v1' or len(root)==3 and root[0]=='sim2act:owned-source-with-mutable.v1'))
     if name not in registry:
         require(not marked)
         return root  # Actual legacy data needs no optional native extension.
@@ -137,7 +141,8 @@ def fact(graph,name):
     require(type(graph.inputs) is dict and graph.inputs is scope[1]
         and vars(graph).get('_source_fact_bindings') is registry)
     root=graph.inputs[name]
-    marked=type(root) is tuple and len(root)==2 and type(root[0]) is str and root[0]==FACT_TAG
+    marked=(type(root) is tuple and len(root) in (2,3) and type(root[0]) is str
+        and (len(root)==2 and root[0]=='sim2act:owned-source-fact.v1' or len(root)==3 and root[0]=='sim2act:owned-source-with-mutable.v1'))
     require(marked and graph.active is True and type(graph.scope) is list
         and len(graph.scope)==1 and graph.scope[0] is graph.nonce)
     entry=registry[name]
@@ -159,7 +164,8 @@ def fields_ref(graph,name,value):
     require(type(registry) is dict and type(graph.inputs) is dict)
     if name not in registry:
         root=graph.inputs.get(name)
-        require(not (type(root) is tuple and len(root)==2 and type(root[0]) is str and root[0]==FACT_TAG))
+        require(not (type(root) is tuple and len(root) in (2,3) and type(root[0]) is str
+            and (len(root)==2 and root[0]=='sim2act:owned-source-fact.v1' or len(root)==3 and root[0]=='sim2act:owned-source-with-mutable.v1')))
         return value
     from .natural_spec_runtime import _source_fields_equal
     saved=fact(graph,name)
@@ -167,7 +173,7 @@ def fields_ref(graph,name,value):
     return saved
 
 
-def own_fact(graph,name,value):
+def own_fact(graph,name,value,*,_mutable=None):
     """First-producer transfer, before returning a fact to any consumer.
 
     Same complete native live comparison and outside alias boundary as the
@@ -176,6 +182,7 @@ def own_fact(graph,name,value):
     from .natural_spec_runtime import _ColdGraphRead
     require(type(graph) is _ColdGraphRead and graph.active and name not in graph.inputs)
     if type(value) in (str,bytes,int,float,bool,type(None)):
+        require(_mutable is None)
         _ColdGraphRead.add(graph,name,value)
         return value
     graph.check(graph.store,graph.connection);current();scope=_scope(graph)
@@ -186,6 +193,12 @@ def own_fact(graph,name,value):
     from .natural_spec_runtime import _model_inputs
     _model_inputs(value)
     outside=graph.input_bytes(_snapshot_values=True);parents=[]
+    if _mutable is not None:
+        # The live companion participates in the SAME outside alias domain.
+        # A shared mutable descendant must remain an explicit anchor, never
+        # silently split into an owned copy and a separately mutable value.
+        _cold_graph_validate_inputs(_mutable,_forbid_root=graph.inputs)
+        outside=(outside,_mutable)
     data,anchors=image.capture(value,outside,_parents=parents)
     owner=native.make_composite(data,tuple(parents))
     require(type(owner) is native.Owned)
@@ -197,7 +210,12 @@ def own_fact(graph,name,value):
     require(type(view) is image.View)
     try:
         _scope_current(graph,scope)
-        _ColdGraphRead.add(graph,name,(FACT_TAG,native.binding_pin(packet)))
+        # One publication can also retain an original LIVE input alongside
+        # the immutable fact. Only value enters the Owner; the mutable input
+        # remains in every full graph validation/codec/content comparison.
+        pin=native.binding_pin(packet)
+        root=(FACT_TAG,pin) if _mutable is None else (MIXED_FACT_TAG,pin,_mutable)
+        _ColdGraphRead.add(graph,name,root)
         vars(graph).setdefault('_source_fact_bindings',{})[name]=(packet,view)
         _ColdGraphRead.check(graph,graph.store,graph.connection)
         return view
@@ -359,7 +377,7 @@ def slot_join(graph,packet,state,owned_slot,aid,guard):
 if _SOURCE_OK:
     _own_names=tuple(k for k,v in globals().copy().items() if type(v) is FunctionType and v.__module__==__name__)
     _image_names=tuple(k for k,v in vars(image).items() if type(v) is FunctionType and v.__module__==image.__name__)
-    _constants=tuple((k,globals()[k]) for k in ('KEY','FACT_TAG','native','image','_MODULE','_SOURCE_OK','_ENTRIES','_BINDING'))
+    _constants=tuple((k,globals()[k]) for k in ('KEY','FACT_TAG','MIXED_FACT_TAG','native','image','_MODULE','_SOURCE_OK','_ENTRIES','_BINDING'))
     native.register_code(0,((_witness(globals(),_own_names),_witness(vars(image),_image_names)),
         tuple(_class(c) for c in (image.Unsupported,image.Bounds,Capacity)),
         ((globals(),_constants),(vars(native),_ENTRIES),(vars(image),tuple((k,vars(image)[k]) for k in
