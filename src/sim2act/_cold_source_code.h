@@ -15,6 +15,18 @@ static int code_namespace(PyObject*space){
  while(PyDict_Next(space,&pos,&k,&v))if(!PyUnicode_CheckExact(k))return 0;
  return 1;
 }
+/* One pure module-witness segment, not a remembered code verdict. Once all
+ * keys are exact Unicode, its remaining identity/field checks cannot invoke
+ * Python. The caller holds the GIL and disables GC. Forget this table before
+ * the class-method segment, whose dictionary lookups may have foreign keys.
+ * An unusually large registry simply keeps the original complete scans. */
+#define SOURCE_NAMESPACE_SLOTS 64
+static int code_namespace_once(PyObject*space,PyObject**seen,Py_ssize_t*used){
+ for(Py_ssize_t i=0;i<*used;i++)if(seen[i]==space)return 1;
+ if(!code_namespace(space))return 0;
+ if(*used<SOURCE_NAMESPACE_SLOTS)seen[(*used)++]=space;
+ return 1;
+}
 static int code_state(PyObject*state,int depth){
  if(depth>64||!PyTuple_CheckExact(state)||PyTuple_GET_SIZE(state)!=7)return 0;
  PyObject*fn=PyTuple_GET_ITEM(state,0),*kw=PyTuple_GET_ITEM(state,3),*closure=PyTuple_GET_ITEM(state,5),*cells=PyTuple_GET_ITEM(state,6);
@@ -50,19 +62,20 @@ static PyObject*register_code(PyObject*self,PyObject*args){
 static PyObject*verify_code(PyObject*self,PyObject*unused){
  (void)self;(void)unused;int prior=PyGC_Disable(),ok=1;
  for(int index=0;ok&&index<SOURCE_CODE_FAMILIES;index++){
+  PyObject*seen_namespaces[SOURCE_NAMESPACE_SLOTS];Py_ssize_t used_namespaces=0;
   PyObject*record=source_code[index];if(!record){ok=0;break;}
   PyObject*witnesses=PyTuple_GET_ITEM(record,0),*classes=PyTuple_GET_ITEM(record,1);
   if(!PyTuple_CheckExact(witnesses)||!PyTuple_CheckExact(classes)){ok=0;break;}
   for(Py_ssize_t i=0;ok&&i<PyTuple_GET_SIZE(witnesses);i++){
    PyObject*w=PyTuple_GET_ITEM(witnesses,i);if(!PyTuple_CheckExact(w)||PyTuple_GET_SIZE(w)!=2){ok=0;break;}
-   PyObject*namespace=PyTuple_GET_ITEM(w,0),*entries=PyTuple_GET_ITEM(w,1);if(!PyTuple_CheckExact(entries)||!code_namespace(namespace)){ok=0;break;}
+   PyObject*namespace=PyTuple_GET_ITEM(w,0),*entries=PyTuple_GET_ITEM(w,1);if(!PyTuple_CheckExact(entries)||!code_namespace_once(namespace,seen_namespaces,&used_namespaces)){ok=0;break;}
    for(Py_ssize_t j=0;ok&&j<PyTuple_GET_SIZE(entries);j++)ok=code_function(PyTuple_GET_ITEM(entries,j),namespace);
   }
   PyObject*constants=PyTuple_GET_ITEM(record,2);
   if(!PyTuple_CheckExact(constants)){ok=0;break;}
   for(Py_ssize_t i=0;ok&&i<PyTuple_GET_SIZE(constants);i++){
    PyObject*entry=PyTuple_GET_ITEM(constants,i);if(!PyTuple_CheckExact(entry)||PyTuple_GET_SIZE(entry)!=2){ok=0;break;}
-   PyObject*space=PyTuple_GET_ITEM(entry,0),*items=PyTuple_GET_ITEM(entry,1);if(!code_namespace(space)||!PyTuple_CheckExact(items)){ok=0;break;}
+   PyObject*space=PyTuple_GET_ITEM(entry,0),*items=PyTuple_GET_ITEM(entry,1);if(!code_namespace_once(space,seen_namespaces,&used_namespaces)||!PyTuple_CheckExact(items)){ok=0;break;}
    for(Py_ssize_t j=0;ok&&j<PyTuple_GET_SIZE(items);j++){
     PyObject*pair=PyTuple_GET_ITEM(items,j);if(!PyTuple_CheckExact(pair)||PyTuple_GET_SIZE(pair)!=2||!PyUnicode_CheckExact(PyTuple_GET_ITEM(pair,0))||PyDict_GetItemWithError(space,PyTuple_GET_ITEM(pair,0))!=PyTuple_GET_ITEM(pair,1))ok=0;
    }
