@@ -1,0 +1,90 @@
+F......F
+=================================== FAILURES ===================================
+__________ test_real_original_loop_complete_goal_saved_and_cold_read ___________
+
+env = (<sim2act.db.Store object at 0x7f2ac2c136b0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-128/test_re...8337c2f70c4cb8b4627467d8f95dcf', 'user_5eac45bc636d48488b9641bedf4be192', 'proj_41e3c7fc37f64413bd33c67f3492dfa4', ...)
+
+    def test_real_original_loop_complete_goal_saved_and_cold_read(env):
+        rid, resource, body, content = prepare(env)
+        model = ExactModel()
+        assert Worker(env[0], env[1], model).once()
+        result = env[2].get(f"/api/runs/{rid}")
+        assert result.status_code == 200, result.text
+        result = result.json()
+        assert result["status"] == "SUCCEEDED" and result["result"]["goal_acceptance"] == "PASS_EXACT_READ_CONTRACT"
+        assert result["result"]["read_result"]["content"] == content
+        assert result["result"]["task_acceptance"]["whole_task_accepted"] is True
+        assert result["result"]["task_acceptance"]["owner_acceptance"] == "PENDING"
+        assert model.calls == 2
+        assert env[2].post(f"/api/projects/{env[5]}/runs", json=body).json()["run_id"] == rid
+        changed = {**body, "goal": "silently compute instead"}
+>       assert env[2].post(f"/api/projects/{env[5]}/runs", json=changed).status_code == 409
+E       AssertionError: assert 400 == 409
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+E        +    where <Response [400 Bad Request]> = post('/api/projects/proj_41e3c7fc37f64413bd33c67f3492dfa4/runs', json={'goal': 'silently compute instead', 'resource_refs': ['res_fc138dee8cf04ca5a3cd315cee8d4bb5'], 'request_key': 'exact-read:once', 'acceptance': 'exact-resource-read.v1'})
+E        +      where post = <starlette.testclient.TestClient object at 0x7f2ac1bf0860>.post
+
+tests/test_exact_read.py:68: AssertionError
+_________ test_cold_read_rejects_changed_evidence_or_authority[result] _________
+
+env = (<sim2act.db.Store object at 0x7f2ac00782c0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-128/test_co...dbfb82575440439cc8940abbe07fcb', 'user_0b32c517694342b99439b162eb46e625', 'proj_c6e7e5b294a444e0903345b51d0748e0', ...)
+fault = 'result'
+
+    @pytest.mark.parametrize("fault", ["result", "response", "receipt", "intent", "context", "usage",
+        "reservation", "strip", "unknown", "source", "grant", "owner"])
+    def test_cold_read_rejects_changed_evidence_or_authority(env, fault):
+        rid, resource, _, _ = prepare(env)
+        assert Worker(env[0], env[1], ExactModel()).once()
+        with env[0].tx() as c:
+            r = dict(c.execute(select(runs).where(runs.c.id == rid)).mappings().one())
+            aa = [dict(x) for x in c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings()]
+            if fault == "result":
+                result = copy.deepcopy(r["result"]); result["read_result"]["content"] = "forged"
+                c.execute(update(runs).where(runs.c.id == rid).values(result=result))
+            elif fault == "response":
+                c.execute(update(attempts).where(attempts.c.id == aa[0]["id"]).values(response={"role":"assistant","content":"forged"}))
+            elif fault == "receipt":
+                c.execute(update(operations).where(operations.c.run_id == rid).values(receipt={"status":"VERIFIED"}))
+            elif fault == "intent":
+                from sim2act.db import operation_intents
+                oid = c.execute(select(operations.c.id).where(operations.c.run_id == rid)).scalar_one()
+                c.execute(update(operation_intents).where(operation_intents.c.operation_id == oid).values(request={"tool":"resource.read","args":{"resource_id":"res_"+"0"*32}}))
+            elif fault == "context":
+                ctx = copy.deepcopy(r["context"]);ctx["messages"][0]["content"] = "changed"
+                c.execute(update(runs).where(runs.c.id == rid).values(context=ctx))
+            elif fault == "usage":
+                c.execute(update(attempts).where(attempts.c.id == aa[0]["id"]).values(usage={"status":"unknown","tokens":None}))
+            elif fault == "reservation":
+                c.execute(update(reservations).where(reservations.c.run_id == rid).values(subject="other-account"))
+            elif fault == "strip":
+                row = c.execute(select(run_contracts).where(run_contracts.c.run_id == rid)).mappings().one()
+                raw=copy.deepcopy(row["snapshot"]);raw.pop("exact_read")
+                c.execute(update(run_contracts).where(run_contracts.c.run_id == rid).values(snapshot=raw,fingerprint=fingerprint(raw)))
+            elif fault == "unknown":
+                raw = dict(aa[0]);raw.update(id="attempt_"+"f"*32,status="STARTED")
+                c.execute(insert(attempts).values(**raw))
+            elif fault == "source":
+                from sim2act.db import resources
+                c.execute(update(resources).where(resources.c.id == resource).values(content="changed"))
+            elif fault == "grant":
+                c.execute(update(grants).where(grants.c.principal_id == env[3],grants.c.resource_id == resource).values(revoked=True))
+            elif fault == "owner":
+                c.execute(update(runs).where(runs.c.id == rid).values(principal_id=env[4]))
+        response = env[2].get(f"/api/runs/{rid}")
+>       assert response.status_code in {403,409}, response.text
+E       AssertionError: {"error":{"code":"VERIFICATION_FAILED","message":"Exact-read stored result changed","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}
+E       assert 400 in {403, 409}
+E        +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/test_exact_read.py:132: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_exact_read.py::test_real_original_loop_complete_goal_saved_and_cold_read
+FAILED tests/test_exact_read.py::test_cold_read_rejects_changed_evidence_or_authority[result]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 2 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+2 failed, 6 passed, 1 warning in 5.94s

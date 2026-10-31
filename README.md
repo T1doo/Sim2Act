@@ -1,6 +1,6 @@
 # Sim2Act
 
-> **最新流程源码：7e29ffb3（2026-10-31）**。旧实例显式续接恢复可用，原58项用例实际通过；精确软件资格、取消恢复和期限等207项组合回归零失败／零跳过。[完整修复与范围](docs/evidence/text-current-target-20261031/README.md)。既有免费Intern已在4508a8e3源码完成两次真实请求的API→Worker→授权读取→结果落盘／新进程回读，原协议结果为PARTIAL、目标验收NOT_RUN；相关F1文件本次未变。[真实调用证据](docs/evidence/intern-basic-worker-live-20261031/README.md)。正式PG／大型Cold真实模型整链及新版Windows未验，30秒性能目标仍未稳定达到。
+> **最新有限真实目标源码：fc978d31（2026-10-31）**。普通任务入口显式选择单文本逐字合同后，真实 Intern→原授权工具→独立验收→保存→首次新进程重开已通过：2次真实请求、1513 tokens、5.69秒，`SUCCEEDED / PASS_EXACT_READ_CONTRACT`，原键无重放；前次8秒超时的UNKNOWN保留在同一账本。302＋84项定向回归零失败／零跳过。[完整源码、真实失败／成功证据与范围](docs/evidence/intern-exact-goal-live-20261031/README.md)。默认模型仍关闭；通用语义、人工验收、正式PG／大型Cold真实模型整链及新版Windows不据此通过，30秒目标仍未稳定达到。旧实例续接与原58项修复见[前版记录](docs/evidence/text-current-target-20261031/README.md)。
 
 > **最新默认生命周期修复：bbe2a11c（2026-10-31，Linux／合成Mock／文件SQLite）**。两笔大型Cold已提交并经首次新进程重开核对；实际持锁取消完整回滚后，默认worker收敛为CANCELLED，重复取消和再次重启无重放。修复了回调耗尽原期限后仍可提交的边界，未增加任何时限。G0为29.41／31.34秒、写入区段44.29／45.97秒，30秒目标仍未稳定达成；本版不是正式PG、真实模型整链或新Windows验收。[冻结源码、原始输出与限制](docs/evidence/sqlite-commit-boundary-20261031/full-acceptance/README.md)。
 > **历史完整链源码：9523d3e2（Mock／文件SQLite）**。Generate→Source→提取→fresh Cold Store→完整G0/G1→保存结果，在真实时钟、7次有限Mock下通过，两次结算88.137/97.243秒，写入区段上界52.821/54.959秒；独立进程只读重开一致。原结算期限已接入写入准入，G0/G1取消、材料竞争及撤权均有实际回滚证据。[精确版本、热点表、失败与限制](docs/evidence/cloud-cold-deadline-20261030/README.md)。计时含被动监测，不能据此证明稳定因果提速；明确120秒SQLite合同未扩大，原30秒、真实模型整链、PG及自然语义未通过。以前失败及B2/9a通过证据保留，不改签为新版本通过。
@@ -15,7 +15,7 @@
 
 [本机安装与只读预检](docs/Installation.md)：MOCK 工程体验；真实 Win11 普通用户首次启动仍未测。
 
-[从安装包开始的空白合成工程](docs/F2/BlankSyntheticWorkspaceQuickstart.md)：显式新目录、自己创建 CSV/Goal/应用、原 Worker 运行与保留数据后冷重开；仅公开测试身份和固定工具，真实模型与发布关闭。
+[从安装包开始的空白合成工程](docs/F2/BlankSyntheticWorkspaceQuickstart.md)：显式新目录、自己创建 CSV/Goal/应用、原 Worker 运行与保留数据后冷重开；默认仅公开测试身份和固定工具；可显式开启单文本真实模型合同，正式发布关闭。
 
 [保留原 Goal 修改 CSV 列绑定](docs/F2/InitialColumnRevision20261018.md)：在原实例明确修改已有列，经独立检查、版本确认及采纳后重新运行，并保留旧结果。
 
@@ -36,7 +36,7 @@
 已成功内部 CSV 任务的有界复用入口：[最短上手说明](docs/F2/RegisteredRunQuickstart.md)。保持本机 MOCK，不代表完整 P-B 或正式发布。
 
 本增量支持：本地身份、三个工作区、项目内文本材料、异步持久任务、独立 API/worker、受控工具与回执、幂等提交、租约/fencing、暂停/取消、授权撤回、有限模型循环和跨进程配额账本。
-默认 **MOCK 工程模式**；固定免费Intern的独立提取已有真实运行证据，正式真实模型整链尚未验收。工具链完成显示 `PARTIAL`，不代表目标语义、应用生成或 R0 验收通过。P-A、P-B、发布、增量修改在 F2 实现；不会用空按钮冒充。
+默认 **MOCK 工程模式**；显式单文本合同已有真实 Intern 的执行、独立验收、保存及重开证据，正式 PG／大型 Cold 真实模型整链尚未验收。普通未声明有限合同的 F1 工具链仍显示 `PARTIAL`，不代表任意目标语义、应用生成或 R0 验收通过。P-A、P-B、发布、增量修改在 F2 实现；不会用空按钮冒充。
 
 ## 运行边界
 

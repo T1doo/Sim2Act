@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.904" timestamp="2026-10-31T16:59:07.708477+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_exact_read_ui" name="test_normal_ui_finite_selection_unknown_recovery_and_actual_goal" time="0.666"><failure message="AssertionError: node:internal/modules/cjs/loader:1520&#10;    throw err;&#10;    ^&#10;  &#10;  Error: Cannot find module 'jsdom'&#10;  Require stack:&#10;  - /workspace/Sim2Act/tests/ordinary_run_materials.cjs&#10;      at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)&#10;      at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)&#10;      at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)&#10;      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)&#10;[+13 more lines; full report in element text]">env = (&lt;sim2act.db.Store object at 0x7f0576afbc20&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-133/test_no...627343bd434139a097a69c4f69ea52', 'user_ef04e47e8e4d456c8047a7a827213cd6', 'proj_374e7aa317d84aaba41f23cfe45c79b4', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-133/test_normal_ui_finite_selectio0')
+
+    def test_normal_ui_finite_selection_unknown_recovery_and_actual_goal(env, tmp_path):
+        store, settings, client, user, other_user, project, _ = env
+        other=store.project(user,'Other synthetic project')
+        store.project(other_user,'Other synthetic identity')
+        material=[]
+        for name,format,content in [('table.csv','csv','n\n1\n'),('finite.txt','txt','Keep this exact text.\n保留换行。\n'),
+                                   ('notes.md','md','# Synthetic\n'),('data.json','json','{"n":1}')]:
+            r=client.post(f'/api/projects/{project}/resources',json={'name':name,'format':format,'content':content})
+            assert r.status_code==201
+            material.append({'id':r.json()['id'],'name':name,'format':format,'content':content})
+        info=tmp_path/'info.json';output=tmp_path/'result.json'
+        info.write_text(json.dumps({'case':'exact','project':project,'other':other,'materials':material,'output':str(output)}))
+        process=None;worked=0
+        try:
+            with (tmp_path/'node.stderr').open('w') as errors:
+                process=subprocess.Popen(['node','tests/ordinary_run_materials.cjs',str(info)],stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,stderr=errors,text=True,
+                    env={**os.environ,'NODE_PATH':str(Path.cwd()/'scripts/engineering-ci/node_modules')})
+                for line in process.stdout:
+                    request=json.loads(line)
+                    if request.get('done'):break
+                    if request.get('command')=='worker':
+                        model=ExactModel();assert Worker(store,settings,model).once();worked+=1
+                        assert model.calls==2
+                        answer={'status':200,'text':'{}'}
+                    elif request.get('command')=='verify':
+                        with store.engine.connect() as c:
+                            rows=c.execute(select(runs)).mappings().all()
+                            assert len(rows)==1 and rows[0]['status']=='SUCCEEDED'
+                            assert len(c.execute(select(attempts)).all())==2
+                        assert worked==1
+                        answer={'status':200,'text':'{}'}
+                    else:
+                        r=client.request(request['method'],request['path'],json=request.get('body'),headers=request.get('headers'))
+                        answer={'status':r.status_code,'text':r.text,'content_type':r.headers.get('content-type')}
+                    process.stdin.write(json.dumps({'id':request['id'],**answer})+'\n');process.stdin.flush()
+                process.stdin.close();code=process.wait(timeout=20)
+&gt;           assert code==0,(tmp_path/'node.stderr').read_text()
+E           AssertionError: node:internal/modules/cjs/loader:1520
+E               throw err;
+E               ^
+E             
+E             Error: Cannot find module 'jsdom'
+E             Require stack:
+E             - /workspace/Sim2Act/tests/ordinary_run_materials.cjs
+E                 at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+E                 at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+E                 at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+E                 at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+E                 at Module._load (node:internal/modules/cjs/loader:1294:5)
+E                 at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+E                 at Module.require (node:internal/modules/cjs/loader:1617:12)
+E                 at require (node:internal/modules/helpers:153:16)
+E                 at Object.&lt;anonymous&gt; (/workspace/Sim2Act/tests/ordinary_run_materials.cjs:3:138)
+E                 at Module._compile (node:internal/modules/cjs/loader:1872:14) {
+E               code: 'MODULE_NOT_FOUND',
+E               requireStack: [ '/workspace/Sim2Act/tests/ordinary_run_materials.cjs' ]
+E             }
+E             
+E             Node.js v24.19.0
+E             
+E           assert 1 == 0
+
+tests/test_exact_read_ui.py:52: AssertionError</failure></testcase></testsuite></testsuites>

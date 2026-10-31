@@ -1,0 +1,45 @@
+....................F                                                    [100%]
+=================================== FAILURES ===================================
+________________ test_finish_callback_expiry_rolls_back_success ________________
+
+env = (<sim2act.db.Store object at 0x7f8d413e1e80>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-129/test_fi...5537a4a5644268b6b2d6f5b8d0c969', 'user_bb1b9da8211e4b8b8e6604463530c439', 'proj_512806caa7bf4f1baec7c77617223cff', ...)
+
+    def test_finish_callback_expiry_rolls_back_success(env):
+        rid, *_ = prepare(env)
+        observed=[]
+        def elapsed(c):
+            if c.execute(select(runs.c.status).where(runs.c.id==rid)).scalar_one()=="SUCCEEDED":
+                # Shorten only this existing test lease, then consume it at the
+                # Connection callback boundary. This is correctness, not speed evidence.
+                observed.append(True)
+                time.sleep(.2)
+        def connected(c):
+            event.listen(c,"commit",elapsed)
+        model=ExactModel()
+        original=model.request
+        def request(messages,tools):
+            raw=original(messages,tools)
+            if messages[-1]["role"]=="tool":
+                with env[0].tx() as c:
+                    c.execute(update(runs).where(runs.c.id==rid).values(lease_until=time.time()+.15))
+                event.listen(env[0].engine,"engine_connect",connected)
+            return raw
+        model.request=request
+        try:
+            assert Worker(env[0],env[1],model).once()
+        finally:
+            event.remove(env[0].engine,"engine_connect",connected)
+>       assert observed, "Must actually reach the Connection callback after provisional success"
+E       AssertionError: Must actually reach the Connection callback after provisional success
+E       assert []
+
+tests/test_exact_read.py:170: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_exact_read.py::test_finish_callback_expiry_rolls_back_success
+1 failed, 20 passed, 1 warning in 17.20s

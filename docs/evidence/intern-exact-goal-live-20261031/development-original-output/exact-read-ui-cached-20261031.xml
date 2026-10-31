@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="2.534" timestamp="2026-10-31T17:00:50.233754+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_exact_read_ui" name="test_normal_ui_finite_selection_unknown_recovery_and_actual_goal" time="2.351"><failure message="AssertionError: TypeError: Cannot read properties of undefined (reading 'id')&#10;      at flow (/workspace/Sim2Act/tests/ordinary_run_materials.cjs:87:24)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async /workspace/Sim2Act/tests/ordinary_run_materials.cjs:119:53&#10;  &#10;assert 1 == 0">env = (&lt;sim2act.db.Store object at 0x7ff4dfe38680&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-134/test_no...ec493a768242afb79df591c1d12db9', 'user_293597c194564e018b131f0c0981b993', 'proj_d5c134c3fb674e1faa5bc6319707a07b', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-134/test_normal_ui_finite_selectio0')
+
+    def test_normal_ui_finite_selection_unknown_recovery_and_actual_goal(env, tmp_path):
+        store, settings, client, user, other_user, project, _ = env
+        other=store.project(user,'Other synthetic project')
+        store.project(other_user,'Other synthetic identity')
+        material=[]
+        for name,format,content in [('table.csv','csv','n\n1\n'),('finite.txt','txt','Keep this exact text.\n保留换行。\n'),
+                                   ('notes.md','md','# Synthetic\n'),('data.json','json','{"n":1}')]:
+            r=client.post(f'/api/projects/{project}/resources',json={'name':name,'format':format,'content':content})
+            assert r.status_code==201
+            material.append({'id':r.json()['id'],'name':name,'format':format,'content':content})
+        info=tmp_path/'info.json';output=tmp_path/'result.json'
+        info.write_text(json.dumps({'case':'exact','project':project,'other':other,'materials':material,'output':str(output)}))
+        process=None;worked=0
+        try:
+            with (tmp_path/'node.stderr').open('w') as errors:
+                process=subprocess.Popen(['node','tests/ordinary_run_materials.cjs',str(info)],stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,stderr=errors,text=True,
+                    env={**os.environ,'NODE_PATH':os.environ.get('NODE_PATH',str(Path.cwd()/'scripts/engineering-ci/node_modules'))})
+                for line in process.stdout:
+                    request=json.loads(line)
+                    if request.get('done'):break
+                    if request.get('command')=='worker':
+                        model=ExactModel();assert Worker(store,settings,model).once();worked+=1
+                        assert model.calls==2
+                        answer={'status':200,'text':'{}'}
+                    elif request.get('command')=='verify':
+                        with store.engine.connect() as c:
+                            rows=c.execute(select(runs)).mappings().all()
+                            assert len(rows)==1 and rows[0]['status']=='SUCCEEDED'
+                            assert len(c.execute(select(attempts)).all())==2
+                        assert worked==1
+                        answer={'status':200,'text':'{}'}
+                    else:
+                        r=client.request(request['method'],request['path'],json=request.get('body'),headers=request.get('headers'))
+                        answer={'status':r.status_code,'text':r.text,'content_type':r.headers.get('content-type')}
+                    process.stdin.write(json.dumps({'id':request['id'],**answer})+'\n');process.stdin.flush()
+                process.stdin.close();code=process.wait(timeout=20)
+&gt;           assert code==0,(tmp_path/'node.stderr').read_text()
+E           AssertionError: TypeError: Cannot read properties of undefined (reading 'id')
+E                 at flow (/workspace/Sim2Act/tests/ordinary_run_materials.cjs:87:24)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async /workspace/Sim2Act/tests/ordinary_run_materials.cjs:119:53
+E             
+E           assert 1 == 0
+
+tests/test_exact_read_ui.py:52: AssertionError</failure></testcase></testsuite></testsuites>

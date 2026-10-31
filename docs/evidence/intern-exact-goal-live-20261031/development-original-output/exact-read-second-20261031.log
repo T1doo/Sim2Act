@@ -1,0 +1,137 @@
+F......F
+=================================== FAILURES ===================================
+__________ test_real_original_loop_complete_goal_saved_and_cold_read ___________
+
+env = (<sim2act.db.Store object at 0x7f2331005fd0>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-127/test_re...83b925ef26407aa2fcedbb647b95e7', 'user_f1dcc2daf6cd464995dca57deab86106', 'proj_11c6382381684d9099e2df70a527e1d1', ...)
+
+    def test_real_original_loop_complete_goal_saved_and_cold_read(env):
+        rid, resource, body, content = prepare(env)
+        model = ExactModel()
+>       assert Worker(env[0], env[1], model).once()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_exact_read.py:57: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/worker.py:972: in once
+    self.process(run)
+src/sim2act/worker.py:920: in process
+    self.finish(rid, fence, "SUCCEEDED", result=exact_result, _exact_read=True)
+src/sim2act/worker.py:382: in finish
+    with self.store.tx(**commit_args) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:909: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:117: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7f232fe95d90>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+>           check()
+E           TypeError: Worker.finish.<locals>.exact_check() missing 1 required positional argument: 'c'
+
+src/sim2act/_sqlite_commit_boundary.py:43: TypeError
+_________ test_cold_read_rejects_changed_evidence_or_authority[result] _________
+
+env = (<sim2act.db.Store object at 0x7f232e5e5460>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-127/test_co...6ecc36dd6a45f19fb422228d7200fd', 'user_b11888cefffb4841abb0619d9227cb7e', 'proj_c1bfb010c047424fbf99a397b6681016', ...)
+fault = 'result'
+
+    @pytest.mark.parametrize("fault", ["result", "response", "receipt", "intent", "context", "usage",
+        "reservation", "strip", "unknown", "source", "grant", "owner"])
+    def test_cold_read_rejects_changed_evidence_or_authority(env, fault):
+        rid, resource, _, _ = prepare(env)
+>       assert Worker(env[0], env[1], ExactModel()).once()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_exact_read.py:95: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/worker.py:972: in once
+    self.process(run)
+src/sim2act/worker.py:920: in process
+    self.finish(rid, fence, "SUCCEEDED", result=exact_result, _exact_read=True)
+src/sim2act/worker.py:382: in finish
+    with self.store.tx(**commit_args) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:909: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:117: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7f232eac29f0>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+>           check()
+E           TypeError: Worker.finish.<locals>.exact_check() missing 1 required positional argument: 'c'
+
+src/sim2act/_sqlite_commit_boundary.py:43: TypeError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_exact_read.py::test_real_original_loop_complete_goal_saved_and_cold_read
+FAILED tests/test_exact_read.py::test_cold_read_rejects_changed_evidence_or_authority[result]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 2 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+2 failed, 6 passed, 1 warning in 5.61s

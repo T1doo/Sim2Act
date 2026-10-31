@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="8" time="6.734" timestamp="2026-10-31T16:55:08.482601+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_exact_read" name="test_real_original_loop_complete_goal_saved_and_cold_read" time="1.208"><failure message="AssertionError: assert ('FAILED' == 'SUCCEEDED'&#10;  &#10;  - SUCCEEDED&#10;  + FAILED)">env = (&lt;sim2act.db.Store object at 0x7f72a3738380&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-131/test_re...936454e0f84343ad769a5bde7a9bf0', 'user_38379238dcc4402ca907c16667c2c4fe', 'proj_f4359ceccf1c467199e0b018fa64597a', ...)
+
+    def test_real_original_loop_complete_goal_saved_and_cold_read(env):
+        rid, resource, body, content = prepare(env)
+        model = ExactModel()
+        assert Worker(env[0], env[1], model).once()
+        result = env[2].get(f"/api/runs/{rid}")
+        assert result.status_code == 200, result.text
+        result = result.json()
+&gt;       assert result["status"] == "SUCCEEDED" and result["result"]["goal_acceptance"] == "PASS_EXACT_READ_CONTRACT"
+E       AssertionError: assert ('FAILED' == 'SUCCEEDED'
+E         
+E         - SUCCEEDED
+E         + FAILED)
+
+tests/test_exact_read.py:61: AssertionError</failure></testcase><testcase classname="tests.test_exact_read" name="test_no_success_for_wrong_final_json_or_effect[content]" time="0.810" /><testcase classname="tests.test_exact_read" name="test_no_success_for_wrong_final_json_or_effect[duplicate]" time="0.967" /><testcase classname="tests.test_exact_read" name="test_no_success_for_wrong_final_json_or_effect[extra]" time="0.798" /><testcase classname="tests.test_exact_read" name="test_no_success_for_wrong_final_json_or_effect[empty]" time="0.737" /><testcase classname="tests.test_exact_read" name="test_no_success_for_wrong_final_json_or_effect[markdown]" time="0.782" /><testcase classname="tests.test_exact_read" name="test_no_success_for_wrong_final_json_or_effect[tool]" time="0.466" /><testcase classname="tests.test_exact_read" name="test_cold_read_rejects_changed_evidence_or_authority[result]" time="0.752"><failure message="TypeError: 'NoneType' object is not subscriptable">env = (&lt;sim2act.db.Store object at 0x7f72a0940590&gt;, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-131/test_co...771d00680a45b5a906e355190d5686', 'user_710f62b357c04433bd4a91a4426064df', 'proj_342ba1d32b7544398e1f3ee788c27d1f', ...)
+fault = 'result'
+
+    @pytest.mark.parametrize("fault", ["result", "response", "receipt", "intent", "context", "usage",
+        "reservation", "strip", "unknown", "source", "grant", "owner", "adapter", "identity-policy", "weight", "params-none", "params-list"])
+    def test_cold_read_rejects_changed_evidence_or_authority(env, fault):
+        rid, resource, _, _ = prepare(env)
+        assert Worker(env[0], env[1], ExactModel()).once()
+        with env[0].tx() as c:
+            r = dict(c.execute(select(runs).where(runs.c.id == rid)).mappings().one())
+            aa = [dict(x) for x in c.execute(select(attempts).where(attempts.c.run_id == rid)).mappings()]
+            if fault == "result":
+&gt;               result = copy.deepcopy(r["result"]); result["read_result"]["content"] = "forged"
+                                                     ^^^^^^^^^^^^^^^^^^^^^
+E               TypeError: 'NoneType' object is not subscriptable
+
+tests/test_exact_read.py:101: TypeError</failure></testcase></testsuite></testsuites>
