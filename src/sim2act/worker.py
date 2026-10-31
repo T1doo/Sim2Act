@@ -70,6 +70,7 @@ class Worker:
         self.stop = threading.Event()
         self._settlement_lock = threading.Lock()
         self._project_cancel_scan = {}
+        self._natural_cancel_scan = {}
 
     def reserve(self, run_id, fence, context, *, request_tools=None, verify_goal_source=False,
                 planner_request=False, generation_request=False, natural_spec_request=None,
@@ -894,6 +895,10 @@ class Worker:
         from .project_check_recovery import recover_cancelled_checks
 
         if recover_cancelled_checks(self.store, scan=self._project_cancel_scan):
+            return True
+        from .natural_cancel_recovery import recover_cancelled_cold
+
+        if recover_cancelled_cold(self.store, scan=self._natural_cancel_scan):
             return True
         run = self.store.claim(self.id, self.s.lease_seconds,
                                **({"trial_binding": self.pa_trial} if self.pa_trial is not None else {}))

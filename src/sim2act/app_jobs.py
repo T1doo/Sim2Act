@@ -878,6 +878,9 @@ def command_job(store, user, rid, command, version):
             raise DomainError("VERSION_CONFLICT")
         state = job["status"]
         unknown = store.has_unknown(c, rid)
+        if (command == "cancel" and job["cancel_intent"]
+                and state in {"RECONCILING", "CANCEL_REQUESTED", "CANCELLED"}):
+            return state  # Current-version replay; no new event or ownership change.
         if command == "pause" and state in {"QUEUED", "RUNNING"}:
             state = "PAUSED" if state == "QUEUED" else "PAUSE_REQUESTED"
         elif command == "cancel" and state in {
