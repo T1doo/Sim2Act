@@ -207,8 +207,9 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                         with runtime._cold_graph_read(worker, c, dict(current=current), roles, "pre") as guard:
                             graph = runtime._cold_first_binding(worker, c, guard, current, full)
                             assert graph.guard is guard and guard.active and not blocked
-                            assert graph.binding == expected_cold
-                            assert graph.source_binding == expected_source
+                            from sim2act._cold_source_image import compat as original_value_domain
+                            assert original_value_domain(graph.binding) == expected_cold
+                            assert original_value_domain(graph.source_binding) == expected_source
                             assert graph.source_outputs == outputs and graph.source_proved == proved
                             assert graph.source_facts.proof == expected_source_proof
                             assert graph.source_audit.digest == expected_source_audit
@@ -266,8 +267,15 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                                 live_source=None,context_record=None,accounted_prewrite=None)
                             typed=collector._typed_parameter_models()
                             from sim2act.contracts import FrozenRunContract
+                            reader = graph.generation_reader
+                            contract_raw = (reader.contract_pin if reader._source_owned else
+                                guard.inputs[reader.source_record_name]['contract'])
                             assert any(kind is FrozenRunContract and model is graph.generation_contract
-                                and raw is graph.generation_reader.contract_pin for kind,model,raw in typed)
+                                and raw is contract_raw for kind,model,raw in typed)
+                            if not reader._source_owned:
+                                assert type(contract_raw) is dict
+                                assert admission._trial_typed_equal(contract_raw,
+                                    FrozenRunContract.model_dump(graph.generation_contract, warnings=False))
                             admission._trial_typed_values(typed)
                             assert generation_image.compat(graph.native_audit["attempts"]) == sorted(generation_attempts, key=lambda row: row["id"])
                             assert dict(graph.source_facts.typed.typed) == next(row
@@ -312,8 +320,8 @@ def test_plain_pb_first_binding_producer_equals_public_complete_ancestry(tmp_pat
                             seeded_graph = runtime._cold_first_binding(worker, c, seed_guard, current, full,
                                 audit_seed=audit_seed)
                             assert seeded_graph.guard is seed_guard and seed_guard.active and not blocked
-                            assert seeded_graph.binding == expected_cold
-                            assert seeded_graph.source_binding == expected_source
+                            assert original_value_domain(seeded_graph.binding) == expected_cold
+                            assert original_value_domain(seeded_graph.source_binding) == expected_source
                             assert seeded_graph.source_outputs == outputs and seeded_graph.source_proved == proved
                             assert seeded_graph.source_facts.proof == expected_source_proof
                             assert seeded_graph.source_audit.digest == expected_source_audit

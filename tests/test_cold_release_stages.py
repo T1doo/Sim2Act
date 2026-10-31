@@ -1,6 +1,7 @@
 """Synthetic lifecycle boundary units. No graph producer, authority, or model IO."""
 
 import copy
+from contextlib import contextmanager
 import time
 
 import pytest
@@ -23,6 +24,11 @@ from sim2act.errors import DomainError
 
 @pytest.fixture
 def saved(local_origin, monkeypatch):
+    # These units deliberately replace lifecycle/compiler callbacks. They
+    # exercise the original raw complete-graph path, not fixed-code ownership.
+    # Real default-owner production boundaries have separate integration tests.
+    monkeypatch.setattr(runtime, '_SOURCE_VIEW_TYPE', None)
+    monkeypatch.setattr(lifecycle._release_owned_code, '_SOURCE_OK', False)
     f = local_origin
     f.rid, approval = new_id("release"), new_id("approval")
     snapshot = dict(namespace=lifecycle.NAMESPACE, formal_publication_enabled=False,
@@ -50,8 +56,18 @@ def saved(local_origin, monkeypatch):
     return f
 
 
+@contextmanager
 def read_scope(f, c):
-    return runtime._cold_graph_read(f.worker, c, f.inputs, f.roles, "pre")
+    with runtime._cold_graph_read(f.worker, c, f.inputs, f.roles, "pre") as guard:
+        try:
+            yield guard
+        finally:
+            if runtime._SOURCE_VIEW_TYPE is None:
+                assert vars(guard).get('_source_fact_bindings') is None
+                if type(guard.inputs) is dict:
+                    assert not any(type(value) is tuple and len(value) == 2
+                        and type(value[0]) is str and value[0] == 'sim2act:owned-source-fact.v1'
+                        for value in guard.inputs.values())
 
 
 def stages(f, c, guard):

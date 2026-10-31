@@ -747,7 +747,7 @@ def _bound_review_from_facts(job, snapshot, release, limits, family, body, froze
     try:
         _use_own_checkpoint(_graph_read)
         _bound_review_identity_from_facts(snapshot, family, body, frozen, checked, _graph_read=_graph_read)
-        draft = {**copy.deepcopy(release["snapshot"]["draft"]), "candidate": checked["effective_candidate"],
+        draft = {**copy.deepcopy(_use_fact_code.image.compat(release["snapshot"]["draft"])), "candidate": checked["effective_candidate"],
             "fingerprint": checked["effective_fingerprint"], family.field + "_run_id": job["id"]}
         manifest, _, report = natural.compile_candidate(draft["candidate"], limits)
         _use_own_checkpoint(_graph_read)
@@ -1191,7 +1191,7 @@ def bound(store, c, user, job, snapshot, release, limits, *, family=PB, _logic_o
             and pb._source_reads_current(store, c, c.info.get("pb_source_reads"))):
         _read_out.update(principal_id=user, job_fingerprint=fingerprint(dict(job)),
             snapshot_fingerprint=fingerprint(snapshot), release_id=release["id"],
-            release_fingerprint=release["fingerprint"], base=copy.deepcopy(release["snapshot"]["draft"]),
+            release_fingerprint=release["fingerprint"], base=copy.deepcopy(_use_fact_code.image.compat(release["snapshot"]["draft"])),
             platform_limits=limits.model_dump(), limits_ref=limits,
             token=c.info["pb_source_reads"], base_audit=checked["source_audit_fingerprint"],
             audit_base=audit_out.get("base"))

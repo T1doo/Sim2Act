@@ -26,6 +26,11 @@ from .errors import DomainError
 from .extraction import exact_sum_oracle
 from .tools import authorized_read
 
+def _release_same(left, right):
+    from ._cold_source_image import same
+    return same(left, right)
+
+
 NAMESPACE = "INTERNAL_ENGINEERING_ONLY"
 MAX_LOGIC_SOURCE_DEPTH = 16
 
@@ -96,8 +101,9 @@ def execute(store, c, user, draft, limits, input_value, replay=None):
 
 
 def record_schema(candidate, schema=None):
-    expected = candidate["manifest"]["output_schema"]
-    schema = copy.deepcopy(
+    from ._cold_source_image import compat, plain
+    expected = plain(candidate["manifest"]["output_schema"])
+    schema = copy.deepcopy(compat(
         schema
         or {
             "type": "object",
@@ -105,7 +111,7 @@ def record_schema(candidate, schema=None):
             "required": ["result"],
             "additionalProperties": False,
         }
-    )
+    ))
     schema_check(schema)
     if (
         schema.get("type") != "object"
@@ -389,9 +395,26 @@ def owned_release_pointer(store, c, user, rid, *, _graph_read=None, _graph_key=N
     if r is None:
         raise DomainError("PERMISSION_DENIED")
     if _graph_read is not None:
+        from . import natural_spec_runtime as rt
+        from types import FunctionType
         from .natural_spec_runtime import _model_inputs
         from .pa_spec_apps import require
         key = _graph_key if _graph_key is not None else "release-pointer:" + user + ":" + rid
+        if not (rt._SOURCE_VIEW_TYPE is None and _release_owned_code._SOURCE_OK is False):
+            if type(_RELEASE_OWNED_CHECK) is not tuple or len(_RELEASE_OWNED_CHECK) != 3:
+                raise DomainError('VERSION_CONFLICT', 'Release ownership configuration changed')
+            checker, code, defaults = _RELEASE_OWNED_CHECK
+            if (type(checker) is not FunctionType or checker is not _release_owned_code.current
+                    or checker.__code__ is not code or checker.__defaults__ is not defaults):
+                raise DomainError('VERSION_CONFLICT', 'Release ownership qualifier changed')
+            checker()
+            entry = rt._COLD_RELEASE_ROW_ENTRY
+            producer = rt._cold_release_row
+            if (type(entry) is not tuple or len(entry) != 3 or type(producer) is not FunctionType
+                    or producer is not entry[0] or producer.__code__ is not entry[1]
+                    or producer.__defaults__ is not entry[2]):
+                raise DomainError('VERSION_CONFLICT', 'Release ownership producer changed')
+            r = producer(_graph_read, key, r)
         if key in _graph_read.inputs:
             require(_model_inputs(dict(r)) == _model_inputs(_graph_read.inputs[key]),
                 "Current owned Release pointer changed")
@@ -789,7 +812,7 @@ def _cold_release_from_origin(store, c, user, prefix, candidate_prefix, facts, *
             and prefix.guard is candidate_prefix.guard
             and prefix.role == candidate_prefix.role
             and prefix.limits is candidate_prefix.limits
-            and prefix.release["snapshot"]["draft"] is candidate_prefix.draft
+            and _release_same(prefix.release["snapshot"]["draft"], candidate_prefix.draft)
             and _model_inputs(dict(prefix.release)) == _model_inputs(prefix.guard.inputs[prefix.key + ":row"]),
             "Cold release row, role or actual draft changed")
         origin: dict[str, Any] = _origin_out if _origin_out is not None else {}
@@ -1378,3 +1401,8 @@ def commit_switch(store, user, approval_id, exact_fp, limits, *, _tx=None):
             "data_version": i["data_version"],
             "namespace": NAMESPACE,
         }
+
+
+# Import-time metadata only; no runtime or policy imports are needed here.
+from . import _cold_source_packet as _release_owned_code
+_RELEASE_OWNED_CHECK = _release_owned_code.CHECK

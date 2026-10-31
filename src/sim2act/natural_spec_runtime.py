@@ -1625,7 +1625,7 @@ def _prove_node_from_facts(store, c, job, binding, op, intent, action, facts, *,
 def _prove_node(store, c, job, binding, op, intent, action, *, _facts=None, _receipt_phase=None):
     from . import pa_spec_apps as spec
 
-    manifest = spec.AppManifest.model_validate(binding["draft"]["candidate"]["manifest"])
+    manifest = spec.AppManifest.model_validate(_source_owned_code.image.plain(binding["draft"]["candidate"]["manifest"]))
     _counter_checkpoint(c, job, _facts)
     if _facts is not None:
         manifest = _facts.canonical_counter_manifest(manifest)
@@ -1783,7 +1783,7 @@ def _prove_pending(store, c, job, binding, op, intent, action, *, _facts=None, _
     """Original-key inspection only; never authorizes a resend or success."""
     from .contracts import AppManifest
 
-    manifest = AppManifest.model_validate(binding["draft"]["candidate"]["manifest"])
+    manifest = AppManifest.model_validate(_source_owned_code.image.plain(binding["draft"]["candidate"]["manifest"]))
     _counter_checkpoint(c, job, _facts)
     if _facts is not None:
         manifest = _facts.canonical_counter_manifest(manifest)
@@ -2030,6 +2030,40 @@ def _model_value(value, *, _byte_digests=None, _byte_seen=None):
         return dict(sha256=hashlib.sha256(value).hexdigest(), bytes=len(value))
     require(type(value) in (str, int, float, bool, type(None)), "Unsupported model proof value")
     return value
+
+
+def _cold_release_row(graph, key, row):
+    """Own the complete independent SQL row before any prefix publishes it."""
+    if _SOURCE_VIEW_TYPE is None:
+        return row
+    from types import FunctionType
+    require(type(_SOURCE_OWNED_CHECK) is tuple and len(_SOURCE_OWNED_CHECK) == 3)
+    checker, code, defaults = _SOURCE_OWNED_CHECK
+    if (type(checker) is not FunctionType or _source_owned_code.current is not checker
+            or checker.__code__ is not code or checker.__defaults__ is not defaults):
+        raise DomainError('VERSION_CONFLICT', 'Release declaration qualifier changed')
+    checker()
+    # Distinct SQL reads retain distinct complete ownership/alias domains,
+    # even when the original legacy comparison key was already present.
+    fields = vars(graph)
+    inputs = fields.get('inputs')
+    require(type(inputs) is dict and type(key) is str and fields.get('active') is True,
+        'Exact active unpublished Release scope required')
+    name = key + ':complete-row:' + str(len(inputs))
+    try:
+        return _source_owned_code.own_fact(graph, name, row)
+    except (_source_owned_code.image.Bounds, _source_owned_code.image.Unsupported):
+        fields = vars(graph)
+        inputs, registry = fields.get('inputs'), fields.get('_source_fact_bindings', {})
+        if (fields.get('active') is not True or type(inputs) is not dict
+                or type(registry) is not dict
+                or not all(type(k) is str for k in inputs)
+                or not all(type(k) is str for k in registry)
+                or name in inputs or name in registry):
+            raise
+        checker()
+        graph.check(graph.store, graph.connection)
+        return row
 
 
 def _model_inputs(values):
@@ -2428,7 +2462,9 @@ class _ColdGraphRead:
             from ._cold_accounted_native import _Frontier
             if type(frontier) is _Frontier:
                 vars(frontier).pop('_structure_state', None)
-        if was_active and frontier is not None:
+        # Valid flags are exact bools. A corrupt flag must neither dispatch
+        # __bool__ nor retain an otherwise exact, scope-owned allocation.
+        if was_active is not False and frontier is not None:
             from ._cold_accounted_native import _Frontier
             from .cold_accounted import _OwnedPrewriteMode
             if (type(frontier) is _Frontier and frontier.graph is self
@@ -3605,7 +3641,7 @@ def _cold_first_binding(worker, c, guard, current, limits, *, audit_seed=None):
             native_original = native_rows['original']
             require(set(source_draft) <= set(native_original)
                 and _trial_typed_equal(_source_owned_code.image.compat({name: native_original[name] for name in source_draft}),
-                    source_draft))
+                    _source_owned_code.image.compat(source_draft)))
         source_binding = spec._cold_bound_from_audit(store, c, user, source_bound_prefix, fingerprint(native_rows))
         source_outputs, source_proved = spec._cold_receipts(store, c, source_job, source_binding,
             source_reader, allow_pending=True)
@@ -3640,7 +3676,7 @@ def _cold_first_binding(worker, c, guard, current, limits, *, audit_seed=None):
             require(set(review_prefix.base) <= set(seeded_draft)
                 and _trial_typed_equal(_source_owned_code.image.compat(
                     {name: seeded_draft[name] for name in review_prefix.base}),
-                    review_prefix.base))
+                    _source_owned_code.image.compat(review_prefix.base)))
         use_review = use._cold_review_from_audit(store, c, user, review_prefix, extraction_audit)
         use_value = use._cold_bound_from_review(store, c, user, use_prefix, use_review)
         cold_reader = _cold_run_facts(store, c, current, guard)
@@ -3654,7 +3690,8 @@ def _cold_first_binding(worker, c, guard, current, limits, *, audit_seed=None):
             audit_prefix, audit = audit_seed.use_prefix, audit_seed.audit
             # Expansion uses the saved declared Limits. Caller role Limits
             # only validate that complete candidate; they never rewrite it.
-            require(_trial_typed_equal(audit_prefix.draft, cold_bound_prefix.value['draft']))
+            require(_trial_typed_equal(_source_owned_code.image.compat(audit_prefix.draft),
+                _source_owned_code.image.compat(cold_bound_prefix.value['draft'])))
         binding = spec._cold_bound_from_audit(store, c, user, cold_bound_prefix, audit)
         _cold_read_checkpoint(store, c, guard)
         return _ColdBindingGraph(guard, binding, cold_queue, cold_complete, cold_reader,
@@ -5699,9 +5736,13 @@ def advance_model(worker, run, *, _heartbeat_state=None):
 
 
 from . import goal_applications as _generation_fact_code
+from . import lifecycle as _release_fact_code
+from . import apps as _release_apps_code
+_COLD_RELEASE_ROW_ENTRY = (_cold_release_row,
+    _cold_release_row.__code__, _cold_release_row.__defaults__)
 
-_source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_limit_values',
-    '_cold_native_audit_fact','_cold_audit_seed','_cold_first_binding','_cold_generated_model_facet',
+_source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_limit_values','_cold_release_row',
+    'require','_cold_native_audit_fact','_cold_audit_seed','_cold_first_binding','_cold_generated_model_facet',
     '_source_data_kind','_source_fields_equal','_cold_seed_audit_rows','_cold_seed_fixed_rows','_cold_seed_fixed_check',
     '_cold_run_raw_seed','_cold_run_facts','_check_run_facts','_cold_read_checkpoint',
     '_cold_sqlite_order','_cold_attempt_order','_model_value','_model_inputs',
@@ -5710,8 +5751,10 @@ _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_
     '_prove_node_from_facts','_prove_node','_prove_pending_from_facts','_prove_pending',
     'messages','parse','_anchor','strict_json','response_archive'),
     (_ColdGraphRead,_ColdTrialGraph,_ColdRunRawSeed,_ColdRunFacts,_ColdAuditSeed,
-        _generation_fact_code._GenerationFactsReader,_generation_fact_code._ColdGenerationRawSeed),
-    constants=('_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_source_owned_code','_SOURCE_VIEW_TYPE','_SOURCE_VIEW_PIN','_SOURCE_OWNER_TYPE','_SOURCE_OWNER_PIN'),
+        _generation_fact_code._GenerationFactsReader,_generation_fact_code._ColdGenerationRawSeed,
+        _release_fact_code._ColdReleasePrefix,_release_fact_code._ColdReleaseFacts,
+        _release_apps_code._ColdCandidatePrefix,_release_apps_code._ColdGraphOriginFacts),
+    constants=('AppManifest','_COLD_RELEASE_ROW_ENTRY','_release_apps_code','_release_fact_code','_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_source_owned_code','_SOURCE_VIEW_TYPE','_SOURCE_VIEW_PIN','_SOURCE_OWNER_TYPE','_SOURCE_OWNER_PIN'),
     helpers=((vars(_generation_fact_code),('_generation_plain','_generation_mapping',
         '_history_core','_cold_generation_reader','_cold_generation_source','_cold_history_from_source',
         '_cold_candidate_from_history','_parse_candidate_core','_read_receipt_core',
@@ -5720,6 +5763,14 @@ _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_
         '_source_scope_gate','source_scope_gate','_source_body','_initial_messages_from_facts','stage_tools','parse_generation',
         'checked_usage','normalize_usage','returned_model_identity','require_returned_model',
         'fingerprint','strict_json','response_archive','body','parse_response','authorized_read')),
-        (vars(_generation_fact_code.copy),('deepcopy',))),
-    constant_helpers=((vars(_generation_fact_code),('_generation_owned','_GenerationFactsReader','_ColdGenerationRawSeed',
+        (vars(_generation_fact_code.copy),('deepcopy',)),
+        (vars(_release_fact_code),('owned_release_pointer','_checkpoint_release_read',
+            '_read_release_prefix','_read_release_suffix','_cold_release_prefix','_release_same',
+            '_cold_release_from_origin','_cold_release_complete','_cold_release_facet_prefix','record_schema')),
+        (vars(_release_apps_code),('validate_source_family','compile_preview',
+            '_cold_candidate_prefix','_frozen_candidate_prefix','_record_candidate_origin',
+            '_checkpoint_candidate_read','_cold_candidate_from_origin'))),
+    constant_helpers=((vars(_release_apps_code),('_ColdCandidatePrefix','_ColdGraphOriginFacts')),
+        (vars(_release_fact_code),('_RELEASE_OWNED_CHECK','_release_owned_code','_ColdReleasePrefix','_ColdReleaseFacts','select','internal_releases','fingerprint','copy','DomainError')),
+        (vars(_generation_fact_code),('_generation_owned','_GenerationFactsReader','_ColdGenerationRawSeed',
         'FrozenRunContract','copy','json','httpx')),))

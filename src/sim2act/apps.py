@@ -412,8 +412,9 @@ def load_draft(store, c, user, aid, platform_limits, *, lock=False):
 
 
 def validate_source_family(c, user, draft):
+    from ._cold_source_image import plain
     """Bind dispatch to independent stored origin records before choosing an executor."""
-    candidate = draft["candidate"]
+    candidate = plain(draft["candidate"])
     markers = []
     for table, field, kind in (
         (goal_candidate_requests, "generation", "registered_tool"),
@@ -565,7 +566,8 @@ def _checkpoint_candidate_read(store, c, guard):
 
 def _record_candidate_origin(c, user, draft, limits, manifest, action, report, origin, out):
     if out is not None:
-        out.update(draft=copy.deepcopy(dict(draft)),manifest=manifest,action=action,report=report,origin=origin,
+        from ._cold_source_image import compat
+        out.update(draft=copy.deepcopy(compat(dict(draft))),manifest=manifest,action=action,report=report,origin=origin,
             principal_id=user,platform_limits=limits.model_dump(),
             _call_connection=c,_call_transaction=c.get_transaction())
 

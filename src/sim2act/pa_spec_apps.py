@@ -102,7 +102,7 @@ def require(value, message="Exact spec application contract changed"):
 
 
 def is_candidate(candidate):
-    return isinstance(candidate, dict) and candidate.get("namespace") in FAMILIES
+    return (isinstance(candidate, dict) or _source_values.is_kind(candidate, 'd')) and candidate.get("namespace") in FAMILIES
 
 
 def check_version(candidate):
@@ -221,6 +221,7 @@ def expand(recipe, aid, cid, pid, source_hash, resource, goal, limits, checked_s
 
 @controlled
 def compile_candidate(candidate, limits):
+    candidate = _source_values.plain(candidate)
     if natural.is_candidate(candidate):
         return natural.compile_candidate(candidate, limits)
     allowed = {"namespace", "manifest", "actions", "spec_recipe", "source_hash", "goal", "model_sample_check"}
@@ -1658,7 +1659,7 @@ def intent_for(step, action, plan, outputs, proved):
     args = resolve(step, plan, outputs)
     validate_value(action["input_schema"], args)
     return dict(tool=action["executor"]["ref"], args=args, plan_fingerprint=plan["plan_fingerprint"],
-        input_sources=copy.deepcopy(step["inputs"]),
+        input_sources=copy.deepcopy(_source_values.compat(step["inputs"])),
         predecessor_receipts=[fingerprint(p) for p in proved if p["step_id"] in step["depends_on"]])
 
 
@@ -2481,13 +2482,19 @@ def mount(app, store, limits, identity):
 # Exact consumers of the owned Source reader. Other ancestry stays on its
 # original fully checked interface and is not inferred to be immutable.
 from . import _cold_source_packet as _source_fact_code
+from . import contracts as _release_contract_models
+from . import goals as _release_goal_models
 _source_fact_code.register(7,globals(),(
-    '_native_audit_facts','scope_gate','pair',
+    '_native_audit_facts','scope_gate','pair','is_candidate',
     '_receipt_checkpoint','_cold_receipt_phase','_cold_receipts','_receipts',
     '_cold_verify_job_from_receipts','_verify_job_from_receipts','_receipt_output',
     '_receipt_data','_receipt_has_unknown','intent_for','receipt_for','output_for',
     'resolve','validate_value','fingerprint','require'),
-    constants=('_source_values','natural','_source_fact_code','copy'),helpers=((vars(natural),(
+    (natural.Recipe,_release_goal_models.GoalCardInput,AppManifest,ActionSpec,*(kind for kind in natural.Recipe.__mro__[1:] if kind.__flags__ & (1 << 9))),
+    constants=('AppManifest','ActionSpec','_source_values','natural','_source_fact_code','copy'),helpers=((vars(natural),(
         'is_candidate','pure','bounded_source','schemas','collected','report',
         'citation_feedback','verify_saved','expand','compile_candidate','preview',
-        'fingerprint','validate_value','object_schema','require')),))
+        'fingerprint','validate_value','object_schema','require')),),
+    constant_helpers=((vars(natural),('Recipe','AppManifest','ActionSpec')),
+        (vars(_release_contract_models),('AppManifest','ActionSpec')),
+        (vars(_release_goal_models),('GoalCardInput',))))

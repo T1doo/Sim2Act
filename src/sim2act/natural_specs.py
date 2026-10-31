@@ -280,6 +280,7 @@ def collected(source, items, ref=None):
 
 
 def report(source, items, goal):
+    from ._cold_source_image import compat
     if not items:
         raise DomainError("VERIFICATION_FAILED", "No extracted facts; not a completed checklist")
     feedback = citation_feedback(source, items)
@@ -307,7 +308,7 @@ def report(source, items, goal):
         source_content=source["content"],
         items=annotated,
         feedback=feedback,
-        human_unresolved=copy.deepcopy(goal["unresolved"]),
+        human_unresolved=copy.deepcopy(compat(goal["unresolved"])),
         source_retention="EXACT",
         semantic_goal_acceptance="NOT_RUN",
         owner_acceptance="PENDING",
@@ -346,13 +347,14 @@ def verify_saved(source, text, goal):
 
 
 def expand(recipe, aid, cid, pid, source_hash, resource, goal, limits, sample_hash):
+    from ._cold_source_image import plain
     try:
-        recipe = Recipe.model_validate(recipe).model_dump(exclude_none=True)
+        recipe = Recipe.model_validate(plain(recipe)).model_dump(exclude_none=True)
     except ValueError as exc:
         raise DomainError("INVALID_MANIFEST", "Closed finite natural-spec recipe required") from exc
     from .goals import GoalCardInput
 
-    goal = GoalCardInput.model_validate(goal).model_dump()
+    goal = GoalCardInput.model_validate(plain(goal)).model_dump()
     steps = recipe["steps"]
     ids = [s["step_id"] for s in steps]
     refs = [s["operator"] for s in steps]
@@ -572,6 +574,8 @@ def expand(recipe, aid, cid, pid, source_hash, resource, goal, limits, sample_ha
 
 
 def compile_candidate(candidate, limits):
+    from ._cold_source_image import plain
+    candidate = plain(candidate)
     keys = {
         "namespace",
         "manifest",
@@ -583,7 +587,8 @@ def compile_candidate(candidate, limits):
     }
     if set(candidate) not in [keys, keys | {"goal_application"}, keys | {"spec_binding"}, keys | {"spec_task"}, keys | {"logic_revision"}]:
         raise DomainError("INVALID_MANIFEST", "Closed natural-spec application required")
-    manifest = AppManifest.model_validate(candidate["manifest"])
+    from ._cold_source_image import plain
+    manifest = AppManifest.model_validate(plain(candidate["manifest"]))
     declared = manifest.runtime_limits
     if declared.max_output_tokens > limits.max_output_tokens or any(
         getattr(declared, k) > getattr(limits, k) for k in Limits.model_fields
@@ -633,7 +638,7 @@ def compile_candidate(candidate, limits):
     )
     return (
         manifest,
-        ActionSpec.model_validate(candidate["actions"][0]),
+        ActionSpec.model_validate(plain(candidate["actions"][0])),
         dict(
             state="PREVIEW_ONLY",
             execution_performed=False,
