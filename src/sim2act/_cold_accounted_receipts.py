@@ -308,9 +308,11 @@ class _ReceiptClosure:
     def _publish_admin(self,ledger,sizing_type):
         # This NEW root publication executes complete guard/encoding calls.
         # Meter the actual COMPLETE graph+contract first, independently of the
-        # READ-only alias bound. Prepay three independent conservative encoder
-        # envelopes using the existing Projection.encoded_upper formula; do
-        # not assume a configured ceiling implies this graph fits it.
+        # READ-only alias bound. The three guard calls are sequential and do
+        # not retain encoded bytes across returns. Prepay one working encoder
+        # plus two complete structural-retention envelopes (capsule/captured
+        # projection and fresh comparison), held until the ENTIRE put returns.
+        # Never assume a configured ceiling implies this graph fits it.
         from ._cold_accounted_budget import _Capacity
         p=prepared=value=None;buffers=None
         with ledger.projection() as unused:
@@ -322,9 +324,22 @@ class _ReceiptClosure:
                         account=b.account_id,version=b.version,fingerprint=b.contract_fingerprint))
                 prepared=p.copy(value,typed=True)
                 upper=p.encoded_upper()+65536
+                structural=p.units+256*(p.nodes+p.edges+1)
+                working=structural+9*upper
+                requested=working+2*structural
+                # Size/capacity observations only; never consulted for routing
+                # or permission. Record the attempted amount BEFORE reserve,
+                # since a rejected ticket does not increase Ledger.peak.
+                object.__setattr__(self.candidate,'receipt_admin_preflight',dict(
+                    nodes=p.nodes,edges=p.edges,leaf_bytes=p.leaf,projection_units=p.units,
+                    encoded_upper=upper,requested_buffer_units=requested,
+                    working_encoder_units=working,retained_structure_units=2*structural,
+                    old_three_envelope_units=3*working,
+                    live_before_buffers=ledger.live,resident_before_buffers=ledger.resident,
+                    peak_limit=ledger.limits.peak,guard_calls=3))
                 if upper>ledger.bounds.encoded_bytes:
                     raise _Capacity('receipt_admin_encoded')
-                buffers=ledger.reserve(units=3*(p.units+9*upper+256*(p.nodes+p.edges+1)))
+                buffers=ledger.reserve(units=requested)
                 ledger.spend(24*(p.nodes+p.edges+p.leaf+65536)**4)
                 # Metadata is pinned into the SAME full graph before issuance. Its
                 # immutable tuple cannot be enlarged via mutable closure fields.

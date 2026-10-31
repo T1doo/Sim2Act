@@ -498,6 +498,7 @@ class _NativeCandidate:
         self.selection: dict[str, Any] = dict(route='NOT_SELECTED', reason=None, budget=None)
         self.diagnostic_ledger: Any = None
         self.diagnostic_incomplete = False
+        self.receipt_admin_preflight = None
 
     def observe(self, *, phase=None, role=None, route=None, error=None, ledger=None):
         """Ordinary observation faults never change routing/cleanup or an error."""
@@ -521,6 +522,9 @@ class _NativeCandidate:
             result = dict(self.selection, phase=self.qualification_phase)
             if self.diagnostic_ledger is not None:
                 result['after_scope'] = self.budget_record(self.diagnostic_ledger)
+            metrics=vars(self).get('receipt_admin_preflight')
+            if type(metrics) is dict and all(type(k) is str and type(v) is int for k,v in metrics.items()):
+                result['receipt_admin_preflight']=dict(metrics)
             result['diagnostic_incomplete'] = self.diagnostic_incomplete
             return result
         except Exception:
