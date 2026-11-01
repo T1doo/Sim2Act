@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Package,[Parameter(Mandatory=$true)][string]$Output)
+param([Parameter(Mandatory=$true)][string]$Package,[Parameter(Mandatory=$true)][string]$Output,[switch]$ExerciseMaterial)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 $probeRoot=[IO.Path]::GetFullPath($Output)
@@ -9,7 +9,7 @@ $payload=Join-Path $probeRoot 'payload';[void][IO.Directory]::CreateDirectory($p
 $report=[ordered]@{source_commit='042ab21c4fa9c7e5ba70c4e2877fb7060d962422';test_commit=$env:GITHUB_SHA;status='STARTED';model_requests=0;browser_launched=$false;starts=@()}
 $desktopProcess=$null;$appRoot=$null;$clock=[Diagnostics.Stopwatch]::StartNew()
 function Save-Report { $report | ConvertTo-Json -Depth 12 | Set-Content (Join-Path $payload 'report.json') -Encoding UTF8 }
-function Budget { if($clock.Elapsed.TotalSeconds -gt 115){throw 'Finite ordinary window probe budget exhausted.'} }
+function Budget { if($clock.Elapsed.TotalSeconds -gt $(if($ExerciseMaterial){75}else{115})){throw 'Finite ordinary window probe budget exhausted.'} }
 function Events([string]$Kind) {
     $log=Join-Path $appRoot 'desktop.log'
     if(-not(Test-Path -LiteralPath $log)){return}
@@ -57,6 +57,103 @@ function Find-Control($Window,[string]$Name,$Type,[int]$Seconds=8) {
     throw "Required actual UIA control unavailable: $Name"
 }
 function Invoke-Control($Control) {([Windows.Automation.InvokePattern]$Control.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern)).Invoke()}
+function Form-Control($Window,[string]$Name,$Type) {
+    Budget
+    $condition=[Windows.Automation.AndCondition]::new(
+        [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::NameProperty,$Name),
+        [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,$Type))
+    $control=$Window.FindFirst([Windows.Automation.TreeScope]::Descendants,$condition)
+    if($null -eq $control -or -not$control.Current.IsEnabled){throw "Actual form control unavailable: $Name"}
+    if($control.Current.IsOffscreen){
+        $pattern=$null
+        if($control.TryGetCurrentPattern([Windows.Automation.ScrollItemPattern]::Pattern,[ref]$pattern)){([Windows.Automation.ScrollItemPattern]$pattern).ScrollIntoView()}
+        else{$control.SetFocus()}
+        Start-Sleep -Milliseconds 150
+        if($control.Current.IsOffscreen){throw "Actual form control remains offscreen: $Name"}
+    }
+    return $control
+}
+function Set-FormValue($Window,[string]$Name,[string]$Value){
+    $control=Form-Control $Window $Name ([Windows.Automation.ControlType]::Edit)
+    ([Windows.Automation.ValuePattern]$control.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)).SetValue($Value)
+}
+function Open-Summary($Window,[string]$Prefix){
+    $buttons=$Window.FindAll([Windows.Automation.TreeScope]::Descendants,
+        [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::Button))
+    foreach($control in $buttons){
+        if($control.Current.Name.StartsWith($Prefix,[StringComparison]::Ordinal) -and $control.Current.IsEnabled -and -not$control.Current.IsOffscreen){
+            $pattern=$null
+            if($control.TryGetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern,[ref]$pattern)){
+                $expand=[Windows.Automation.ExpandCollapsePattern]$pattern
+                if($expand.Current.ExpandCollapseState -eq [Windows.Automation.ExpandCollapseState]::Collapsed){$expand.Expand()}
+                elseif($expand.Current.ExpandCollapseState -ne [Windows.Automation.ExpandCollapseState]::Expanded){throw 'Summary cannot expand using ordinary UIA.'}
+            }else{Invoke-Control $control}
+            return $control
+        }
+    }
+    throw "Actual summary unavailable: $Prefix"
+}
+function Submit-Control($Window,[string]$Name,$Summary){
+    $summaryId=$Summary.GetRuntimeId() -join ':'
+    $condition=[Windows.Automation.AndCondition]::new(
+        [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::NameProperty,$Name),
+        [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::Button))
+    $submitCandidates=@(foreach($control in $Window.FindAll([Windows.Automation.TreeScope]::Descendants,$condition)){
+        if($control.Current.IsEnabled -and -not$control.Current.IsOffscreen -and ($control.GetRuntimeId() -join ':') -cne $summaryId){$control}
+    })
+    if($submitCandidates.Count -ne 1){throw 'Unique visible form submit required; summary identity excluded.'}
+    return $submitCandidates[0]
+}
+function Read-Local([string]$Path){
+    Budget
+    $url=$report.starts[-1].ready.url
+    if($url -notmatch '^http://127[.]0[.]0[.]1:[1-9][0-9]{0,4}$' -or $Path -notmatch '^/api/(projects|resources)(/|$)'){throw 'Read restricted to actual owned loopback API.'}
+    $data=Invoke-RestMethod -Uri ($url+$Path) -Headers @{Authorization='Bearer public-synthetic-blank-workspace'} -TimeoutSec 4
+    foreach($row in $data){Write-Output $row}
+}
+function Check-Material {
+    $projects=@(Read-Local '/api/projects'|Where-Object {$_.name -ceq 'native-window-synthetic'})
+    if($projects.Count -ne 1){throw 'Exact UI-created project not unique.'}
+    $resources=@(Read-Local ("/api/projects/"+$projects[0].id+"/resources")|Where-Object {$_.name -ceq 'native-window.csv'})
+    if($resources.Count -ne 1 -or $resources[0].format -cne 'csv'){throw 'Exact UI-created CSV not unique/current.'}
+    $resource=Read-Local ("/api/resources/"+$resources[0].id)
+    if($resource.content -cne "item,amount,quantity`nA,10,7`nB,20,8"){throw 'Actual saved content mismatch.'}
+    return @{project_id=$projects[0].id;resource_id=$resources[0].id;format=$resources[0].format;content=$resource.content}
+}
+function Save-Material($Window){
+    $projectSummary=Open-Summary $Window '创建项目'
+    Set-FormValue $Window '项目名称' 'native-window-synthetic'
+    Invoke-Control (Submit-Control $Window '创建项目' $projectSummary)
+    $until=[DateTime]::UtcNow.AddSeconds(6)
+    do{$projects=@(Read-Local '/api/projects'|Where-Object {$_.name -ceq 'native-window-synthetic'});if($projects.Count -eq 1){break};Start-Sleep -Milliseconds 150}while([DateTime]::UtcNow -lt $until)
+    if($projects.Count -ne 1){throw 'UI project creation not confirmed; no repeat submit.'}
+    $until=[DateTime]::UtcNow.AddSeconds(6);$selected=$false
+    do{
+        Budget;$selector=Find-Control $Window '当前项目' ([Windows.Automation.ControlType]::ComboBox)
+        $selection=[Windows.Automation.SelectionPattern]$selector.GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern)
+        $items=@($selection.GetCurrentSelection());$selected=$items.Count -eq 1 -and $items[0].Current.Name -ceq 'native-window-synthetic'
+        if(-not$selected){Start-Sleep -Milliseconds 150}
+    }while(-not$selected -and [DateTime]::UtcNow -lt $until)
+    if(-not$selected){throw 'UI project selection not confirmed; no material submit.'}
+    Invoke-Control (Find-Control $Window '资源' ([Windows.Automation.ControlType]::Button))
+    [void](Open-Summary $Window '添加材料')
+    Set-FormValue $Window '名称' 'native-window.csv'
+    $format=Form-Control $Window '类型' ([Windows.Automation.ControlType]::ComboBox)
+    $desktopProcess.Refresh()
+    if(-not[NativeWindowProbe]::SetForegroundWindow($desktopProcess.MainWindowHandle)){throw 'Own foreground unavailable; no keyboard fallback.'}
+    $format.SetFocus()
+    if([NativeWindowProbe]::GetForegroundWindow() -ne $desktopProcess.MainWindowHandle){throw 'Own foreground changed; no keys sent.'}
+    [Windows.Forms.SendKeys]::SendWait('{HOME}c')
+    $selectedFormat=([Windows.Automation.SelectionPattern]$format.GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern)).GetCurrentSelection()
+    if(@($selectedFormat).Count -ne 1 -or $selectedFormat[0].Current.Name -cne 'csv'){throw 'CSV UI selection not confirmed; no material submit.'}
+    Set-FormValue $Window '授权给当前项目的文本' "item,amount,quantity`nA,10,7`nB,20,8"
+    Invoke-Control (Form-Control $Window '保存并授权项目内使用（24小时）' ([Windows.Automation.ControlType]::Button))
+    $until=[DateTime]::UtcNow.AddSeconds(6)
+    $proof=$null;$lastError=$null
+    do{try{$proof=Check-Material;break}catch{$lastError=$_;Start-Sleep -Milliseconds 150}}while([DateTime]::UtcNow -lt $until)
+    if($null -eq $proof){throw $lastError}
+    $report['ui_saved_material']=$proof;Save-Report
+}
 function Login($Window) {
     $token=Find-Control $Window '本机访问令牌' ([Windows.Automation.ControlType]::Edit)
     ([Windows.Automation.ValuePattern]$token.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)).SetValue('public-synthetic-blank-workspace')
@@ -142,12 +239,19 @@ public static class NativeWindowProbe {
     }
     $window=Start-Window;Login $window
     $first=$report.starts[0].ready
+    if($ExerciseMaterial){Save-Material $window}
     Capture 'window-first.png';Close-Window
     $window=Start-Window;Login $window
     $second=$report.starts[1].ready
     if($first.url -cne $second.url -or $first.principal_id -cne $second.principal_id -or $first.data_dir -cne $second.data_dir){throw 'Actual native reopen changed origin/workspace identity.'}
+    if($ExerciseMaterial){
+        $proof=Check-Material
+        if($proof.project_id -cne $report.ui_saved_material.project_id -or $proof.resource_id -cne $report.ui_saved_material.resource_id){throw 'Reopen changed UI-created record identity.'}
+        Invoke-Control (Find-Control $window '资源' ([Windows.Automation.ControlType]::Button))
+        $report['ui_reopened_material']=$proof;Save-Report
+    }
     Capture 'window-reopen.png';Close-Window
-    $report.status='PASS_NATIVE_WINDOW_LOGIN_CLOSE_REOPEN_ONLY'
+    $report.status=if($ExerciseMaterial){'PASS_NATIVE_UI_PROJECT_CSV_SAVE_CLOSE_REOPEN_ONLY'}else{'PASS_NATIVE_WINDOW_LOGIN_CLOSE_REOPEN_ONLY'}
 } catch {
     $report.status='FAILED_NOT_ACCEPTED';$report['error_type']=$_.Exception.GetType().FullName;$report['error']=$_.Exception.Message
     throw
