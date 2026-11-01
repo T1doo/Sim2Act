@@ -156,7 +156,7 @@ def recover_cancelled_cold(store, *, scan=None):
         attempts.c.parameters['natural_spec']['operation_id'].as_string().is_not(None)))
     with store.tx() as c:
         query = select(runs.c.id).where(runs.c.status == 'RECONCILING',
-            runs.c.cancel_intent.is_(True), runs.c.lease_until <= time.time(), eligible_attempt)
+            runs.c.cancel_intent.is_(True), eligible_attempt)
         if scan.get('after') is not None:
             query = query.where(runs.c.id > scan['after'])
         ids = c.execute(query.order_by(runs.c.id).limit(SCAN_LIMIT)).scalars().all()
@@ -170,9 +170,21 @@ def recover_cancelled_cold(store, *, scan=None):
                 job = dict(c.execute(select(runs).where(runs.c.id == rid)
                                      .with_for_update()).mappings().one())
                 original_job = copy.deepcopy(job)
+                controlled = 'local_lease_control' in job['context']
                 spec.require(job['status'] == 'RECONCILING' and job['cancel_intent']
-                    and job['lease_until'] <= time.time() and job['result'] is None
+                    and (controlled or job['lease_until'] <= time.time()) and job['result'] is None
                     and all(job[k] == owner[k] for k in owner))
+                final_context = copy.deepcopy(job['context'])
+                if controlled:
+                    from ._lease_control_runtime import Runtime
+                    selected = store._authoritative_lease_runtime
+                    spec.require(selected is not None)
+                    retired = Runtime.retire_owner(selected, c, job)
+                    spec.require(retired is not False and retired['intent'] == 'cancel')
+                    del final_context['local_lease_control']
+                    store.event(c, rid, 'LOCAL_LEASE_CONTROL_RETIRED', dict(
+                        marker=job['context']['local_lease_control'], intent='cancel',
+                        fence=job['fence'], version=job['version']))
                 scoped = uses.control_scope(store, c, job['principal_id'], rid, lock=True)
                 spec.require(scoped is not None)
                 _, app = scoped
@@ -189,8 +201,8 @@ def recover_cancelled_cold(store, *, scan=None):
                     runs.c.status == 'RECONCILING', runs.c.cancel_intent.is_(True),
                     runs.c.version == job['version'], runs.c.fence == job['fence'],
                     runs.c.worker_id == job['worker_id'], runs.c.lease_until == job['lease_until'],
-                    runs.c.lease_until <= time.time()).values(status='CANCELLED',
-                        version=job['version'] + 1, fence=job['fence'] + 1, lease_until=0))
+                    *((runs.c.lease_until <= time.time(),) if not controlled else ())).values(status='CANCELLED',
+                        version=job['version'] + 1, fence=job['fence'] + 1, lease_until=0, context=final_context))
                 spec.require(changed.rowcount == 1)
                 changed = c.execute(update(internal_app_runs).where(
                     internal_app_runs.c.id == app['id'], internal_app_runs.c.status == state,
@@ -209,7 +221,8 @@ def recover_cancelled_cold(store, *, scan=None):
                 # accepted receipt evidence before the atomic commit.
                 final = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
                 spec.require(dict(final) == {**original_job, 'status':'CANCELLED',
-                    'version':original_job['version']+1, 'fence':original_job['fence']+1, 'lease_until':0})
+                    'version':original_job['version']+1, 'fence':original_job['fence']+1, 'lease_until':0,
+                    'context':final_context})
                 # Rejoin the complete historical bodies, capture, ledger and
                 # intent after callbacks, too. All rows are now known: this
                 # second pass cannot emit another rejection or alter history.

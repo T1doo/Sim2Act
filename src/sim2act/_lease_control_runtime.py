@@ -204,6 +204,8 @@ class Runtime:
                 runs.c.cancel_intent.is_(False), runs.c.lease_until == actual["lease_until"])
                 .values(context=context))
             require(changed.rowcount == 1, "Claim handoff competed")
+            self.store.event(c, actual["id"], "LOCAL_LEASE_CONTROL_CLAIM",
+                             dict(header=list(expected), marker=marker))
         # Hold the actual main writer across the fresh read and activation.
         # No main DML occurs in this segment; a competing version/intent cannot
         # slip between receipt inspection and issuing the process-local clock.
@@ -312,7 +314,7 @@ class Runtime:
             require(changed.rowcount == 1, "Abort intent changed")
             ctrl.execute("UPDATE leases SET pending_commit=acked_commit WHERE run_id=?", (binding[9],))
 
-    def publish_command(self, principal, run_id, command, version):
+    def publish_command(self, principal, run_id, command, version, *, iid=None):
         """Durable stop intent before waiting for the business writer.
 
         The control writer serializes this fresh committed-owner read with the
@@ -329,6 +331,17 @@ class Runtime:
             require(actual["version"] == version, "Command version changed")
             if not marked(actual):
                 return
+            with Runtime._main(self) as main:
+                owner = main.execute("SELECT p.owner_id FROM runs r JOIN projects p ON p.id=r.project_id WHERE r.id=? AND r.principal_id=?",
+                                     (run_id, principal)).fetchone()
+                require(owner == (principal,), "Command project owner changed")
+                if iid is not None:
+                    association = main.execute("""SELECT a.instance_id,json_extract(b.snapshot,'$.instance_id')
+                        FROM internal_run_bindings b JOIN internal_app_runs a ON a.id=b.app_run_id
+                        JOIN internal_instances i ON i.id=a.instance_id JOIN runs r ON r.id=b.run_id
+                        WHERE b.run_id=? AND a.principal_id=? AND i.principal_id=? AND i.project_id=r.project_id
+                          AND i.runtime_id=r.runtime_id AND i.id=?""", (run_id, principal, principal, iid)).fetchone()
+                    require(association == (iid, iid), "Command instance scope changed")
             value = self.authority.row(c, run_id)
             self.authority._match(actual, value)
             if actual["status"] != "RUNNING":

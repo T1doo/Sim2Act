@@ -1019,6 +1019,10 @@ class Worker:
                 if is_app_job(self.store, run["id"]):
                     fail_job(self, run, e)
                     return True
+                if "local_lease_control" in run["context"]:
+                    from .natural_spec_runtime import fail_owned
+                    fail_owned(self, run, e)
+                    return True
                 with self.store.tx() as c:
                     current_fence = c.execute(select(runs.c.fence).where(runs.c.id == run["id"])).scalar_one()
                     if current_fence == run["fence"]:

@@ -442,7 +442,7 @@ def check_terminal_commit(worker, c, run, state):
         _pb_source(worker, c, b)
     _binding(worker)
     if _production_binding(b):
-        gate.require(not worker.stop.is_set() and time.time() < min(run["lease_until"],
+        gate.require(not worker.stop.is_set() and time.time() < min(worker.store._execution_lease(c, run, _terminal=True),
             b.contract.expires_at, run["created_at"] + b.contract.caps.run_seconds,
             terminal_source.expires_at), "Production terminal proof expired")
 

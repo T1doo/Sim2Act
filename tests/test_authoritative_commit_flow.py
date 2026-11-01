@@ -140,6 +140,18 @@ def test_reopen_retires_expired_owner_without_replaying_committed_effect(env):
         cold.engine.dispose()
 
 
+def test_refused_project_scope_cannot_publish_a_stop_intent(env):
+    from sqlalchemy import update
+    from sim2act.db import projects
+    store, runtime, row, stop = owner(env)
+    with store.tx() as c:
+        c.execute(update(projects).where(projects.c.id == row["project_id"]).values(owner_id=env[4]))
+    with pytest.raises(DomainError):
+        store.command(row["principal_id"], row["id"], "cancel", row["version"])
+    with runtime.authority.connection() as c:
+        assert c.execute("SELECT intent FROM leases WHERE run_id=?", (row["id"],)).fetchone() == (None,)
+
+
 def test_actual_store_guard_fences_and_acknowledges_its_main_transaction(env):
     store, runtime, row, stop = owner(env)
     with store.tx() as c:

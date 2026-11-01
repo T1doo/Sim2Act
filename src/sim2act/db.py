@@ -1984,15 +1984,7 @@ class Store:
             from ._lease_control_runtime import Runtime
             # Instance association remains part of the original command gate.
             # Verify it before publishing an irreversible stop intent.
-            actual = Runtime.committed_run(selected, rid)
-            if iid is not None and "local_lease_control" in actual["context"]:
-                with self.engine.connect() as c:
-                    instance = c.execute(select(internal_app_runs.c.instance_id).join(
-                        internal_run_bindings, internal_run_bindings.c.app_run_id == internal_app_runs.c.id).where(
-                        internal_run_bindings.c.run_id == rid, internal_app_runs.c.principal_id == principal)).scalar_one_or_none()
-                    if instance != iid:
-                        raise DomainError("PERMISSION_DENIED")
-            Runtime.publish_command(selected, principal, rid, command, version)
+            Runtime.publish_command(selected, principal, rid, command, version, iid=iid)
         control = self._local_model_control
         if control is None:
             yield

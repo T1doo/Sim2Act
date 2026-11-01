@@ -1334,6 +1334,27 @@ def _counters_from_facts(store, c, job, manifest, facts):
         raise
 
 
+def _counter_lease_context(c, job):
+    ctx = job["context"]
+    if "local_lease_control" not in ctx:
+        return False
+    from . import _lease_control as lease_protocol
+    marker = ctx[lease_protocol.CONTEXT]
+    require(set(marker) == {"protocol", "control_id", "nonce"}
+        and marker["protocol"] == lease_protocol.VERSION
+        and all(type(marker[k]) is str and len(marker[k]) == 64
+            and all(v in "0123456789abcdef" for v in marker[k]) for k in ("control_id", "nonce")),
+        "Natural lease marker changed")
+    claims = c.execute(select(events.c.data).where(events.c.run_id == job["id"],
+        events.c.kind == "LOCAL_LEASE_CONTROL_CLAIM")).scalars().all()
+    claims = [claim for claim in claims if claim.get("marker") == dict(marker)]
+    require(len(claims) == 1 and claims[0]["marker"] == dict(marker)
+        and claims[0]["header"][:-1] == [job[k] for k in lease_protocol.HEADER[:-1]]
+        and job["version"] in (claims[0]["header"][-1], claims[0]["header"][-1]+1),
+        "Natural lease claim receipt changed")
+    return True
+
+
 def _counters(c, job, manifest, *, _facts=None):
     from .natural_trial_runs import MARKER, context_association
     from .spec_production import evidence_mode
@@ -1366,6 +1387,8 @@ def _counters(c, job, manifest, *, _facts=None):
     )
     rows.sort(key=lambda r: r["parameters"]["natural_spec"]["ordinal"])
     context_keys = {"kind", "messages", "requests", "repairs", "reserved_tokens", "tools", "spec_family"}
+    if _counter_lease_context(c, job):
+        context_keys.add("local_lease_control")
     associated = ((_facts.association() if _facts is not None else context_association(c, job))
         if MARKER in ctx else None)
     _counter_checkpoint(c, job, _facts)
@@ -3436,6 +3459,8 @@ def _counter_packet_core(packet):
         "tools",
         "spec_family",
     }
+    if _counter_lease_context(packet.facts.connection, job):
+        context_keys.add("local_lease_control")
     associated = packet.association() if MARKER in ctx else None
     packet.checkpoint()
     if associated is not None:
@@ -6112,7 +6137,7 @@ def _register_graph_source_witness():
         '_cold_sqlite_order','_cold_attempt_order','_model_value','_model_inputs',
         '_invalidate_cold_run_raw_seed','_invalidate_cold_run_facts','fingerprint',
         '_raw_seed_plain','_raw_seed_eligible','_raw_dynamic_eligible','_RAW_READ_SOURCE_BODY',
-        '_counters_from_facts','_counters','_counter_checkpoint','_node_proof_inputs',
+        '_counters_from_facts','_counters','_counter_lease_context','_counter_checkpoint','_node_proof_inputs',
         '_prove_node_from_facts','_prove_node','_prove_pending_from_facts','_prove_pending',
         'messages','parse','_anchor','strict_json','response_archive'),
         (_ColdGraphRead,_graph_accounted_versions._Frontier,_ColdTrialGraph,_ColdRunRawSeed,_ColdRunFacts,_ColdAuditSeed,

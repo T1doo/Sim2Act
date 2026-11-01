@@ -54,16 +54,29 @@ def cancelled(tmp_path, monkeypatch):
     monkeypatch.setattr(MockModel, 'request', forbidden)
     monkeypatch.setattr(InternModel, 'request', forbidden)
     monkeypatch.setattr(httpx.HTTPTransport, 'handle_request', forbidden)
-    monkeypatch.setattr(natural_live_admission, '_current', forbidden)
-    monkeypatch.setattr(natural_live_admission, 'authorized_read', forbidden)
-    monkeypatch.setattr(spec_production, 'source', forbidden)
-    monkeypatch.setattr(tools, 'authorized_read', forbidden)
+    # These are qualified production roles. Observe forbidden execution without
+    # replacing them and causing the unrelated native entry guard to refuse.
+    watched = {fn.__code__ for fn in (natural_live_admission._current,
+        natural_live_admission.authorized_read, spec_production.source, tools.authorized_read)}
+    slot = next(i for i in (3, 4, 5) if sys.monitoring.get_tool(i) is None)
+    sys.monitoring.use_tool_id(slot, 'cancel-recovery-forbidden-calls')
+    def entered(code, offset):
+        forbidden()
+    sys.monitoring.register_callback(slot, sys.monitoring.events.PY_START, entered)
+    for code in watched:
+        sys.monitoring.set_local_events(slot, code, sys.monitoring.events.PY_START)
     def sql_guard(c, cursor, statement, parameters, context, many):
         assert not ('resources.content' in statement.lower()), 'Current resource body read'
     event.listen(store.engine, 'before_cursor_execute', sql_guard)
-    yield store, settings, job, row, op, calls
-    event.remove(store.engine, 'before_cursor_execute', sql_guard)
-    store.engine.dispose()
+    try:
+        yield store, settings, job, row, op, calls
+    finally:
+        for code in watched:
+            sys.monitoring.set_local_events(slot, code, 0)
+        sys.monitoring.register_callback(slot, sys.monitoring.events.PY_START, None)
+        sys.monitoring.free_tool_id(slot)
+        event.remove(store.engine, 'before_cursor_execute', sql_guard)
+        store.engine.dispose()
 
 
 def snapshot(store):
