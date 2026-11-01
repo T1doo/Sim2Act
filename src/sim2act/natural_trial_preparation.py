@@ -1,4 +1,4 @@
-"""Server-authored P-A consent scope. Preparation never creates or dispatches Runs."""
+"""Server-authored P-A/P-B scopes; preparation never dispatches Runs."""
 
 import math
 import time
@@ -31,6 +31,11 @@ class PrepareInput(Strict):
     def distinct(self):
         gate.require(self.bindings[0].card_id != self.bindings[1].card_id)
         return self
+
+
+class PBPrepareInput(PrepareInput):
+    path: Literal["P-B"]
+    extraction_recipe: gate.Recipe
 
 
 class ConsentInput(Strict):
@@ -86,13 +91,21 @@ def _load(store, c, user, pid, key, *, current=True):
             raise DomainError("OUTCOME_UNKNOWN", "No complete preparation under this original key")
         store.authorize(c, user, project["runtime_id"], pid, rid, "resource.read")
     store.authorize(c, user, project["runtime_id"], pid, pid, "artifact.save_text")
-    request, value = pair(c, user, eid, PREPARE, "prepare", PrepareInput)
+    path = c.execute(query.with_only_columns(delivery_graph_requests.c.snapshot[
+        "response"]["path"].as_string())).scalar()
+    request_model = PBPrepareInput if path == "P-B" else PrepareInput
+    request, value = pair(c, user, eid, PREPARE, "prepare", request_model)
     contract = gate.parse_contract(value)
     gate.require(contract.principal_id == user and contract.project_id == pid
         and contract.trial_key == key and entity(user, pid, key) == gate.entity(contract)
         and contract.stage_keys == stage_keys(user, pid, key)
         and request.bindings == [GoalChoice(card_id=b.card_id,
             expected_version=b.goal_version) for b in contract.bindings])
+    if isinstance(request, PBPrepareInput):
+        gate.require(isinstance(contract, gate.PBTrialContract)
+            and request.extraction_recipe == contract.extraction_recipe
+            and contract.extraction_request_key == stage_keys(user, pid, key).cold + "_extract"
+            and contract.caps == gate.TrialCaps())
     if current:
         gate._current(store, c, user, contract, active=False)
     else:
@@ -107,7 +120,7 @@ def _receipt(store, c, user, contract):
     if closed:
         return closed
     approved = bool(gate._keys(c, user, gate.entity(contract), gate.APPROVE))
-    receipt = dict(status="PREPARED_LIVE_BLOCKED", path="P-A", contract=contract.model_dump(),
+    receipt = dict(status="PREPARED_LIVE_BLOCKED", path=getattr(contract, "path", "P-A"), contract=contract.model_dump(),
         review_token=fingerprint(contract.model_dump()), approved=approved,
         expired=time.time() >= contract.expires_at, live_allowed=False,
         new_runs=0, new_slots=0, actual_model_requests=0,
@@ -179,7 +192,7 @@ def end_preparation(store, user, pid, key, body: EndInput):
 
 
 @controlled
-def prepare(store, user, pid, key, body: PrepareInput, *, settings=None):
+def prepare(store, user, pid, key, body: PrepareInput | PBPrepareInput, *, settings=None):
     with store.tx() as c:
         project = store.lock_project(c, user, pid)
         eid = entity(user, pid, key)
@@ -231,14 +244,29 @@ def prepare(store, user, pid, key, body: PrepareInput, *, settings=None):
             environment(store, settings, None)
             subject = canonical_quota_subject(ACCOUNT_ID)
         prepared_at = time.time()
-        contract = gate.TrialContractV2(prepared_at=prepared_at,
-            review_expires_at=prepared_at + 300, execution_expires_at=prepared_at + 3600,
-            trial_key=key, project_id=pid, principal_id=user,
+        fields = dict(trial_key=key, project_id=pid, principal_id=user,
             runtime_id=project["runtime_id"], quota_subject=subject,
             software_fingerprint=gate.implementation(),
             authorization_fingerprint=gate.authorization_fingerprint(c, user, pid,
                 project["runtime_id"], sources), bindings=bindings,
-            stage_keys=stage_keys(user, pid, key), expires_at=prepared_at + 3600)
+            stage_keys=stage_keys(user, pid, key))
+        if isinstance(body, PBPrepareInput):
+            # Original P-B V1 only: do not invent a V2 migration or inherit the
+            # optional SQLite 120s settlement policy by its model default.
+            contract = gate.PBTrialContract(**fields, path="P-B", expires_at=prepared_at + 300,
+                caps=gate.TrialCaps(), extraction_recipe=body.extraction_recipe,
+                extraction_request_key=fields["stage_keys"].cold + "_extract")
+            from . import natural_specs
+
+            target = bindings[1]
+            natural_specs.expand(body.extraction_recipe.model_dump(exclude_none=True),
+                "app_" + fingerprint(dict(project=pid, trial=key))[:32], target.card_id,
+                pid, target.source_hash, target.resource_id,
+                target.goal_snapshot.content.model_dump(), gate._limits(contract), bindings[0].source_hash)
+        else:
+            contract = gate.TrialContractV2(**fields, prepared_at=prepared_at,
+                review_expires_at=prepared_at + 300, execution_expires_at=prepared_at + 3600,
+                expires_at=prepared_at + 3600)
         gate._current(store, c, user, contract)
         remember(c, user, eid, PREPARE, "prepare", body, contract.model_dump())
         gate._current(store, c, user, contract)

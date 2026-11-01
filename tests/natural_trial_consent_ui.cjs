@@ -69,6 +69,12 @@ async function boot(hash = "") {
     w.history.replaceState({marker: "kept"}, "", url);
   }
   if (["lost-preparation", "lost-cold"].includes(originalScenario)) fault = "preparation";
+  if(originalScenario.startsWith("pb-")) {
+    $("trial-path").value="P-B";$("trial-path").dispatchEvent(new w.Event("change"));
+    $("trial-pb-mode").value=originalScenario.slice(3);$("trial-pb-mode").dispatchEvent(new w.Event("change"));
+    $("trial-pb-prefix").value="reviewed";$("trial-pb-prefix").dispatchEvent(new w.Event("input"));
+    check(visible($("trial-pb-editor")),"P-B graph editor visible by explicit selection");
+  }
   await click("trial-prepare");
   const key = $("trial-original-key").value, hash = w.location.hash;
   check(/^[A-Za-z0-9_-]+$/.test(key), "server scope key generated without handwritten JSON or hash");
@@ -81,6 +87,14 @@ async function boot(hash = "") {
     check(posts("/preparation") === 1, "lost response cold recovery never reposts preparation");
   }
   check(posts("/preparation") === 1, "one original preparation POST");
+  if(originalScenario.startsWith("pb-")) {
+    const request=requests.find(r=>r.method==="POST"&&r.path.endsWith("/preparation"));
+    check(request.body.path==="P-B" && request.body.extraction_recipe.steps[0].step_id==="reviewed_read","normal UI produces typed P-B graph without handwritten contract or credentials");
+    check($("trial-path").disabled && $("trial-pb-mode").disabled && $("trial-pb-prefix").disabled,"prepared graph controls cannot change under an old consent");
+    await boot(hash);await click("trial-recover");
+    check($("trial-path").value==="P-B" && $("trial-path").disabled && $("trial-scope").textContent.includes("P-B 精确准备"),"cold page restores original P-B path and locks original intent");
+    check($("trial-scope").textContent.includes("reviewed_read") && $("trial-scope").textContent.includes("原 P-B 提取键"),"full frozen recipe and original extraction key visible for consent");
+  }
   if(originalScenario === "live-config-blocked") {
     const message=$("trial-status").textContent;
     check(message.includes("postgresql_application_database") && message.includes("SIM2ACT_APPLICATION_GENERATION_ACTIVATION_ENABLED=true"),"actual server configuration detail reaches the visible status");
@@ -100,7 +114,7 @@ async function boot(hash = "") {
   }
 
   check($("trial-scope").textContent.includes("共 7 槽") && $("trial-scope").textContent.includes("192000") && $("trial-scope").textContent.includes("7168"), "full original budget visible");
-  check($("trial-scope").textContent.includes("V2 审阅截止") && $("trial-scope").textContent.includes("执行截止") && $("trial-scope").textContent.includes("不是七槽完成保证"), "both frozen deadlines and finite handoff limits visible without a completion guarantee");
+  if(!originalScenario.startsWith("pb-"))check($("trial-scope").textContent.includes("V2 审阅截止") && $("trial-scope").textContent.includes("执行截止") && $("trial-scope").textContent.includes("不是七槽完成保证"), "both frozen deadlines and finite handoff limits visible without a completion guarantee");
   check(info.goalTexts.every(text => $("trial-scope").textContent.includes(text)), "both complete goals and materials visible");
   check($("trial-consent").disabled && !$("trial-ack").checked, "no implicit consent after preparation");
   if (originalScenario.startsWith("manual-b-")) {

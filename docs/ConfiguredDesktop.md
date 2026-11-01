@@ -106,5 +106,11 @@ For an already approved P-A or P-B scope, enter its original trial and approval
 keys in “正式连接与启动选择”, read the existing approval, then recheck/export.
 The original five-field selection contains no credentials or authority. An old
 unconfigured-account scope cannot be silently rebound by this reader. Fresh
-seven-slot preparation in this panel remains P-A only; P-B still needs its
-original typed contract, recipe, source chain and explicit approval procedure.
+seven-slot preparation now offers P-A and P-B separately. P-B uses its original
+V1 contract, a server-validated finite extraction recipe and exact extraction
+key; later extraction must still prove this same trial's successful Source.
+Choose the P-B graph structure and node prefix, read both complete Goals/TXT,
+all ports/steps and the five-minute single expiry, then explicitly consent.
+Preparation locks the editor; changes require ending/withdrawing the original
+intent and explicitly starting another. Original P-A V2 and saved scopes retain
+their own deadlines and schema; no contract is relabelled or extended.

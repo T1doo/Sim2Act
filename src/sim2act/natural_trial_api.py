@@ -109,7 +109,7 @@ def mount(app, store, identity, settings=None):
     from . import natural_trial_preparation as preparation
 
     @app.post(base + "/preparation")
-    def prepare(pid: str, key: str, body: preparation.PrepareInput, user=dependency):
+    def prepare(pid: str, key: str, body: preparation.PBPrepareInput | preparation.PrepareInput, user=dependency):
         gate.require(re.fullmatch(gate.KEY, key) is not None)
         return preparation.prepare(store, user, pid, key, body, settings=settings)
 

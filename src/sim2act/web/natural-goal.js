@@ -351,7 +351,7 @@ async function renderNaturalReceiptCandidate(r,id,current){
   });section.append(button);
 }
 
-// P-A exact trial preparation and consent.
+// Exact P-A/P-B trial preparation; original contracts remain separate.
 "use strict";
 // Only original keys and transient page state; never model/Run submission.
 const trialEntries = new Map();
@@ -453,8 +453,11 @@ function trialEntry() { return trialEntries.get(trialIndex(trialContext())); }
 const trialReviewDeadline = c => c?.namespace === "natural-live-trial.v2" ? c.review_expires_at : c?.expires_at;
 function trialValid(r, key) {
   const c = r?.contract;
-  if (r?.status !== "PREPARED_LIVE_BLOCKED" || r.path !== "P-A" || r.live_allowed !== false || r.new_runs !== 0 || r.new_slots !== 0 || r.actual_model_requests !== 0 || !/^[a-f0-9]{64}$/.test(r.review_token) || c?.trial_key !== key || c.project_id !== $("project-select").value || !Array.isArray(c.bindings) || c.bindings.length !== 2 || !Number.isFinite(c.expires_at) || typeof r.approved !== "boolean" || typeof r.revoked !== "boolean" || typeof r.expired !== "boolean") throw Error("未知准备回执");
+  if (r?.status !== "PREPARED_LIVE_BLOCKED" || !["P-A","P-B"].includes(r.path) || r.live_allowed !== false || r.new_runs !== 0 || r.new_slots !== 0 || r.actual_model_requests !== 0 || !/^[a-f0-9]{64}$/.test(r.review_token) || c?.trial_key !== key || c.project_id !== $("project-select").value || !Array.isArray(c.bindings) || c.bindings.length !== 2 || !Number.isFinite(c.expires_at) || typeof r.approved !== "boolean" || typeof r.revoked !== "boolean" || typeof r.expired !== "boolean") throw Error("未知准备回执");
   if (c.namespace === "natural-live-trial.v2" && (!Number.isFinite(c.prepared_at) || c.review_expires_at !== c.prepared_at + 300 || c.execution_expires_at !== c.prepared_at + 3600 || c.expires_at !== c.execution_expires_at || c.stage_handoff_seconds !== 900 || typeof r.review_expired !== "boolean")) throw Error("未知期限合同");
+  if(r.path==="P-B" && (c.path!=="P-B" || c.namespace!=="natural-live-trial.v1"
+    || !c.extraction_recipe || c.extraction_recipe.version!=="natural-spec-recipe.v1"
+    || !Array.isArray(c.extraction_recipe.steps) || !/^[A-Za-z0-9_-]{1,100}$/.test(c.extraction_request_key)))throw Error("未知 P-B 提取范围");
   return r;
 }
 function trialWorkerSelection(receipt) {
@@ -497,17 +500,20 @@ function renderTrialConsent() {
   $("trial-new").disabled = !entry || !(["closed", "rejected"].includes(entry.state) || (entry.state === "known" && r?.approved && r.revoked));
   $("trial-end").disabled = !(entry?.state === "unapproved" || (entry?.state === "known" && r && !r.approved)) || !$("trial-end-ack").checked;
   $("trial-refresh").disabled = busy || unknown;
+  for(const id of ["trial-path","trial-pb-mode","trial-pb-prefix"])$(id).disabled=Boolean(entry);
   if (entry) $("trial-status").textContent = entry.message;
 }
 function showTrialScope(r) {
   clearTrialBudget();
   const c = r.contract;
   if (!c) { $("trial-scope").textContent = `仅恢复同意元数据。批准：${r.approved}；撤回：${r.revoked}；过期：${r.expired}。材料不可读取时不展示旧私有范围；仍可明确撤回。LIVE 关闭。`; return; }
+  $("trial-path").value=r.path;renderTrialPBEditor();
+  if(r.path==="P-B")$("trial-pb-recipe").textContent=JSON.stringify(c.extraction_recipe,null,2);
   const fields = {title: "名称", goal: "目标", known: "已知", assumptions: "假设", unresolved: "未决项", constraints: "硬条件", acceptance_checks: "验收检查", resource_refs: "绑定材料"};
   const materials = c.bindings.map((b, i) => `${i === 0 ? "生成及 Source" : "未见输入 Cold"}：目标 ${b.card_id} v${b.goal_version}\n材料 ${b.resource_id}（TXT）\n${b.content}\n\n${Object.entries(fields).map(([field, label]) => `${label}：${Array.isArray(b.goal_snapshot.content[field]) ? b.goal_snapshot.content[field].join("\n") : b.goal_snapshot.content[field]}`).join("\n")}`).join("\n\n");
   const cap = c.caps;
   const deadlines = c.namespace === "natural-live-trial.v2" ? `V2 审阅截止 ${new Date(c.review_expires_at * 1000).toISOString()}；执行截止 ${new Date(c.execution_expires_at * 1000).toISOString()}。均从准备时冻结，恢复、批准、重放不续期。总时窗60分钟含5分钟审阅；每个后继阶段须在前序 Run 受理后15分钟内明确批准（含前序最多300秒、排队及人工交接）。每 Run 的300秒含额度等待、模型延迟和工具工作；人工迟到或剩余时间不足即拒绝。不是七槽完成保证。` : "V1 原单一期限保持，不迁移或续期。";
-  $("trial-scope").textContent = `P-A 精确准备与同意范围\n${deadlines}\n项目 ${c.project_id}\n身份 ${c.principal_id}\n运行身份 ${c.runtime_id}\n模型 ${c.model}\n端点 ${c.endpoint}\n流式 ${c.stream}\n额度主体 ${c.quota_subject}（执行时核对服务器账户来源）\n期限 ${new Date(c.expires_at * 1000).toISOString()}（不会因恢复延长）\n生成 ${cap.generate_requests} / Source ${cap.source_requests} / Cold ${cap.cold_requests}，共 ${cap.max_requests} 槽\n每请求输出 ≤${cap.max_output_tokens} tokens；总输出 ≤${cap.total_output_tokens}\n每请求 wire ≤${cap.max_wire_bytes} bytes；响应 ASCII ≤${cap.max_response_ascii_bytes} bytes\n每 Run 预留 ≤${cap.per_run_reserved}；总预留 ≤${cap.total_reserved}\n每 Run ≤${cap.run_seconds} 秒；普通 lease ${cap.lease_seconds} 秒${cap.settlement_protocol === "sqlite-exclusive-settlement.v1" ? `；单次结算预约 ≤${cap.settlement_seconds} 秒，受原总期限约束` : ""}；每分钟 ${cap.requests_per_minute} 请求；付费上限 ${cap.paid_cap}\n阶段键 ${Object.entries(c.stage_keys).map(([k,v]) => `${k}: ${v}`).join("；")}\n批准：${r.approved}；撤回：${r.revoked}；过期：${r.expired}\n\n${materials}\n\n此入口新增 Run / 槽 / 外发均为 0。本准备记录不代表任务已执行；运行结果和人工验收单独核对。`;
+  $("trial-scope").textContent = `${r.path} 精确准备与同意范围\n${deadlines}\n项目 ${c.project_id}\n身份 ${c.principal_id}\n运行身份 ${c.runtime_id}\n模型 ${c.model}\n端点 ${c.endpoint}\n流式 ${c.stream}\n额度主体 ${c.quota_subject}（执行时核对服务器账户来源）\n期限 ${new Date(c.expires_at * 1000).toISOString()}（不会因恢复延长）\n生成 ${cap.generate_requests} / Source ${cap.source_requests} / Cold ${cap.cold_requests}，共 ${cap.max_requests} 槽\n每请求输出 ≤${cap.max_output_tokens} tokens；总输出 ≤${cap.total_output_tokens}\n每请求 wire ≤${cap.max_wire_bytes} bytes；响应 ASCII ≤${cap.max_response_ascii_bytes} bytes\n每 Run 预留 ≤${cap.per_run_reserved}；总预留 ≤${cap.total_reserved}\n每 Run ≤${cap.run_seconds} 秒；普通 lease ${cap.lease_seconds} 秒${cap.settlement_protocol === "sqlite-exclusive-settlement.v1" ? `；单次结算预约 ≤${cap.settlement_seconds} 秒，受原总期限约束` : ""}；每分钟 ${cap.requests_per_minute} 请求；付费上限 ${cap.paid_cap}\n阶段键 ${Object.entries(c.stage_keys).map(([k,v]) => `${k}: ${v}`).join("；")}\n批准：${r.approved}；撤回：${r.revoked}；过期：${r.expired}\n\n${materials}${r.path==="P-B"?`\n\n原 P-B 提取键 ${c.extraction_request_key}\n预定提取图（实际 Source 完成后仍须来源审阅）\n${JSON.stringify(c.extraction_recipe,null,2)}`:""}\n\n此入口新增 Run / 槽 / 外发均为 0。本准备记录不代表任务已执行；运行结果和人工验收单独核对。`;
 }
 function trialBudgetApproval(receipt) {
   const approval=receipt?.approval,accepted=approval?.approval,key=accepted?.request?.request_key;
@@ -664,17 +670,44 @@ function trialConfigurationFailure(error) {
   const fields=error.detail.slice(prefix.length).split(", ");
   return fields.length && fields.every(field=>allowed.has(field)) ? fields.join("；") : null;
 }
+function trialPBRecipe() {
+  const prefix=$("trial-pb-prefix").value.trim(),mode=$("trial-pb-mode").value;
+  if(!/^[a-z][a-z0-9_]{0,19}$/.test(prefix)||!["single","parallel","feedback"].includes(mode))throw Error("节点前缀需为小写字母开头的20位以内名称；请选择既有有限图结构。");
+  const id=name=>prefix+"_"+name,port=(ref,field)=>({source:"step",ref:id(ref),field});
+  const source=Object.fromEntries(["resource_id","content","hash","format"].map(field=>[field,port("read",field)]));
+  const steps=[{step_id:id("read"),operator:"resource.read",depends_on:[],inputs:{resource_id:{source:"data",ref:"source",field:"resource_id"}}}];
+  let joined;
+  if(mode==="single") {
+    steps.push({step_id:id("all"),operator:"model.spec.all",depends_on:[id("read")],inputs:{...source}});joined="all";
+  } else {
+    steps.push({step_id:id("duties"),operator:"model.spec.requirements",depends_on:[id("read")],inputs:{...source}});
+    const inputs={...source},depends=[id("read")];
+    if(mode==="feedback"){inputs.prior_items=port("duties","items");inputs.prior_feedback=port("duties","feedback");depends.push(id("duties"));}
+    steps.push({step_id:id("qualifiers"),operator:"model.spec.qualifiers",depends_on:depends,inputs});
+    steps.push({step_id:id("merge"),operator:"spec.merge_evidence",depends_on:[id("duties"),id("qualifiers")],inputs:{first:port("duties","items"),second:port("qualifiers","items")}});joined="merge";
+  }
+  steps.push({step_id:id("check"),operator:"spec.verify_citations",depends_on:[id("read"),id(joined)],inputs:{...source,items:port(joined,"items")}});
+  steps.push({step_id:id("save"),operator:"artifact.save_text",depends_on:[id("check")],inputs:{text:port("check","text")}});
+  return {version:"natural-spec-recipe.v1",steps};
+}
+function renderTrialPBEditor() {
+  $("trial-pb-editor").hidden=$("trial-path").value!=="P-B";
+  try{$("trial-pb-recipe").textContent=JSON.stringify(trialPBRecipe(),null,2);}catch(error){$("trial-pb-recipe").textContent=error.message;}
+}
 async function prepareTrial() {
   const ctx = trialContext(); if (!ctx.identity || !ctx.project || trialEntry()) return;
   const choices = [$("trial-source").value, $("trial-cold").value].map(id => trialCards.find(c => c.id === id));
   if (choices.some(c => !c) || choices[0].id === choices[1].id) throw Error("请选择两张不同的完整目标卡");
+  const request={bindings:choices.map(c=>({card_id:c.id,expected_version:c.version}))};
+  if($("trial-path").value==="P-B"){request.path="P-B";request.extraction_recipe=trialPBRecipe();}
+  else if($("trial-path").value!=="P-A")throw Error("请选择原有应用路径");
   const key = crypto.randomUUID(), entry = {key, base: `/api/projects/${ctx.project}/natural-trials/${key}`, state: "sending", operation: 1, message: "正在准备；不会新增 Run 或发送模型请求。"};
   const operation = entry.operation;
   trialEntries.set(trialIndex(ctx), entry); $("trial-original-key").value = key;
   updateTrialAddress(ctx.project, key);
   renderTrialConsent();
   try {
-    const receipt = await api(`${entry.base}/preparation`, "POST", {bindings: choices.map(c => ({card_id: c.id, expected_version: c.version}))});
+    const receipt = await api(`${entry.base}/preparation`, "POST", request);
     if (entry.operation !== operation) return;
     // Validate while current; late replies cannot acknowledge or enable another view.
     if (!trialCurrent(ctx)) { entry.state = "unknown"; entry.message = "页面已切换；只读取原键恢复。"; return; }
@@ -752,3 +785,8 @@ $("trial-new").onclick = safe(() => {
 window.addEventListener("popstate", trialHistoryChanged);
 window.addEventListener("hashchange", trialHistoryChanged);
 setInterval(renderTrialConsent, 1000);
+
+$("trial-path").onchange=renderTrialPBEditor;
+$("trial-pb-mode").onchange=renderTrialPBEditor;
+$("trial-pb-prefix").oninput=renderTrialPBEditor;
+renderTrialPBEditor();
