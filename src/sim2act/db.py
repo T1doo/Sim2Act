@@ -1501,7 +1501,7 @@ class Store:
         return row
 
     def _sync_recovered_app(self, c, row, state, error):
-        """Error metadata for the exact accepted binding, never a result write."""
+        """Terminal metadata for the exact accepted binding, never a result write."""
         binding = c.execute(select(internal_run_bindings).where(
             internal_run_bindings.c.run_id == row["id"])).mappings().first()
         if binding is None:
@@ -1609,8 +1609,8 @@ class Store:
                 error = ({"code": "OUTCOME_UNKNOWN"} if pending or op else
                     DomainError("BUDGET_EXHAUSTED", "Original absolute Run deadline ended").public()
                     if state == "FAILED" else None)
-                if state == "FAILED":
-                    # Closing an expired control generation is not permission
+                if "context" in r and state in {"FAILED", "CANCELLED", "PAUSED"}:
+                    # Closing a stopped/expired generation is not permission
                     # to execute it again. Keep prior receipts/effects and only
                     # synchronize the already accepted application's metadata.
                     self._sync_recovered_app(c, actual, state, error)

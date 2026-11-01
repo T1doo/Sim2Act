@@ -213,6 +213,24 @@ def test_recovery_rejects_binding_mutation_with_unchanged_self_reported_hash(env
         assert before == after
 
 
+@pytest.mark.parametrize("command,terminal", [("cancel","CANCELLED"), ("pause","PAUSED")])
+def test_stopped_control_owner_closes_run_and_accepted_app_metadata_together(env, command, terminal):
+    from test_persistent_app_runs import setup, enqueue as enqueue_app
+    store = env[0]
+    runtime = store._enable_authoritative_leases(env[1], create=True)
+    release, instance, *_ = setup(env)
+    accepted = enqueue_app(env, instance, release)
+    stop = threading.Event()
+    row = store.claim("controlled-app-owner", 30)
+    row = runtime.bind_claim(row, owner_stop=stop)
+    assert row["id"] == accepted["run_id"]
+    assert store.command(row["principal_id"], row["id"], command, row["version"]) == command.upper()+"_REQUESTED"
+    assert store.claim("recovery-owner", 30) is None
+    value = store.inspect(row["principal_id"], row["id"])
+    assert value["status"] == terminal and value["result"] is None
+    assert store.claim("second-recovery-owner", 30) is None
+
+
 def test_actual_store_guard_fences_and_acknowledges_its_main_transaction(env):
     store, runtime, row, stop = owner(env)
     with store.tx() as c:
