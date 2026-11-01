@@ -152,6 +152,28 @@ def test_refused_project_scope_cannot_publish_a_stop_intent(env):
         assert c.execute("SELECT intent FROM leases WHERE run_id=?", (row["id"],)).fetchone() == (None,)
 
 
+@pytest.mark.parametrize("damage", ["marker-null", "marker-list", "claim-null", "header-null", "boolean-fence", "boolean-version"])
+def test_saved_json_claim_shapes_fail_with_controlled_domain_error(env, damage):
+    from sim2act.natural_spec_runtime import _counter_lease_context
+    from sqlalchemy import update
+    from sim2act.db import events
+    store, runtime, row, stop = owner(env)
+    with store.tx() as c:
+        actual = dict(row)
+        actual["context"] = dict(row["context"])
+        if damage.startswith("marker"):
+            actual["context"][control.CONTEXT] = None if damage == "marker-null" else []
+        else:
+            value = dict(header=[row[k] for k in control.HEADER], marker=row["context"][control.CONTEXT])
+            if damage == "claim-null": value = None
+            elif damage == "header-null": value["header"] = None
+            elif damage == "boolean-fence": value["header"][5] = True
+            else: value["header"][6] = True
+            c.execute(update(events).where(events.c.run_id == row["id"], events.c.kind == "LOCAL_LEASE_CONTROL_CLAIM").values(data=value))
+        with pytest.raises(DomainError):
+            _counter_lease_context(c, actual)
+
+
 def test_actual_store_guard_fences_and_acknowledges_its_main_transaction(env):
     store, runtime, row, stop = owner(env)
     with store.tx() as c:

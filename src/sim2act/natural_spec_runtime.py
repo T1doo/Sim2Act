@@ -1340,6 +1340,8 @@ def _counter_lease_context(c, job):
         return False
     from . import _lease_control as lease_protocol
     marker = ctx[lease_protocol.CONTEXT]
+    require((type(marker) is dict or _source_owned_code.image.is_kind(marker, 'd')),
+            "Natural lease marker shape changed")
     require(set(marker) == {"protocol", "control_id", "nonce"}
         and marker["protocol"] == lease_protocol.VERSION
         and all(type(marker[k]) is str and len(marker[k]) == 64
@@ -1347,6 +1349,16 @@ def _counter_lease_context(c, job):
         "Natural lease marker changed")
     claims = c.execute(select(events.c.data).where(events.c.run_id == job["id"],
         events.c.kind == "LOCAL_LEASE_CONTROL_CLAIM")).scalars().all()
+    for claim in claims:
+        require(type(claim) is dict and set(claim) == {"header", "marker"}
+            and type(claim["header"]) is list and len(claim["header"]) == len(lease_protocol.HEADER)
+            and all(type(v) is str and v for v in claim["header"][:5])
+            and all(type(v) is int and v >= 1 for v in claim["header"][5:])
+            and type(claim["marker"]) is dict and set(claim["marker"]) == {"protocol", "control_id", "nonce"}
+            and claim["marker"]["protocol"] == lease_protocol.VERSION
+            and all(type(claim["marker"][k]) is str and len(claim["marker"][k]) == 64
+                and all(v in "0123456789abcdef" for v in claim["marker"][k]) for k in ("control_id", "nonce")),
+            "Natural lease claim receipt shape changed")
     claims = [claim for claim in claims if claim.get("marker") == dict(marker)]
     require(len(claims) == 1 and claims[0]["marker"] == dict(marker)
         and claims[0]["header"][:-1] == [job[k] for k in lease_protocol.HEADER[:-1]]
@@ -3459,8 +3471,7 @@ def _counter_packet_core(packet):
         "tools",
         "spec_family",
     }
-    if _counter_lease_context(packet.facts.connection, job):
-        context_keys.add("local_lease_control")
+    require("local_lease_control" not in ctx, "Authoritative lease requires full counter checkpoints")
     associated = packet.association() if MARKER in ctx else None
     packet.checkpoint()
     if associated is not None:
@@ -3747,6 +3758,11 @@ def _cold_counter_loaded(c, job, manifest, facts):
         type(rows) is not list
         or job is not namespace["job"]
     ):
+        return _RAW_READ_MISS
+    # Claim receipts are current SQL facts. They have not been included in the
+    # private immutable packet's complete inputs, so its no-SQL pure segment
+    # cannot safely consume this protocol. Keep the ordinary complete checks.
+    if "local_lease_control" in job["context"]:
         return _RAW_READ_MISS
     if type(job) is _ColdGraphRowMapping:
         # Source and fresh Cold keep the actual SQL Run row here. Qualify its
