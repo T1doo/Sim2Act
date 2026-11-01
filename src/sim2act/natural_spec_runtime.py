@@ -4638,7 +4638,9 @@ class _ColdTrialGraph:
                 require(_source_owned_code.current is checker and checker.__code__ is code
                     and checker.__defaults__ is defaults,'Source checker code changed')
                 checker()
+            from .natural_live_admission import PBTrialContract, _contract_kind, _contract_owned, _contract_raw
             value = (_manifest_code.dump(self.guard,model) if _SOURCE_VIEW_TYPE is not None and _manifest_code.is_manifest(model)
+                else _contract_raw(model) if _contract_owned(model) and _contract_kind(model) is PBTrialContract
                 else model.model_dump())
             self._base()
             return value

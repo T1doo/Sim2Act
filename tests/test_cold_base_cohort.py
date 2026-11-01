@@ -200,3 +200,24 @@ def test_unissued_default_and_unissued_mode_keep_original_collector(sql_facts, m
 
     with f.store.tx() as c, native_segment(f, c, before_choose=before):
         assert calls == ['default-real-producers', 'unissued-mode']
+
+
+def test_real_admission_dump_retains_exact_pb_owner_and_canonical_raw(sql_facts):
+    from sim2act import _cold_source_packet as source
+    from sim2act import production_trial_policy as policy
+    f=sql_facts
+    seed_cold(f)
+    expected=policy.evidence.requirements_for(f.user,f.contract,f.binding.approval_key)
+    def admission_before_frontier(graph,source_facts,generate_facts,candidate):
+        # Admission is produced before the accounted frontier in the default
+        # coordinator. Preserve that actual order; no undeclared late root.
+        graph.add('cold-trial:admission-prefix',dict(original=gate._contract_raw(f.contract),expected=expected.model_dump()))
+    with f.store.tx() as c,native_segment(f,c,before_choose=admission_before_frontier) as segment:
+        value=trial(segment)
+        value.expected=expected
+        original=value._dump(f.contract)
+        assert gate._contract_same(original,gate._contract_raw(f.contract))
+        assert source.image.plain(original)==f.contract.model_dump()
+        value._base()
+        with pytest.raises(TypeError):original['trial_key']='forged'
+        assert gate._contract_same(segment.graph.inputs['cold-trial:admission-prefix']['original'],original)
