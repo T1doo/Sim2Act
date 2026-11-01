@@ -4,6 +4,10 @@ One private registration per exact driver/Connection/Transaction. Ordinary
 transactions retain their original delegate; no deadline or permit is created.
 """
 import sqlite3
+import json
+import time
+import os
+from contextlib import nullcontext
 from sqlalchemy import event
 
 from .errors import DomainError
@@ -61,19 +65,26 @@ def install(engine):
             if raw in active:fail('Finite commit boundary cannot reenter')
             active.add(raw)
             entered = True
-            check()
-            if current is not None:
-                current(entry)
-            tail(owner)
-            if (entry.check is not check or entry.clock_check is not clock
-                    or entry.c is not owner or entry.raw is not raw
-                    or entry.transaction is not transaction or entry.changes != changes
-                    or raw.total_changes != changes):
-                fail('Finite commit callback changed held roles or protected data')
-            if clock is not None:
-                clock()
-            invoke = "sim2act:commit-outcome-invoke.v1"
-            return original(proxy) if invoke is None else invoke(entry, proxy)
+            read_control = "sim2act:commit-control-read.v1"
+            control = None if read_control is None else read_control(entry)
+            barrier = nullcontext() if control is None else control[1].boundary(entry)
+            with barrier:
+                check()
+                if current is not None:
+                    current(entry)
+                tail(owner)
+                if control is not None:
+                    from ._lease_control_runtime import Runtime
+                    Runtime._validate_boundary(control[0], entry, owner)
+                if (entry.check is not check or entry.clock_check is not clock
+                        or entry.c is not owner or entry.raw is not raw
+                        or entry.transaction is not transaction or entry.changes != changes
+                        or raw.total_changes != changes):
+                    fail('Finite commit callback changed held roles or protected data')
+                if clock is not None:
+                    clock()
+                invoke = "sim2act:commit-outcome-invoke.v1"
+                return original(proxy) if invoke is None else invoke(entry, proxy)
         except BaseException as error:
             safe_owner = rollback(entry, raw, owner)
             if (type(error) is ValueError and error.args and type(error.args[0]) is str
@@ -156,6 +167,11 @@ def install(engine):
         def commit(self):
             owner, raw, _ = held_roles(self)
             self.identity()
+            read_control = "sim2act:commit-control-read.v1"
+            control = None if read_control is None else read_control(self)
+            if control is not None:
+                from ._lease_control_runtime import Runtime
+                Runtime._seed_boundary(control[0], self, owner)
             if tuple(engine.dispatch.commit) or owner._echo:
                 fail('Finite commit does not support Engine commit listeners or echo callbacks')
             self.changes = raw.total_changes
@@ -189,9 +205,20 @@ def install(engine):
             finally:
                 if entries.get(raw) is self:
                     del entries[raw]
-                retire = "sim2act:commit-outcome-retire.v1"
-                if retire is not None:
-                    retire(self)
+                read_control = "sim2act:commit-control-read.v1"
+                facts = "sim2act:commit-outcome-read.v1"
+                control = None if read_control is None else read_control(self)
+                try:
+                    if control is not None and not any(facts(self)):
+                        from ._lease_control_runtime import Runtime
+                        Runtime._abort_boundary(control[0], self, owner)
+                except BaseException:
+                    if error is None:
+                        raise
+                finally:
+                    retire = "sim2act:commit-outcome-retire.v1"
+                    if retire is not None:
+                        retire(self)
 
     register = "sim2act:commit-factory-register.v1"
     retire = "sim2act:commit-factory-retire.v1"
@@ -215,6 +242,7 @@ def _seal_commit_code():
                "sim2act:commit-outcome-owner.v1": "restore_commit_owner",
                "sim2act:commit-factory-register.v1": "register_commit_factory",
                "sim2act:commit-factory-retire.v1": "retire_commit_factory"}
+    methods["sim2act:commit-control-read.v1"] = "read_commit_control"
     selected = {key: (None if _outcome_native is None else getattr(_outcome_native, name))
                 for key, name in methods.items()}
     def seal(code):
@@ -230,7 +258,8 @@ except ImportError:
 if _outcome_native is not None and not all(hasattr(_outcome_native, name) for name in (
         "register_commit_outcomes", "register_commit_factory", "retire_commit_factory",
         "init_commit_outcome", "preinit_commit_outcome", "check_commit_outcome",
-        "read_commit_outcome", "read_commit_roles", "restore_commit_owner", "retire_commit_roles", "invoke_commit_outcome")):
+        "read_commit_outcome", "read_commit_roles", "restore_commit_owner", "retire_commit_roles", "invoke_commit_outcome",
+        "read_commit_control", "bind_commit_control", "find_commit_boundary", "enter_commit_control", "leave_commit_control")):
     _outcome_native = None
 _seal_commit_code()
 if _outcome_native is not None:
@@ -245,6 +274,13 @@ if _outcome_native is not None:
     _tx_connection = _sqlite_transaction.connection
     _tx_active = _sqlite_transaction.is_active
     _object_class = object.__dict__["__class__"]
+    _sqlite_dbapi = sqlite3.Connection
+    _sqlite_execute = sqlite3.Connection.execute
+    _sqlite_fetchone = sqlite3.Cursor.fetchone
+    _sqlite_commit = sqlite3.Connection.commit
+    _commit_wall, _commit_mono = time.time, time.monotonic
+    _control_stat = os.lstat
+    _receipt_load = json.loads
     _outcome_items = tuple(globals().copy().items())
     _outcome_native.register_code(12, (((globals(), (
         ("install", install, (_function_state(install),)),
@@ -257,5 +293,6 @@ if _outcome_native is not None:
          (vars(_outcome_native), tuple((name, getattr(_outcome_native, name)) for name in (
              "register_commit_outcomes", "register_commit_factory", "retire_commit_factory",
              "init_commit_outcome", "preinit_commit_outcome", "check_commit_outcome",
-             "read_commit_outcome", "read_commit_roles", "restore_commit_owner", "retire_commit_roles", "invoke_commit_outcome"))))))
+             "read_commit_outcome", "read_commit_roles", "restore_commit_owner", "retire_commit_roles", "invoke_commit_outcome",
+             "read_commit_control", "bind_commit_control", "find_commit_boundary", "enter_commit_control", "leave_commit_control"))))))
     _outcome_native.register_commit_outcomes(install, _sqlite_do_commit, _sqlite_dialect)

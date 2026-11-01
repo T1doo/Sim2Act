@@ -29,7 +29,8 @@ from .db import Store, meta
 from .errors import DomainError
 from .worker import Worker
 
-VERSION = "sim2act-blank-synthetic-workspace.v1"
+LEGACY_VERSION = "sim2act-blank-synthetic-workspace.v1"
+VERSION = "sim2act-blank-synthetic-workspace.v2"
 TOKEN = "public-synthetic-blank-workspace"
 DATABASE = "synthetic-workspace.db"
 MARKER = "synthetic-workspace.json"
@@ -57,11 +58,11 @@ def require(value, code):
         raise WorkspaceError(code)
 
 
-def schema_structure(inspector=None):
+def schema_structure(inspector=None, *, authoritative=False):
     """Pin this finite SQLite schema, including the constraints used for CAS."""
     dialect = sqlite.dialect()
     if inspector is None:
-        return {table.name: {
+        result = {table.name: {
             "columns": [{"name": c.name, "type": str(c.type.compile(dialect=dialect)),
                          "nullable": c.nullable} for c in table.columns],
             "primary_key": [c.name for c in table.primary_key.columns],
@@ -69,6 +70,12 @@ def schema_structure(inspector=None):
                              for constraint in table.constraints
                              if isinstance(constraint, UniqueConstraint)),
         } for table in meta.sorted_tables}
+        if authoritative:
+            result["local_lease_control_receipts"] = dict(columns=[
+                dict(name=name, type="TEXT", nullable=name == "commit_id")
+                for name in ("commit_id", "control_id", "run_id", "nonce", "header", "receipt")],
+                primary_key=["commit_id"], unique=[])
+        return result
     return {name: {
         "columns": [{"name": c["name"], "type": str(c["type"].compile(dialect=dialect)),
                      "nullable": c["nullable"]} for c in inspector.get_columns(name)],
@@ -77,8 +84,8 @@ def schema_structure(inspector=None):
     } for name in inspector.get_table_names()}
 
 
-def schema_fingerprint():
-    return hashlib.sha256(json.dumps(schema_structure(), sort_keys=True).encode()).hexdigest()
+def schema_fingerprint(*, authoritative=False):
+    return hashlib.sha256(json.dumps(schema_structure(authoritative=authoritative), sort_keys=True).encode()).hexdigest()
 
 
 def checked_path(path):
@@ -211,10 +218,10 @@ def open_workspace(path, *, new=False):
         marker = json.loads((root / MARKER).read_text(encoding="utf-8"))
         require(isinstance(marker, dict) and set(marker) == {
             "version", "mode", "principal_id", "schema_fingerprint"}, "UNKNOWN_WORKSPACE")
-        require(marker["version"] == VERSION and marker["mode"] == "SYNTHETIC_TEST_ONLY"
+        require(marker["version"] in (VERSION, LEGACY_VERSION) and marker["mode"] == "SYNTHETIC_TEST_ONLY"
                 and isinstance(marker["principal_id"], str)
                 and re.fullmatch(r"user_[a-f0-9]{32}", marker["principal_id"]), "UNKNOWN_WORKSPACE")
-        require(marker["schema_fingerprint"] == schema_fingerprint(), "SCHEMA_CHANGED")
+        require(marker["schema_fingerprint"] == schema_fingerprint(authoritative=marker["version"] == VERSION), "SCHEMA_CHANGED")
     for suffix in ["", "-journal", "-wal", "-shm"]:
         file = root / (DATABASE + suffix)
         require(not file.is_symlink() and (not file.exists() or file.is_file()), "LINKED_DATABASE")
@@ -224,16 +231,19 @@ def open_workspace(path, *, new=False):
         if new:
             store.initialize()
             principal = store.user("Public synthetic workspace", TOKEN)
+            store._enable_authoritative_leases(settings_for(root), create=True)
             marker = dict(version=VERSION, mode="SYNTHETIC_TEST_ONLY", principal_id=principal,
-                          schema_fingerprint=schema_fingerprint())
+                          schema_fingerprint=schema_fingerprint(authoritative=True))
             # The directory is new and exclusively created by this call.
             with (root / MARKER).open("x", encoding="utf-8") as stream:
                 json.dump(marker, stream, indent=2)
                 stream.write("\n")
         else:
             inspector = inspect(store.engine)
-            require(schema_structure(inspector) == schema_structure(), "SCHEMA_CHANGED")
+            require(schema_structure(inspector) == schema_structure(authoritative=marker["version"] == VERSION), "SCHEMA_CHANGED")
             require(store.authenticate(TOKEN) == marker["principal_id"], "IDENTITY_CHANGED")
+            if marker["version"] == VERSION:
+                store._enable_authoritative_leases(settings_for(root), create=False)
         store._enable_local_model_snapshots()
         return root, store, marker
     except Exception:

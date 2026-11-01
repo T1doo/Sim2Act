@@ -2260,7 +2260,7 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
             raise DomainError("VERSION_CONFLICT", "Terminal write ownership pointer changed")
         require(all(owner[key] == live[key] for key in owner_fields)
             and owner["status"] == "RUNNING" and not owner["cancel_intent"]
-            and not worker.stop.is_set() and time.time() < owner["lease_until"],
+            and not worker.stop.is_set() and time.time() < store._execution_lease(c, owner),
             "Terminal write ownership interval changed")
         from .spec_production import active as production_active
         if (worker.s.mode != "mock" or worker.s.live_enabled) and not production_active(worker):
@@ -2305,7 +2305,7 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
             if getattr(worker, "pa_trial", None) is not None:
                 from .pa_trial_dispatch import check_terminal_commit
                 check_terminal_commit(worker, c, live, "SUCCEEDED")
-            require(not worker.stop.is_set() and time.time() < live["lease_until"]
+            require(not worker.stop.is_set() and time.time() < store._execution_lease(c, live, _terminal=True)
                 and time.time() < job["created_at"] + min(limits.run_seconds, plan["definition"]["manifest"]["runtime_limits"]["run_seconds"], s["limits"]["run_seconds"]))
         return False
     # This final fresh guard covers all preceding receipt/context writes.
@@ -2337,7 +2337,7 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
             from .pa_trial_dispatch import check_commit_after_readback
             check_commit_after_readback(worker, c, final, commit_readback,
                 _tail_authorities=tuple(sorted(authorities)))
-        require(not worker.stop.is_set() and time.time() < final["lease_until"]
+        require(not worker.stop.is_set() and time.time() < store._execution_lease(c, final)
             and time.time() < job["created_at"] + min(worker.s.run_seconds,
                 plan["definition"]["manifest"]["runtime_limits"]["run_seconds"], s["limits"]["run_seconds"]),
             "Local write final interval ended")

@@ -270,12 +270,17 @@ def observe_reservation_reads(monkeypatch):
     return reports, before_sql
 
 
-def test_pb_production_original_source_extraction_explicit_use_and_cold(env, tmp_path, monkeypatch):
+def test_pb_production_original_source_extraction_explicit_use_and_cold(env, tmp_path, monkeypatch, _authoritative=False):
     data, binding, fixture, factory = configured(env, tmp_path, monkeypatch, prepare_case=prepare_pb)
+    if _authoritative:
+        data[0]._enable_authoritative_leases(data[1], create=True)
     generation, _, release, source_instance, generated = apps.ready(data, style="ordered")
     assert len(generated) == 3
-    read_reports, before_sql = observe_reservation_reads(monkeypatch)
-    event.listen(data[0].engine, "before_cursor_execute", before_sql)
+    # The authoritative protocol requires original actor roles. Its acceptance
+    # uses actual commits/receipts, without the legacy method-wrapping observer.
+    read_reports, before_sql = ([], None) if _authoritative else observe_reservation_reads(monkeypatch)
+    if before_sql is not None:
+        event.listen(data[0].engine, "before_cursor_execute", before_sql)
     source_id = apps.enqueue(data, release, source_instance, key=binding.contract.stage_keys.source)
     approve_stage(data, binding, "source", source_id)
     source_bytes = []
@@ -326,7 +331,10 @@ def test_pb_production_original_source_extraction_explicit_use_and_cold(env, tmp
 
     # Fresh Store/client/Worker on the same durable database; no old worker result.
     cold_store = Store(data[1].database_url, test_only=True)
-    event.listen(cold_store.engine, "before_cursor_execute", before_sql)
+    if _authoritative:
+        cold_store._enable_authoritative_leases(data[1], create=False)
+    if before_sql is not None:
+        event.listen(cold_store.engine, "before_cursor_execute", before_sql)
     cold_client = TestClient(create_app(cold_store, data[1]))
     cold_client.headers["Authorization"] = "Bearer synthetic-test-A"
     cold_data = (cold_store, data[1], cold_client, *data[3:])
@@ -373,8 +381,9 @@ def test_pb_production_original_source_extraction_explicit_use_and_cold(env, tmp
         history = journal.read(cold_store, data[3], binding.contract, binding.approval_key, binding.account_id)
         assert len(history.ledger.slots) == len(fixture["sends"]) == 7
         assert not history.ledger.halted and all(s.accepted for s in history.ledger.slots)
-        assert len(read_reports) == 4
-        assert [r["run_id"] for r in read_reports] == [source_id] * 2 + [cold_id] * 2
+        if not _authoritative:
+            assert len(read_reports) == 4
+            assert [r["run_id"] for r in read_reports] == [source_id] * 2 + [cold_id] * 2
         assert [s.identity.stage for s in history.ledger.slots] == ["generate"] * 3 + ["source"] * 2 + ["cold"] * 2
         assert all(b.reserved_at - a.reserved_at >= 60 for a, b in zip(history.ledger.slots[:-1], history.ledger.slots[1:], strict=True))
         with cold_store.tx() as c:

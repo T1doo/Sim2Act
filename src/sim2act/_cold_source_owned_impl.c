@@ -588,8 +588,9 @@ done:
 /* Commit facts never live in a Python closure/container reachable by GC.
  * Only the fixed guarded frame can invoke its captured original delegate. */
 typedef struct {
- PyObject *weak,*connection,*raw,*transaction,*guarded,*original,*factory;
+ PyObject *weak,*connection,*raw,*transaction,*guarded,*original,*factory,*control,*control_connection,*control_times,*control_file;
  int invoked,committed,in_delegate;
+ double control_wall_limit,control_absolute_limit;
 } CommitOutcomeRecord;
 #define COMMIT_OUTCOME_RECORD "sim2act.commit-outcome.v1"
 static PyObject *commit_outcome_records,*commit_outcome_factories,*commit_outcome_globals,*commit_outcome_install_code,*commit_outcome_body_code,*commit_outcome_ctor_code,*commit_outcome_exit_code,*commit_outcome_guarded_code,*commit_outcome_delegate,*commit_outcome_dialect;
@@ -601,7 +602,8 @@ static CommitOutcomeRecord*commit_outcome_record(PyObject*value){
 static void commit_outcome_free(PyObject*capsule){
  CommitOutcomeRecord*r=commit_outcome_record(capsule);if(!r)return;
  Py_XDECREF(r->weak);Py_XDECREF(r->connection);Py_XDECREF(r->raw);Py_XDECREF(r->transaction);
- Py_XDECREF(r->guarded);Py_XDECREF(r->original);Py_XDECREF(r->factory);PyMem_Free(r);
+ Py_XDECREF(r->guarded);Py_XDECREF(r->original);Py_XDECREF(r->factory);
+ Py_XDECREF(r->control);Py_XDECREF(r->control_connection);Py_XDECREF(r->control_times);Py_XDECREF(r->control_file);PyMem_Free(r);
 }
 static PyObject*commit_outcome_forget(PyObject*key,PyObject*weak){
  if(commit_outcome_records){CommitOutcomeRecord*r=commit_outcome_record(PyDict_GetItemWithError(commit_outcome_records,key));
@@ -764,6 +766,86 @@ static PyObject*read_commit_outcome(PyObject*self,PyObject*boundary){
  if(!r){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
  return PyTuple_Pack(2,r->committed?Py_True:Py_False,r->invoked?Py_True:Py_False);
 }
+static PyObject*find_commit_boundary(PyObject*self,PyObject*connection){
+ (void)self;if(!commit_outcome_code_current()){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
+ Py_ssize_t pos=0;PyObject*key,*value;
+ while(commit_outcome_records&&PyDict_Next(commit_outcome_records,&pos,&key,&value)){
+  CommitOutcomeRecord*r=commit_outcome_record(value);
+  if(r&&r->connection==connection&&r->factory){PyObject*scope=PyWeakref_GetObject(r->weak);
+   if(scope!=Py_None){PyObject*f=commit_factory_record(r->factory);
+    if(PyDict_GetItemWithError(PyTuple_GET_ITEM(f,3),r->raw)==scope)return Py_NewRef(scope);}}
+ }Py_RETURN_NONE;
+}
+static PyObject*read_commit_control(PyObject*self,PyObject*boundary){
+ (void)self;CommitOutcomeRecord*r=find_commit_outcome(boundary);
+ if(!r){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
+ return Py_NewRef(r->control?r->control:Py_None);
+}
+static PyObject*bind_commit_control(PyObject*self,PyObject*args){
+ (void)self;PyObject*scope,*binding,*connection;
+ if(!PyArg_ParseTuple(args,"OOO",&scope,&binding,&connection))return NULL;
+ if(!lease_actor_current()||!commit_outcome_code_current()){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
+ CommitOutcomeRecord*r=find_commit_outcome(scope);
+ if(!r||r->connection!=connection||!PyTuple_CheckExact(binding)||PyTuple_GET_SIZE(binding)!=11||r->invoked||r->control_connection)return commit_outcome_error();
+ PyObject*runtime=PyTuple_GET_ITEM(binding,0),*current=lease_runtime_current(NULL,runtime);if(!current)return NULL;Py_DECREF(current);
+ PyFrameObject*frame=PyThreadState_GetFrame(PyThreadState_Get());PyObject*locals=NULL;int valid=0;
+ if(frame){PyCodeObject*code=PyFrame_GetCode(frame);PyObject*space=PyFrame_GetGlobals(frame);
+  const char*names[]={"_bind_boundary","_seed_boundary"};
+  for(int i=0;i<2;i++){PyObject*fn=PyDict_GetItemString(((PyTypeObject*)lease_runtime_type)->tp_dict,names[i]);
+   if(fn&&PyFunction_Check(fn)&&PyFunction_GetCode(fn)==(PyObject*)code&&PyFunction_GetGlobals(fn)==space)valid=1;}
+  if(valid)locals=PyFrame_GetLocals(frame);Py_DECREF(code);Py_DECREF(space);Py_DECREF(frame);}
+ valid=locals&&code_namespace(locals)&&PyDict_GetItemString(locals,"self")==runtime
+   &&PyDict_GetItemString(locals,"boundary")==scope&&PyDict_GetItemString(locals,"c")==connection
+   &&PyDict_GetItemString(locals,"binding")==binding;
+ Py_XDECREF(locals);if(!valid)return commit_outcome_error();
+ if(r->control){for(int i=0;i<7;i++)if(PyTuple_GET_ITEM(r->control,i)!=PyTuple_GET_ITEM(binding,i))return commit_outcome_error();
+  if(PyTuple_GET_ITEM(r->control,7)!=Py_None)return commit_outcome_error();}
+ Py_XSETREF(r->control,Py_NewRef(binding));Py_RETURN_NONE;
+}
+static PyObject*control_generator_code(PyObject*function,int depth){
+ if(depth>8||!PyFunction_Check(function))return NULL;PyCodeObject*code=(PyCodeObject*)PyFunction_GetCode(function);
+ if((code->co_flags&CO_GENERATOR)&&PyUnicode_CompareWithASCIIString(code->co_name,"boundary")==0)return function;
+ PyObject*cells=PyFunction_GetClosure(function);
+ for(Py_ssize_t i=0;cells&&i<PyTuple_GET_SIZE(cells);i++){PyObject*v=PyCell_GET(PyTuple_GET_ITEM(cells,i));
+  PyObject*found=v?control_generator_code(v,depth+1):NULL;if(found)return found;}
+ return NULL;
+}
+static int control_frame_current(CommitOutcomeRecord*r,PyObject*scope,PyObject*connection){
+ if(!r||!r->control)return 0;PyObject*session=PyTuple_GET_ITEM(r->control,1);
+ PyObject*fn=PyDict_GetItemString(Py_TYPE(session)->tp_dict,"boundary"),*generator=fn?control_generator_code(fn,0):NULL;
+ PyFrameObject*frame=PyThreadState_GetFrame(PyThreadState_Get());PyObject*locals=NULL;
+ if(frame){PyCodeObject*actual=PyFrame_GetCode(frame);PyObject*space=PyFrame_GetGlobals(frame);
+  if(generator&&(PyObject*)actual==PyFunction_GetCode(generator)&&space==PyFunction_GetGlobals(generator))locals=PyFrame_GetLocals(frame);
+  Py_DECREF(space);Py_DECREF(actual);Py_DECREF(frame);}
+ int valid=locals&&code_namespace(locals)&&PyDict_GetItemString(locals,"self")==session
+  &&PyDict_GetItemString(locals,"scope")==scope&&(!connection||PyDict_GetItemString(locals,"c")==connection);
+ Py_XDECREF(locals);return valid;
+}
+static PyObject*enter_commit_control(PyObject*self,PyObject*args){
+ (void)self;PyObject*scope,*connection;if(!PyArg_ParseTuple(args,"OO",&scope,&connection))return NULL;
+ if(!lease_actor_current()||!commit_outcome_code_current()){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
+ CommitOutcomeRecord*r=find_commit_outcome(scope);
+ if(!control_frame_current(r,scope,connection)||r->control_connection||!PyTuple_CheckExact(r->control)
+   ||PyTuple_GET_ITEM(r->control,7)==Py_None)return commit_outcome_error();
+ PyObject*session=PyTuple_GET_ITEM(r->control,1),*fields=PyObject_GenericGetDict(session,NULL),*times=NULL;
+ if(fields&&code_namespace(fields)){
+  PyObject*wall=PyDict_GetItemString(fields,"wall"),*mono=PyDict_GetItemString(fields,"mono"),*absolute=PyDict_GetItemString(fields,"absolute_mono");
+  if(wall&&mono&&absolute)times=PyTuple_Pack(3,wall,mono,absolute);}
+ Py_XDECREF(fields);if(!times){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
+ PyObject*authority=PyObject_GetAttrString(session,"authority"),*data=authority?PyObject_GenericGetDict(authority,NULL):NULL;
+ PyObject*path=data?PyDict_GetItemString(data,"path"):NULL,*identity=data?PyDict_GetItemString(data,"file_identity"):NULL;
+ PyObject*filename=path?PyOS_FSPath(path):NULL,*file=NULL;
+ if(filename&&PyUnicode_CheckExact(filename)&&identity&&PyTuple_CheckExact(identity)&&PyTuple_GET_SIZE(identity)==2)
+  file=PyTuple_Pack(3,filename,PyTuple_GET_ITEM(identity,0),PyTuple_GET_ITEM(identity,1));
+ Py_XDECREF(authority);Py_XDECREF(data);Py_XDECREF(filename);
+ if(!file){Py_DECREF(times);if(PyErr_Occurred())return NULL;return commit_outcome_error();}
+ r->control_connection=Py_NewRef(connection);r->control_times=times;r->control_file=file;Py_RETURN_NONE;
+}
+static PyObject*leave_commit_control(PyObject*self,PyObject*scope){
+ (void)self;CommitOutcomeRecord*r=find_commit_outcome(scope);
+ if(!control_frame_current(r,scope,NULL))return commit_outcome_error();
+ Py_CLEAR(r->control_connection);Py_CLEAR(r->control_times);Py_CLEAR(r->control_file);Py_RETURN_NONE;
+}
 static PyObject*read_commit_roles(PyObject*self,PyObject*boundary){
  (void)self;CommitOutcomeRecord*r=find_commit_outcome(boundary);
  if(!r||!r->connection||!r->raw||!r->transaction){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
@@ -790,7 +872,8 @@ static PyObject*retire_commit_roles(PyObject*self,PyObject*boundary){
  if(!r||r->in_delegate){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
  /* Facts stay readable until this Boundary dies; heavy roles must not keep
   * a failed listener/Connection cycle alive through the native weak table. */
- Py_CLEAR(r->connection);Py_CLEAR(r->raw);Py_CLEAR(r->transaction);Py_CLEAR(r->guarded);Py_CLEAR(r->original);Py_CLEAR(r->factory);Py_RETURN_NONE;
+ Py_CLEAR(r->connection);Py_CLEAR(r->raw);Py_CLEAR(r->transaction);Py_CLEAR(r->guarded);Py_CLEAR(r->original);Py_CLEAR(r->factory);
+ Py_CLEAR(r->control);Py_CLEAR(r->control_connection);Py_CLEAR(r->control_times);Py_CLEAR(r->control_file);Py_RETURN_NONE;
 }
 static PyObject*check_commit_outcome(PyObject*self,PyObject*boundary){
  (void)self;if(!commit_outcome_code_current()){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
@@ -841,6 +924,58 @@ static int commit_physical_current(CommitOutcomeRecord*r,PyObject*proxy,int requ
 done:Py_XDECREF(fields);Py_XDECREF(actual);Py_XDECREF(owner);Py_XDECREF(active);
  if(!valid&&!PyErr_Occurred())PyErr_Format(PyExc_ValueError,"Commit outcome provenance changed (%s)",stage);return valid;
 }
+static int commit_control_clocks(CommitOutcomeRecord*r){
+ PyObject*b=r->control,*times=r->control_times;
+ PyObject*stop_fields=PyObject_GenericGetDict(PyTuple_GET_ITEM(b,4),NULL);
+ if(!stop_fields||!code_namespace(stop_fields)||PyDict_GetItemString(stop_fields,"_flag")!=Py_False){Py_XDECREF(stop_fields);return 0;}Py_DECREF(stop_fields);
+ PyObject*wall=PyObject_CallNoArgs(PyDict_GetItemString(commit_outcome_globals,"_commit_wall"));
+ PyObject*mono=PyObject_CallNoArgs(PyDict_GetItemString(commit_outcome_globals,"_commit_mono"));
+ if(!wall||!mono){Py_XDECREF(wall);Py_XDECREF(mono);return 0;}
+ double w=PyFloat_AsDouble(wall),m=PyFloat_AsDouble(mono);Py_DECREF(wall);Py_DECREF(mono);
+ return !PyErr_Occurred()&&w<r->control_wall_limit&&w<r->control_absolute_limit
+  &&w<PyFloat_AsDouble(PyTuple_GET_ITEM(b,6))&&w<PyFloat_AsDouble(PyTuple_GET_ITEM(times,0))
+  &&m<PyFloat_AsDouble(PyTuple_GET_ITEM(b,5))&&m<PyFloat_AsDouble(PyTuple_GET_ITEM(times,1))&&m<PyFloat_AsDouble(PyTuple_GET_ITEM(times,2));
+}
+static int commit_control_current(CommitOutcomeRecord*r){
+ if(!r->control)return 1;
+ if(!r->control_file)return 0;
+ PyObject*stat=PyObject_CallOneArg(PyDict_GetItemString(commit_outcome_globals,"_control_stat"),PyTuple_GET_ITEM(r->control_file,0));
+ if(!stat)return 0;
+ PyObject*device=PyObject_GetAttrString(stat,"st_dev"),*inode=PyObject_GetAttrString(stat,"st_ino"),*mode=PyObject_GetAttrString(stat,"st_mode");
+ int same=device&&inode&&mode&&PyLong_CheckExact(device)&&PyLong_CheckExact(inode)&&PyLong_CheckExact(mode)
+  &&(PyLong_AsUnsignedLong(mode)&0170000)==0100000
+  &&PyObject_RichCompareBool(device,PyTuple_GET_ITEM(r->control_file,1),Py_EQ)==1
+  &&PyObject_RichCompareBool(inode,PyTuple_GET_ITEM(r->control_file,2),Py_EQ)==1;
+ Py_XDECREF(device);Py_XDECREF(inode);Py_XDECREF(mode);Py_DECREF(stat);if(!same)return 0;
+ PyObject*b=r->control,*ctrl=r->control_connection,*times=r->control_times;
+ PyObject*kind=PyDict_GetItemString(commit_outcome_globals,"_sqlite_dbapi");
+ if(!ctrl||!times||(PyObject*)Py_TYPE(ctrl)!=kind||(PyObject*)Py_TYPE(r->raw)!=kind)return 0;
+ PyObject*factory=PyObject_GetAttrString(ctrl,"row_factory"),*active=PyObject_GetAttrString(ctrl,"in_transaction");
+ int valid=factory==Py_None&&active==Py_True;Py_XDECREF(factory);Py_XDECREF(active);if(!valid)return 0;
+ PyObject*execute=PyDict_GetItemString(commit_outcome_globals,"_sqlite_execute"),*fetch=PyDict_GetItemString(commit_outcome_globals,"_sqlite_fetchone");
+ PyObject*sql=PyUnicode_FromString("SELECT header,nonce,state,lease_wall,absolute_deadline,intent,pending_commit,acked_commit FROM leases WHERE run_id=?");
+ PyObject*params=PyTuple_Pack(1,PyTuple_GET_ITEM(b,9)),*cursor=NULL,*row=NULL;
+ if(sql&&params)cursor=PyObject_CallFunctionObjArgs(execute,ctrl,sql,params,NULL);
+ if(cursor)row=PyObject_CallOneArg(fetch,cursor);
+ Py_XDECREF(sql);Py_XDECREF(params);Py_XDECREF(cursor);
+ if(!row||!PyTuple_CheckExact(row)||PyTuple_GET_SIZE(row)!=8)goto done;
+ PyObject*effect=PyTuple_GET_ITEM(b,10);
+ if(!PyTuple_CheckExact(effect)||PyTuple_GET_SIZE(effect)!=2)goto done;
+ PyObject*commit=PyTuple_GET_ITEM(effect,0);
+ if(!commit||!PyUnicode_CheckExact(commit)||!PyUnicode_CheckExact(PyTuple_GET_ITEM(row,0))
+  ||!PyUnicode_CheckExact(PyTuple_GET_ITEM(row,1))||!PyUnicode_CheckExact(PyTuple_GET_ITEM(row,2))
+  ||!PyUnicode_CheckExact(PyTuple_GET_ITEM(row,6)))goto done;
+ if(PyUnicode_Compare(PyTuple_GET_ITEM(row,0),PyTuple_GET_ITEM(b,2))
+   ||PyUnicode_Compare(PyTuple_GET_ITEM(row,1),PyTuple_GET_ITEM(b,3))
+   ||PyUnicode_CompareWithASCIIString(PyTuple_GET_ITEM(row,2),"ACTIVE")
+   ||PyTuple_GET_ITEM(row,5)!=Py_None||PyUnicode_Compare(PyTuple_GET_ITEM(row,6),commit)
+   ||(PyUnicode_CheckExact(PyTuple_GET_ITEM(row,7))&&!PyUnicode_Compare(PyTuple_GET_ITEM(row,7),commit)))goto done;
+ /* Everything after SQL/JSON callbacks is a pure current stop/time check.
+  * The control write lock still excludes cancellation/takeover commits. */
+ r->control_wall_limit=PyFloat_AsDouble(PyTuple_GET_ITEM(row,3));r->control_absolute_limit=PyFloat_AsDouble(PyTuple_GET_ITEM(row,4));
+ valid=!PyErr_Occurred();Py_DECREF(row);return valid;
+done:Py_XDECREF(row);return 0;
+}
 static PyObject*invoke_commit_outcome(PyObject*self,PyObject*args){
  (void)self;PyObject*boundary,*proxy;if(!PyArg_ParseTuple(args,"OO",&boundary,&proxy))return NULL;
  if(!commit_outcome_code_current()){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
@@ -864,6 +999,17 @@ static PyObject*invoke_commit_outcome(PyObject*self,PyObject*args){
  stage="private entries/engine";
  if(!entries||entries!=PyTuple_GET_ITEM(factory_state,3)
    ||!PyDict_CheckExact(entries)||PyDict_GetItemWithError(entries,r->raw)!=boundary)goto done;
+ if(r->control){
+  if(gc){PyGC_Enable();gc=0;}
+  stage="current control lease/deadline/stop";
+  if(!commit_control_current(r))goto done;
+  gc=PyGC_Disable();
+  if(!lease_actor_current()||!commit_outcome_code_current()||!commit_physical_current(r,proxy,1)
+    ||!commit_factory_current(r->factory)||!commit_control_clocks(r))goto done;
+  PyObject*count=PyObject_GetAttrString(r->raw,"total_changes"),*expected=PyDict_GetItemString(locals,"changes");
+  int same=count&&expected&&PyLong_CheckExact(count)&&PyLong_CheckExact(expected)&&PyObject_RichCompareBool(count,expected,Py_EQ)==1;
+  Py_XDECREF(count);if(!same)goto done;
+ }
  r->invoked=1;
  Py_CLEAR(locals);Py_CLEAR(fields);
  if(gc){PyGC_Enable();gc=0;}
@@ -871,7 +1017,8 @@ static PyObject*invoke_commit_outcome(PyObject*self,PyObject*args){
   * Fix this physical target even if a Python monitoring/GC callback changes
   * the pool proxy after the last metadata check. The hook still runs once. */
  r->in_delegate=1;
- result=PyObject_CallOneArg(r->original,r->raw);
+ result=(r->control?PyObject_CallOneArg(PyDict_GetItemString(commit_outcome_globals,"_sqlite_commit"),r->raw)
+                    :PyObject_CallOneArg(r->original,r->raw));
  r->in_delegate=0;
  if(result){
   r->committed=1;
@@ -1034,6 +1181,11 @@ static PyMethodDef methods[]={
  {"preinit_commit_outcome",preinit_commit_outcome,METH_O,"Reject borrowed constructors before any instance dispatch."},
  {"check_commit_outcome",check_commit_outcome,METH_O,"Check fixed actual Boundary class and private roles before dispatch."},
  {"read_commit_outcome",read_commit_outcome,METH_O,"Read actual original-delegate invocation/return facts."},
+ {"find_commit_boundary",find_commit_boundary,METH_O,"Find only the actual entered scope for an owned main transaction."},
+ {"read_commit_control",read_commit_control,METH_O,"Read immutable control binding, never a validation PASS."},
+ {"bind_commit_control",bind_commit_control,METH_VARARGS,"Bind only from fixed Runtime main-transaction methods."},
+ {"enter_commit_control",enter_commit_control,METH_VARARGS,"Enter only the issued Session generator's real control writer."},
+ {"leave_commit_control",leave_commit_control,METH_O,"Leave only that same control writer scope."},
  {"read_commit_roles",read_commit_roles,METH_O,"Read original cleanup roles, never rejected mutable fields."},
  {"restore_commit_owner",restore_commit_owner,METH_O,"Restore the known owned Connection class before cleanup, never dispatch a rejected class."},
  {"retire_commit_roles",retire_commit_roles,METH_O,"Release heavy roles at actual scope exit, retaining facts."},

@@ -132,14 +132,20 @@ def transaction(store, *, settlement_interval=None, _commit_check=None, _commit_
         event.listen(c, 'before_cursor_execute', scope.before)
         committed = rolled_back = False
         boundary = None
+        early_boundary = store._authoritative_lease_runtime is not None
         try:
             try:
+                if early_boundary:
+                    boundary = store._sqlite_commit_boundary(c, final_check, final_clock)
+                    boundary.__enter__()
                 yield c
                 if scope.phase != 'WRITE':
                     raise SnapshotChanged('Local model snapshot did not reach its original write boundary')
                 selected = final_check if settlement_interval is not None or _commit_check is not None or _commit_clock_check is not None else None
                 if selected is None:
                     c.commit()
+                elif early_boundary:
+                    boundary.commit()
                 else:
                     with store._sqlite_commit_boundary(c, selected, final_clock) as boundary:
                         boundary.commit()
@@ -163,6 +169,10 @@ def transaction(store, *, settlement_interval=None, _commit_check=None, _commit_
                 raise
         finally:
             primary = sys.exc_info()[1]
+            if early_boundary and boundary is not None:
+                try:boundary.__exit__(type(primary) if primary is not None else None, primary, primary.__traceback__ if primary is not None else None)
+                except BaseException:
+                    if primary is None:raise
             def cleanup(operation):
                 try:operation()
                 except BaseException as error:

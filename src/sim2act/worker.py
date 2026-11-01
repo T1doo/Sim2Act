@@ -1001,6 +1001,7 @@ class Worker:
         if recover_cancelled_cold(self.store, scan=self._natural_cancel_scan):
             return True
         run = self.store.claim(self.id, self.s.lease_seconds,
+                               _owner_stop=self.stop,
                                **({"trial_binding": self.pa_trial} if self.pa_trial is not None else {}))
         if run:
             original = self.s

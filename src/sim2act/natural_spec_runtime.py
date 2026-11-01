@@ -200,6 +200,12 @@ def _model_settlement_writer(worker, job, deadline, state, *, attempt_id=None, _
     settlement_lock = vars(worker).setdefault("_settlement_lock", Lock())
     require(settlement_lock.acquire(blocking=False), "Model settlement writer cannot reenter")
     try:
+        from ._lease_control_runtime import marked
+        if worker.store._authoritative_lease_runtime is not None and marked(job):
+            from .model_settlement import authoritative_interval
+            with authoritative_interval(worker, job, deadline, state):
+                yield
+            return
         with renewal_lock:
             if extended:
                 from .model_settlement import interval
@@ -1945,6 +1951,13 @@ def fail_owned(worker, run, error):
             .mappings()
             .one()
         )
+        lease = header["lease_until"]
+        controlled = store._authoritative_lease_runtime is not None and "local_lease_control" in run["context"]
+        if controlled:
+            try:
+                lease = store._execution_lease(c, header)
+            except DomainError:
+                return  # Recovery, never a stopped/expired old executor, owns it.
         if (
             any(
                 header[k] != run[k]
@@ -1958,13 +1971,20 @@ def fail_owned(worker, run, error):
                     "request_key",
                 )
             )
-            or header["lease_until"] <= time.time()
+            or lease <= time.time()
             or (
                 header["status"] not in {"RUNNING", "PAUSE_REQUESTED", "CANCEL_REQUESTED"}
                 and not (header["status"] == "RECONCILING" and header["cancel_intent"])
             )
         ):
             return
+        if controlled:
+            from . import _cold_source_owned_impl as native_control
+            from ._lease_control_runtime import Runtime
+            boundary = native_control.find_commit_boundary(c)
+            require(boundary is not None, "Owned failure requires final commit fence")
+            actual = dict(c.execute(select(runs).where(runs.c.id == run["id"])).mappings().one())
+            Runtime._bind_boundary(store._authoritative_lease_runtime, boundary, c, actual)
         unknown = store.has_unknown(c, run["id"]) or error.code == "OUTCOME_UNKNOWN"
         state = (
             stop_state(header, unknown)
@@ -4675,7 +4695,8 @@ class _ColdTrialGraph:
                          stage, run_id, version, fence, worker_id, *, pin):
         try:
             return _policy_segments._run_check_value(original, expected, approval, phase, run, at,
-                stage, run_id, version, fence, worker_id, pin=pin)
+                stage, run_id, version, fence, worker_id, pin=pin,
+                _deadline=self.worker.store._execution_deadline(self.c, run))
         except BaseException:
             if type(self.guard) is _ColdGraphRead:
                 _ColdGraphRead.invalidate(self.guard)
@@ -4959,9 +4980,9 @@ class _ColdTrialGraph:
         require(actual is not None and actual['id'] == job['id'] and (actual['worker_id'] == self.worker.id) and (_model_inputs(dict(actual)) == _model_inputs(dict(job))))
         at = time.time()
         pin()
-        gate._require_run_context_row(user, b.contract, 'cold', actual, job['version'], job['fence'], approval, accepted.authority, at, _guard=pin)
+        gate._require_run_context_row(user, b.contract, 'cold', actual, job['version'], job['fence'], approval, accepted.authority, at, _guard=pin, _store=store, _c=c)
         pin()
-        deadlines = [actual['lease_until'], b.contract.expires_at, source.expires_at, self.trial.binding['snapshot']['natural_spec_clock']['deadline']]
+        deadlines = [store._execution_lease(c, actual), b.contract.expires_at, source.expires_at, self.trial.binding['snapshot']['natural_spec_clock']['deadline']]
         for role in ('source', 'generate', 'platform', 'trial', 'per_use'):
             limits = self.guard.role_limits[role]
             if limits is not None:
@@ -5375,8 +5396,8 @@ class _ModelSettlementRead:
             at = time.time()
             gate._require_run_context_row(b.contract.principal_id, b.contract, "cold", actual,
                 self.inputs["meta"]["run_version"], self.inputs["meta"]["fence"],
-                approval, phase.authority, at, _guard=self.check)
-            deadlines = [actual["lease_until"], b.contract.expires_at, self.source_deadline,
+                approval, phase.authority, at, _guard=self.check, _store=self.store, _c=c)
+            deadlines = [self.store._execution_lease(c, actual), b.contract.expires_at, self.source_deadline,
                 self.inputs["meta"]["deadline"],
                 self.inputs["post_binding"]["snapshot"]["natural_spec_clock"]["deadline"]]
             for name in ("platform", "node", "trial_limits", "frozen_limits", "declared", "action_limits"):
@@ -5971,6 +5992,15 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                     fence=current["fence"],
                 ),
             )
+            if store._authoritative_lease_runtime is not None:
+                from . import _cold_source_owned_impl as control_native
+                from ._lease_control_runtime import Runtime
+                boundary = control_native.find_commit_boundary(c)
+                control_binding = None if boundary is None else control_native.read_commit_control(boundary)
+                if control_binding is not None:
+                    Runtime._seed_boundary(control_binding[0], boundary, c,
+                        effect=dict(attempt_id=aid, operation_id=meta["operation_id"],
+                            response_wire_sha256=hashlib.sha256(wire).hexdigest(), receipt=receipt))
             # The last event/receipt callback can change live authority or time.
             # Check authority before replaying any protected receipts/Attempts,
             # then re-read the full evidence before committing VERIFIED.

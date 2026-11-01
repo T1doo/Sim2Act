@@ -168,7 +168,7 @@ class Runtime:
         finally:
             c.close()
 
-    def bind_claim(self, claimed):
+    def bind_claim(self, claimed, *, owner_stop=None):
         """Called before a newly claimed owner is returned to its Worker.
 
         Pending control -> durable main marker -> active control. Each crash
@@ -218,8 +218,162 @@ class Runtime:
                     and committed["status"] == "RUNNING" and not committed["cancel_intent"]
                     and committed["context"][control.CONTEXT] == marker,
                     "Main claim receipt changed before activation")
-            self.authority.activate(committed, self.seconds)
+            self.authority.activate(committed, self.seconds, owner_stop=owner_stop)
         return committed
+
+    def _bind_boundary(self, boundary, c, row):
+        entry = "sim2act:lease-entry.v1"
+        entry()
+        state = _state(self)
+        require(state["store"].owns_connection(c) and c.in_transaction(), "Original lease writer required")
+        session = Runtime.session(self, row)
+        if session.owner_stop is None:
+            raise DomainError("UNSUPPORTED_CAPABILITY", "Authoritative lease execution is not enabled")
+        require(type(session.owner_stop) is threading.Event, "Original worker stop event required")
+        until = min(session.deadline, row["created_at"] + state["run_seconds"])
+        mono = session.absolute_mono
+        snapshot = c.info.get("local_model_snapshot")
+        if snapshot is not None and snapshot.settlement_interval is not None:
+            mono = min(mono, snapshot.settlement_interval[0])
+            until = min(until, snapshot.settlement_interval[1])
+        binding = (self, session, control._wire(control._header(row)), session.nonce, session.owner_stop,
+            mono, until, None, None, row["id"], None)
+        install = "sim2act:commit-control-bind.v1"
+        require(install is not None, "Native commit fence unavailable")
+        install(boundary, binding, c)
+
+    def _seed_boundary(self, boundary, c, *, effect=None):
+        entry = "sim2act:lease-entry.v1"
+        entry()
+        _state(self)
+        read = "sim2act:commit-control-read.v1"
+        update_binding = "sim2act:commit-control-bind.v1"
+        binding = read(boundary)
+        require(binding is not None and binding[0] is self and self.store.owns_connection(c)
+                and c.connection.driver_connection.in_transaction, "Original prepared main writer required")
+        if binding[7] is not None:
+            Runtime._validate_boundary(self, boundary, c)
+            return
+        from .db import runs
+        post = dict(c.execute(select(runs).where(runs.c.id == binding[9])).mappings().one())
+        header = control._header(post)
+        before = tuple(json.loads(binding[2]))
+        require(header[:-1] == before[:-1] and (header[-1] == before[-1]
+                or header[-1] == before[-1] + 1 and post["status"] != "RUNNING")
+                and post["context"][control.CONTEXT]["nonce"] == binding[3],
+                "Final Run owner/version changed")
+        receipt = binding[1].prepare(secrets.token_hex(32))
+        wire = control._wire(receipt)
+        # This protocol metadata write is explicit and precedes full post-G1.
+        c.execute(text("INSERT INTO " + RECEIPTS + " VALUES(:key,:control,:run,:nonce,:header,:receipt)"),
+            dict(key=receipt["commit_id"], control=receipt["control_id"], run=post["id"],
+                 nonce=receipt["nonce"], header=control._wire(tuple(receipt["header"])), receipt=wire))
+        post_wire = control._wire(post)
+        # Own the complete final proof inputs as bytes; no mutable graph or
+        # validation result is retained in the control scope.
+        effect = None if effect is None else control._wire(effect)
+        binding = (*binding[:7], wire, post_wire, binding[9], (receipt["commit_id"], effect))
+        update_binding(boundary, binding, c)
+
+    def _validate_boundary(self, boundary, c):
+        entry = "sim2act:lease-entry.v1"
+        entry()
+        _state(self)
+        read = "sim2act:commit-control-read.v1"
+        binding = read(boundary)
+        require(binding is not None and binding[0] is self and binding[7] is not None
+                and self.store.owns_connection(c), "Final prepared scope changed")
+        receipt = json.loads(binding[7])
+        require(Runtime._receipt(self, c, receipt["commit_id"]) == receipt,
+                "Actual uncommitted main receipt changed")
+        from .db import runs
+        post = dict(c.execute(select(runs).where(runs.c.id == binding[9])).mappings().one())
+        require(control._wire(post) == binding[8], "Final main Run postimage changed")
+
+    def _abort_boundary(self, boundary, c):
+        entry = "sim2act:lease-entry.v1"
+        entry()
+        _state(self)
+        read = "sim2act:commit-control-read.v1"
+        binding = read(boundary)
+        require(binding[0] is self and self.store.owns_connection(c)
+                and not c.connection.driver_connection.in_transaction,
+                "Main rollback must precede aborting control intent")
+        if binding[7] is None:
+            return
+        receipt = json.loads(binding[7])
+        with self.authority.connection(write=True) as ctrl:
+            value = self.authority.row(ctrl, binding[9])
+            require(value["header"] == binding[2] and value["nonce"] == binding[3]
+                    and value["pending"] == receipt["commit_id"]
+                    and value["acked"] != receipt["commit_id"], "Abort generation changed")
+            changed = ctrl.execute("UPDATE commits SET state='ABORTED' WHERE commit_id=? AND state='PREPARED'",
+                                  (receipt["commit_id"],))
+            require(changed.rowcount == 1, "Abort intent changed")
+            ctrl.execute("UPDATE leases SET pending_commit=acked_commit WHERE run_id=?", (binding[9],))
+
+    def publish_command(self, principal, run_id, command, version):
+        """Durable stop intent before waiting for the business writer.
+
+        The control writer serializes this fresh committed-owner read with the
+        final business commit. It never waits for a main writer in this order.
+        """
+        entry = "sim2act:lease-entry.v1"
+        entry()
+        _state(self)
+        if command not in {"pause", "cancel"}:
+            return
+        with self.authority.connection(write=True) as c:
+            actual = Runtime.committed_run(self, run_id)
+            require(actual["principal_id"] == principal, "Command owner changed")
+            require(actual["version"] == version, "Command version changed")
+            if not marked(actual):
+                return
+            value = self.authority.row(c, run_id)
+            self.authority._match(actual, value)
+            if actual["status"] != "RUNNING":
+                return  # Original command handler validates its state/replay.
+            require(value["state"] == "ACTIVE" and value["intent"] in {None, command},
+                    "Command control generation changed")
+            c.execute("UPDATE leases SET intent=? WHERE run_id=?", (command, run_id))
+
+    def retire_owner(self, c, row):
+        """Actual main writer excludes late commits; never reissue old clocks.
+
+        Closing control before main reconciliation is fail-closed on a crash:
+        a later writer can repeat reconciliation, but no old worker can commit.
+        """
+        entry = "sim2act:lease-entry.v1"
+        entry()
+        _state(self)
+        require(self.store.owns_connection(c) and c.connection.driver_connection.in_transaction,
+                "Original main writer required for owner retirement")
+        with self.authority.connection(write=True) as ctrl:
+            value = self.authority.row(ctrl, row["id"])
+            before = tuple(json.loads(value["header"]))
+            current = control._header(row)
+            require(current[:-1] == before[:-1] and (current[-1] == before[-1]
+                    or current[-1] == before[-1]+1 and value["intent"] in {"pause", "cancel"})
+                    and self.authority.marker(row)["nonce"] == value["nonce"],
+                    "Retirement owner/version changed")
+            if value["state"] == "ACTIVE" and value["intent"] is None and control.time.time() < min(
+                    value["lease_wall"], value["deadline"]):
+                return False
+            if value["pending"] is not None and value["pending"] != value["acked"]:
+                key = value["pending"]
+                receipt = Runtime._receipt(self, c, key)
+                if receipt is None:
+                    changed = ctrl.execute("UPDATE commits SET state='ABORTED' WHERE commit_id=? AND state='PREPARED'", (key,))
+                    require(changed.rowcount == 1, "Unknown missing main commit receipt")
+                    ctrl.execute("UPDATE leases SET pending_commit=acked_commit WHERE run_id=?", (row["id"],))
+                else:
+                    require(receipt["nonce"] == value["nonce"] and control._wire(tuple(receipt["header"])) == value["header"],
+                            "Retirement main receipt changed")
+                    changed = ctrl.execute("UPDATE commits SET state='ACKED' WHERE commit_id=? AND state='PREPARED'", (key,))
+                    require(changed.rowcount == 1, "Unknown durable commit outcome")
+                    ctrl.execute("UPDATE leases SET acked_commit=? WHERE run_id=?", (key, row["id"]))
+            ctrl.execute("UPDATE leases SET state='CLOSED' WHERE run_id=?", (row["id"],))
+            return dict(intent=value["intent"])
 
     def session(self, row):
         entry = "sim2act:lease-entry.v1"

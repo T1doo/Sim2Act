@@ -379,14 +379,14 @@ def check_commit_after_readback(worker, c, run, read_out, *, _tail_authorities=(
     actual = c.execute(select(runs).where(runs.c.id == run["id"]).with_for_update()).mappings().one()
     at = time.time()
     gate._require_run_context_row(run["principal_id"], b.contract, "cold", actual,
-        run["version"], run["fence"], approval, accepted.authority, at)
+        run["version"], run["fence"], approval, accepted.authority, at, _store=worker.store, _c=c)
     gate.require(fingerprint(dict(actual)) == stamp.run_fingerprint
         and actual["worker_id"] == worker.id and not worker.stop.is_set()
         and at < source.expires_at,
         "Production readback ownership or finite interval changed")
     if not unchanged():
         return check_commit(worker, c, run)
-    gate.require(not worker.stop.is_set() and time.time() < min(actual["lease_until"],
+    gate.require(not worker.stop.is_set() and time.time() < min(worker.store._execution_lease(c, actual),
         actual["created_at"] + b.contract.caps.run_seconds, b.contract.expires_at, source.expires_at),
         "Production readback final interval ended")
 
@@ -423,7 +423,7 @@ def check_terminal_commit(worker, c, run, state):
         and all(terminal[k] == run[k] for k in fields)
         and terminal["status"] == state and terminal["version"] == run["version"] + 1
         and not terminal["cancel_intent"] and terminal["lease_until"] == 0
-        and time.time() < min(run["lease_until"], b.contract.expires_at,
+        and time.time() < min(worker.store._execution_lease(c, run, _terminal=True), b.contract.expires_at,
                               run["created_at"] + b.contract.caps.run_seconds))
     gate._approved(worker.store, c, run["principal_id"], b.contract, b.approval_key)
     terminal_source = _journal_source(worker.store, c, b)

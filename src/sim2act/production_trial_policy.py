@@ -170,7 +170,7 @@ def check_run(store, c, user, contract, key, stage, run_id, version, fence, work
     if phase is None:
         gate._generation_context(store, c, run, original)
     return _run_check_from_facts(original, expected, approval, phase, run, at, stage,
-                                 run_id, version, fence, worker_id)
+                                 run_id, version, fence, worker_id, _deadline=store._execution_deadline(c, run))
 
 
 def check_source(requirements, result, *, now):
@@ -330,9 +330,9 @@ def settle(store, c, user, contract, key, ledger, quota, identity, wire, source,
     return Transition(ledger=updated, quota=cursor)
 
 
-def _run_check_from_facts(original, expected, approval, phase, run, at, stage, run_id, version, fence, worker_id, *, _guard=None):
+def _run_check_from_facts(original, expected, approval, phase, run, at, stage, run_id, version, fence, worker_id, *, _guard=None, _deadline=None):
     """Original result fields only, after fresh complete Run/phase predicates."""
-    return gate._trial_result(RunCheck(requirements_fingerprint=gate._trial_result(fingerprint(gate._trial_result(expected.model_dump(), _guard)), _guard), approval_fingerprint=gate._trial_result(fingerprint(gate._trial_result(approval.model_dump(), _guard)), _guard), stage=stage, run_id=run_id, runtime_id=run['runtime_id'], version=version, fence=fence, worker_id=worker_id, stage_fingerprint=None if phase is None else gate._trial_result(fingerprint(gate._trial_result(phase.model_dump(), _guard)), _guard), checked_at=at, deadline=min(run['lease_until'], original.expires_at, run['created_at'] + original.caps.run_seconds)), _guard)
+    return gate._trial_result(RunCheck(requirements_fingerprint=gate._trial_result(fingerprint(gate._trial_result(expected.model_dump(), _guard)), _guard), approval_fingerprint=gate._trial_result(fingerprint(gate._trial_result(approval.model_dump(), _guard)), _guard), stage=stage, run_id=run_id, runtime_id=run['runtime_id'], version=version, fence=fence, worker_id=worker_id, stage_fingerprint=None if phase is None else gate._trial_result(fingerprint(gate._trial_result(phase.model_dump(), _guard)), _guard), checked_at=at, deadline=min(run['lease_until'] if _deadline is None else _deadline, original.expires_at, run['created_at'] + original.caps.run_seconds)), _guard)
 
 
 def _graph_check_run(graph, store, c, user, contract, key, stage, run_id, version, fence, worker_id, stage_facts):
@@ -364,7 +364,7 @@ def _graph_check_run(graph, store, c, user, contract, key, stage, run_id, versio
         gate._graph_trial_produced(graph, store, c, _models, gate.StageAuthority, phase)
         _require(type(worker_id) is str and bool(worker_id) and (run['worker_id'] == worker_id))
         _guard()
-        return gate._trial_result(_run_check_from_facts(original, expected, approval, phase, run, at, stage, run_id, version, fence, worker_id, _guard=_guard), _guard)
+        return gate._trial_result(_run_check_from_facts(original, expected, approval, phase, run, at, stage, run_id, version, fence, worker_id, _guard=_guard, _deadline=store._execution_deadline(c, run)), _guard)
     except BaseException:
         from .natural_spec_runtime import _ColdGraphRead
         if type(graph) is _ColdGraphRead:

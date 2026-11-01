@@ -224,14 +224,15 @@ class Authority:
             self.pending_claims[(header, nonce)] = (started_mono, started_wall, lease, seconds)
         return dict(protocol=VERSION, control_id=self.binding["control_id"], nonce=nonce)
 
-    def activate(self, committed_row, seconds):
+    def activate(self, committed_row, seconds, *, owner_stop=None):
         marker = self.marker(committed_row)
         header = _header(committed_row)
         with self.lock:
             prior = self.sessions.get(header)
             issued = self.pending_claims.get((header, marker["nonce"]))
         if prior is not None:
-            require(prior.nonce == marker["nonce"], "Local claim generation changed")
+            require(prior.nonce == marker["nonce"] and prior.owner_stop is owner_stop,
+                    "Local claim generation changed")
             prior.check()
             return prior
         require(issued is not None and issued[3] == seconds,
@@ -250,7 +251,7 @@ class Authority:
         # persisted mono absolute values are never reused across restart.
         session = Session(self, _header(committed_row), marker["nonce"], seconds,
                           value["deadline"], value["lease_wall"], began,
-                          absolute_mono=began + min(300, value["deadline"]-claimed_wall))
+                          absolute_mono=began + min(300, value["deadline"]-claimed_wall), owner_stop=owner_stop)
         with self.lock:
             self.sessions[session.header] = session
             self.session_states[session] = session._state()
@@ -285,7 +286,7 @@ class Authority:
 class Session:
     """Process-local rolling clock, issued from a committed exact claim."""
 
-    def __init__(self, authority, header, nonce, seconds, deadline, wall, began, *, absolute_mono=None):
+    def __init__(self, authority, header, nonce, seconds, deadline, wall, began, *, absolute_mono=None, owner_stop=None):
         self.authority, self.header, self.nonce = authority, header, nonce
         self.seconds, self.deadline = seconds, deadline
         self.wall, self.mono = wall, began + min(seconds, wall-time.time())
@@ -293,6 +294,7 @@ class Session:
                               if absolute_mono is None else absolute_mono)
         self.lock = threading.RLock()
         self.failure = None
+        self.owner_stop = owner_stop
 
     def _current(self, c, *, intent=False):
         self._issued()
@@ -300,6 +302,7 @@ class Session:
         require(value["header"] == _wire(self.header) and value["nonce"] == self.nonce
                 and value["state"] == "ACTIVE" and (intent or value["intent"] is None),
                 "Lease session owner/version/fence or control intent changed")
+        require(self.owner_stop is None or not self.owner_stop.is_set(), "Lease owner stopped")
         require(self.failure is None and time.monotonic() < min(self.mono, self.absolute_mono)
                 and time.time() < min(self.wall, value["lease_wall"], self.deadline, value["deadline"]),
                 "Issued lease session expired")
@@ -307,7 +310,60 @@ class Session:
 
     def _state(self):
         return (self.authority, self.header, self.nonce, self.seconds, self.deadline,
-                self.wall, self.mono, self.lock, self.failure, self.absolute_mono)
+                self.wall, self.mono, self.lock, self.failure, self.absolute_mono, self.owner_stop)
+
+    @contextmanager
+    def boundary(self, scope):
+        """One control writer spans final original checks and main commit only."""
+        read = "sim2act:commit-control-read.v1"
+        enter = "sim2act:commit-control-enter.v1"
+        leave = "sim2act:commit-control-leave.v1"
+        facts = "sim2act:commit-outcome-read.v1"
+        require(read is not None and enter is not None and leave is not None and facts is not None,
+                "Qualified final commit control unavailable")
+        binding = read(scope)
+        require(type(binding) is tuple and len(binding) == 11 and binding[1] is self
+                and binding[7] is not None and self.owner_stop is binding[4], "Unseeded final commit scope")
+        receipt = json.loads(binding[7])
+        committed = False
+        try:
+            with self.lock, self.authority.connection(write=True, until=self.mono) as c:
+                value = self._current(c)
+                require(receipt == dict(protocol=VERSION, control_id=self.authority.binding["control_id"],
+                    nonce=self.nonce, commit_id=receipt.get("commit_id"), header=list(self.header)),
+                    "Final commit receipt changed")
+                actual = c.execute("SELECT run_id,header,nonce,state FROM commits WHERE commit_id=?",
+                    (receipt["commit_id"],)).fetchone()
+                require(actual == (self.header[0], _wire(self.header), self.nonce, "PREPARED")
+                    and value["pending"] == receipt["commit_id"] and value["acked"] != receipt["commit_id"],
+                    "Final commit intent changed")
+                enter(scope, c)
+                try:
+                    yield
+                finally:
+                    committed, invoked = facts(scope)
+                    leave(scope)
+                if not committed:
+                    if invoked:
+                        raise CommitOutcomeUnknown("Inspect durable main receipt before recovery")
+                    raise DomainError("VERSION_CONFLICT", "Final commit was not invoked")
+                c.execute("UPDATE leases SET acked_commit=? WHERE run_id=?", (receipt["commit_id"], self.header[0]))
+                c.execute("UPDATE commits SET state='ACKED' WHERE commit_id=?", (receipt["commit_id"],))
+                post = json.loads(binding[8])
+                if post["status"] in {"SUCCEEDED", "FAILED", "CANCELLED", "PAUSED", "WAITING_RESOURCE"}:
+                    c.execute("UPDATE leases SET state='CLOSED' WHERE run_id=?", (self.header[0],))
+        except BaseException as error:
+            if committed:
+                self._boundary_failure(error)
+                raise CommittedAckPending("Main committed; inspect/acknowledge its durable receipt") from error
+            if facts(scope)[1]:
+                self._boundary_failure(error)
+                raise CommitOutcomeUnknown("Main commit outcome unknown; inspect its durable receipt") from error
+            raise
+
+    def _boundary_failure(self, error):
+        self.failure = error
+        self._remember()
 
     def _issued(self):
         require(type(self) is Session and type(self.authority) is Authority,
@@ -440,6 +496,7 @@ def _seal_session_entries():
     activate = Authority.activate
     state = Session._state
     renew, commit = Session.renew, Session.commit
+    boundary_failure_code = Session._boundary_failure.__code__
     renew_code, commit_code = renew.__code__, commit.__code__
     namespace = globals()
     helpers = tuple((name, namespace[name], namespace[name].__code__)
@@ -571,14 +628,14 @@ def _seal_session_entries():
         if caller.f_globals is not namespace or caller.f_locals.get("self") is not self:
             fail("Lease session update has no committed issuer")
         current = state(self)
-        if any(current[i] is not saved[2][i] for i in (0, 1, 2, 3, 4, 7, 9)):
+        if any(current[i] is not saved[2][i] for i in (0, 1, 2, 3, 4, 7, 9, 10)):
             fail("Immutable lease session fields changed")
         if caller.f_code is renew_code:
             if (current[5] is not caller.f_locals.get("wall")
                     or current[6] is not caller.f_locals.get("next_mono")
                     or current[8] is not saved[2][8]):
                 fail("Lease session has no committed renewal")
-        elif caller.f_code is commit_code:
+        elif caller.f_code is commit_code or caller.f_code is boundary_failure_code:
             if (current[5] is not saved[2][5] or current[6] is not saved[2][6]
                     or current[8] is not caller.f_locals.get("error")):
                 fail("Lease failure publication changed")
@@ -619,8 +676,14 @@ def _seal_control_entries():
     from . import _cold_source_packet as packet
     available = packet.available() and hasattr(packet.native, "lease_entry")
     native_entry = packet.native.lease_entry if available else None
+    markers = {"sim2act:commit-control-read.v1": "read_commit_control",
+        "sim2act:commit-control-enter.v1": "enter_commit_control",
+        "sim2act:commit-control-leave.v1": "leave_commit_control",
+        "sim2act:commit-outcome-read.v1": "read_commit_outcome"}
+    entries = {key: getattr(packet.native, name, None) if available else None for key, name in markers.items()}
     def seal(code):
         return code.replace(co_consts=tuple(native_entry if type(value) is str and value == "sim2act:lease-entry.v1"
+            else entries[value] if type(value) is str and value in entries
             else seal(value) if type(value) is CodeType else value for value in code.co_consts))
     functions = [_seal_session_entries]
     for cls in (Authority, Session):
@@ -650,11 +713,16 @@ def seal_functions(functions):
              if _CODE_AVAILABLE and hasattr(_CODE_PACKET.native, "lease_actor_entry") else None)
     install = (getattr(_CODE_PACKET.native, "install_lease_runtime", None) if _CODE_AVAILABLE else None)
     current = (getattr(_CODE_PACKET.native, "lease_runtime_current", None) if _CODE_AVAILABLE else None)
+    markers = {"sim2act:commit-control-read.v1": "read_commit_control",
+        "sim2act:commit-control-bind.v1": "bind_commit_control",
+        "sim2act:commit-boundary-find.v1": "find_commit_boundary"}
+    entries = {key: getattr(_CODE_PACKET.native, name, None) if _CODE_AVAILABLE else None for key, name in markers.items()}
     def seal(code):
         return code.replace(co_consts=tuple(selected if type(value) is str and value == "sim2act:lease-entry.v1"
             else actor if type(value) is str and value == "sim2act:lease-actor-entry.v1"
             else install if type(value) is str and value == "sim2act:lease-runtime-install.v1"
             else current if type(value) is str and value == "sim2act:lease-runtime-current.v1"
+            else entries[value] if type(value) is str and value in entries
             else seal(value) if type(value) is CodeType else value for value in code.co_consts))
     for function in functions:
         function.__code__ = seal(function.__code__)
@@ -698,7 +766,8 @@ def _register_control_code(runtime_module=None):
             (vars(threading), ("RLock",)),
             (vars(sys), ("_getframe",)),
             (vars(_CODE_PACKET.native), ("lease_entry", "lease_actor_entry", "register_code",
-                "register_lease_runtime", "install_lease_runtime", "lease_runtime_current")),
+                "register_lease_runtime", "install_lease_runtime", "lease_runtime_current",
+                "read_commit_control", "bind_commit_control", "find_commit_boundary", "enter_commit_control", "leave_commit_control", "read_commit_outcome")),
             (vars(runtime_module), ("ANCHOR", "RECEIPTS", "RECEIPT_DDL", "control", "DomainError",
                 "Runtime", "_RUNTIMES", "_RUNTIME_LOCK", "json", "secrets", "sqlite3", "threading", "weakref", "Path",
                 "type", "dict", "tuple", "list", "str", "int", "float", "bool", "len", "all", "any", "set", "vars", "getattr", "hasattr", "object", "id", "min", "max"))))

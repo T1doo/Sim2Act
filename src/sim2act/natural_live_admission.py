@@ -959,14 +959,14 @@ def _run_context(store, c, user, contract, approval_key, stage, run_id, expected
         _stage_accepted_from_facts(phase, accepted)
     run = _run_context_row(c, run_id)
     at = time.time()
-    _require_run_context_row(user, contract, stage, run, expected_version, fence, approval, phase, at)
+    _require_run_context_row(user, contract, stage, run, expected_version, fence, approval, phase, at, _store=store, _c=c)
     return approval, phase, run, at
 
 
-def _require_run_context_row(user, contract, stage, run, expected_version, fence, approval, phase, at, *, _guard=None):
+def _require_run_context_row(user, contract, stage, run, expected_version, fence, approval, phase, at, *, _guard=None, _store=None, _c=None):
     """The original complete Run predicate, also after a synchronous readback."""
     binding = contract.bindings[1 if stage == 'cold' else 0]
-    require(type(expected_version) is int and type(fence) is int and (run is not None) and (run['principal_id'] == user) and (run['project_id'] == contract.project_id) and (run['runtime_id'] == (contract.runtime_id if phase is None else phase.runtime_id)) and (phase is not None or run['request_key'] == contract.stage_keys.generate) and (run['resource_refs'] == [binding.resource_id]) and (run['status'] == 'RUNNING') and (run['cancel_intent'] is False) and (run['version'] == expected_version) and (run['fence'] == fence) and (fence >= 1) and (type(run['created_at']) in (int, float)) and _trial_result(math.isfinite(run['created_at']), _guard) and (approval.approved_at <= run['created_at'] <= at) and (type(run['lease_until']) in (int, float)) and _trial_result(math.isfinite(run['lease_until']), _guard) and (at < min(run['lease_until'], run['created_at'] + contract.caps.run_seconds, contract.expires_at)), 'Run identity, cancellation, version or finite lease changed')
+    require(type(expected_version) is int and type(fence) is int and (run is not None) and (run['principal_id'] == user) and (run['project_id'] == contract.project_id) and (run['runtime_id'] == (contract.runtime_id if phase is None else phase.runtime_id)) and (phase is not None or run['request_key'] == contract.stage_keys.generate) and (run['resource_refs'] == [binding.resource_id]) and (run['status'] == 'RUNNING') and (run['cancel_intent'] is False) and (run['version'] == expected_version) and (run['fence'] == fence) and (fence >= 1) and (type(run['created_at']) in (int, float)) and _trial_result(math.isfinite(run['created_at']), _guard) and (approval.approved_at <= run['created_at'] <= at) and (type(run['lease_until']) in (int, float)) and _trial_result(math.isfinite(run['lease_until']), _guard) and (at < min((_store._execution_lease(_c, run, expected_version=expected_version, fence=fence) if _store is not None else run['lease_until']), run['created_at'] + contract.caps.run_seconds, contract.expires_at)), 'Run identity, cancellation, version or finite lease changed')
 
 
 def _generation_context(store, c, run, contract):
@@ -1163,7 +1163,7 @@ def _graph_run_context(graph, store, c, user, contract, approval_key, stage, run
         run = _trial_result(_run_context_row(c, run_id, _guard=_guard), _guard)
         require(run is not None and run['id'] == run_id, 'Locked row belongs to another Run')
         at = _trial_result(time.time(), _guard)
-        _trial_result(_require_run_context_row(user, contract, stage, run, expected_version, fence, approval, phase, at, _guard=_guard), _guard)
+        _trial_result(_require_run_context_row(user, contract, stage, run, expected_version, fence, approval, phase, at, _guard=_guard, _store=store, _c=c), _guard)
         _guard()
         return (approval, phase, run, at)
     except BaseException:

@@ -872,7 +872,8 @@ class Store:
 
     @contextmanager
     def tx(self, *, wait_seconds=None, _cap_wait=False, _commit_check=None, _commit_clock_check=None):
-        checked_commit = _commit_check is not None or _commit_clock_check is not None
+        checked_commit = (_commit_check is not None or _commit_clock_check is not None
+                          or self._authoritative_lease_runtime is not None)
         if checked_commit and not self.sqlite:
             raise ValueError('Finite SQLite commit check requires SQLite')
         if self.sqlite and wait_seconds is not None:
@@ -1318,12 +1319,25 @@ class Store:
         source_scope_gate(self, c, run_id)
         r = c.execute(select(runs).where(runs.c.id == run_id).with_for_update()).mappings().one()
         if type(r["context"]) is dict and "local_lease_control" in r["context"]:
-            # New metadata must never silently use the legacy historical lease.
-            # Execution stays closed until the full versioned protocol lands.
-            raise DomainError("UNSUPPORTED_CAPABILITY", "Authoritative lease execution is not enabled")
+            from ._lease_control_runtime import Runtime
+            from . import _cold_source_owned_impl as native
+            selected = self._authoritative_lease_runtime
+            if selected is None or Runtime.session(selected, r).owner_stop is None:
+                raise DomainError("UNSUPPORTED_CAPABILITY", "Authoritative lease execution is not enabled")
+            lease = self._execution_lease(c, r, fence=fence)
+            scope = native.find_commit_boundary(c)
+            if scope is None:
+                raise DomainError("VERSION_CONFLICT", "Authoritative lease requires its final commit boundary")
+            binding = native.read_commit_control(scope)
+            if binding is None:
+                Runtime._bind_boundary(selected, scope, c, r)
+            elif binding[0] is not selected or binding[9] != r["id"]:
+                raise DomainError("VERSION_CONFLICT", "One authoritative Run per atomic transaction")
+        else:
+            lease = self._execution_lease(c, r) if self._authoritative_lease_runtime is not None else r["lease_until"]
         if (
             r["fence"] != fence
-            or r["lease_until"] <= time.time()
+            or lease <= time.time()
             or r["status"] not in {"RUNNING", "PAUSE_REQUESTED", "CANCEL_REQUESTED"}
         ):
             raise DomainError("VERSION_CONFLICT", "Stale worker lease")
@@ -1333,6 +1347,61 @@ class Store:
     def _enable_authoritative_leases(self, settings, *, create=False):
         from ._lease_control_runtime import enable
         return enable(self, settings, create=create)
+
+    def _execution_lease(self, c, row, *, expected_version=None, fence=None, worker_id=None, _terminal=False):
+        """Fresh live interval; historical Run values never change in a graph.
+
+        Even a thin projection must resolve the marker in its original main
+        snapshot. Missing context is never permission to fall back to legacy.
+        """
+        from ._lease_control_runtime import Runtime, require
+        from . import _lease_control as control
+        require(self.owns_connection(c) and c.in_transaction(), "Original Run lease snapshot required")
+        rid = row["id"]
+        for name, expected in (("version", expected_version), ("fence", fence), ("worker_id", worker_id)):
+            require(expected is None or row[name] == expected, "Run lease caller identity changed")
+        fields = (*control.HEADER, "status", "cancel_intent")
+        marker = runs.c.context[control.CONTEXT]
+        actual = c.execute(select(*(getattr(runs.c, name) for name in fields),
+            marker.label("lease_marker")).where(runs.c.id == rid,
+                runs.c.principal_id == row["principal_id"], runs.c.project_id == row["project_id"],
+                runs.c.runtime_id == row["runtime_id"])).mappings().one_or_none()
+        terminal = (_terminal and actual is not None and actual["version"] == row["version"] + 1
+                    and actual["status"] in {"SUCCEEDED", "FAILED", "PAUSED", "CANCELLED", "WAITING_RESOURCE"}
+                    and all(actual[name] == row[name] for name in control.HEADER[:-1]))
+        require(actual is not None, "Run lease snapshot is missing")
+        selected = self._authoritative_lease_runtime
+        if actual["lease_marker"] is None:
+            if selected is not None:
+                with selected.authority.connection() as authority:
+                    prior = authority.execute("SELECT state,header FROM leases WHERE run_id=?", (rid,)).fetchone()
+                    require(prior is None or prior[0] == "CLOSED" and prior[1] != control._wire(control._header(row)),
+                            "Authoritative Run marker was removed")
+            return row["lease_until"]
+        require(all(actual[name] == row[name] for name in fields) or terminal,
+                "Run lease snapshot identity changed")
+        require(selected is not None, "Authoritative Run control is unavailable")
+        metadata = {name: row[name] if terminal else actual[name] for name in fields}
+        metadata["context"] = {control.CONTEXT: actual["lease_marker"]}
+        if terminal:
+            from . import _cold_source_owned_impl as native
+            scope = native.find_commit_boundary(c)
+            binding = None if scope is None else native.read_commit_control(scope)
+            require(binding is not None and binding[2] == control._wire(control._header(metadata)),
+                    "Terminal lease is not owned by this original writer")
+        return Runtime.lease(selected, metadata)
+
+    def _execution_deadline(self, c, row):
+        """Absolute bound for immutable proof inputs; rolling lease is rechecked."""
+        from ._lease_control_runtime import Runtime
+        from . import _lease_control as control
+        lease = self._execution_lease(c, row, _terminal=True)
+        marker = c.execute(select(runs.c.context[control.CONTEXT]).where(runs.c.id == row["id"])).scalar_one()
+        if marker is None:
+            return lease
+        metadata = dict(row)
+        metadata["context"] = {control.CONTEXT: marker}
+        return Runtime.session(self._authoritative_lease_runtime, metadata).deadline
 
     def frozen_contract(self, c, run):
         from .goal_applications import source_scope_gate
@@ -1418,7 +1487,20 @@ class Store:
             validate_exact_read(self, c, run, contract)
         return contract
 
-    def claim(self, worker_id, lease_seconds, *, trial_binding=None):
+    def claim(self, worker_id, lease_seconds, *, trial_binding=None, _owner_stop=None):
+        row = self._claim_main(worker_id, lease_seconds, trial_binding=trial_binding)
+        selected = self._authoritative_lease_runtime
+        natural = row is not None and row["context"].get("spec_family") == "pa-natural-spec-app.v1"
+        # Generate, signed120 and other job families retain their contracts.
+        if natural and trial_binding is not None:
+            from .natural_live_admission import _contract_kind, SQLiteSettlementCaps
+            natural = _contract_kind(trial_binding.contract.caps) is not SQLiteSettlementCaps
+        if natural and selected is not None and _owner_stop is not None:
+            from ._lease_control_runtime import Runtime
+            return Runtime.bind_claim(selected, row, owner_stop=_owner_stop)
+        return row
+
+    def _claim_main(self, worker_id, lease_seconds, *, trial_binding=None):
         from .protocol_jobs import protocol_run_ids
         from .protocol_recovery import recover_expired_protocols
 
@@ -1432,7 +1514,7 @@ class Store:
                             .label("control_protocol"))
                     .where(
                         runs.c.status.in_(["RUNNING", "PAUSE_REQUESTED", "CANCEL_REQUESTED"]),
-                        runs.c.lease_until <= now,
+                        (runs.c.lease_until <= now) | ((func.json_type(runs.c.context, "$.local_lease_control").is_not(None)) if self.sqlite else literal(False)),
                     )
                     .with_for_update(skip_locked=True)
                 )
@@ -1442,9 +1524,21 @@ class Store:
             protocol_ids = protocol_run_ids(c, candidates=[row["id"] for row in expired])
             for r in expired:
                 if r["control_protocol"] is not None:
-                    # Never let the old historical anchor reclaim a v2 owner.
-                    # Its control/main receipt recovery is a separate protocol.
-                    continue
+                    from ._lease_control_runtime import Runtime
+                    selected = self._authoritative_lease_runtime
+                    if selected is None:
+                        continue  # Closed unless its original authority opened.
+                    actual = dict(c.execute(select(runs).where(runs.c.id == r["id"])).mappings().one())
+                    retired = Runtime.retire_owner(selected, c, actual)
+                    if retired is False:
+                        continue
+                    r = dict(r, context=dict(actual["context"]), cancel_intent=(
+                        actual["cancel_intent"] or retired["intent"] == "cancel"),
+                        status="PAUSE_REQUESTED" if retired["intent"] == "pause" else actual["status"])
+                    del r["context"]["local_lease_control"]
+                    self.event(c, r["id"], "LOCAL_LEASE_CONTROL_RETIRED", dict(
+                        marker=actual["context"]["local_lease_control"], intent=retired["intent"],
+                        fence=actual["fence"], version=actual["version"]))
                 if r["id"] in protocol_ids:
                     continue
                 c.execute(
@@ -1480,7 +1574,9 @@ class Store:
                     update(runs)
                     .where(runs.c.id == r["id"])
                     .values(
-                        status=state, error={"code": "OUTCOME_UNKNOWN"} if pending or op else None
+                        status=state, error={"code": "OUTCOME_UNKNOWN"} if pending or op else None,
+                        **(dict(context=r["context"], cancel_intent=r["cancel_intent"], lease_until=0)
+                           if "context" in r else {})
                     )
                 )
                 self.event(c, r["id"], "RECONCILED", {"status": state, "receipts_preserved": True})
@@ -1866,6 +1962,11 @@ class Store:
 
     @contextmanager
     def local_model_settlement(self, worker, job, deadline):
+        if self._authoritative_lease_runtime is not None and "local_lease_control" in job["context"]:
+            # The committed control intent is the authority; an old in-memory
+            # Epoch's historical lease is not a second source of liveness.
+            yield None
+            return
         from ._sqlite_run_control import Registry, supported
         if not supported(self):
             yield None
@@ -1878,6 +1979,20 @@ class Store:
 
     @contextmanager
     def local_model_command(self, principal, rid, command, version, *, iid=None):
+        selected = self._authoritative_lease_runtime
+        if selected is not None:
+            from ._lease_control_runtime import Runtime
+            # Instance association remains part of the original command gate.
+            # Verify it before publishing an irreversible stop intent.
+            actual = Runtime.committed_run(selected, rid)
+            if iid is not None and "local_lease_control" in actual["context"]:
+                with self.engine.connect() as c:
+                    instance = c.execute(select(internal_app_runs.c.instance_id).join(
+                        internal_run_bindings, internal_run_bindings.c.app_run_id == internal_app_runs.c.id).where(
+                        internal_run_bindings.c.run_id == rid, internal_app_runs.c.principal_id == principal)).scalar_one_or_none()
+                    if instance != iid:
+                        raise DomainError("PERMISSION_DENIED")
+            Runtime.publish_command(selected, principal, rid, command, version)
         control = self._local_model_control
         if control is None:
             yield

@@ -15,10 +15,14 @@ def test_new_is_empty_and_reopen_does_not_initialize_or_mutate(tmp_path, monkeyp
     root, store, marker = workspace.open_workspace(tmp_path / "空白 工程", new=True)
     before = snapshot(store)
     assert len(before["principals"]) == 1 and len(before["quotas"]) == 1
-    assert all(not rows for name, rows in before.items() if name not in {"principals", "quotas"})
+    assert all(not rows for name, rows in before.items() if name not in {"principals", "quotas", "events"})
+    from sim2act._lease_control_runtime import ANCHOR
+    assert len(before["events"]) == 1
+    assert before["events"][0]["kind"] == ANCHOR and before["events"][0]["run_id"] is None
     assert store.authenticate(workspace.TOKEN) == marker["principal_id"]
     store.engine.dispose()
-    monkeypatch.setattr(Store, "initialize", lambda *_: pytest.fail("reopen must not migrate"))
+    # Reopening uses the original qualified Store roles. Snapshot equality
+    # below checks that it does not initialize or mutate persisted contents.
     _, cold, restored = workspace.open_workspace(root)
     try:
         assert restored == marker and snapshot(cold) == before

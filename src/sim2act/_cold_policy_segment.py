@@ -363,15 +363,15 @@ def _requirements_value(user, contract, key, *, pin):
 
 
 def _run_check_value(original, expected, approval, phase, run, at, stage,
-                     run_id, version, fence, worker_id, *, pin):
+                     run_id, version, fence, worker_id, *, pin, _deadline=None):
     """Fixed RunCheck construction using the already sampled original `at`."""
     pin()
     values = _snapshot((original, expected, approval, phase, run, at, stage,
                         run_id, version, fence, worker_id))
     if values is _UNSUITABLE or policy._run_check_from_facts is not _RUN_CHECK:
         return policy._run_check_from_facts(original, expected, approval, phase, run,
-            at, stage, run_id, version, fence, worker_id, _guard=pin)
-    result = _RUN_CHECK(*values)
+            at, stage, run_id, version, fence, worker_id, _guard=pin, _deadline=_deadline)
+    result = _RUN_CHECK(*values, _deadline=_deadline)
     pin()
     return result
 

@@ -194,7 +194,7 @@ def _active(store, c, scope, request, contract, admission):
              and run["status"] == "RUNNING" and not run["cancel_intent"])
     _require(all(type(run[k]) in (int, float) and math.isfinite(run[k])
                  for k in ("created_at", "lease_until")), "PERMISSION_DENIED")
-    deadline = min(scope.expires_at, permit.expires_at, run["lease_until"],
+    deadline = min(scope.expires_at, permit.expires_at, store._execution_deadline(c, run),
                    run["created_at"] + contract.model_dump()["caps"]["run_seconds"])
     _require(time.time() < deadline, "BUDGET_EXHAUSTED")
     return deadline

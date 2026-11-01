@@ -19,6 +19,37 @@ RESERVED = "NS_SETTLEMENT_LEASE_RESERVED"
 RELEASED = "NS_SETTLEMENT_LEASE_RELEASED"
 
 
+@contextmanager
+def authoritative_interval(worker, job, deadline, state):
+    from ._lease_control_runtime import Runtime
+    runtime = worker.store._authoritative_lease_runtime
+    session = Runtime.session(runtime, job)
+    cutoff = min(deadline, session.deadline, job["created_at"] + worker.s.run_seconds)
+    if state is not None:
+        with state["lock"]:
+            if state["deadline"] is not None:
+                cutoff = min(cutoff, state["deadline"])
+            renewal = state["renewal_lock"]
+        with renewal:
+            lease = worker.store.heartbeat(worker.id, job["id"], job["fence"], worker.s.lease_seconds,
+                _expected_version=job["version"], _deadline=cutoff)
+            _publish(state, worker, job, lease)
+    else:
+        worker.store.heartbeat(worker.id, job["id"], job["fence"], worker.s.lease_seconds,
+            _expected_version=job["version"], _deadline=cutoff)
+    token = (min(session.absolute_mono, time.monotonic() + cutoff-time.time()), cutoff)
+    _require(not hasattr(worker, "_settlement_interval"), "Settlement cannot reenter")
+    worker._settlement_interval = token
+    worker._authoritative_settlement = (runtime, session)
+    try:
+        checkpoint(worker)
+        yield
+    finally:
+        if getattr(worker, "_settlement_interval", None) is token:
+            del worker._settlement_interval
+        worker.__dict__.pop("_authoritative_settlement", None)
+
+
 def _require(ok, message):
     if not ok:
         raise DomainError("VERSION_CONFLICT", message)
@@ -195,8 +226,14 @@ def interval(worker, job, attempt_id, deadline, state):
 
 
 def checkpoint(worker):
+    authoritative = getattr(worker, "_authoritative_settlement", None)
+    if authoritative is not None:
+        runtime, session = authoritative
+        _require(runtime is worker.store._authoritative_lease_runtime
+            and session.owner_stop is worker.stop, "Authoritative settlement owner changed")
+        session.check()
     control = getattr(getattr(worker, "store", None), "_local_model_control", None)
-    if control is not None:
+    if control is not None and authoritative is None:
         control.checkpoint(worker)
     token = getattr(worker, "_settlement_interval", None)
     if token is not None and (worker.stop.is_set() or time.monotonic() >= token[0]
