@@ -23,7 +23,10 @@ _SOURCE_OK = native is not None and native.SOURCE_SHA256 == hashlib.sha256(
     b''.join(Path(__file__).with_name(name).read_bytes() for name in _FILES)).hexdigest()
 _ENTRIES = (() if not _SOURCE_OK else tuple((name,getattr(native,name)) for name in
     ('Owned','Binding','View','read_owner','UNSUPPORTED','make_owned','owned_data','owned_pin','make_binding',
-     'binding_owner','binding_current','binding_pin','match_live','match_node','match_nodes','match_ledger','register_code','verify_code','make_composite','view_pin')))
+     'binding_owner','binding_current','binding_pin','match_live','match_node','match_nodes','match_ledger','register_code','verify_code','make_composite','view_pin',
+     'register_contract_models','make_contract_owned','contract_model','contract_fingerprint','contract_json',
+     'register_contract_schemas','contract_schema_current','contract_entry','contract_type',
+     'register_contract_binding','install_contract_binding','contract_binding_current')))
 _BINDING = None if not _SOURCE_OK else native.Binding
 if _SOURCE_OK:image.View=native.View
 

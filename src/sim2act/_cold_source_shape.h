@@ -24,7 +24,7 @@ static Py_UCS4 shape_tag(PyObject*nodes,PyObject*ref){
  Py_ssize_t i;if(!shape_ref(ref,PyTuple_GET_SIZE(nodes),&i))return 0;
  return PyUnicode_READ_CHAR(PyTuple_GET_ITEM(PyTuple_GET_ITEM(nodes,i),0),0);
 }
-static int source_image_shape(PyObject*data){
+static int source_image_shape(PyObject*data,Py_ssize_t model_count){
  if(!PyTuple_CheckExact(data)||PyTuple_GET_SIZE(data)!=8)return 0;
  PyObject*nodes=PyTuple_GET_ITEM(data,1),*leaves=PyTuple_GET_ITEM(data,2),*catalog=PyTuple_GET_ITEM(data,7);
  if(!PyTuple_CheckExact(nodes)||!PyTuple_CheckExact(leaves)||!PyTuple_CheckExact(catalog))return 0;
@@ -33,7 +33,7 @@ static int source_image_shape(PyObject*data){
  unsigned char*states=PyMem_Calloc(n,1),*models=PyMem_Calloc(n,1);int ok=0;if(!states||!models)goto done;
  for(Py_ssize_t i=0;i<PyTuple_GET_SIZE(catalog);i++){
   PyObject*e=PyTuple_GET_ITEM(catalog,i);Py_ssize_t ref,kind;
-  if(!PyTuple_CheckExact(e)||PyTuple_GET_SIZE(e)!=2||!shape_ref(PyTuple_GET_ITEM(e,0),n,&ref)||!shape_ref(PyTuple_GET_ITEM(e,1),17,&kind)||models[ref])goto done;
+  if(!PyTuple_CheckExact(e)||PyTuple_GET_SIZE(e)!=2||!shape_ref(PyTuple_GET_ITEM(e,0),n,&ref)||!shape_ref(PyTuple_GET_ITEM(e,1),model_count,&kind)||models[ref])goto done;
   models[ref]=1;
  }
  for(Py_ssize_t i=0;i<n;i++){

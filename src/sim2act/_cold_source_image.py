@@ -27,9 +27,20 @@ def model_classes():
         BranchCondition,BranchGroup,WorkflowStep,ActionBinding,DataBinding,RuntimeIdentity)
 
 
-def capture(incoming, outside, *, _parents=None, _manifest=False):
+def contract_classes():
+    """Separate complete PB domain; original seventeen ordinals never move."""
+    from . import natural_live_admission as gate
+    from .goals import GoalCardInput
+    from .natural_specs import Recipe, Step
+    return (*model_classes(),gate.PBTrialContract,gate.TrialCaps,gate.SQLiteSettlementCaps,
+        gate.MaterialGoal,gate.StageKeys,gate.GoalSnapshot,gate.SourceSnapshot,
+        GoalCardInput,Recipe,Step)
+
+
+def capture(incoming, outside, *, _parents=None, _manifest=False, _contract=False):
     if _parents is not None and type(_parents) is not list:raise Unsupported('exact parent registry required')
     if type(_manifest) is not bool:raise Unsupported('exact model domain required')
+    if type(_contract) is not bool or _manifest and _contract:raise Unsupported('separate exact PB domain required')
     from sim2act import natural_spec_runtime as rt, natural_live_admission as gate
     from . import _cold_source_owned_impl as native
     from sim2act import production_trial_policy as policy, production_trial_sender as sender
@@ -38,7 +49,7 @@ def capture(incoming, outside, *, _parents=None, _manifest=False):
     from sqlalchemy.engine import RowMapping
     from sqlalchemy.sql.elements import quoted_name
     from sim2act.contracts import Limits
-    models=model_classes() if _manifest else model_classes()[:5]
+    models=contract_classes() if _contract else model_classes() if _manifest else model_classes()[:5]
     nodes=[];origins=[];memo={};held=[];active=set();synthetic=[];leaves=[];kinds=[]
     # Outside-only nodes need identity/type/budget state, never an emitted
     # record or an anchor. Negative refs keep their joint alias domain apart
@@ -64,7 +75,7 @@ def capture(incoming, outside, *, _parents=None, _manifest=False):
         parent=None
         if View is not None and kind is View:
             if _parents is None:raise Unsupported('immutable parent not admitted by caller')
-            parent=value.owner();ident=('owned-node',id(parent),value.ref())
+            parent=value.owner();ident=('owned-node',id(parent),View.ref(value))
         tag=('n' if value is None else 't' if value is True else 'f' if value is False else
             'i' if kind is int else 'v' if kind is float else 's' if kind is str else
             'b' if kind is bytes else 'd' if kind is dict else 'l' if kind is list else
@@ -95,7 +106,7 @@ def capture(incoming, outside, *, _parents=None, _manifest=False):
             if ordinal is None:
                 if len(_parents)>=256:raise Bounds('immutable parents')
                 ordinal=len(_parents);_parents.append(parent)
-            payload=(ordinal,value.ref());edges=()
+            payload=(ordinal,View.ref(value));edges=()
         elif tag in ('s','b'):
             (virtual_leaves if synthetic_leaf else real_leaves).add(ref)
             size+=len(value)*(4 if tag=='s' else 1)
@@ -160,7 +171,7 @@ def capture(incoming, outside, *, _parents=None, _manifest=False):
         kind=type(value);ident=id(value);parent=None
         if View is not None and kind is View:
             if _parents is None:raise Unsupported('immutable parent not admitted by caller')
-            parent=value.owner();ident=('owned-node',id(parent),value.ref())
+            parent=value.owner();ident=('owned-node',id(parent),View.ref(value))
         tag=('n' if value is None else 't' if value is True else 'f' if value is False else
             'i' if kind is int else 'v' if kind is float else 's' if kind is str else
             'b' if kind is bytes else 'd' if kind is dict else 'l' if kind is list else
@@ -187,7 +198,7 @@ def capture(incoming, outside, *, _parents=None, _manifest=False):
             if ordinal is None:
                 if len(_parents)>=256:raise Bounds('immutable parents')
                 _parents.append(parent)
-            value.ref()
+            View.ref(value)
         elif tag in ('s','b'):
             (virtual_leaves if synthetic_leaf else real_leaves).add(ref)
             size+=len(value)*(4 if tag=='s' else 1)
@@ -279,7 +290,7 @@ def is_kind(value,*tags):
 def same(left,right):
     """Identity of an immutable node, never business value equality."""
     return left is right or (View is not None and type(left) is View and type(right) is View
-        and left.owner() is right.owner() and left.ref()==right.ref())
+        and left.owner() is right.owner() and View.ref(left)==View.ref(right))
 
 
 def plain(value,*,_memo=None):
@@ -291,7 +302,7 @@ def plain(value,*,_memo=None):
     if _memo is None:_memo={}
     if View is None or type(value) is not View:
         return value
-    key=(id(value.owner()),value.ref())
+    key=(id(value.owner()),View.ref(value))
     if key in _memo:return _memo[key]
     tag=value.node()[0]
     if tag=='u':return value.label()
