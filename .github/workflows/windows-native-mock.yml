@@ -21,6 +21,50 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  native-window-once:
+    if: >-
+      github.repository == 'T1doo/Sim2Act' &&
+      github.event.repository.private == false &&
+      github.ref == 'refs/heads/dev/cloud-g0-live-20261028' &&
+      github.run_attempt == 1 &&
+      contains(github.event.head_commit.message, '[windows-native-window-once-20261101]')
+    runs-on: windows-2025
+    timeout-minutes: 3
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      SIM2ACT_MODEL_MODE: mock
+      SIM2ACT_LIVE_ENABLED: 'false'
+      SIM2ACT_INTERN_TOKEN: ''
+      INTERN_API_TOKEN: ''
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        timeout-minutes: 1
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.gitignore
+            /.gitattributes
+            /scripts/windows/Check-NativeWindow.ps1
+            /deliverables/windows-full-20261101/Sim2Act-win64-042ab21c4fa9.zip
+      - name: Existing native desktop only; no runtime installer, browser or security fallback
+        timeout-minutes: 3
+        run: |
+          ./scripts/windows/Check-NativeWindow.ps1 -Package ./deliverables/windows-full-20261101/Sim2Act-win64-042ab21c4fa9.zip -Output (Join-Path $env:RUNNER_TEMP 'sim2act-native-window-once')
+      - name: Preserve actual own-window pixels and protocol logs
+        if: ${{ always() && env.SIM2ACT_WINDOW_PAYLOAD != '' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        timeout-minutes: 1
+        with:
+          name: sim2act-native-window-${{ github.sha }}
+          path: ${{ env.SIM2ACT_WINDOW_PAYLOAD }}/*
+          retention-days: 1
+          compression-level: 0
+          include-hidden-files: false
+          if-no-files-found: error
+
   complete-portable-once:
     if: >-
       github.repository == 'T1doo/Sim2Act' &&

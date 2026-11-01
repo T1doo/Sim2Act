@@ -34,3 +34,11 @@
 Windows本机正式传输helper是否恢复由唯一协调任务另行核实；文件未跨机共享，也未把本机连接当输入可用。本轮只能准备完整源码／包／manifest／摘要，不能绕旧传输拒绝、私自使用用户电脑或宣称桌面窗口已验收。
 
 长写锁仍是已知未解风险：`advance_model`的W5后仍在写事务内调用`_model_settlement_read`重建post图并执行完整权限／回执／绑定复核。本轮只核源码位置，没有新的大型Cold性能计时，也没有删检查、扩大30秒租约／300秒截止或缓存授权PASS。正式PG、任意自然目标、Windows真实模型与当前桌面运行仍按各自证据边界保留。
+
+## 第二次真实Windows终态与下一窗口检查
+
+源码 `042ab21c4fa9c7e5ba70c4e2877fb7060d962422`，[run41325692393](https://github.com/T1doo/Sim2Act/actions/runs/41325692393)，job124905034942，16:19:01–16:21:32 UTC，151秒，SUCCESS。上述61项协议测试0失败0跳过；四扩展、私有runtime、完整同源包、两次CSV30/v1和15/v2、同键不重放、EOF clean退出及首次新进程同origin/principal重开均实际完成。原始日志、XML、完整清单及本地逐文件复核在`attempt-2/`。应用src/C/C#业务字节与7bf6fd基线一致。
+
+完整包 `deliverables/windows-full-20261101/Sim2Act-win64-042ab21c4fa9.zip` 19,745,959字节，SHA256 `cc177eeb8815194a4f1e973e146ce7dd95c2949350745a296c4d6a9bfcd38027`。1779个清单成员及whole-zip、wheel/source/native一致性已独立复核，未含DB、私有env/私钥或托管token模式。此时原EXE尚未执行，状态严格为ASSEMBLY_AND_BACKEND_ONLY，不是整体交付。
+
+本批累计115+151=266秒，余214秒。按用户新增独立窗口与截图要求，下一次仅对这份精确原包做普通窗口/登录/关闭重开与自身像素检查，job硬上限180秒；即使用满累计446秒也小于480秒。仅用已有交互桌面/稳定WebView2；缺失或拒绝则停止，不安装Runtime、修改sandbox/ACL/会话/显示设置、不启Edge浏览器/CDP，也不使用用户电脑。新的测试提交不改变已冻结包身份。结果须追加真实终态，不预置通过。
