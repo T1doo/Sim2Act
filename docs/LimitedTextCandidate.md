@@ -56,4 +56,4 @@ python -m pip uninstall sim2act
 
 ## 仍有边界
 
-本包不开放正式PG、不代创建principal／project／trial／approval／account，也不自动启用自然应用生成。大型Cold原30秒目标尚未稳定达到；不能用小文本耗时替代大型Cold验收。旧8秒真实超时与UNKNOWN账本仍保留，新的25秒单请求上限只属于新有限协议且不能越过原租约／任务截止。当前源码真实调用与独审证据另保全于开发仓库的`docs/evidence/intern-exact-goal-live-20261031/`，不随此包带入数据库。
+本包不开放正式PG、不代创建principal／project／trial／approval／account，也不自动启用自然应用生成。新建合成工作区使用独立权威控制存储，在原30秒租期内有界续租，最终提交仍受所有者、版本、取消和原绝对任务截止约束；旧工作区不自动迁移。已有大型SQLite／Mock保存和持锁取消证据分别绑定其源码版本，见仓库`docs/evidence/lease-control-final-fence-20261101/`；长写锁及300秒总预算风险仍存在，不能用小文本耗时替代大型Cold验收。旧8秒真实超时与UNKNOWN账本仍保留，新的25秒单请求上限只属于新有限协议且不能越过有效租约／任务截止。当前源码真实调用与独审证据另保全于开发仓库的`docs/evidence/intern-exact-goal-live-20261031/`，不随此包带入数据库。

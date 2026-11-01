@@ -71,17 +71,23 @@ static class Paths {
 }
 
 sealed class Host : Form {
+    sealed class BackendLine {
+        public readonly string Text;
+        public readonly bool Error;
+        public BackendLine(string text,bool error) {Text=text;Error=error;}
+    }
     readonly string root,runtime;
     readonly WebView2 view = new WebView2();
     readonly Label status = new Label();
     readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
-    readonly ConcurrentQueue<string> output = new ConcurrentQueue<string>();
-    int queued, overflow;
+    readonly ConcurrentQueue<BackendLine> output = new ConcurrentQueue<BackendLine>();
+    int queued, overflow, logFailed;
     volatile bool stdoutEnded,stderrEnded;
     readonly Stopwatch clock = Stopwatch.StartNew();
     readonly object logGate = new object();
     Process child; FileStream claim; StreamWriter log;
-    string worker,origin,boundReadyUrl; Dictionary<string,object> receipt;
+    string worker,origin,boundReadyUrl,expectedData,startupIssue; Dictionary<string,object> receipt;
+    bool logFailureHandled;
     bool initialized,stopping,stopSent,childStarted,stdoutEof,stderrEof,finished,closingAllowed,failed,timeoutShown;
     double startAt,stopAt,exitAt=-1,eofAt=-1;
     public int ExitCode = 1;
@@ -101,7 +107,19 @@ sealed class Host : Form {
         };
         timer.Interval=100; timer.Tick += Tick; timer.Start();
     }
-    void Write(string text) { lock(logGate) { if(log != null) { log.WriteLine(DateTime.UtcNow.ToString("o")+" "+text); log.Flush(); } } }
+    void Write(string text) {
+        lock(logGate) {
+            if(log==null || Volatile.Read(ref logFailed)!=0) return;
+            try {log.WriteLine(DateTime.UtcNow.ToString("o")+" "+text);log.Flush();}
+            catch(Exception) {Interlocked.Exchange(ref logFailed,1);}
+        }
+    }
+    void QueueLine(string line,bool error) {
+        if(line.Length>8192) {Interlocked.Exchange(ref overflow,1);Write("OVERSIZED_BACKEND_LINE");return;}
+        Write(line);
+        if(Interlocked.Increment(ref queued)>256) {Interlocked.Decrement(ref queued);Interlocked.Exchange(ref overflow,1);return;}
+        output.Enqueue(new BackendLine(line,error));
+    }
     async Task Start() {
         try {
             string profile=Paths.Directory(root,"webview-profile"); Paths.Directory(root,"temp"); Paths.Directory(root,"exports");
@@ -131,6 +149,7 @@ sealed class Host : Form {
     }
     void StartBackend() {
         string data=Path.Combine(root,"workspace data"); Paths.Check(data);
+        expectedData=Path.GetFullPath(data).TrimEnd(Path.DirectorySeparatorChar);
         ProcessStartInfo info=new ProcessStartInfo(Path.Combine(root,"runtime","python.exe"));
         info.Arguments="-I -B -u -m sim2act.cli synthetic-workspace --data-dir \""+data+"\" --control-stdin"+(System.IO.Directory.Exists(data)?"":" --new");
         if(exactReadLive) info.Arguments+=" --exact-read-live";
@@ -143,15 +162,11 @@ sealed class Host : Form {
         child=new Process(); child.StartInfo=info; child.EnableRaisingEvents=true;
         child.OutputDataReceived += delegate(object sender,DataReceivedEventArgs args) {
             if(args.Data==null) { stdoutEnded=true; return; }
-            string line=args.Data;
-            if(line.Length>8192) { Interlocked.Exchange(ref overflow,1); Write("OVERSIZED_BACKEND_LINE"); return; }
-            Write(line);
-            if(Interlocked.Increment(ref queued)>256) { Interlocked.Decrement(ref queued); Interlocked.Exchange(ref overflow,1); return; }
-            output.Enqueue(line);
+            QueueLine(args.Data,false);
         };
         child.ErrorDataReceived += delegate(object sender,DataReceivedEventArgs args) {
             if(args.Data==null) { stderrEnded=true; return; }
-            Write(args.Data.Length<=65536 ? args.Data : "OVERSIZED_BACKEND_ERROR");
+            QueueLine(args.Data,true);
         };
         if(!child.Start()) throw new Exception("无法启动包内后台。");
         childStarted=true;
@@ -160,7 +175,48 @@ sealed class Host : Form {
     }
     static string TextValue(Dictionary<string,object> value,string key) { object item; return value.TryGetValue(key,out item) ? item as string : null; }
     static bool True(Dictionary<string,object> value,string key) { object item; return value.TryGetValue(key,out item) && item is bool && (bool)item; }
-    void Line(string line) {
+    string StartupMessage(string code) {
+        switch(code) {
+            case "PORT_UNAVAILABLE": return "原工作台端口仍被占用。请核对原窗口是否已退出；保留工程、origin记录和运行锁。";
+            case "INVALID_DESKTOP_ORIGIN": case "DESKTOP_ORIGIN_CHANGED":
+            case "DESKTOP_ORIGIN_PORT_MISMATCH": return "工作台地址记录损坏或身份变化；保留原工程与 desktop.log，未更换地址或重建数据。";
+            case "SCHEMA_CHANGED": case "UNKNOWN_WORKSPACE": case "IDENTITY_CHANGED": return "工作区版本或身份不匹配；请保留原目录，不要覆盖数据库。";
+            case "EXACT_READ_EXISTING_TOKEN_MISSING": return "当前程序环境没有既有模型配置。可用默认模式打开工程；程序不会创建凭据。";
+            default: return "后台未能启动；请保留工程和 desktop.log 核对具体错误。";
+        }
+    }
+    bool WorkspaceIdentity(Dictionary<string,object> value,Uri address) {
+        try {
+            string data=TextValue(value,"data_dir"),principal=TextValue(value,"principal_id");
+            if(data==null || !String.Equals(Path.GetFullPath(data).TrimEnd(Path.DirectorySeparatorChar),expectedData,StringComparison.OrdinalIgnoreCase)
+                || TextValue(value,"public_token")!="public-synthetic-blank-workspace"
+                || principal==null || !Regex.IsMatch(principal,"^user_[0-9a-f]{32}$")) return false;
+            Paths.Check(data);
+            Dictionary<string,object>[] records=new Dictionary<string,object>[2];
+            string[] names={"synthetic-workspace.json","desktop-origin.json"};
+            for(int i=0;i<names.Length;i++) {
+                FileInfo file=new FileInfo(Path.Combine(data,names[i]));
+                if(!file.Exists || (file.Attributes & FileAttributes.ReparsePoint)!=0 || file.Length>4096) return false;
+                records[i]=new JavaScriptSerializer().DeserializeObject(File.ReadAllText(file.FullName,Encoding.UTF8)) as Dictionary<string,object>;
+                if(records[i]==null || TextValue(records[i],"principal_id")!=principal) return false;
+            }
+            string version=TextValue(records[0],"version"); object port;
+            return (version=="sim2act-blank-synthetic-workspace.v1" || version=="sim2act-blank-synthetic-workspace.v2")
+                && TextValue(records[0],"mode")=="SYNTHETIC_TEST_ONLY"
+                && TextValue(records[1],"version")=="sim2act-desktop-origin.v1"
+                && TextValue(records[1],"host")=="127.0.0.1"
+                && records[1].TryGetValue("port",out port) && port is int && (int)port==address.Port;
+        } catch(Exception) {return false;}
+    }
+    void Line(BackendLine record) {
+        string line=record.Text;
+        const string prefix="Synthetic workspace stopped; existing data preserved: ";
+        if(record.Error) {
+            if(line.StartsWith(prefix,StringComparison.Ordinal)) {
+                startupIssue=StartupMessage(line.Substring(prefix.Length).Trim());failed=true;Stop(startupIssue);
+            }
+            return; // stderr never supplies a READY/STOPPED protocol receipt.
+        }
         Dictionary<string,object> value;
         try { value=new JavaScriptSerializer().DeserializeObject(line) as Dictionary<string,object>; } catch {return;}
         if(value==null) return;
@@ -172,6 +228,7 @@ sealed class Host : Form {
         if(kind=="SYNTHETIC_WORKSPACE_READY") {
             string url=TextValue(value,"url"); Uri address;
             if(url==null || !Regex.IsMatch(url,"^http://127\\.0\\.0\\.1:[1-9][0-9]{0,4}$") || !Uri.TryCreate(url,UriKind.Absolute,out address) || address.Port>65535) return;
+            if(!WorkspaceIdentity(value,address)) {startupIssue="后台工作区身份与本窗口不匹配；未导航或重建数据。";failed=true;Stop(startupIssue);return;}
             if(boundReadyUrl!=null && boundReadyUrl!=url) {failed=true; Stop("后台地址发生变化，正在停止…"); return;}
             if(stopping) return;
             if(clock.Elapsed.TotalSeconds-startAt>=30) {failed=true; Stop("启动超时，正在停止…"); return;}
@@ -185,8 +242,19 @@ sealed class Host : Form {
         string url=args.DownloadOperation.Uri;
         if(!(Allowed(url) || (origin!=null && url.StartsWith("blob:"+origin+"/",StringComparison.Ordinal)))) {args.Cancel=true;return;}
         string name=Path.GetFileName(args.ResultFilePath); if(!Regex.IsMatch(name,"^[A-Za-z0-9._-]{1,100}$")) name="export.json";
-        args.ResultFilePath=Path.Combine(Paths.Directory(root,"exports"),DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-")+Guid.NewGuid().ToString("N").Substring(0,8)+"-"+name);
-        args.Handled=true; status.Text="导出文件保存到程序目录 exports";
+        string target=Path.Combine(Paths.Directory(root,"exports"),DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-")+Guid.NewGuid().ToString("N").Substring(0,8)+"-"+name);
+        args.ResultFilePath=target;
+        CoreWebView2DownloadOperation operation=args.DownloadOperation;
+        EventHandler<object> changed=null;
+        changed=delegate(object source,object changedArgs) {
+            if(operation.State==CoreWebView2DownloadState.InProgress) return;
+            operation.StateChanged-=changed;
+            if(IsDisposed || finished) return;
+            status.Text=operation.State==CoreWebView2DownloadState.Completed
+                ? "导出完成："+target : "导出未完成："+operation.InterruptReason.ToString()+"；原成果未更改。";
+        };
+        operation.StateChanged+=changed;
+        args.Handled=true; status.Text="正在导出到程序目录 exports…";
     }
     void Stop(string message) {
         if(finished) return; status.Text=message; stopping=true;
@@ -202,6 +270,10 @@ sealed class Host : Form {
     void Tick(object sender,EventArgs args) {
         if(finished) return;
         double now=clock.Elapsed.TotalSeconds;
+        if(Volatile.Read(ref logFailed)!=0 && !logFailureHandled) {
+            logFailureHandled=true;failed=true;startupIssue="日志无法写入；请保留工程并检查目录空间/权限，后台正按原协议停止。";Stop(startupIssue);
+            if(finished) return;
+        }
         if(!childStarted) {
             if(!initialized && now>=30) {
                 failed=true; finished=true; timer.Stop(); Write("WEBVIEW_INITIALIZATION_TIMEOUT");
@@ -210,7 +282,7 @@ sealed class Host : Form {
             }
             return;
         }
-        Stopwatch batch=Stopwatch.StartNew(); string line;
+        Stopwatch batch=Stopwatch.StartNew(); BackendLine line;
         for(int i=0;i<64 && batch.ElapsedMilliseconds<5 && output.TryDequeue(out line);i++) { Interlocked.Decrement(ref queued); Line(line); }
         // EOF becomes authoritative only after all preceding stdout records were handled.
         stdoutEof=stdoutEnded && output.IsEmpty && Volatile.Read(ref queued)==0;
@@ -224,11 +296,12 @@ sealed class Host : Form {
             bool clean=receipt!=null && True(receipt,"worker_stopped") && True(receipt,"clean") && True(receipt,"data_preserved");
             ExitCode=child.ExitCode==0 && clean && !failed ? 0 : 1;
             Write(new JavaScriptSerializer().Serialize(new Dictionary<string,object>{{"event","DESKTOP_EXIT"},{"child_returncode",child.ExitCode},{"receipt_verified",clean},{"ready_seen",origin!=null},{"exitcode",ExitCode}}));
+            if(Volatile.Read(ref logFailed)!=0) ExitCode=1;
             finished=true;
             if(ExitCode==0) ReleaseClaim();
             else {
                 if(claim!=null) {claim.Dispose();claim=null;}
-                MessageBox.Show(this,"后台已退出，但未通过完整退出确认。数据、运行锁和 desktop.log 已保留。","Sim2Act",MessageBoxButtons.OK,MessageBoxIcon.Error);
+                MessageBox.Show(this,(startupIssue==null?"后台已退出，但未通过完整退出确认。":startupIssue)+"\n数据、运行锁和 desktop.log 已保留。","Sim2Act",MessageBoxButtons.OK,MessageBoxIcon.Error);
             }
             closingAllowed=true; Close(); return;
         }
@@ -240,7 +313,7 @@ sealed class Host : Form {
     void FinishBeforeChild() {finished=true; ExitCode=failed?1:0; ReleaseClaim(); closingAllowed=true; Close();}
     void ReleaseClaim() {if(claim!=null) {claim.Dispose();claim=null; File.Delete(Path.Combine(root,"desktop-running.lock"));}}
     protected override void Dispose(bool disposing) {
-        if(disposing) {timer.Dispose(); lock(logGate) {if(log!=null) {log.Dispose();log=null;}} if(claim!=null) claim.Dispose(); if(child!=null) child.Dispose();}
+        if(disposing) {timer.Dispose(); lock(logGate) {if(log!=null) {try {log.Dispose();} catch(Exception) {Interlocked.Exchange(ref logFailed,1);} finally {log=null;}}} if(claim!=null) claim.Dispose(); if(child!=null) child.Dispose();}
         base.Dispose(disposing);
     }
 }

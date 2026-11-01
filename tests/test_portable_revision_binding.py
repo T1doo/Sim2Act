@@ -54,7 +54,7 @@ def candidate(tmp_path):
         python="3.12",
         files={"src/" + name: record(value) for name, value in files.items()},
     )
-    for name in ["scripts/portable_desktop.py", "scripts/package_windows_portable.py", "docs/PreviewRelease.md"] + ["scripts/windows/" + name for name in ("Sim2ActDesktop.cs", "Build-Desktop.ps1", "desktop.manifest", "README.md")]:
+    for name in ["scripts/portable_desktop.py", "scripts/package_windows_portable.py", "docs/PreviewRelease.md", "docs/F2/BlankSyntheticWorkspaceQuickstart.md", "docs/LimitedTextCandidate.md"] + ["scripts/windows/" + name for name in ("Sim2ActDesktop.cs", "Build-Desktop.ps1", "desktop.manifest", "README.md")]:
         data["files"][name] = record((ROOT / name).read_bytes())
     data["files"]["wheels/" + wheel.name] = record(wheel.read_bytes())
     manifest.write_text(json.dumps(data))
@@ -136,6 +136,8 @@ def test_full_local_assembly_binds_revision_and_preserves_existing_output(candid
         preview = z.read("Sim2Act-preview/Developer-Browser-Preview.cmd").decode("ascii")
         assert "--browser-preview" in preview
         assert "Sim2Act-preview/desktop-build/Sim2ActDesktop.cs" in z.namelist()
+        for guide in ("docs/F2/BlankSyntheticWorkspaceQuickstart.md", "docs/LimitedTextCandidate.md"):
+            assert z.read("Sim2Act-preview/" + guide) == (ROOT / guide).read_bytes()
         assert m["app_candidate_manifest_sha256"] == record(manifest.read_bytes())["sha256"]
         for name, expected in m["files"].items():
             assert record(z.read("Sim2Act-preview/" + name)) == expected

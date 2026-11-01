@@ -404,7 +404,12 @@ class Runtime:
             raise DomainError("UNSUPPORTED_CAPABILITY", "Qualified native lease control is unavailable")
         entry()
         _state(self)
-        return Runtime.session(self, row).check()
+        require(type(row) is dict and marked(row), "Explicit authoritative lease Run required")
+        # Session issuance/header/marker are checked before its one fresh
+        # authority read. _current revalidates every live fact, stop and both
+        # clocks; no verdict survives this call. Runtime.session's additional
+        # early authority read is needed by its other callers, not here.
+        return control.Authority.session(self.authority, row).check()
 
     def heartbeat(self, worker_id, run_id, fence, version, seconds, *, deadline=None):
         """Fresh committed main owner/authorization; renewal writes control only.

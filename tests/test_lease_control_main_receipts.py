@@ -39,6 +39,22 @@ def test_handoff_uses_actual_committed_main_marker_and_keeps_history_anchor(env)
             selected.store.guard(c, bound["id"], bound["fence"])
 
 
+def test_lease_rejects_foreign_row_and_context_before_getter_dispatch(env):
+    selected, _, bound = claim(env)
+    calls = []
+
+    class Foreign(dict):
+        def get(self, *args):
+            calls.append(args)
+            raise AssertionError("foreign getter dispatched")
+
+    for row in (Foreign(bound), dict(bound, context=Foreign(bound["context"]))):
+        with pytest.raises(DomainError, match="Explicit authoritative lease Run required"):
+            selected.lease(row)
+    assert calls == []
+    assert selected.lease(bound) > 0
+
+
 def test_forged_main_claim_header_cannot_activate_a_control_owner(env):
     store, settings = env[:2]
     selected = store._enable_authoritative_leases(settings, create=True)

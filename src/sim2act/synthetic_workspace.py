@@ -348,8 +348,21 @@ def serve(path, *, new=False, port=0, control_stdin=False, exact_read_live=False
         address = "http://127.0.0.1:" + str(listener.getsockname()[1])
 
         def work():
-            announced = False
             try:
+                # A usable service must not wait for an already queued task.
+                # Register this actual worker, then wait for Uvicorn's real
+                # startup before announcing the interactive workspace. Only
+                # after READY can the first claim start a long transaction.
+                store.heartbeat(worker.id)
+                while not stopped.is_set() and not server.should_exit and not server.started:
+                    stopped.wait(.02)
+                if stopped.is_set() or server.should_exit:
+                    return
+                if desktop_origin is not None:
+                    require(_read_desktop_origin(root) == desktop_origin, "DESKTOP_ORIGIN_CHANGED")
+                print(json.dumps(dict(event="SYNTHETIC_WORKSPACE_READY", url=address,
+                    data_dir=str(root), public_token=TOKEN, worker_id=worker.id,
+                    principal_id=marker["principal_id"], mode="SYNTHETIC_TEST_ONLY", control_stdin=control_stdin)), flush=True)
                 while not stopped.is_set():
                     if desktop_origin is not None:
                         require(_read_desktop_origin(root) == desktop_origin, "DESKTOP_ORIGIN_CHANGED")
@@ -357,13 +370,6 @@ def serve(path, *, new=False, port=0, control_stdin=False, exact_read_live=False
                     # Commands/reads can enter between atomic steps and while
                     # the Worker computes outside a database transaction.
                     worker.once()
-                    if server.started and not announced:
-                        if desktop_origin is not None:
-                            require(_read_desktop_origin(root) == desktop_origin, "DESKTOP_ORIGIN_CHANGED")
-                        print(json.dumps(dict(event="SYNTHETIC_WORKSPACE_READY", url=address,
-                            data_dir=str(root), public_token=TOKEN, worker_id=worker.id,
-                            principal_id=marker["principal_id"], mode="SYNTHETIC_TEST_ONLY", control_stdin=control_stdin)), flush=True)
-                        announced = True
                     stopped.wait(1)  # Original worker.main service cadence.
             except Exception as error:
                 errors.append("SYNTHETIC_WORKER_STOPPED")

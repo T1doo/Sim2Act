@@ -120,7 +120,8 @@ def checked_desktop_inputs(candidate_manifest):
         raise ValueError("Native host stage requires an exact current candidate manifest")
     records = json.loads(candidate_manifest.read_bytes())["files"]
     root = Path(__file__).resolve().parents[1]
-    names = ["scripts/portable_desktop.py", "scripts/package_windows_portable.py", "docs/PreviewRelease.md"]
+    names = ["scripts/portable_desktop.py", "scripts/package_windows_portable.py", "docs/PreviewRelease.md",
+             "docs/F2/BlankSyntheticWorkspaceQuickstart.md", "docs/LimitedTextCandidate.md"]
     names += ["scripts/windows/" + name for name in ("Sim2ActDesktop.cs", "Build-Desktop.ps1", "desktop.manifest", "README.md")]
     result = {}
     for name in names:
@@ -175,6 +176,8 @@ def build(inputs, assets, app_wheel, output, *, candidate_manifest=None):
     )
     files["desktop.py"] = desktop_inputs["scripts/portable_desktop.py"]
     files["使用说明.md"] = desktop_inputs["docs/PreviewRelease.md"]
+    for name in ("docs/F2/BlankSyntheticWorkspaceQuickstart.md", "docs/LimitedTextCandidate.md"):
+        files[name] = desktop_inputs[name]
     # Native desktop is the product entry. Browser access is explicit developer preview.
     for name in ("Sim2ActDesktop.cs", "Build-Desktop.ps1", "desktop.manifest", "README.md"):
         files["desktop-build/" + name] = desktop_inputs["scripts/windows/" + name]
