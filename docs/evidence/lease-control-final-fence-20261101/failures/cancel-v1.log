@@ -1,0 +1,105 @@
+F
+=================================== FAILURES ===================================
+_____ test_actual_large_writer_cancel_reconciles_without_effect_or_replay ______
+
+env = (<sim2act.db.Store object at 0x7fe66b3a0680>, Settings(database_url='sqlite:////workspace/scratch/lease-fence-large-ca...be7e86641c42c793897fa911017dcb', 'user_91fe5325f43748ff8359bbf5f31f2bfc', 'proj_18744d3433874dd7977a2b53102ca8d0', ...)
+tmp_path = PosixPath('/workspace/scratch/lease-fence-large-cancel-v1-20261101/test_actual_large_writer_cance0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe66b09ac00>
+
+    def test_actual_large_writer_cancel_reconciles_without_effect_or_replay(env, tmp_path, monkeypatch):
+        finished = threading.Event()
+        outcome, errors = {}, []
+        database = env[0].engine.url.database
+        def observe():
+            server = None
+            thread = None
+            try:
+                until = time.monotonic()+660
+                while not finished.wait(.04):
+                    assert time.monotonic() < until, "Bounded large writer observation ended"
+                    with sqlite3.connect('file:'+database+'?mode=ro', uri=True, timeout=.1) as c:
+                        selected = c.execute("""SELECT r.id,r.version,a.instance_id FROM runs r
+                            JOIN internal_run_bindings b ON b.run_id=r.id JOIN internal_app_runs a ON a.id=b.app_run_id
+                            WHERE r.status='RUNNING' AND json_extract(r.context,'$.natural_trial_run.stage')='cold'
+                            AND EXISTS(SELECT 1 FROM attempts x WHERE x.run_id=r.id AND x.status='RECEIVED')""").fetchone()
+                    if selected is None:
+                        continue
+                    rid, version, iid = selected
+                    probe = sqlite3.connect(database, timeout=.01, isolation_level=None)
+                    try:
+                        probe.execute('BEGIN IMMEDIATE')
+                        probe.rollback()
+                        continue
+                    except sqlite3.OperationalError as error:
+                        assert error.sqlite_errorcode == sqlite3.SQLITE_BUSY
+                    finally:
+                        probe.close()
+                    # A real BEGIN IMMEDIATE conflict proves the business writer
+                    # is held; no worker/graph method or clock is replaced.
+                    stores = [s for s in adapter._RUNTIMES if s.engine.url == env[0].engine.url
+                        and any(h[0] == rid for h in s._authoritative_lease_runtime.authority.sessions)]
+                    assert len(stores) == 1
+                    store = stores[0]
+                    listener = socket.socket()
+                    listener.bind(('127.0.0.1', 0)); listener.listen(128)
+                    base = 'http://127.0.0.1:'+str(listener.getsockname()[1])
+                    server = uvicorn.Server(uvicorn.Config(create_app(store, env[1]), log_level='error', access_log=False))
+                    thread = threading.Thread(target=server.run, kwargs={'sockets':[listener]}, daemon=True)
+                    thread.start()
+                    ready = time.monotonic()+5
+                    while not server.started:
+                        assert thread.is_alive() and time.monotonic() < ready
+                        finished.wait(.01)
+                    path = base+f'/api/internal/instances/{iid}/runs/{rid}'
+                    headers = {'Authorization':'Bearer synthetic-test-A','Content-Type':'application/json'}
+                    started = time.monotonic()
+                    with urlopen(Request(path+'/control-progress', headers=headers), timeout=8) as reply:
+                        progress = json.load(reply)
+                    outcome['progress_seconds'] = time.monotonic()-started
+                    assert progress['status'] == 'RUNNING' and not progress['content_access']
+                    started = time.monotonic()
+                    with urlopen(Request(path+'/commands', data=json.dumps(dict(command='cancel', version=version)).encode(),
+                        headers=headers, method='POST'), timeout=12) as reply:
+                        value = json.load(reply)
+                        outcome['http_status'] = reply.status
+                    outcome.update(cancel_seconds=time.monotonic()-started, reply=value, run_id=rid, instance_id=iid,
+                        observed_phase='ACTUAL_SQLITE_BUSINESS_WRITER_LOCK', store=store)
+                    assert value['status'] == 'RECONCILING'
+                    break
+            except BaseException:
+                errors.append(traceback.format_exc())
+            finally:
+                if server is not None: server.should_exit = True
+                if thread is not None:
+                    thread.join(5)
+                    if thread.is_alive(): errors.append('Owned loopback server did not exit')
+        observer = threading.Thread(target=observe, daemon=True)
+        observer.start()
+        divergence = None
+        try:
+            try: complete(env, tmp_path, monkeypatch)
+            except AssertionError as error: divergence = str(error)
+        finally:
+            finished.set(); observer.join(15)
+        assert not observer.is_alive() and not errors, errors
+>       assert divergence is not None and outcome.get('http_status') == 200, (divergence, outcome)
+E       AssertionError: ('{"namespace":"INTERNAL_APPRUN","formal_publication_enabled":false,"id":"run_2be46c2ee6684a4d9ddf0678e830911e","app_r...nd \'RUNNING\' == \'SUCCEEDED\'
+E          +  where 200 = <Response [200 OK]>.status_code
+E           
+E           - SUCCEEDED
+E           + RUNNING)', {})
+E       assert ('{"namespace":"INTERNAL_APPRUN","formal_publication_enabled":false,"id":"run_2be46c2ee6684a4d9ddf0678e830911e","app_ru...200 and \'RUNNING\' == \'SUCCEEDED\'\n +  where 200 = <Response [200 OK]>.status_code\n  \n  - SUCCEEDED\n  + RUNNING)' is not None and None == 200)
+E        +  where None = <built-in method get of dict object at 0x7fe66ac82d00>('http_status')
+E        +    where <built-in method get of dict object at 0x7fe66ac82d00> = {}.get
+
+tests/test_authoritative_cold_cancel.py:94: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_authoritative_cold_cancel.py::test_actual_large_writer_cancel_reconciles_without_effect_or_replay
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 1 warning in 579.30s (0:09:39)

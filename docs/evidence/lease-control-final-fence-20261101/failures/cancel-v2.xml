@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="378.168" timestamp="2026-11-01T13:31:30.819976+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_authoritative_cold_cancel" name="test_actual_large_writer_cancel_reconciles_without_effect_or_replay" time="377.718"><failure message="AssertionError: ['Traceback (most recent call last):&#10;    File &quot;/workspace/Sim2Act/tests/test_authoritative_cold_cancel.py&quot;, line 77, in...CILING\'&#10;  AssertionError: assert \'CANCEL_REQUESTED\' == \'RECONCILING\'&#10;    &#10;    - RECONCILING&#10;    + CANCEL_REQUESTED&#10;  ']&#10;[+3 more lines; full report in element text]">env = (&lt;sim2act.db.Store object at 0x7f823b48c290&gt;, Settings(database_url='sqlite:////workspace/scratch/lease-fence-large-ca...f3e07557014db98664d7c7f1235d1a', 'user_d14b24612a2e40e88bc32e03c9f0a045', 'proj_164e420946014c41a23098656ec0370b', ...)
+tmp_path = PosixPath('/workspace/scratch/lease-fence-large-cancel-v2-20261101/test_actual_large_writer_cance0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f823aca8fe0&gt;
+
+    def test_actual_large_writer_cancel_reconciles_without_effect_or_replay(env, tmp_path, monkeypatch):
+        finished = threading.Event()
+        outcome, errors = {}, []
+        database = env[0].engine.url.database
+        def observe():
+            server = None
+            thread = None
+            try:
+                until = time.monotonic()+660
+                while not finished.wait(.04):
+                    assert time.monotonic() &lt; until, "Bounded large writer observation ended"
+                    with sqlite3.connect('file:'+database+'?mode=ro', uri=True, timeout=.1) as c:
+                        selected = c.execute("""SELECT r.id,r.version,a.instance_id FROM runs r
+                            JOIN internal_run_bindings b ON b.run_id=r.id JOIN internal_app_runs a ON a.id=b.app_run_id
+                            WHERE r.status='RUNNING' AND EXISTS(SELECT 1 FROM runs prior
+                              WHERE prior.status='SUCCEEDED' AND prior.created_at&lt;r.created_at)
+                            AND EXISTS(SELECT 1 FROM attempts x WHERE x.run_id=r.id AND x.status='RECEIVED')""").fetchone()
+                    if selected is None:
+                        continue
+                    rid, version, iid = selected
+                    probe = sqlite3.connect(database, timeout=.01, isolation_level=None)
+                    try:
+                        probe.execute('BEGIN IMMEDIATE')
+                        probe.rollback()
+                        continue
+                    except sqlite3.OperationalError as error:
+                        assert error.sqlite_errorcode == sqlite3.SQLITE_BUSY
+                    finally:
+                        probe.close()
+                    # A real BEGIN IMMEDIATE conflict proves the business writer
+                    # is held; no worker/graph method or clock is replaced.
+                    stores = [s for s in adapter._RUNTIMES if s.engine.url == env[0].engine.url
+                        and any(h[0] == rid for h in s._authoritative_lease_runtime.authority.sessions)]
+                    assert len(stores) == 1
+                    store = stores[0]
+                    listener = socket.socket()
+                    listener.bind(('127.0.0.1', 0)); listener.listen(128)
+                    base = 'http://127.0.0.1:'+str(listener.getsockname()[1])
+                    server = uvicorn.Server(uvicorn.Config(create_app(store, env[1]), log_level='error', access_log=False))
+                    thread = threading.Thread(target=server.run, kwargs={'sockets':[listener]}, daemon=True)
+                    thread.start()
+                    ready = time.monotonic()+5
+                    while not server.started:
+                        assert thread.is_alive() and time.monotonic() &lt; ready
+                        finished.wait(.01)
+                    path = base+f'/api/internal/instances/{iid}/runs/{rid}'
+                    headers = {'Authorization':'Bearer synthetic-test-A','Content-Type':'application/json'}
+                    started = time.monotonic()
+                    with urlopen(Request(path+'/control-progress', headers=headers), timeout=8) as reply:
+                        progress = json.load(reply)
+                    outcome['progress_seconds'] = time.monotonic()-started
+                    assert progress['status'] == 'RUNNING' and not progress['content_access']
+                    started = time.monotonic()
+                    with urlopen(Request(path+'/commands', data=json.dumps(dict(command='cancel', version=version)).encode(),
+                        headers=headers, method='POST'), timeout=12) as reply:
+                        value = json.load(reply)
+                        outcome['http_status'] = reply.status
+                    outcome.update(cancel_seconds=time.monotonic()-started, reply=value, run_id=rid, instance_id=iid,
+                        observed_phase='ACTUAL_SQLITE_BUSINESS_WRITER_LOCK', store=store)
+                    assert value['status'] == 'RECONCILING'
+                    break
+            except BaseException:
+                errors.append(traceback.format_exc())
+            finally:
+                if server is not None: server.should_exit = True
+                if thread is not None:
+                    thread.join(5)
+                    if thread.is_alive(): errors.append('Owned loopback server did not exit')
+        observer = threading.Thread(target=observe, daemon=True)
+        observer.start()
+        divergence = None
+        try:
+            try: complete(env, tmp_path, monkeypatch)
+            except AssertionError as error: divergence = str(error)
+        finally:
+            finished.set(); observer.join(15)
+&gt;       assert not observer.is_alive() and not errors, errors
+E       AssertionError: ['Traceback (most recent call last):
+E           File "/workspace/Sim2Act/tests/test_authoritative_cold_cancel.py", line 77, in...CILING\'
+E         AssertionError: assert \'CANCEL_REQUESTED\' == \'RECONCILING\'
+E           
+E           - RECONCILING
+E           + CANCEL_REQUESTED
+E         ']
+E       assert (not False and not ['Traceback (most recent call last):\n  File "/workspace/Sim2Act/tests/test_authoritative_cold_cancel.py", line 77, in...CILING\'\nAssertionError: assert \'CANCEL_REQUESTED\' == \'RECONCILING\'\n  \n  - RECONCILING\n  + CANCEL_REQUESTED\n'])
+E        +  where False = is_alive()
+E        +    where is_alive = &lt;Thread(Thread-3 (observe), stopped daemon 140197307631296)&gt;.is_alive
+
+tests/test_authoritative_cold_cancel.py:94: AssertionError</failure></testcase></testsuite></testsuites>
