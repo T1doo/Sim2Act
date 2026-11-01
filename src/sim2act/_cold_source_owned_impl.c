@@ -453,6 +453,16 @@ static PyObject*contract_entry(PyObject*self,PyObject*unused){
  (void)self;(void)unused;PyObject*ok=verify_code_range(0,10);if(!ok)return NULL;
  int same=ok==Py_True;Py_DECREF(ok);if(!same){PyErr_SetString(PyExc_ValueError,"PB data entry code or role changed");return NULL;}Py_RETURN_NONE;
 }
+/* Independent optional lease-code family. Legacy Source/PB verification keeps
+ * exactly its original ranges and does not require this optional protocol. */
+static PyObject*lease_entry(PyObject*self,PyObject*unused){
+ (void)self;(void)unused;PyObject*ok=verify_code_range(10,11);if(!ok)return NULL;
+ int same=ok==Py_True;Py_DECREF(ok);if(!same){PyErr_SetString(PyExc_ValueError,"Lease control entry code or role changed");return NULL;}Py_RETURN_NONE;
+}
+static PyObject*lease_actor_entry(PyObject*self,PyObject*unused){
+ (void)self;(void)unused;PyObject*ok=verify_code_range(10,12);if(!ok)return NULL;
+ int same=ok==Py_True;Py_DECREF(ok);if(!same){PyErr_SetString(PyExc_ValueError,"Lease control actor code or role changed");return NULL;}Py_RETURN_NONE;
+}
 static PyObject*contract_type(PyObject*self,PyObject*value){
  PyObject*model=contract_model(self,value);if(!model)return NULL;if(model!=Py_None)return model;Py_DECREF(model);return Py_NewRef((PyObject*)Py_TYPE(value));
 }
@@ -594,6 +604,8 @@ static PyMethodDef methods[]={
  {"register_contract_schemas",register_contract_schemas,METH_VARARGS,"Original complete schema/code expectations, never model data or a PASS."},
  {"contract_schema_current",contract_schema_current,METH_NOARGS,"Fresh complete live PB schema configuration, with no Python callback."},
  {"contract_entry",contract_entry,METH_NOARGS,"Fresh fixed Python data-entry roles before any foreign dispatch."},
+ {"lease_entry",lease_entry,METH_NOARGS,"Fresh independent lease-control code roles; never a lease or authority result."},
+ {"lease_actor_entry",lease_actor_entry,METH_NOARGS,"Fresh lease-control and original Store actor code roles."},
  {"contract_type",contract_type,METH_O,"Explicit PB schema class or original exact type; no Python getattr or impersonation."},
  {"register_contract_binding",register_contract_binding,METH_VARARGS,"Register the original production Binding lifecycle once, never a grant."},
  {"install_contract_binding",install_contract_binding,METH_VARARGS,"Constructor-only complete PB owner/header publication."},

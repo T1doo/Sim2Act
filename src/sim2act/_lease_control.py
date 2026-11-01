@@ -14,6 +14,7 @@ import stat
 import sys
 import threading
 import time
+from builtins import type, dict, tuple, list, str, int, float, bool, len, all, any, set, zip, vars, getattr, hasattr, setattr, classmethod, staticmethod, object
 from contextlib import contextmanager
 from pathlib import Path
 from types import FunctionType
@@ -91,6 +92,10 @@ class Authority:
     """Exact file/generation binding; every current read uses a new snapshot."""
 
     def __init__(self, path, binding):
+        entry = "sim2act:lease-entry.v1"
+        if entry is None:
+            raise DomainError("UNSUPPORTED_CAPABILITY", "Qualified native lease control is unavailable")
+        entry()
         self.path = _path(path)
         require(type(binding) is dict and set(binding) == {
             "protocol", "control_id", "main_id", "device", "inode"}, "Invalid lease control binding")
@@ -108,6 +113,10 @@ class Authority:
 
     @classmethod
     def provision(cls, path, main_id):
+        entry = "sim2act:lease-entry.v1"
+        if entry is None:
+            raise DomainError("UNSUPPORTED_CAPABILITY", "Qualified native lease control is unavailable")
+        entry()
         require(type(main_id) is str and len(main_id) == 64, "Exact main workspace identity required")
         path = _path(path)
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
@@ -132,6 +141,10 @@ class Authority:
 
     @contextmanager
     def connection(self, *, write=False, until=None):
+        entry = "sim2act:lease-entry.v1"
+        if entry is None:
+            raise DomainError("UNSUPPORTED_CAPABILITY", "Qualified native lease control is unavailable")
+        entry()
         require(_identity(self.path) == self.file_identity, "Lease control file identity changed")
         timeout = .2 if until is None else min(.2, max(0., until - time.monotonic()))
         c = sqlite3.connect(self.path.as_uri() + "?mode=rw", uri=True,
@@ -510,12 +523,20 @@ def _seal_session_entries():
         return saved
 
     def initialized(self, *args, **kwargs):
+        sealed = "sim2act:lease-entry.v1"
+        if sealed is None:
+            raise error("UNSUPPORTED_CAPABILITY", "Qualified native lease control is unavailable")
+        sealed()
         if exact_type(self) is not authority_type:
             fail("Exact lease authority required")
         init(self, *args, **kwargs)
         authorities[self] = authority_snapshot(self)
 
     def activated(self, *args, **kwargs):
+        sealed = "sim2act:lease-entry.v1"
+        if sealed is None:
+            raise error("UNSUPPORTED_CAPABILITY", "Qualified native lease control is unavailable")
+        sealed()
         auth_guard(self)
         value = activate(self, *args, **kwargs)
         if value in sessions:
@@ -526,9 +547,17 @@ def _seal_session_entries():
         return value
 
     def checked(self):
+        sealed = "sim2act:lease-entry.v1"
+        if sealed is None:
+            raise error("UNSUPPORTED_CAPABILITY", "Qualified native lease control is unavailable")
+        sealed()
         guard(self)
 
     def remembered(self):
+        sealed = "sim2act:lease-entry.v1"
+        if sealed is None:
+            raise error("UNSUPPORTED_CAPABILITY", "Qualified native lease control is unavailable")
+        sealed()
         roles()
         if exact_type(self) is not session_type or self not in sessions:
             fail("Unissued lease session update")
@@ -560,6 +589,10 @@ def _seal_session_entries():
         code = function.__code__
         defaults, kwdefaults = function.__defaults__, function.__kwdefaults__
         def run(self, *args, **kwargs):
+            sealed = "sim2act:lease-entry.v1"
+            if sealed is None:
+                raise error("UNSUPPORTED_CAPABILITY", "Qualified native lease control is unavailable")
+            sealed()
             guard(self)
             if (function.__code__ is not code or function.__defaults__ is not defaults
                     or function.__kwdefaults__ is not kwdefaults):
@@ -577,6 +610,90 @@ def _seal_session_entries():
     session_roles = tuple(class_get(session_type, "__dict__").items())
 
 
+def _seal_control_entries():
+    from types import CodeType
+    from . import _cold_source_packet as packet
+    available = packet.available() and hasattr(packet.native, "lease_entry")
+    native_entry = packet.native.lease_entry if available else None
+    def seal(code):
+        return code.replace(co_consts=tuple(native_entry if type(value) is str and value == "sim2act:lease-entry.v1"
+            else seal(value) if type(value) is CodeType else value for value in code.co_consts))
+    functions = [_seal_session_entries]
+    for cls in (Authority, Session):
+        for value in vars(cls).values():
+            if type(value) is classmethod:
+                value = value.__func__
+            if type(value) is FunctionType:
+                functions.append(value)
+                wrapped = vars(value).get("__wrapped__")
+                if type(wrapped) is FunctionType:
+                    functions.append(wrapped)
+    for function in functions:
+        function.__code__ = seal(function.__code__)
+    return packet, available
+
+
+_CODE_PACKET, _CODE_AVAILABLE = _seal_control_entries()
 _seal_session_entries()
 del _seal_session_entries
 
+
+def seal_functions(functions):
+    """Import-time constants only; subsequent code changes fail the native pin."""
+    from types import CodeType
+    selected = _CODE_PACKET.native.lease_entry if _CODE_AVAILABLE else None
+    actor = (_CODE_PACKET.native.lease_actor_entry
+             if _CODE_AVAILABLE and hasattr(_CODE_PACKET.native, "lease_actor_entry") else None)
+    def seal(code):
+        return code.replace(co_consts=tuple(selected if type(value) is str and value == "sim2act:lease-entry.v1"
+            else actor if type(value) is str and value == "sim2act:lease-actor-entry.v1"
+            else seal(value) if type(value) is CodeType else value for value in code.co_consts))
+    for function in functions:
+        function.__code__ = seal(function.__code__)
+
+
+_CONTROL_CODE_REGISTERED = False
+
+
+def _register_control_code(runtime_module=None):
+    global _CONTROL_CODE_REGISTERED
+    if not _CODE_AVAILABLE:
+        return
+    if _CONTROL_CODE_REGISTERED:
+        return
+    if runtime_module is None:
+        from . import _lease_control_runtime as runtime_module
+    if _CONTROL_CODE_REGISTERED:
+        return
+    if not hasattr(runtime_module, "Runtime"):
+        return  # The adapter is importing this module; it finishes registration.
+    concrete_path = type(Path("."))
+    # CPython 3.12 static builtins can keep tp_dict in interpreter state.
+    # They are immutable; register the actual mutable heap-class roles only,
+    # as the existing PB schema registration does.
+    path_classes = tuple(cls for cls in dict.fromkeys((*Path.__mro__, *concrete_path.__mro__))
+                         if type.__getattribute__(cls, "__flags__") & (1 << 9))
+    _CODE_PACKET.register(10, globals(),
+        ("require", "finite", "_path", "_identity", "_header", "_wire", "_schema",
+         "_seal_control_entries", "seal_functions", "_register_control_code"),
+        classes=(Authority, Session, runtime_module.Runtime, DomainError, CommittedAckPending, CommitOutcomeUnknown, *path_classes),
+        constants=("VERSION", "CONTEXT", "HEADER", "_DDL", "_CODE_PACKET", "_CODE_AVAILABLE",
+            "Authority", "Session", "DomainError", "CommittedAckPending", "CommitOutcomeUnknown",
+            "json", "math", "os", "secrets", "sqlite3", "stat", "sys", "threading", "time", "Path", "FunctionType",
+            "type", "dict", "tuple", "list", "str", "int", "float", "bool", "len", "all", "any", "set", "zip", "vars", "getattr", "hasattr", "setattr", "classmethod", "staticmethod", "object"),
+        helpers=((vars(json), ("dumps", "loads")),
+            (vars(runtime_module), ("require", "runtime", "marked", "_state", "_main_path", "enable", "_seal_and_register"))),
+        constant_helpers=((vars(time), ("time", "monotonic")),
+            (vars(sqlite3), ("connect", "Connection")),
+            (vars(os), ("open", "close", "stat", "fstat", "path")),
+            (vars(os.path), ("abspath",)),
+            (vars(threading), ("RLock",)),
+            (vars(sys), ("_getframe",)),
+            (vars(_CODE_PACKET.native), ("lease_entry", "lease_actor_entry", "register_code")),
+            (vars(runtime_module), ("ANCHOR", "RECEIPTS", "RECEIPT_DDL", "control", "DomainError",
+                "Runtime", "_RUNTIMES", "_RUNTIME_LOCK", "_RUNTIME_STATES", "json", "secrets", "sqlite3", "threading", "weakref", "Path",
+                "type", "dict", "tuple", "list", "str", "int", "float", "bool", "len", "all", "any", "set", "vars", "getattr", "hasattr", "object", "id"))))
+    _CONTROL_CODE_REGISTERED = True
+
+
+_register_control_code()

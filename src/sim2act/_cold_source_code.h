@@ -1,8 +1,8 @@
 /* Import-time code configuration, never model data or a cached verdict. */
-#define SOURCE_CODE_FAMILIES 10
+#define SOURCE_CODE_FAMILIES 12
 static PyObject*source_code[SOURCE_CODE_FAMILIES]={NULL};
 static int code_items(PyObject*dict,PyObject*items){
- if(!PyDict_CheckExact(dict)||!PyTuple_CheckExact(items)||PyDict_GET_SIZE(dict)!=PyTuple_GET_SIZE(items))return 0;
+ if(!dict||!PyDict_CheckExact(dict)||!PyTuple_CheckExact(items)||PyDict_GET_SIZE(dict)!=PyTuple_GET_SIZE(items))return 0;
  Py_ssize_t pos=0,i=0;PyObject*k,*v;
  while(PyDict_Next(dict,&pos,&k,&v)){
   PyObject*pair=PyTuple_GET_ITEM(items,i++);

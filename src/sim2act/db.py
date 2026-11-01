@@ -8,6 +8,7 @@ import sys
 import threading
 import time
 import uuid
+from builtins import type, dict, tuple, list, str, int, float, bool, len, all, any, set, zip, vars, getattr, hasattr, isinstance, object
 from time import monotonic as _lease_monotonic
 from collections import deque
 from contextlib import contextmanager, nullcontext
@@ -26,6 +27,8 @@ from sqlalchemy import (
     bindparam,
     create_engine,
     insert,
+    func,
+    literal,
     select,
     text,
     update,
@@ -1313,6 +1316,10 @@ class Store:
 
         source_scope_gate(self, c, run_id)
         r = c.execute(select(runs).where(runs.c.id == run_id).with_for_update()).mappings().one()
+        if type(r["context"]) is dict and "local_lease_control" in r["context"]:
+            # New metadata must never silently use the legacy historical lease.
+            # Execution stays closed until the full versioned protocol lands.
+            raise DomainError("UNSUPPORTED_CAPABILITY", "Authoritative lease execution is not enabled")
         if (
             r["fence"] != fence
             or r["lease_until"] <= time.time()
@@ -1321,6 +1328,10 @@ class Store:
             raise DomainError("VERSION_CONFLICT", "Stale worker lease")
         self._frozen_contract_after_scope(c, r)
         return dict(r)
+
+    def _enable_authoritative_leases(self, settings, *, create=False):
+        from ._lease_control_runtime import enable
+        return enable(self, settings, create=create)
 
     def frozen_contract(self, c, run):
         from .goal_applications import source_scope_gate
@@ -1415,7 +1426,9 @@ class Store:
         with self.tx() as c:
             expired = (
                 c.execute(
-                    select(runs.c.id, runs.c.status, runs.c.fence, runs.c.version, runs.c.cancel_intent)
+                    select(runs.c.id, runs.c.status, runs.c.fence, runs.c.version, runs.c.cancel_intent,
+                        (func.json_type(runs.c.context, "$.local_lease_control") if self.sqlite else literal(None))
+                            .label("control_protocol"))
                     .where(
                         runs.c.status.in_(["RUNNING", "PAUSE_REQUESTED", "CANCEL_REQUESTED"]),
                         runs.c.lease_until <= now,
@@ -1427,6 +1440,10 @@ class Store:
             )
             protocol_ids = protocol_run_ids(c, candidates=[row["id"] for row in expired])
             for r in expired:
+                if r["control_protocol"] is not None:
+                    # Never let the old historical anchor reclaim a v2 owner.
+                    # Its control/main receipt recovery is a separate protocol.
+                    continue
                 if r["id"] in protocol_ids:
                     continue
                 c.execute(
@@ -1471,6 +1488,8 @@ class Store:
             # Ordinary workers never acquire trial ownership, even before phase
             # approval. Association and Run become visible in the same commit.
             eligibility = ~associated_sql()
+            if self.sqlite:
+                eligibility = eligibility & func.json_type(runs.c.context, "$.local_lease_control").is_(None)
             if trial_binding is not None:
                 from sqlalchemy import and_, exists, or_
 
@@ -1503,6 +1522,8 @@ class Store:
                                  runs.c.request_key == trial_binding.contract.stage_keys.generate),
                             phase_ready))
                     eligibility = legacy if journal_trial else or_(eligibility, legacy)
+                if self.sqlite:
+                    eligibility = eligibility & func.json_type(runs.c.context, "$.local_lease_control").is_(None)
             row = (
                 c.execute(
                     select(runs.c.id)
@@ -2448,3 +2469,17 @@ delivery_graph_locks = Table(
     Column("snapshot", JSON, nullable=False),
     Column("fingerprint", String, nullable=False),
 )
+
+
+# Optional actor provenance is captured at trusted module initialization, not
+# when an action asks for a lease. Legacy Source/PB verifier ranges exclude it.
+try:
+    from . import _cold_source_owned_impl as _lease_native
+except ImportError:
+    _lease_native = None
+if _lease_native is not None and hasattr(_lease_native, "lease_actor_entry"):
+    from ._lease_code_witness import class_state as _lease_class_state
+    _lease_actor_items = tuple((name, value) for name, value in globals().copy().items())
+    _lease_native.register_code(11, ((), (_lease_class_state(Store),),
+        ((globals(), _lease_actor_items),
+         (vars(time), (("time", time.time), ("monotonic", time.monotonic))))))
