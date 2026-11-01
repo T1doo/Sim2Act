@@ -903,7 +903,7 @@ def publish_sync_renewal(worker, run, state, renewed):
         sequence = state.get("sync_renewal", {}).get("sequence", 0) + 1
         state["lease_until"] = max(state["lease_until"], renewed)
         state["sync_renewal"] = dict(sequence=sequence, worker_id=worker.id,
-            run_id=run["id"], fence=run["fence"], lease_until=renewed)
+            run_id=run["id"], fence=run["fence"], version=run["version"], lease_until=renewed)
 
 
 def _renew_sync_locked(worker, run, state, *, deadline=None, lease_seconds=None):
@@ -923,7 +923,8 @@ def _renew_sync_locked(worker, run, state, *, deadline=None, lease_seconds=None)
         raise DomainError("BUDGET_EXHAUSTED", "Original heartbeat interval ended")
     renewed = worker.store.heartbeat(worker.id, run["id"], run["fence"],
         worker.s.lease_seconds if lease_seconds is None else lease_seconds,
-        _deadline=cutoff, _wait_seconds=min(5.0, remaining), _running_only=True)
+        _deadline=cutoff, _wait_seconds=min(5.0, remaining), _running_only=True,
+        _expected_version=run["version"])
     publish_sync_renewal(worker, run, state, renewed)
     return renewed
 
@@ -984,12 +985,16 @@ def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
                         deadline = state["deadline"]
                         cutoff = min(state["lease_until"], deadline) if deadline is not None else None
                     try:
-                        options = {}
+                        # The explicit natural runner keeps this exact Run
+                        # version through all nodes. A control command changes
+                        # it even when worker/fence and the lease remain live.
+                        options = ({"_expected_version": run["version"]}
+                            if state.get("sync_contention_recovery") is True else {})
                         if cutoff is not None:
                             remaining = cutoff - time.time()
                             if remaining <= 0:
                                 raise DomainError("BUDGET_EXHAUSTED", "Original heartbeat interval ended")
-                            options = dict(_deadline=cutoff, _wait_seconds=min(5.0, remaining),
+                            options.update(_deadline=cutoff, _wait_seconds=min(5.0, remaining),
                                 _running_only=True)
                         renewed = worker.store.heartbeat(worker.id, run["id"], run["fence"],
                             worker.s.lease_seconds, **options)
@@ -1055,6 +1060,7 @@ def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
                     and renewed.get("sequence", 0) > failure_sequence[0]
                     and renewed.get("worker_id") == worker.id
                     and renewed.get("run_id") == run["id"] and renewed.get("fence") == run["fence"]
+                    and renewed.get("version") == run["version"]
                     and deadline is not None and not worker.stop.is_set()
                     and time.time() < min(renewed.get("lease_until", 0), deadline))
                 if recovered:

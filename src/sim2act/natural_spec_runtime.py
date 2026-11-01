@@ -162,7 +162,8 @@ def renew(worker, job, deadline, *, _heartbeat_state=None):
         from .text_workflows import renew_sync
         renew_sync(worker, job, _heartbeat_state, deadline=deadline)
     else:
-        renewed = worker.store.heartbeat(worker.id, job["id"], job["fence"], worker.s.lease_seconds)
+        renewed = worker.store.heartbeat(worker.id, job["id"], job["fence"], worker.s.lease_seconds,
+            _expected_version=job["version"])
         if _heartbeat_state is not None:
             from .text_workflows import publish_sync_renewal
             publish_sync_renewal(worker, job, _heartbeat_state, renewed)

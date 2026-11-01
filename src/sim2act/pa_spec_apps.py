@@ -2366,7 +2366,8 @@ def process_job(worker, run):
                     renew_sync(worker, current, heartbeat_state)
                 else:
                     from .text_workflows import publish_sync_renewal
-                    renewed = worker.store.heartbeat(worker.id, current["id"], current["fence"], worker.s.lease_seconds)
+                    renewed = worker.store.heartbeat(worker.id, current["id"], current["fence"], worker.s.lease_seconds,
+                        _expected_version=current["version"])
                     publish_sync_renewal(worker, current, heartbeat_state, renewed)
             return again
         return process(worker, run, advance_fn=advance_and_renew, _heartbeat_state=heartbeat_state)

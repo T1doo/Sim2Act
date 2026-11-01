@@ -1561,7 +1561,11 @@ class Store:
             return data
 
     def heartbeat(self, worker_id, run_id=None, fence=None, lease_seconds=30, *,
-                  _deadline=None, _wait_seconds=None, _running_only=False):
+                  _deadline=None, _wait_seconds=None, _running_only=False,
+                  _expected_version=None):
+        if _expected_version is not None and (
+                type(_expected_version) is not int or _expected_version < 1 or not run_id):
+            raise DomainError("VERSION_CONFLICT", "Invalid expected heartbeat Run version")
         renewed_until = None
         commit_bounds = None
         def renewal_clock():
@@ -1580,6 +1584,8 @@ class Store:
                 c.execute(insert(heartbeats).values(id=worker_id, at=time.time()))
             if run_id:
                 current = self.guard(c, run_id, fence)
+                if _expected_version is not None and current["version"] != _expected_version:
+                    raise DomainError("VERSION_CONFLICT", "Heartbeat Run version changed")
                 renewal_mono = _lease_monotonic() if self.sqlite else None
                 now = time.time()
                 if _running_only and (current["status"] != "RUNNING" or current["cancel_intent"]):
@@ -1598,7 +1604,11 @@ class Store:
                     .where(runs.c.id == run_id, runs.c.worker_id == worker_id,
                         runs.c.fence == fence, runs.c.lease_until == current["lease_until"],
                         runs.c.lease_until > now,
-                        runs.c.status.in_(["RUNNING", "PAUSE_REQUESTED", "CANCEL_REQUESTED"]))
+                        runs.c.status.in_(["RUNNING", "PAUSE_REQUESTED", "CANCEL_REQUESTED"]),
+                        *(() if _expected_version is None else (
+                            runs.c.version == _expected_version,
+                            runs.c.status == current["status"],
+                            runs.c.cancel_intent == current["cancel_intent"],)))
                     .values(lease_until=renewed_until)
                 )
                 if renewed.rowcount != 1:

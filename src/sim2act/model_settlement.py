@@ -33,7 +33,7 @@ def _publish(state, worker, job, lease):
         sequence = state.get("sync_renewal", {}).get("sequence", 0) + 1
         state["lease_until"] = lease
         state["sync_renewal"] = dict(sequence=sequence, worker_id=worker.id,
-            run_id=job["id"], fence=job["fence"], lease_until=lease)
+            run_id=job["id"], fence=job["fence"], version=job["version"], lease_until=lease)
 
 
 @contextmanager
@@ -65,7 +65,8 @@ def original_interval(worker, job, deadline, state):
     _require(not stop.is_set() and started_wall < cutoff, 'Original settlement interval ended')
     if state is None:
         lease = store.heartbeat(owner, job['id'], job['fence'], lease_seconds,
-            _deadline=cutoff, _wait_seconds=min(5., cutoff-started_wall), _running_only=True)
+            _deadline=cutoff, _wait_seconds=min(5., cutoff-started_wall), _running_only=True,
+            _expected_version=job['version'])
     else:
         from .text_workflows import _renew_sync_locked
         lease = _renew_sync_locked(worker, job, state, deadline=cutoff)

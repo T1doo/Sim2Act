@@ -544,7 +544,8 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
             from .text_workflows import publish_sync_renewal
             renewed = store.heartbeat(worker_id, item.run_id, item.fence,
                 original.caps.lease_seconds, _deadline=deadline,
-                _wait_seconds=min(5.0, max(0.001, deadline - time.time())), _running_only=True)
+                _wait_seconds=min(5.0, max(0.001, deadline - time.time())), _running_only=True,
+                _expected_version=run["version"])
             publish_sync_renewal(worker, run, state, renewed)
         same_binding()
         _require(not worker.stop.is_set() and time.time() < deadline, "BUDGET_EXHAUSTED")

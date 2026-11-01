@@ -26,9 +26,13 @@ def test_heartbeat_final_write_requires_live_original_ownership(env, monkeypatch
         return value
 
     monkeypatch.setattr(store, "guard", delayed_guard)
-    with pytest.raises(DomainError, match="Heartbeat ownership"):
+    # Expiry is rejected by the existing pre-CAS finite-clock gate; a foreign
+    # worker reaches the ownership CAS. Both must leave the original row intact.
+    message = "Original heartbeat interval ended" if fault == "elapsed" else "Heartbeat ownership"
+    with pytest.raises(DomainError, match=message) as caught:
         store.heartbeat("original-worker" if fault == "elapsed" else "other-worker",
                         rid, run["fence"], 30)
+    assert caught.value.code == ("BUDGET_EXHAUSTED" if fault == "elapsed" else "VERSION_CONFLICT")
     with store.tx() as c:
         saved = c.execute(select(runs.c.lease_until, runs.c.worker_id, runs.c.fence)
                           .where(runs.c.id == rid)).mappings().one()

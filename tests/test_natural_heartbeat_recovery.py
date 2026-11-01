@@ -14,7 +14,7 @@ from sim2act import text_workflows as flow
 from sim2act.db import runs
 
 
-@pytest.mark.parametrize("case", ["real-lock", "numeric-only", "old-marker", "wrong-scope",
+@pytest.mark.parametrize("case", ["real-lock", "numeric-only", "old-marker", "wrong-scope", "wrong-version",
                                   "deadline", "non-busy", "repeat-failure", "repeat-busy"])
 def test_new_committed_sync_renewal_and_restarted_sender(env, monkeypatch, tmp_path, caplog, case):
     if not env[0].sqlite:
@@ -95,6 +95,8 @@ def test_new_committed_sync_renewal_and_restarted_sender(env, monkeypatch, tmp_p
                 flow.publish_sync_renewal(worker, run, state, renewed)
                 if case == "wrong-scope":
                     state["sync_renewal"]["run_id"] = "another-run"
+                elif case == "wrong-version":
+                    state["sync_renewal"]["version"] = run["version"] + 1
                 elif case == "deadline":
                     state["deadline"] = time.time() - 1
             return True
