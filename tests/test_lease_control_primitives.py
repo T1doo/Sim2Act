@@ -67,6 +67,23 @@ def test_real_expiry_cannot_renew_or_reissue_process_clock(tmp_path):
         fresh.activate(row, .12)
 
 
+def test_real_absolute_monotonic_cutoff_never_moves_with_renewal(tmp_path):
+    authority = Authority.provision(tmp_path / "absolute-leases.db", "d" * 64)
+    row = dict(id="run_absolute", principal_id="user_synthetic", project_id="proj_synthetic",
+        runtime_id="runtime_synthetic", worker_id="worker_synthetic", fence=1,
+        version=1, status="RUNNING", cancel_intent=False, context={})
+    row["context"][CONTEXT] = authority.prepare_claim(row, 1, time.time() + .4)
+    session = authority.activate(row, 1)
+    absolute = session.absolute_mono
+    threading.Event().wait(.08)
+    session.renew()
+    assert session.absolute_mono is absolute and session.mono <= absolute
+    threading.Event().wait(max(0, absolute-time.monotonic()) + .02)
+    with pytest.raises(DomainError, match="expired|ended"):
+        session.renew()
+    assert authority.check(row, live=False)["sequence"] == 1
+
+
 def test_direct_or_mutated_session_is_not_an_issued_owner(tmp_path):
     authority, row, session = owner(tmp_path)
     forged = Session(authority, session.header, session.nonce, 30, session.deadline,

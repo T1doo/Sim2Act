@@ -18,7 +18,7 @@ def claim(env):
     store, settings = env[:2]
     selected = store._enable_authoritative_leases(settings, create=True)
     rid = enqueue(env, "real-main-control-claim")
-    original = store.claim("original-worker", 30)
+    original = store.claim("original-worker", settings.lease_seconds)
     assert original["id"] == rid
     bound = selected.bind_claim(original)
     return selected, original, bound
@@ -219,6 +219,172 @@ def test_activation_rejects_same_connection_select_callback_write(env):
     assert selected.authority.sessions == {}
     with selected.authority.connection() as c:
         assert c.execute("SELECT state FROM leases WHERE run_id=?", (rid,)).fetchone() == ("PENDING",)
+
+
+@pytest.mark.parametrize("main_write", [False, True])
+def test_store_heartbeat_commits_past_old_lease_with_main_snapshot_or_writer(env, main_write, tmp_path):
+    import sqlite3
+    import time
+    from dataclasses import replace
+    local_env = (env[0], replace(env[1], lease_seconds=1), *env[2:])
+    selected, original, bound = claim(local_env)
+    raw = sqlite3.connect(str(selected.path), isolation_level=None, timeout=.2)
+    timings = []
+    began = time.monotonic()
+    try:
+        raw.execute("BEGIN IMMEDIATE" if main_write else "BEGIN DEFERRED")
+        assert raw.execute("SELECT lease_until FROM runs WHERE id=?", (bound["id"],)).fetchone() == (original["lease_until"],)
+        if main_write:
+            raw.execute("UPDATE runs SET lease_until=lease_until WHERE id=?", (bound["id"],))
+        changes = raw.total_changes
+        for index in range(8):
+            started = time.monotonic()
+            renewed = selected.store.heartbeat(original["worker_id"], bound["id"], bound["fence"], 1,
+                _expected_version=bound["version"], _running_only=True)
+            timings.append(time.monotonic() - started)
+            assert renewed > original["lease_until"] and raw.total_changes == changes
+            time.sleep(.16)
+        assert time.time() > original["lease_until"]
+        # A real G0 read snapshot can still upgrade after many independently
+        # committed renewals. There was no hidden main heartbeat write.
+        raw.execute("UPDATE runs SET lease_until=lease_until WHERE id=?", (bound["id"],))
+        raw.commit()
+    finally:
+        raw.close()
+    assert selected.committed_run(bound["id"]) == bound
+    assert selected.authority.check(bound)["sequence"] == 8
+    result = dict(status="PASS",real_wall_seconds=time.monotonic()-began,
+        main_writer=main_write,control_commits=8,renewal_seconds=timings,
+        main_run_unchanged=True,lease_seconds=1,large_30_second_acceptance=False)
+    (tmp_path / "committed-heartbeat-with-main-lock.json").write_text(json.dumps(result))
+
+
+@pytest.mark.parametrize("failure", ["version", "owner", "cancel", "deadline", "missing-version"])
+def test_store_control_heartbeat_rejects_changed_identity_or_intent_without_renewal(env, failure):
+    import time
+    selected, original, bound = claim(env)
+    version = bound["version"]
+    if failure in {"version", "owner"}:
+        with selected.store.tx() as c:
+            if failure == "version":
+                c.execute(text("UPDATE runs SET version=version+1 WHERE id=:id"), dict(id=bound["id"]))
+            else:
+                c.execute(text("UPDATE runs SET worker_id='other-worker' WHERE id=:id"), dict(id=bound["id"]))
+    elif failure == "cancel":
+        selected.authority.command(bound, "cancel")
+    elif failure == "missing-version":
+        version = None
+    with pytest.raises(DomainError):
+        selected.store.heartbeat(original["worker_id"], bound["id"], bound["fence"], 30,
+            _expected_version=version,
+            _deadline=time.time()-1 if failure == "deadline" else None)
+    with selected.authority.connection() as c:
+        assert c.execute("SELECT sequence FROM leases WHERE run_id=?", (bound["id"],)).fetchone() == (0,)
+
+
+def test_heartbeat_final_read_crossing_earlier_node_deadline_does_not_publish_success(env):
+    import threading
+    import time
+    selected, original, bound = claim(env)
+    deadline = time.time() + .5
+    reads = []
+    read_code = adapter.Runtime.committed_run.__code__
+    heartbeat_code = adapter.Runtime.heartbeat.__code__
+    def delayed_read(code, offset, result):
+        if code is read_code and sys._getframe(1).f_back.f_code is heartbeat_code:
+            reads.append(True)
+            threading.Event().wait(max(0, deadline-time.time()) + .02)
+    slot = next(i for i in (3, 5, 4) if sys.monitoring.get_tool(i) is None)
+    sys.monitoring.use_tool_id(slot, "lease final read deadline")
+    try:
+        sys.monitoring.register_callback(slot, sys.monitoring.events.PY_RETURN, delayed_read)
+        sys.monitoring.set_local_events(slot, read_code, sys.monitoring.events.PY_RETURN)
+        with pytest.raises(DomainError, match="deadline ended before final publication"):
+            selected.store.heartbeat(original["worker_id"], bound["id"], bound["fence"], 30,
+                _expected_version=bound["version"], _deadline=deadline)
+    finally:
+        sys.monitoring.set_local_events(slot, read_code, 0)
+        sys.monitoring.register_callback(slot, sys.monitoring.events.PY_RETURN, None)
+        sys.monitoring.free_tool_id(slot)
+    assert reads == [True]
+    # A committed renewal remains a known fact; only success publication was
+    # refused. Do not lie about rollback or erase the actual control history.
+    with selected.authority.connection() as c:
+        assert c.execute("SELECT sequence FROM leases WHERE run_id=?", (bound["id"],)).fetchone() == (1,)
+
+
+def test_heartbeat_rechecks_committed_revocation_after_control_renewal(env):
+    import sqlite3
+    selected, original, bound = claim(env)
+    read_code = adapter.Runtime.committed_run.__code__
+    heartbeat_code = adapter.Runtime.heartbeat.__code__
+    revoked = []
+    def revoke_after_renewal(code, offset, result):
+        if code is read_code and sys._getframe(1).f_back.f_code is heartbeat_code:
+            with sqlite3.connect(str(selected.path)) as other:
+                changed = other.execute("UPDATE grants SET revoked=1,revision=revision+1 "
+                    "WHERE principal_id=? AND resource_id=? AND tool_ref='resource.read'",
+                    (bound["runtime_id"], bound["resource_refs"][0]))
+                revoked.append(changed.rowcount)
+    slot = next(i for i in (3, 5, 4) if sys.monitoring.get_tool(i) is None)
+    sys.monitoring.use_tool_id(slot, "lease committed revocation")
+    try:
+        sys.monitoring.register_callback(slot, sys.monitoring.events.PY_RETURN, revoke_after_renewal)
+        sys.monitoring.set_local_events(slot, read_code, sys.monitoring.events.PY_RETURN)
+        with pytest.raises(DomainError) as denied:
+            selected.store.heartbeat(original["worker_id"], bound["id"], bound["fence"], 30,
+                _expected_version=bound["version"])
+        assert denied.value.code == "GRANT_REVOKED"
+    finally:
+        sys.monitoring.set_local_events(slot, read_code, 0)
+        sys.monitoring.register_callback(slot, sys.monitoring.events.PY_RETURN, None)
+        sys.monitoring.free_tool_id(slot)
+    assert revoked == [1]
+    with selected.authority.connection() as c:
+        assert c.execute("SELECT sequence FROM leases WHERE run_id=?", (bound["id"],)).fetchone() == (1,)
+
+
+def test_store_control_heartbeat_refuses_missing_storage_without_creating_replacement(env):
+    selected, original, bound = claim(env)
+    path = selected.authority.path
+    backup = path.with_name(path.name + ".preserved")
+    path.rename(backup)
+    try:
+        with pytest.raises(DomainError) as unavailable:
+            selected.store.heartbeat(original["worker_id"], bound["id"], bound["fence"], 30,
+                _expected_version=bound["version"])
+        assert unavailable.value.code == "RESOURCE_UNAVAILABLE"
+        assert not path.exists()
+        assert selected.committed_run(bound["id"]) == bound
+    finally:
+        backup.rename(path)
+    assert selected.authority.check(bound)["sequence"] == 0
+
+
+def test_store_control_heartbeat_does_not_resurrect_expired_owner(env):
+    import threading
+    from dataclasses import replace
+    local_env = (env[0], replace(env[1], lease_seconds=1), *env[2:])
+    selected, original, bound = claim(local_env)
+    threading.Event().wait(1.05)
+    with pytest.raises(DomainError, match="expired"):
+        selected.store.heartbeat(original["worker_id"], bound["id"], bound["fence"], 1,
+            _expected_version=bound["version"])
+    assert selected.authority.check(bound, live=False)["sequence"] == 0
+
+
+def test_foreign_store_runtime_rejected_before_reading_other_workspace(env):
+    from sim2act.db import Store
+    selected, original, bound = claim(env)
+    other = Store(str(selected.store.engine.url), test_only=True)
+    other._authoritative_lease_runtime = selected
+    try:
+        with pytest.raises(DomainError, match="Foreign authoritative heartbeat runtime"):
+            other.heartbeat(original["worker_id"], bound["id"], bound["fence"], 30,
+                _expected_version=bound["version"])
+    finally:
+        other.engine.dispose()
+    assert selected.authority.check(bound)["sequence"] == 0
 
 
 def test_new_process_ack_recovers_real_main_receipt_without_issuing_old_owner(env, tmp_path):

@@ -11,7 +11,7 @@ import sqlite3
 import threading
 import weakref
 from pathlib import Path
-from builtins import type, dict, tuple, list, str, int, float, bool, len, all, any, set, vars, getattr, hasattr, object, id
+from builtins import type, dict, tuple, list, str, int, float, bool, len, all, any, set, vars, getattr, hasattr, object, id, min, max
 
 from sqlalchemy import select, text, update
 
@@ -118,6 +118,7 @@ def enable(store, settings, *, create=False):
     install(selected)
     with _RUNTIME_LOCK:
         _RUNTIMES[store] = selected
+    store._authoritative_lease_runtime = selected
     return selected
 
 
@@ -237,6 +238,85 @@ class Runtime:
         entry()
         _state(self)
         return Runtime.session(self, row).check()
+
+    def heartbeat(self, worker_id, run_id, fence, version, seconds, *, deadline=None):
+        """Fresh committed main owner/authorization; renewal writes control only.
+
+        The main Run lease is historical graph input. Never update it while a
+        business WAL reader/writer owns that graph or use an uncommitted main
+        heartbeat as evidence of renewal.
+        """
+        entry = "sim2act:lease-entry.v1"
+        if entry is None:
+            raise DomainError("UNSUPPORTED_CAPABILITY", "Qualified native lease control is unavailable")
+        entry()
+        state = _state(self)
+        require(type(worker_id) is str and worker_id and type(run_id) is str
+                and type(fence) is int and fence >= 1 and type(version) is int and version >= 1
+                and control.finite(seconds) and seconds == state["seconds"]
+                and (deadline is None or control.finite(deadline)),
+                "Exact original heartbeat identity and configuration required")
+        node_mono = (None if deadline is None else control.time.monotonic()
+                     + max(0, deadline-control.time.time()))
+        from .db import Store, runs
+        from .goal_applications import source_scope_gate
+        with state["engine"].connect() as c:
+            c.exec_driver_sql("BEGIN DEFERRED")
+            changes = c.connection.driver_connection.total_changes
+            source_scope_gate(state["store"], c, run_id)
+            actual = dict(c.execute(select(runs).where(runs.c.id == run_id)).mappings().one())
+            require(actual["worker_id"] == worker_id and actual["fence"] == fence
+                    and actual["version"] == version and actual["status"] == "RUNNING"
+                    and not actual["cancel_intent"] and marked(actual),
+                    "Authoritative heartbeat Run owner/version/state changed")
+            frozen = Store._frozen_contract_after_scope(state["store"], c, actual)
+            for resource in actual["resource_refs"]:
+                Store.authorize(state["store"], c, actual["principal_id"], actual["runtime_id"],
+                    actual["project_id"], resource, "resource.read")
+            session = Runtime.session(self, actual)
+            require(session.deadline <= min(actual["created_at"] + state["run_seconds"],
+                    actual["created_at"] + frozen.limits.run_seconds),
+                    "Original absolute heartbeat deadline changed")
+            require(deadline is None or control.time.time() < min(deadline, session.deadline),
+                    "Original heartbeat node deadline ended")
+            require(c.connection.driver_connection.total_changes == changes,
+                    "Authoritative heartbeat attempted a main write")
+            renewed = session.renew()
+            require(deadline is None or control.time.time() < min(deadline, session.deadline),
+                    "Original heartbeat node deadline ended before publication")
+        # No stale state is published if the committed main owner changed
+        # while the control-only renewal was being committed.
+        current = Runtime.committed_run(self, run_id)
+        require(control._header(current) == control._header(actual)
+                and current["status"] == "RUNNING" and not current["cancel_intent"]
+                and current["context"][control.CONTEXT] == actual["context"][control.CONTEXT],
+                "Authoritative heartbeat main owner changed before publication")
+        # Renewal is liveness only, never a Grant or reusable validation PASS.
+        # Re-read current authorization after the control commit. The original
+        # business graph and final writer still perform their own full checks.
+        with state["engine"].connect() as c:
+            c.exec_driver_sql("BEGIN DEFERRED")
+            changes = c.connection.driver_connection.total_changes
+            source_scope_gate(state["store"], c, run_id)
+            late = dict(c.execute(select(runs).where(runs.c.id == run_id)).mappings().one())
+            require(control._header(late) == control._header(actual)
+                    and late["status"] == "RUNNING" and not late["cancel_intent"]
+                    and late["context"][control.CONTEXT] == actual["context"][control.CONTEXT],
+                    "Authoritative heartbeat owner changed during final validation")
+            late_frozen = Store._frozen_contract_after_scope(state["store"], c, late)
+            require(session.deadline <= min(late["created_at"] + state["run_seconds"],
+                    late["created_at"] + late_frozen.limits.run_seconds),
+                    "Original absolute heartbeat deadline changed")
+            for resource in late["resource_refs"]:
+                Store.authorize(state["store"], c, late["principal_id"], late["runtime_id"],
+                    late["project_id"], resource, "resource.read")
+            require(c.connection.driver_connection.total_changes == changes,
+                    "Final heartbeat validation attempted a main write")
+        session.check()
+        require(deadline is None or (control.time.monotonic() < node_mono
+                    and control.time.time() < min(deadline, session.deadline)),
+                "Original heartbeat node deadline ended before final publication")
+        return renewed
 
     def _receipt(self, c, commit_id):
         entry = "sim2act:lease-entry.v1"

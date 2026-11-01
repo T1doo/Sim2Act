@@ -816,6 +816,7 @@ class Store:
         self._workspace_writer_gate = _WorkspaceWriterGate() if workspace_serialized else None
         self._local_model_control = None
         self._local_model_control_lock = threading.Lock()
+        self._authoritative_lease_runtime = None
 
         def proof_write_boundary(connection, cursor, statement, parameters, context, executemany):
             # Conservatively invalidate ephemeral same-call proofs for every
@@ -1587,6 +1588,15 @@ class Store:
         if _expected_version is not None and (
                 type(_expected_version) is not int or _expected_version < 1 or not run_id):
             raise DomainError("VERSION_CONFLICT", "Invalid expected heartbeat Run version")
+        selected = self._authoritative_lease_runtime
+        if selected is not None and run_id:
+            from ._lease_control_runtime import Runtime, marked, _state
+            if _state(selected)["store"] is not self:
+                raise DomainError("VERSION_CONFLICT", "Foreign authoritative heartbeat runtime")
+            current = Runtime.committed_run(selected, run_id)
+            if marked(current):
+                return Runtime.heartbeat(selected, worker_id, run_id, fence,
+                    _expected_version, lease_seconds, deadline=_deadline)
         renewed_until = None
         commit_bounds = None
         def renewal_clock():

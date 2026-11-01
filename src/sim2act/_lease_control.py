@@ -14,7 +14,7 @@ import stat
 import sys
 import threading
 import time
-from builtins import type, dict, tuple, list, str, int, float, bool, len, all, any, set, zip, vars, getattr, hasattr, setattr, classmethod, staticmethod, object
+from builtins import type, dict, tuple, list, str, int, float, bool, len, all, any, set, zip, vars, getattr, hasattr, setattr, classmethod, staticmethod, object, min, max, sorted, BaseException, OSError
 from contextlib import contextmanager
 from pathlib import Path
 from types import FunctionType
@@ -208,6 +208,7 @@ class Authority:
         require(finite(seconds) and 0 < seconds <= 30 and finite(deadline), "Finite ordinary lease required")
         header = _header(row);nonce = secrets.token_hex(32)
         started_mono, started_wall = time.monotonic(), time.time()
+        require(deadline <= started_wall + 300, "Original absolute Run limit exceeded")
         lease = min(started_wall + seconds, deadline)
         require(started_wall < lease, "Claim deadline ended")
         with self.connection(write=True, until=started_mono + min(seconds, deadline-started_wall)) as c:
@@ -248,7 +249,8 @@ class Authority:
         # Mono is issued only in this process after the actual control commit;
         # persisted mono absolute values are never reused across restart.
         session = Session(self, _header(committed_row), marker["nonce"], seconds,
-                          value["deadline"], value["lease_wall"], began)
+                          value["deadline"], value["lease_wall"], began,
+                          absolute_mono=began + min(300, value["deadline"]-claimed_wall))
         with self.lock:
             self.sessions[session.header] = session
             self.session_states[session] = session._state()
@@ -283,10 +285,12 @@ class Authority:
 class Session:
     """Process-local rolling clock, issued from a committed exact claim."""
 
-    def __init__(self, authority, header, nonce, seconds, deadline, wall, began):
+    def __init__(self, authority, header, nonce, seconds, deadline, wall, began, *, absolute_mono=None):
         self.authority, self.header, self.nonce = authority, header, nonce
         self.seconds, self.deadline = seconds, deadline
         self.wall, self.mono = wall, began + min(seconds, wall-time.time())
+        self.absolute_mono = (began + min(300, deadline-time.time())
+                              if absolute_mono is None else absolute_mono)
         self.lock = threading.RLock()
         self.failure = None
 
@@ -296,14 +300,14 @@ class Session:
         require(value["header"] == _wire(self.header) and value["nonce"] == self.nonce
                 and value["state"] == "ACTIVE" and (intent or value["intent"] is None),
                 "Lease session owner/version/fence or control intent changed")
-        require(self.failure is None and time.monotonic() < self.mono
+        require(self.failure is None and time.monotonic() < min(self.mono, self.absolute_mono)
                 and time.time() < min(self.wall, value["lease_wall"], self.deadline, value["deadline"]),
                 "Issued lease session expired")
         return value
 
     def _state(self):
         return (self.authority, self.header, self.nonce, self.seconds, self.deadline,
-                self.wall, self.mono, self.lock, self.failure)
+                self.wall, self.mono, self.lock, self.failure, self.absolute_mono)
 
     def _issued(self):
         require(type(self) is Session and type(self.authority) is Authority,
@@ -341,14 +345,14 @@ class Session:
             # Do not publish an interval unless its real commit returned within
             # the old monotonic/wall bound. Commit may have blocked in fsync.
             self._current_before_commit(value)
-            next_mono = began + min(self.seconds, wall-time.time())
+            next_mono = min(self.absolute_mono, began + min(self.seconds, wall-time.time()))
             self.wall, self.mono = wall, next_mono
             self._remember()
             return wall
 
     def _current_before_commit(self, prior):
         self._issued()
-        require(self.failure is None and time.monotonic() < self.mono
+        require(self.failure is None and time.monotonic() < min(self.mono, self.absolute_mono)
                 and time.time() < min(self.wall, prior["lease_wall"], self.deadline),
                 "Lease renewal ended before publication")
 
@@ -567,7 +571,7 @@ def _seal_session_entries():
         if caller.f_globals is not namespace or caller.f_locals.get("self") is not self:
             fail("Lease session update has no committed issuer")
         current = state(self)
-        if any(current[i] is not saved[2][i] for i in (0, 1, 2, 3, 4, 7)):
+        if any(current[i] is not saved[2][i] for i in (0, 1, 2, 3, 4, 7, 9)):
             fail("Immutable lease session fields changed")
         if caller.f_code is renew_code:
             if (current[5] is not caller.f_locals.get("wall")
@@ -684,7 +688,7 @@ def _register_control_code(runtime_module=None):
         constants=("VERSION", "CONTEXT", "HEADER", "_DDL", "_CODE_PACKET", "_CODE_AVAILABLE",
             "Authority", "Session", "DomainError", "CommittedAckPending", "CommitOutcomeUnknown",
             "json", "math", "os", "secrets", "sqlite3", "stat", "sys", "threading", "time", "Path", "FunctionType",
-            "type", "dict", "tuple", "list", "str", "int", "float", "bool", "len", "all", "any", "set", "zip", "vars", "getattr", "hasattr", "setattr", "classmethod", "staticmethod", "object"),
+            "type", "dict", "tuple", "list", "str", "int", "float", "bool", "len", "all", "any", "set", "zip", "vars", "getattr", "hasattr", "setattr", "classmethod", "staticmethod", "object", "min", "max", "sorted", "BaseException", "OSError"),
         helpers=((vars(json), ("dumps", "loads")),
             (vars(runtime_module), ("require", "runtime", "marked", "_state", "_main_path", "enable", "_seal_and_register"))),
         constant_helpers=((vars(time), ("time", "monotonic")),
@@ -697,7 +701,7 @@ def _register_control_code(runtime_module=None):
                 "register_lease_runtime", "install_lease_runtime", "lease_runtime_current")),
             (vars(runtime_module), ("ANCHOR", "RECEIPTS", "RECEIPT_DDL", "control", "DomainError",
                 "Runtime", "_RUNTIMES", "_RUNTIME_LOCK", "json", "secrets", "sqlite3", "threading", "weakref", "Path",
-                "type", "dict", "tuple", "list", "str", "int", "float", "bool", "len", "all", "any", "set", "vars", "getattr", "hasattr", "object", "id"))))
+                "type", "dict", "tuple", "list", "str", "int", "float", "bool", "len", "all", "any", "set", "vars", "getattr", "hasattr", "object", "id", "min", "max"))))
     _CONTROL_CODE_REGISTERED = True
 
 
