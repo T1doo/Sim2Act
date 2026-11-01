@@ -1,0 +1,76 @@
+.F.F........................................................             [100%]
+=================================== FAILURES ===================================
+____ test_natural_renewal_refuses_changed_version_without_publishing[True] _____
+
+env = (<sim2act.db.Store object at 0x7fe77e325e80>, Settings(database_url='sqlite:////workspace/scratch/natural-renewal-vers...f8ff58e219410ba48efbe2fcdfd324', 'user_4ff5dc374a444402bf43c36b5f1b3bc1', 'proj_4145535db6ac4cd0be7fdb0b5b33bdaa', ...)
+with_state = True
+
+    @pytest.mark.parametrize("with_state", [False, True])
+    def test_natural_renewal_refuses_changed_version_without_publishing(env, with_state):
+        store, settings = env[:2]
+        rid = enqueue(env, "natural-renewal-version")
+        original = store.claim("original-worker", 30)
+        worker = SimpleNamespace(store=store, s=settings, id="original-worker", stop=threading.Event())
+        deadline = original["created_at"] + settings.run_seconds
+        state = dict(lock=threading.Lock(), lease_until=original["lease_until"], deadline=deadline)
+        # A committed command can change the Run version without replacing its
+        # worker/fence. Neither a numeric lease nor that old fence proves continuity.
+        with store.tx() as c:
+            c.execute(update(runs).where(runs.c.id == rid).values(version=original["version"] + 1))
+        before = state.copy()
+        with pytest.raises(DomainError, match="Heartbeat Run version changed"):
+            renew(worker, original, deadline, _heartbeat_state=state if with_state else None)
+        with store.engine.connect() as c:
+            saved = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
+            assert c.execute(select(heartbeats.c.id).where(heartbeats.c.id == worker.id)).first() is None
+        assert saved["lease_until"] == original["lease_until"]
+        assert saved["version"] == original["version"] + 1
+        assert saved["worker_id"] == worker.id and saved["fence"] == original["fence"]
+>       assert state == before and "sync_renewal" not in state
+E       AssertionError: assert ({'lock': <unl...7fe77e8ae200>} == {'lock': <unl...18920.7848644}
+E         
+E         Omitting 3 identical items, use -vv to show
+E         Left contains 1 more item:
+E         {'renewal_lock': <unlocked _thread.lock object at 0x7fe77e8ae200>}
+E         Use -v to get more diff)
+
+tests/test_natural_renewal_version.py:37: AssertionError
+_____ test_heartbeat_final_write_requires_live_original_ownership[elapsed] _____
+
+env = (<sim2act.db.Store object at 0x7fe77cbe8230>, Settings(database_url='sqlite:////workspace/scratch/natural-renewal-vers...607a0fd5284294ad77e6f8e47aa455', 'user_148efcba3e534f608a43133c9c862182', 'proj_bebd93c010e444ecb621192e1d8c07ab', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe77ccd3350>
+fault = 'elapsed'
+
+    @pytest.mark.parametrize("fault", ["elapsed", "wrong-worker"])
+    def test_heartbeat_final_write_requires_live_original_ownership(env, monkeypatch, fault):
+        store = env[0]
+        rid = enqueue(env, "heartbeat-final-" + fault)
+        run = store.claim("original-worker", 30)
+        now = [run["lease_until"] - 1]
+        monkeypatch.setattr(db, "time", SimpleNamespace(time=lambda: now[0]))
+        original = store.guard
+    
+        def delayed_guard(c, run_id, fence):
+            value = original(c, run_id, fence)
+            if fault == "elapsed":
+                now[0] = value["lease_until"]
+            return value
+    
+        monkeypatch.setattr(store, "guard", delayed_guard)
+>       with pytest.raises(DomainError, match="Heartbeat ownership"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'Heartbeat ownership'
+E         Actual message: 'Original heartbeat interval ended'
+
+tests/test_heartbeat_ownership.py:29: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_natural_renewal_version.py::test_natural_renewal_refuses_changed_version_without_publishing[True]
+FAILED tests/test_heartbeat_ownership.py::test_heartbeat_final_write_requires_live_original_ownership[elapsed]
+2 failed, 58 passed, 1 warning in 44.67s

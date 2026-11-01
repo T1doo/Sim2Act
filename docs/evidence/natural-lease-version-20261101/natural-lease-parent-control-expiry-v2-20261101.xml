@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.072" timestamp="2026-11-01T07:39:09.679792+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_heartbeat_ownership" name="test_heartbeat_final_write_requires_live_original_ownership[elapsed]" time="0.977"><failure message="AssertionError: Regex pattern did not match.&#10;  Expected regex: 'Heartbeat ownership'&#10;  Actual message: 'Original heartbeat interval ended'">env = (&lt;sim2act.db.Store object at 0x7f56b034fbc0&gt;, Settings(database_url='sqlite:////workspace/scratch/natural-lease-parent...d11b3b7fe94433b88f8e0238d7aaaa', 'user_cde193cd2a7f40349109f084aded4669', 'proj_6a2388cff34744308a226585f9d735df', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f56af3437d0&gt;
+fault = 'elapsed'
+
+    @pytest.mark.parametrize("fault", ["elapsed", "wrong-worker"])
+    def test_heartbeat_final_write_requires_live_original_ownership(env, monkeypatch, fault):
+        store = env[0]
+        rid = enqueue(env, "heartbeat-final-" + fault)
+        run = store.claim("original-worker", 30)
+        now = [run["lease_until"] - 1]
+        monkeypatch.setattr(db, "time", SimpleNamespace(time=lambda: now[0]))
+        original = store.guard
+    
+        def delayed_guard(c, run_id, fence):
+            value = original(c, run_id, fence)
+            if fault == "elapsed":
+                now[0] = value["lease_until"]
+            return value
+    
+        monkeypatch.setattr(store, "guard", delayed_guard)
+&gt;       with pytest.raises(DomainError, match="Heartbeat ownership"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'Heartbeat ownership'
+E         Actual message: 'Original heartbeat interval ended'
+
+../scratch/natural-lease-parent-control-0a605f51-20261101/tests/test_heartbeat_ownership.py:29: AssertionError</failure></testcase></testsuite></testsuites>

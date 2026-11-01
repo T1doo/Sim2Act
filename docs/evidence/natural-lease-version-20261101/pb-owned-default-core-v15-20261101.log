@@ -1,0 +1,99 @@
+........................................................................ [ 21%]
+.........FF............................................................. [ 42%]
+........................................................................ [ 63%]
+............................F........................................... [ 84%]
+....................................................                     [100%]
+=================================== FAILURES ===================================
+_____________ test_native_dynamic_and_frontier_invalidation[model] _____________
+
+sql_facts = namespace(store=<sim2act.db.Store object at 0x7f4c2178bc20>, settings=Settings(database_url='sqlite:////tmp/pytest-of-...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=<sim2act.worker.Worker object at 0x7f4c23db1ca0>)
+damage = 'model'
+
+    @pytest.mark.parametrize('damage', ['settings', 'model', 'max_tokens', 'stop', 'write', 'rollback', 'commit', 'frontier', 'rebind'])
+    def test_native_dynamic_and_frontier_invalidation(sql_facts, damage):
+        f = sql_facts
+        with pytest.raises(DomainError), f.store.tx() as c, native_segment(f, c) as s:
+            record = s.generated.actual[2]
+            if damage == 'settings':
+                object.__setattr__(f.settings, 'run_seconds', f.settings.run_seconds - 1)
+            elif damage == 'model':
+>               object.__setattr__(f.contract, 'model', 'changed')
+E               AttributeError: 'sim2act._cold_source_owned_impl.View' object has no attribute 'model'
+
+tests/test_cold_accounted_native.py:326: AttributeError
+__________ test_native_dynamic_and_frontier_invalidation[max_tokens] ___________
+
+sql_facts = namespace(store=<sim2act.db.Store object at 0x7f4c232c4bc0>, settings=Settings(database_url='sqlite:////tmp/pytest-of-...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=<sim2act.worker.Worker object at 0x7f4c211b49b0>)
+damage = 'max_tokens'
+
+    @pytest.mark.parametrize('damage', ['settings', 'model', 'max_tokens', 'stop', 'write', 'rollback', 'commit', 'frontier', 'rebind'])
+    def test_native_dynamic_and_frontier_invalidation(sql_facts, damage):
+        f = sql_facts
+        with pytest.raises(DomainError), f.store.tx() as c, native_segment(f, c) as s:
+            record = s.generated.actual[2]
+            if damage == 'settings':
+                object.__setattr__(f.settings, 'run_seconds', f.settings.run_seconds - 1)
+            elif damage == 'model':
+                object.__setattr__(f.contract, 'model', 'changed')
+            elif damage == 'max_tokens':
+>               object.__setattr__(f.contract.caps, 'max_output_tokens', 1)
+E               AttributeError: 'sim2act._cold_source_owned_impl.View' object has no attribute 'max_output_tokens'
+
+tests/test_cold_accounted_native.py:328: AttributeError
+________ test_native_optional_absence_preserves_original_complete_path _________
+
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-178/test_native_optional_absence_p0')
+
+    def test_native_optional_absence_preserves_original_complete_path(tmp_path):
+        import os,subprocess
+        code=r'''
+    import importlib.abc,sys
+    from pathlib import Path
+    class MissingNative(importlib.abc.MetaPathFinder):
+     def find_spec(self,fullname,path=None,target=None):
+      if fullname=='sim2act._cold_graph_structure':raise ImportError('synthetic missing optional graph accelerator')
+    sys.meta_path.insert(0,MissingNative())
+    from test_cold_accounted_sqlite import sql_facts
+    from test_cold_use_manifest_owned import graph_scope
+    from sim2act.errors import DomainError
+    from sim2act import _cold_graph_versions as versions
+    fixture=sql_facts.__wrapped__(Path(sys.argv[1]));f=next(fixture)
+    try:
+     assert versions.AVAILABLE is False
+     with graph_scope(f) as (graph,limits):
+      assert graph.content_version() is None
+      value={'full':['original']};graph.add('original-fallback',value)
+      version,raw,key=graph.export_version()
+      assert version is None and raw==graph.input_bytes() and key==graph.key
+      value['full'].append('mutation')
+      try:graph.check(f.store,graph.connection)
+      except DomainError:pass
+      else:raise AssertionError('Legacy complete mutation gate was lost')
+    except DomainError:
+     assert not graph.active
+    finally:
+     try:next(fixture)
+     except StopIteration:pass
+    print('PASS_OPTIONAL_NATIVE_ABSENCE_ORIGINAL_V2')
+    '''
+        result=subprocess.run([sys.executable,'-c',code,str(tmp_path)],capture_output=True,text=True,timeout=25)
+>       assert result.returncode==0,(result.stdout,result.stderr)
+E       AssertionError: ('', 'Traceback (most recent call last):
+E           File "<string>", line 8, in <module>
+E         ModuleNotFoundError: No module named \'test_cold_accounted_sqlite\'
+E         ')
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/workspace/Sim2Act/.venv/bin/python', '-c', "\nimport importlib.abc,sys\nfrom pathlib import P...last):\n  File "<string>", line 8, in <module>\nModuleNotFoundError: No module named \'test_cold_accounted_sqlite\'\n').returncode
+
+tests/test_cold_graph_versions.py:328: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cold_accounted_native.py::test_native_dynamic_and_frontier_invalidation[model]
+FAILED tests/test_cold_accounted_native.py::test_native_dynamic_and_frontier_invalidation[max_tokens]
+FAILED tests/test_cold_graph_versions.py::test_native_optional_absence_preserves_original_complete_path
+3 failed, 337 passed, 1 warning in 312.10s (0:05:12)

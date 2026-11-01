@@ -1,0 +1,74 @@
+E                                                                        [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_heartbeat_final_write_requires_live_original_ownership[elapsed] _
+
+tmp_path = PosixPath('/workspace/scratch/natural-lease-parent-control-expiry-case-20261101/test_heartbeat_final_write_req0')
+
+    @pytest.fixture
+    def env(tmp_path):
+        if os.environ.get("SIM2ACT_RECORD_PG_CONFIG"):
+            from record_pg_fixture import environment
+    
+            yield from environment(tmp_path, os.environ["SIM2ACT_RECORD_PG_CONFIG"])
+            return
+        url = os.environ.get("SIM2ACT_TEST_DATABASE_URL", "sqlite:///" + str(tmp_path / "fixture.db"))
+        store = Store(url, test_only=True)
+        schema = new_id("test")
+        if not store.sqlite:
+            with store.engine.begin() as c:
+                c.execute(text('CREATE SCHEMA "' + schema + '"'))
+            store.engine = store.engine.execution_options(schema_translate_map={None: schema})
+        store.initialize(fresh_test_schema=None if store.sqlite else schema)
+        # Explicit synthetic identities, never production secrets.
+        a = store.user("fixture A", "synthetic-test-A")
+        b = store.user("fixture B", "synthetic-test-B")
+        s = Settings(url, Path(tmp_path), mode="mock")
+>       client = TestClient(create_app(store, s))
+                            ^^^^^^^^^^^^^^^^^^^^
+
+../scratch/natural-lease-parent-control-0a605f51-20261101/tests/conftest.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../scratch/natural-lease-parent-control-0a605f51-20261101/src/sim2act/api.py:991: in create_app
+    mount_owner_acceptance(app, db, platform_limits, identity)
+../scratch/natural-lease-parent-control-0a605f51-20261101/src/sim2act/owner_acceptance.py:534: in mount
+    from . import natural_spec_corrections
+../scratch/natural-lease-parent-control-0a605f51-20261101/src/sim2act/natural_spec_corrections.py:16: in <module>
+    from . import pa_spec_apps as spec
+../scratch/natural-lease-parent-control-0a605f51-20261101/src/sim2act/pa_spec_apps.py:2490: in <module>
+    from . import _cold_accounted_receipts as _receipt_continuation_code
+../scratch/natural-lease-parent-control-0a605f51-20261101/src/sim2act/_cold_accounted_receipts.py:13: in <module>
+    from . import natural_spec_runtime as rt
+../scratch/natural-lease-parent-control-0a605f51-20261101/src/sim2act/natural_spec_runtime.py:6069: in <module>
+    from . import _cold_graph_structure_guard as _graph_structure_code
+../scratch/natural-lease-parent-control-0a605f51-20261101/src/sim2act/_cold_graph_structure_guard.py:57: in <module>
+    _ALIASES = tuple((owner, name, getattr(owner, name)) for owner, names in (
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+.0 = <tuple_iterator object at 0x7f9987af4970>
+
+>   _ALIASES = tuple((owner, name, getattr(owner, name)) for owner, names in (
+                                   ^^^^^^^^^^^^^^^^^^^^
+        (versions, ('current','matches','publish','create')),
+        (r, ('_cold_graph_bytes', '_cold_graph_row_storage', '_cold_graph_limit_values',
+             '_cold_graph_pickle_marker', '_ColdGraphPickler', '_ColdGraphBytesIO',
+             '_ColdGraphRowMapping', '_ColdGraphCursorMeta', '_ColdGraphSimpleMeta',
+             '_ColdGraphQuotedName', 'Limits', 'require', '_COLD_ROW_LOOKUP',
+             '_COLD_ROW_REQUIRE', '_COLD_ROW_LEAF', '_SOURCE_VIEW_TYPE', '_SOURCE_VIEW_PIN', '_SOURCE_OWNER_TYPE', '_SOURCE_OWNER_PIN')),
+        (r.codec, ('require',)),
+        (accounted, ('rt', 'gate', 'o', '_Frontier', '_NativeCandidate', '_SizingProjection')),
+        (owned, ('_OwnedPrewriteMode',)),
+        (r._row_native_code, ('_RAW_ROW_LOOKUP', '_RAW_UNSUPPORTED')),
+        (typed, ('require', '_trial_typed_storage', '_trial_typed_classes', '_trial_typed_nested_classes')),
+    ) for name in names)
+E   AttributeError: module 'sim2act.natural_live_admission' has no attribute '_RAW_UNSUPPORTED'
+
+../scratch/natural-lease-parent-control-0a605f51-20261101/src/sim2act/_cold_graph_structure_guard.py:57: AttributeError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR ../scratch/natural-lease-parent-control-0a605f51-20261101/tests/test_heartbeat_ownership.py::test_heartbeat_final_write_requires_live_original_ownership[elapsed]
+3 deselected, 1 warning, 1 error in 0.97s

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="3" time="1.777" timestamp="2026-11-01T07:35:54.230020+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_natural_renewal_version" name="test_natural_renewal_refuses_changed_version_without_publishing[False]" time="0.671"><failure message="Failed: DID NOT RAISE DomainError">env = (&lt;sim2act.db.Store object at 0x7f590d905250&gt;, Settings(database_url='sqlite:////workspace/scratch/natural-renewal-vers...1ea8d3aa574008a09233469ba14eb0', 'user_3548d61c3dec4ead944cb57ac51d0488', 'proj_86a905b740a249fb9139dae1c5fd7278', ...)
+with_state = False
+
+    @pytest.mark.parametrize("with_state", [False, True])
+    def test_natural_renewal_refuses_changed_version_without_publishing(env, with_state):
+        store, settings = env[:2]
+        rid = enqueue(env, "natural-renewal-version")
+        original = store.claim("original-worker", 30)
+        worker = SimpleNamespace(store=store, s=settings, id="original-worker", stop=threading.Event())
+        deadline = original["created_at"] + settings.run_seconds
+        state = dict(lock=threading.Lock(), lease_until=original["lease_until"], deadline=deadline)
+        # A committed command can change the Run version without replacing its
+        # worker/fence. Neither a numeric lease nor that old fence proves continuity.
+        with store.tx() as c:
+            c.execute(update(runs).where(runs.c.id == rid).values(version=original["version"] + 1))
+        before = state.copy()
+&gt;       with pytest.raises(DomainError, match="Heartbeat Run version changed"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE DomainError
+
+tests/test_natural_renewal_version.py:29: Failed</failure></testcase><testcase classname="tests.test_natural_renewal_version" name="test_natural_renewal_refuses_changed_version_without_publishing[True]" time="0.362"><failure message="Failed: DID NOT RAISE DomainError">env = (&lt;sim2act.db.Store object at 0x7f590c61cfb0&gt;, Settings(database_url='sqlite:////workspace/scratch/natural-renewal-vers...8150210fbc4ddc913c1f24fa1b07e9', 'user_4ea4a3c6fd1345fdb7c1f505356c38ce', 'proj_0e421f26af7343bd9a4770ceec94cad0', ...)
+with_state = True
+
+    @pytest.mark.parametrize("with_state", [False, True])
+    def test_natural_renewal_refuses_changed_version_without_publishing(env, with_state):
+        store, settings = env[:2]
+        rid = enqueue(env, "natural-renewal-version")
+        original = store.claim("original-worker", 30)
+        worker = SimpleNamespace(store=store, s=settings, id="original-worker", stop=threading.Event())
+        deadline = original["created_at"] + settings.run_seconds
+        state = dict(lock=threading.Lock(), lease_until=original["lease_until"], deadline=deadline)
+        # A committed command can change the Run version without replacing its
+        # worker/fence. Neither a numeric lease nor that old fence proves continuity.
+        with store.tx() as c:
+            c.execute(update(runs).where(runs.c.id == rid).values(version=original["version"] + 1))
+        before = state.copy()
+&gt;       with pytest.raises(DomainError, match="Heartbeat Run version changed"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE DomainError
+
+tests/test_natural_renewal_version.py:29: Failed</failure></testcase><testcase classname="tests.test_natural_renewal_version" name="test_natural_renewal_of_current_version_commits_before_publication" time="0.459" /></testsuite></testsuites>
