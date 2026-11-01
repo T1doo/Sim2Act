@@ -2,13 +2,14 @@
 
 import json
 import sqlite3
+import sys
 import threading
 import time
 from contextlib import contextmanager
 
 import pytest
 
-from sim2act._lease_control import Authority, CommittedAckPending, CONTEXT, Session
+from sim2act._lease_control import Authority, CommittedAckPending, CommitOutcomeUnknown, CONTEXT, Session
 from sim2act.errors import DomainError
 
 
@@ -104,7 +105,8 @@ def test_missing_control_file_never_recreates_or_uses_legacy(tmp_path):
     assert not authority.path.exists() and renamed.exists()
 
 
-def test_business_commit_success_ack_failure_is_not_a_rollback(tmp_path):
+@pytest.mark.parametrize("failure", ["ack", "delegate"])
+def test_business_commit_success_ack_failure_is_not_a_rollback(tmp_path, failure):
     authority, row, session = owner(tmp_path)
     receipt = session.prepare("c" * 64)
     main_path = tmp_path / "business.db"
@@ -112,18 +114,33 @@ def test_business_commit_success_ack_failure_is_not_a_rollback(tmp_path):
     main.execute("CREATE TABLE receipts(commit_id TEXT PRIMARY KEY,receipt TEXT NOT NULL)")
     main.execute("BEGIN IMMEDIATE")
     main.execute("INSERT INTO receipts VALUES(?,?)", (receipt["commit_id"], json.dumps(receipt, sort_keys=True)))
-    renamed = authority.path.with_suffix(".temporarily-unavailable")
-    calls = []
+    calls, denied = [], []
+    def reject_ack(action, table, column, database, origin):
+        if action == sqlite3.SQLITE_UPDATE and table in {"leases", "commits"}:
+            denied.append((action, table, column))
+            return sqlite3.SQLITE_DENY
+        return sqlite3.SQLITE_OK
     def commit():
-        calls.append(True);main.commit();authority.path.rename(renamed)
+        calls.append(True)
+        main.commit()
+        if failure == "delegate":
+            raise OSError("Synthetic delegate failure after actual main commit")
+        # Portable actual ACK failure: Windows correctly refuses renaming a
+        # database while this control writer is open. Deny only its later ACK
+        # UPDATE, after the genuine business commit has returned successfully.
+        frame = sys._getframe(1)
+        assert frame.f_locals["self"] is session and frame.f_locals["receipt"] is receipt
+        control = frame.f_locals["c"]
+        assert isinstance(control, sqlite3.Connection)
+        control.set_authorizer(reject_ack)
     def check(value):
         saved = main.execute("SELECT receipt FROM receipts WHERE commit_id=?", (value["commit_id"],)).fetchone()
         assert saved is not None and json.loads(saved[0]) == value
     try:
-        with pytest.raises(CommittedAckPending):
+        with pytest.raises(CommittedAckPending if failure == "ack" else CommitOutcomeUnknown):
             session.commit(receipt, commit, stop=threading.Event(), clock=lambda: None, durable_check=check)
         assert calls == [True] and not main.in_transaction
-        renamed.rename(authority.path)
+        assert bool(denied) is (failure == "ack")
         assert authority.check(row, live=False)["acked"] is None
         main.execute("BEGIN IMMEDIATE")
         session.recover(row, receipt, durable_check=check)

@@ -175,11 +175,20 @@ def test_runtime_rejects_store_method_shadow_before_foreign_dispatch(env, role, 
     def foreign(*args, **kwargs):
         foreign_calls.append(True)
         raise AssertionError("Foreign Store dispatched")
+    assert role not in vars(selected.store)
     with monkeypatch.context() as patch:
-        patch.setattr(selected.store, role, foreign)
+        # The contract rejects every instance shadow, including a bound copy
+        # of the original method. Older pytest setattr undo leaves that copy.
+        patch.setitem(vars(selected.store), role, foreign)
         with pytest.raises(ValueError, match="Lease runtime issuance or fields changed"):
             selected.bind_claim(bound)
         assert foreign_calls == []
+    assert role not in vars(selected.store)
+    with monkeypatch.context() as patch:
+        patch.setitem(vars(selected.store), role, getattr(selected.store, role))
+        with pytest.raises(ValueError, match="Lease runtime issuance or fields changed"):
+            selected.bind_claim(bound)
+    assert role not in vars(selected.store) and foreign_calls == []
     assert selected.committed_run(bound["id"])["id"] == bound["id"]
 
 

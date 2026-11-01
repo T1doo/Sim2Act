@@ -57,4 +57,5 @@ def inspect(data):
         for index in range(total):
             exports.append(name(struct.unpack_from("<I", data, at(names + index * 4, 4))[0]))
     return dict(machine=hex(machine), pe32plus=magic == 0x20B, dll=bool(flags & 0x2000),
+                subsystem=struct.unpack_from("<H", data, optional + 68)[0],
                 imports=sorted(imports), exports=sorted(exports))

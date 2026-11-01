@@ -29,7 +29,7 @@ jobs:
       github.run_attempt == 1 &&
       contains(github.event.head_commit.message, '[windows-full-package-once-20261101]')
     runs-on: windows-2025
-    timeout-minutes: 8
+    timeout-minutes: 5
     defaults:
       run:
         shell: pwsh
@@ -86,7 +86,7 @@ jobs:
           ./.venv/Scripts/python.exe -m pip install --only-binary=:all: --retries 0 --timeout 30 -r requirements-windows.lock
           if ($LASTEXITCODE -ne 0) { throw 'Locked Windows dependencies unavailable; no fallback/retry.' }
       - name: Compile four extensions and same-source host, assemble and check ordinary backend
-        timeout-minutes: 5
+        timeout-minutes: 4
         run: |
           ./.venv/Scripts/python.exe scripts/windows_full_package_ci.py
           if ($LASTEXITCODE -ne 0) { throw 'Complete build/backend check failed; preserve actual stage and stop.' }
@@ -104,7 +104,7 @@ jobs:
       - name: Preserve exact execution boundary
         if: always()
         run: |
-          'Single new round <=8 minutes on standard public Windows Server 2025. Native compiler/import/ordinary SQLite backend checks only. Desktop EXE, WebView2/browser, system security setters, PG and live models NOT_RUN. No automatic rerun, paid runner or cache.' | Add-Content $env:GITHUB_STEP_SUMMARY
+          'Corrected-source verification <=5 minutes within this round total <=8 minutes (first job 115 seconds). Standard public Windows Server 2025, native compiler/import/ordinary SQLite backend checks only. Desktop EXE, WebView2/browser, system security setters, PG and live models NOT_RUN. No unchanged-source retry, paid runner or cache.' | Add-Content $env:GITHUB_STEP_SUMMARY
 
   desktop-recovery-once:
     if: >-

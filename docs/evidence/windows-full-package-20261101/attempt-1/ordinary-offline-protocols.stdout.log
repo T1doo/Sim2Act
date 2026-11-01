@@ -1,0 +1,304 @@
+.......F...................FFFFF............................             [100%]
+================================== FAILURES ===================================
+_________ test_business_commit_success_ack_failure_is_not_a_rollback __________
+
+    def commit():
+>       calls.append(True);main.commit();authority.path.rename(renamed)
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_lease_control_primitives.py:118: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/a/_temp/sim2act-full-41322277031/test-data/test_business_commit_success_a0/leases.db')
+target = WindowsPath('D:/a/_temp/sim2act-full-41322277031/test-data/test_business_commit_success_a0/leases.temporarily-unavailable')
+
+    def rename(self, target):
+        """
+        Rename this path to the target path.
+    
+        The target path may be absolute or relative. Relative paths are
+        interpreted relative to the current working directory, *not* the
+        directory of the Path object.
+    
+        Returns the new Path instance pointing to the target path.
+        """
+>       os.rename(self, target)
+E       PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'D:\\a\\_temp\\sim2act-full-41322277031\\test-data\\test_business_commit_success_a0\\leases.db' -> 'D:\\a\\_temp\\sim2act-full-41322277031\\test-data\\test_business_commit_success_a0\\leases.temporarily-unavailable'
+
+C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\pathlib.py:1363: PermissionError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('D:/a/_temp/sim2act-full-41322277031/test-data/test_business_commit_success_a0')
+
+    def test_business_commit_success_ack_failure_is_not_a_rollback(tmp_path):
+        authority, row, session = owner(tmp_path)
+        receipt = session.prepare("c" * 64)
+        main_path = tmp_path / "business.db"
+        main = sqlite3.connect(main_path, isolation_level=None)
+        main.execute("CREATE TABLE receipts(commit_id TEXT PRIMARY KEY,receipt TEXT NOT NULL)")
+        main.execute("BEGIN IMMEDIATE")
+        main.execute("INSERT INTO receipts VALUES(?,?)", (receipt["commit_id"], json.dumps(receipt, sort_keys=True)))
+        renamed = authority.path.with_suffix(".temporarily-unavailable")
+        calls = []
+        def commit():
+            calls.append(True);main.commit();authority.path.rename(renamed)
+        def check(value):
+            saved = main.execute("SELECT receipt FROM receipts WHERE commit_id=?", (value["commit_id"],)).fetchone()
+            assert saved is not None and json.loads(saved[0]) == value
+        try:
+            with pytest.raises(CommittedAckPending):
+>               session.commit(receipt, commit, stop=threading.Event(), clock=lambda: None, durable_check=check)
+
+tests\test_lease_control_primitives.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\sim2act\_lease_control.py:661: in run
+    return function(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sim2act._lease_control.Session object at 0x00000187C8644530>
+receipt = {'commit_id': 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', 'control_id': '898cf822e9dc4289e969f...thetic', 'worker_synthetic', 1, ...], 'nonce': '1dceac544e880145c171cdf4d5f3ab78953139c5f3c8c736006b635405016760', ...}
+delegate = <function test_business_commit_success_ack_failure_is_not_a_rollback.<locals>.commit at 0x00000187C86EA520>
+
+    def commit(self, receipt, delegate, *, stop, clock, durable_check):
+        """Only original DBAPI delegate inside the final control write lock.
+    
+        durable_check verifies the exact, still-uncommitted main receipt. A
+        successful delegate is never retried, even if control acknowledgement
+        fails. This serializes takeover; it is not an fsync latency guarantee.
+        """
+        require(type(receipt) is dict and receipt == dict(protocol=VERSION,
+                control_id=self.authority.binding["control_id"], nonce=self.nonce,
+                commit_id=receipt.get("commit_id"), header=list(self.header)),
+                "Settlement receipt identity changed")
+        committed = False
+        invoked = False
+        try:
+            with self.lock, self.authority.connection(write=True, until=self.mono) as c:
+                value = self._current(c)
+                commit = c.execute("SELECT run_id,header,nonce,state FROM commits WHERE commit_id=?", (receipt["commit_id"],)).fetchone()
+                require(commit == (self.header[0], _wire(self.header), self.nonce, "PREPARED")
+                        and value["pending"] == receipt["commit_id"] and value["acked"] != receipt["commit_id"]
+                        and not stop.is_set(),
+                        "Settlement intent or stop changed")
+                durable_check(receipt)
+                clock()
+                require(not stop.is_set(), "Settlement stopped before commit")
+                self._current(c)  # Pure time checks follow all stop/callback work.
+                invoked = True
+                delegate()
+                committed = True
+                c.execute("UPDATE leases SET acked_commit=? WHERE run_id=?", (receipt["commit_id"], self.header[0]))
+                c.execute("UPDATE commits SET state='ACKED' WHERE commit_id=?", (receipt["commit_id"],))
+        except BaseException as error:
+            if committed:
+                self.failure = error
+                self._remember()
+                raise CommittedAckPending("Business committed; control receipt acknowledgement pending") from error
+            if invoked:
+                self.failure = error
+                self._remember()
+>               raise CommitOutcomeUnknown("Business commit outcome unknown; inspect durable receipt") from error
+E               sim2act._lease_control.CommitOutcomeUnknown: Business commit outcome unknown; inspect durable receipt
+
+.venv\Lib\site-packages\sim2act\_lease_control.py:468: CommitOutcomeUnknown
+____ test_runtime_rejects_store_method_shadow_before_foreign_dispatch[tx] _____
+
+env = (<sim2act.db.Store object at 0x00000187C9588B00>, Settings(database_url='sqlite:///D:\\a\\_temp\\sim2act-full-41322277...f6c9626e344604900f85eb43b5744b', 'user_8aad04669a56484fa68a1211061e0079', 'proj_2bdea8aa26674054ab13cc9826a4e11e', ...)
+role = 'tx'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000187C95BA660>
+
+    @pytest.mark.parametrize("role", ["tx", "guard", "owns_connection", "frozen_contract", "event"])
+    def test_runtime_rejects_store_method_shadow_before_foreign_dispatch(env, role, monkeypatch):
+        selected, _, bound = claim(env)
+        foreign_calls = []
+        def foreign(*args, **kwargs):
+            foreign_calls.append(True)
+            raise AssertionError("Foreign Store dispatched")
+        with monkeypatch.context() as patch:
+            patch.setattr(selected.store, role, foreign)
+            with pytest.raises(ValueError, match="Lease runtime issuance or fields changed"):
+                selected.bind_claim(bound)
+            assert foreign_calls == []
+>       assert selected.committed_run(bound["id"])["id"] == bound["id"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_lease_control_main_receipts.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\sim2act\_lease_control_runtime.py:152: in committed_run
+    _state(self)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = <sim2act._lease_control_runtime.Runtime object at 0x00000187C8FA3D10>
+
+    def _state(value):
+        current = "sim2act:lease-runtime-current.v1"
+        require(current is not None, "Qualified runtime provenance unavailable")
+>       return dict(current(value))
+                    ^^^^^^^^^^^^^^
+E       ValueError: Lease runtime issuance or fields changed
+
+.venv\Lib\site-packages\sim2act\_lease_control_runtime.py:50: ValueError
+___ test_runtime_rejects_store_method_shadow_before_foreign_dispatch[guard] ___
+
+env = (<sim2act.db.Store object at 0x00000187C9318200>, Settings(database_url='sqlite:///D:\\a\\_temp\\sim2act-full-41322277...d2ebd2cac94dadaff783b546fce599', 'user_40f21bb3aece445281090b42dda3e4a1', 'proj_39438b393e86424f88424e07fb97804f', ...)
+role = 'guard'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000187CA9417C0>
+
+    @pytest.mark.parametrize("role", ["tx", "guard", "owns_connection", "frozen_contract", "event"])
+    def test_runtime_rejects_store_method_shadow_before_foreign_dispatch(env, role, monkeypatch):
+        selected, _, bound = claim(env)
+        foreign_calls = []
+        def foreign(*args, **kwargs):
+            foreign_calls.append(True)
+            raise AssertionError("Foreign Store dispatched")
+        with monkeypatch.context() as patch:
+            patch.setattr(selected.store, role, foreign)
+            with pytest.raises(ValueError, match="Lease runtime issuance or fields changed"):
+                selected.bind_claim(bound)
+            assert foreign_calls == []
+>       assert selected.committed_run(bound["id"])["id"] == bound["id"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_lease_control_main_receipts.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\sim2act\_lease_control_runtime.py:152: in committed_run
+    _state(self)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = <sim2act._lease_control_runtime.Runtime object at 0x00000187CA994230>
+
+    def _state(value):
+        current = "sim2act:lease-runtime-current.v1"
+        require(current is not None, "Qualified runtime provenance unavailable")
+>       return dict(current(value))
+                    ^^^^^^^^^^^^^^
+E       ValueError: Lease runtime issuance or fields changed
+
+.venv\Lib\site-packages\sim2act\_lease_control_runtime.py:50: ValueError
+_ test_runtime_rejects_store_method_shadow_before_foreign_dispatch[owns_connection] _
+
+env = (<sim2act.db.Store object at 0x00000187C8BA6F30>, Settings(database_url='sqlite:///D:\\a\\_temp\\sim2act-full-41322277...8882bc99964d949c076718f942e74a', 'user_7b95f93ffaf144529e6fdd53838f8776', 'proj_6a9a44515a3848d88dadbe451f319b03', ...)
+role = 'owns_connection'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000187CA999580>
+
+    @pytest.mark.parametrize("role", ["tx", "guard", "owns_connection", "frozen_contract", "event"])
+    def test_runtime_rejects_store_method_shadow_before_foreign_dispatch(env, role, monkeypatch):
+        selected, _, bound = claim(env)
+        foreign_calls = []
+        def foreign(*args, **kwargs):
+            foreign_calls.append(True)
+            raise AssertionError("Foreign Store dispatched")
+        with monkeypatch.context() as patch:
+            patch.setattr(selected.store, role, foreign)
+            with pytest.raises(ValueError, match="Lease runtime issuance or fields changed"):
+                selected.bind_claim(bound)
+            assert foreign_calls == []
+>       assert selected.committed_run(bound["id"])["id"] == bound["id"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_lease_control_main_receipts.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\sim2act\_lease_control_runtime.py:152: in committed_run
+    _state(self)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = <sim2act._lease_control_runtime.Runtime object at 0x00000187C9466720>
+
+    def _state(value):
+        current = "sim2act:lease-runtime-current.v1"
+        require(current is not None, "Qualified runtime provenance unavailable")
+>       return dict(current(value))
+                    ^^^^^^^^^^^^^^
+E       ValueError: Lease runtime issuance or fields changed
+
+.venv\Lib\site-packages\sim2act\_lease_control_runtime.py:50: ValueError
+_ test_runtime_rejects_store_method_shadow_before_foreign_dispatch[frozen_contract] _
+
+env = (<sim2act.db.Store object at 0x00000187C925F650>, Settings(database_url='sqlite:///D:\\a\\_temp\\sim2act-full-41322277...aaabd29b194976bfae9ff4ddf74fe7', 'user_9fbc9860399f4b6db10fa09c7df455a1', 'proj_71fda69fe808419bba57f429be3b6a25', ...)
+role = 'frozen_contract'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000187CAE41010>
+
+    @pytest.mark.parametrize("role", ["tx", "guard", "owns_connection", "frozen_contract", "event"])
+    def test_runtime_rejects_store_method_shadow_before_foreign_dispatch(env, role, monkeypatch):
+        selected, _, bound = claim(env)
+        foreign_calls = []
+        def foreign(*args, **kwargs):
+            foreign_calls.append(True)
+            raise AssertionError("Foreign Store dispatched")
+        with monkeypatch.context() as patch:
+            patch.setattr(selected.store, role, foreign)
+            with pytest.raises(ValueError, match="Lease runtime issuance or fields changed"):
+                selected.bind_claim(bound)
+            assert foreign_calls == []
+>       assert selected.committed_run(bound["id"])["id"] == bound["id"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_lease_control_main_receipts.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\sim2act\_lease_control_runtime.py:152: in committed_run
+    _state(self)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = <sim2act._lease_control_runtime.Runtime object at 0x00000187CB23C500>
+
+    def _state(value):
+        current = "sim2act:lease-runtime-current.v1"
+        require(current is not None, "Qualified runtime provenance unavailable")
+>       return dict(current(value))
+                    ^^^^^^^^^^^^^^
+E       ValueError: Lease runtime issuance or fields changed
+
+.venv\Lib\site-packages\sim2act\_lease_control_runtime.py:50: ValueError
+___ test_runtime_rejects_store_method_shadow_before_foreign_dispatch[event] ___
+
+env = (<sim2act.db.Store object at 0x00000187C8C916A0>, Settings(database_url='sqlite:///D:\\a\\_temp\\sim2act-full-41322277...b8906898c5445ab60cfa110e836fc3', 'user_54b4f533880e4caa8b9d4898ae220023', 'proj_9ecc6c9cfc7943ca800586e194bb525a', ...)
+role = 'event'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000187CAEA8A40>
+
+    @pytest.mark.parametrize("role", ["tx", "guard", "owns_connection", "frozen_contract", "event"])
+    def test_runtime_rejects_store_method_shadow_before_foreign_dispatch(env, role, monkeypatch):
+        selected, _, bound = claim(env)
+        foreign_calls = []
+        def foreign(*args, **kwargs):
+            foreign_calls.append(True)
+            raise AssertionError("Foreign Store dispatched")
+        with monkeypatch.context() as patch:
+            patch.setattr(selected.store, role, foreign)
+            with pytest.raises(ValueError, match="Lease runtime issuance or fields changed"):
+                selected.bind_claim(bound)
+            assert foreign_calls == []
+>       assert selected.committed_run(bound["id"])["id"] == bound["id"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_lease_control_main_receipts.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\sim2act\_lease_control_runtime.py:152: in committed_run
+    _state(self)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = <sim2act._lease_control_runtime.Runtime object at 0x00000187CAEAB920>
+
+    def _state(value):
+        current = "sim2act:lease-runtime-current.v1"
+        require(current is not None, "Qualified runtime provenance unavailable")
+>       return dict(current(value))
+                    ^^^^^^^^^^^^^^
+E       ValueError: Lease runtime issuance or fields changed
+
+.venv\Lib\site-packages\sim2act\_lease_control_runtime.py:50: ValueError
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  D:\a\Sim2Act\Sim2Act\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_lease_control_primitives.py::test_business_commit_success_ack_failure_is_not_a_rollback - sim2act._lease_control.CommitOutcomeUnknown: Business commit outcome unknown; inspect durable receipt
+FAILED tests/test_lease_control_main_receipts.py::test_runtime_rejects_store_method_shadow_before_foreign_dispatch[tx] - ValueError: Lease runtime issuance or fields changed
+FAILED tests/test_lease_control_main_receipts.py::test_runtime_rejects_store_method_shadow_before_foreign_dispatch[guard] - ValueError: Lease runtime issuance or fields changed
+FAILED tests/test_lease_control_main_receipts.py::test_runtime_rejects_store_method_shadow_before_foreign_dispatch[owns_connection] - ValueError: Lease runtime issuance or fields changed
+FAILED tests/test_lease_control_main_receipts.py::test_runtime_rejects_store_method_shadow_before_foreign_dispatch[frozen_contract] - ValueError: Lease runtime issuance or fields changed
+FAILED tests/test_lease_control_main_receipts.py::test_runtime_rejects_store_method_shadow_before_foreign_dispatch[event] - ValueError: Lease runtime issuance or fields changed
+6 failed, 54 passed, 1 warning in 33.88s

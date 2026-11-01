@@ -5,6 +5,7 @@ import importlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import time
@@ -29,7 +30,7 @@ def main():
     assert commit == os.environ["GITHUB_SHA"]
     report = dict(source_commit=commit, status="STARTED", desktop_executed=False,
                   real_model_requests=0, database="SYNTHETIC_SQLITE_ONLY", stages=[])
-    until = time.monotonic() + 260
+    until = time.monotonic() + 210
     target = os.environ.get("GITHUB_ENV")
     if target:
         with open(target, "a", encoding="utf-8") as output:
@@ -69,6 +70,10 @@ def main():
         assert len(candidate_data["wheel_profile"]["native_artifacts"]) == 4
         wheel = candidate / candidate_data["wheel_profile"]["filename"]
         assert wheel.name == "sim2act-0.1.0-cp312-cp312-win_amd64.whl"
+        # Keep genuine built bytes even if a later native check or protocol fails.
+        shutil.copyfile(wheel, payload / wheel.name)
+        shutil.copyfile(manifest, payload / "candidate-manifest.json")
+        shutil.copyfile(candidate / "build.log", payload / "wheel-build.log")
         run("install-actual-wheel", [sys.executable, "-m", "pip", "install", "--no-index", "--no-deps", "--force-reinstall", str(wheel)], 30)
         # This script lives under scripts/, not src; imports must be the installed wheel.
         import sim2act
@@ -126,6 +131,9 @@ def main():
             sdk.write_bytes(response.content)
         run("compile-native-desktop", ["pwsh", "-NoProfile", "-File", str(stage / "desktop-build/Build-Desktop.ps1"),
             "-CandidateRoot", str(stage), "-SdkPackage", str(sdk), "-SourceCommit", commit], 40)
+        host_pe = inspect((stage / "Sim2Act.exe").read_bytes())
+        assert host_pe["machine"] == "0x8664" and host_pe["pe32plus"] and not host_pe["dll"] and host_pe["subsystem"] == 2
+        report["host_pe"] = host_pe
         expected_runtime = {w["name"]: w["version"] for w in specification["wheels"]
                             if w["name"].replace("_", "-") not in ("psycopg", "psycopg-binary")}
         expected_runtime["sim2act"] = "0.1.0"
@@ -162,7 +170,6 @@ print(json.dumps(dict(native=actual,dependencies=dependencies,cohort_abi=_cold_t
         report["unbundled_native_imports_to_resolve_on_target"] = external
         run("packaged-backend-reopen", [sys.executable, "scripts/windows_portable_backend_check.py",
             "--python", str(stage / "runtime/python.exe"), "--root", str(out / "backend-check")], 75)
-        import shutil
         shutil.copyfile(out / "backend-check/report.json", payload / "packaged-backend-report.json")
         (stage / "WINDOWS-BUILD-STATUS.md").write_text(
             "# Same-source compiled Windows package\n\nSource: `" + commit + "`.\n\n"
@@ -178,7 +185,7 @@ print(json.dumps(dict(native=actual,dependencies=dependencies,cohort_abi=_cold_t
         files = {str(p.relative_to(stage)).replace("\\", "/"): record(p.read_bytes()) for p in stage.rglob("*") if p.is_file()}
         full = dict(format="sim2act-complete-portable-build.v1", source_commit=commit,
             status="ASSEMBLED_BACKEND_CHECKED_DESKTOP_NOT_EXECUTED", desktop_executed=False,
-            model_requests=0, files=files, native=report["native"], native_import_graph=graph,
+            model_requests=0, files=files, native=report["native"], host_pe=host_pe, native_import_graph=graph,
             unbundled_native_imports_to_resolve_on_target=external,
             dependency_image_role="ONLY_UNCHANGED_RUNTIME_DEPENDENCIES")
         (stage / "full-package-manifest.json").write_text(json.dumps(full, indent=2) + "\n", encoding="utf-8")
@@ -187,8 +194,6 @@ print(json.dumps(dict(native=actual,dependencies=dependencies,cohort_abi=_cold_t
             for p in sorted(stage.rglob("*")):
                 if p.is_file():
                     z.write(p, "Sim2Act/" + str(p.relative_to(stage)).replace("\\", "/"))
-        shutil.copyfile(wheel, payload / wheel.name)
-        shutil.copyfile(manifest, payload / "candidate-manifest.json")
         shutil.copyfile(stage / "full-package-manifest.json", payload / "full-package-manifest.json")
         report.update(status="PASS_ASSEMBLY_AND_BACKEND_ONLY", archive=dict(name=archive.name, **record(archive.read_bytes())),
                       exe=record((stage / "Sim2Act.exe").read_bytes()), tests=dict(suite.attrib))
@@ -197,7 +202,6 @@ print(json.dumps(dict(native=actual,dependencies=dependencies,cohort_abi=_cold_t
         report.update(status="FAILED_NOT_ACCEPTED", error_type=type(error).__name__)
         raise
     finally:
-        import shutil
         for source, name in [(out / "candidate/build.log", "wheel-build.log"),
                              (out / "backend-check/report.json", "packaged-backend-report.json")]:
             if source.is_file():
