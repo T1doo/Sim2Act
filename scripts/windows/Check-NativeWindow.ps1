@@ -81,7 +81,9 @@ function Open-Summary($Window,[string]$Prefix){
     $buttons=$Window.FindAll([Windows.Automation.TreeScope]::Descendants,
         [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::Button))
     foreach($control in $buttons){
-        if($control.Current.Name.StartsWith($Prefix,[StringComparison]::Ordinal) -and $control.Current.IsEnabled -and -not$control.Current.IsOffscreen){
+        if($null -eq $control){continue}
+        $accessibleName=$control.Current.Name
+        if($accessibleName -is [string] -and $accessibleName.StartsWith($Prefix,[StringComparison]::Ordinal) -and $control.Current.IsEnabled -and -not$control.Current.IsOffscreen){
             $pattern=$null
             if($control.TryGetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern,[ref]$pattern)){
                 $expand=[Windows.Automation.ExpandCollapsePattern]$pattern

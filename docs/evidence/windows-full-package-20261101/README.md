@@ -70,3 +70,11 @@ Windows本机正式传输helper是否恢复由唯一协调任务另行核实；�
 `8a75f4630f61d3a863c36d9994e5e6d9036b45d6`，[run41329802210](https://github.com/T1doo/Sim2Act/actions/runs/41329802210)，job124917311950，17:07:12–17:07:49 UTC，37秒。原EXE真实READY、登录、项目创建动作及项目列表GET执行到达，但在核项目选择时，WebView2的HTML select不支持SelectionPattern，脚本调用GetCurrentPattern抛Unsupported Pattern。未进入材料保存，未重开，不能报UI材料通过。失败截图与日志保全在本地/原授权artifact13092468927，仓库仅文本和hash，正常关闭自有窗口确认，未强杀。
 
 修正同一控件的只读取值适配：TryGetCurrentPattern明确检测Selection/Value/LegacyIAccessible可用模式，仍必须精确等于期望项目名／csv；都不支持则拒绝，不能凭HTTP结果假造UI选择或绕页面提交。新增成功项目ID阶段证据。应用/原包不变。已用325+37=362秒，余118秒，仅修复源再做一次job60秒硬上限，累计最多422<480；内部阶段门40秒、异常正常退出最多5秒，超过job硬限则不得宣称清理完成。本次后不再自动追加原生CI。
+
+### 窗口材料第二次终态与收口
+
+`8717578c48f660f4cda15680d7bf70edeb9b9a9f`，[run41330123010](https://github.com/T1doo/Sim2Act/actions/runs/41330123010)，job124918253400，17:10:42–17:11:27 UTC，45秒。原EXE READY、登录、UI创建项目及精确project selector读取已通过，项目ID写入真实阶段报告；随后已切到“资源”，在Open-Summary枚举无名称按钮时对null Name调用StartsWith，脚本84行失败。尚未填写/保存材料，未执行材料重开验证；不能将“项目创建可用”扩成“窗口材料保存已通过”。当前Selected-Value兼容入口在项目选择段已通过（原报告没有记录具体返回的pattern），后续CSV选择尚未验。异常路径正常CloseMainWindow、进程退出确认；原desktop.log还保留完整STOPPED/DESKTOP_EXIT。
+
+本次只修脚本枚举：匿名/空元素不可能匹配目标summary，先检查Name确为string再StartsWith；精确选中、唯一提交、完整退出和内容核查门不变。此修复未再原生运行，不能称Windows实测通过。按本轮停止计划不再追加CI。实际累计115+151+19+40+37+45=407秒，480秒批次余73秒；旧900秒批次余77秒继续单列，不混为新预算。所有失败、空状态和原始协议保留。
+
+原包042ab21c及其完整装配/独立后台CSV两结果保存、首次同源重开/原生窗口登录关闭重开通过仍成立；新的窗口材料UI验收属于未完成的自动化能力，不是已证明产品保存失败。需要现有Windows普通UI条件或后续明确有界验证完成材料/运行/导出点击范围；不因此扩大安全权限或伪造签收。Windows11正式传输/目标机验收、PG、live、本轮大型Cold未验维持原边界。未创建Release，交接准确包与测试范围供最终发布评估。
