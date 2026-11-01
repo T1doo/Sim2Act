@@ -1,0 +1,7 @@
+# 定点独立只读收口
+
+审查源码：0d4bd59b08fb1fef15f9a63f20c04d642816a874。
+
+审查者evidence_review复核：read_commit_roles分配前持有3个role强引用；restore_owner强持owner并使用C static canonical type/原生descriptor；Native.current在check前后、tail前核物理类型，真正invoke另核active/current tx；拒绝清理及Snapshot facts不读被拒绝的动态entry/property。此限定范围未再定位严重内存/UAF或普通流程必须修复项，可保全。
+
+161项回归与prepare-pa/新进程verify属于已记录的有限Mock本地范围；结论不扩签未接通的独立lease最终fence、原30秒大图或Windows/PG/live验收。无源码代写。
