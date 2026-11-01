@@ -87,7 +87,7 @@ sealed class Host : Form {
     readonly object logGate = new object();
     Process child; FileStream claim; StreamWriter log;
     string worker,origin,boundReadyUrl,expectedData,startupIssue; Dictionary<string,object> receipt;
-    bool logFailureHandled;
+    bool logFailureHandled,userStopRequested;
     bool initialized,stopping,stopSent,childStarted,stdoutEof,stderrEof,finished,closingAllowed,failed,timeoutShown;
     double startAt,stopAt,exitAt=-1,eofAt=-1;
     public int ExitCode = 1;
@@ -103,7 +103,7 @@ sealed class Host : Form {
         view.Dock=DockStyle.Fill; Controls.Add(view); Controls.Add(status);
         Shown += async delegate { await Start(); };
         FormClosing += delegate(object sender,FormClosingEventArgs args) {
-            if (!closingAllowed) { args.Cancel=true; Stop("正在保存状态并停止后台…"); }
+            if (!closingAllowed) { userStopRequested=true; args.Cancel=true; Stop("正在保存状态并停止后台…"); }
         };
         timer.Interval=100; timer.Tick += Tick; timer.Start();
     }
@@ -239,6 +239,7 @@ sealed class Host : Form {
     bool Allowed(string url) { Uri value; return origin!=null && Uri.TryCreate(url,UriKind.Absolute,out value) && value.Scheme=="http" && value.Host=="127.0.0.1" && value.UserInfo=="" && value.GetLeftPart(UriPartial.Authority)==origin; }
     void Navigate(object sender,CoreWebView2NavigationStartingEventArgs args) { if(!Allowed(args.Uri)) args.Cancel=true; }
     void Download(object sender,CoreWebView2DownloadStartingEventArgs args) {
+        try {
         string url=args.DownloadOperation.Uri;
         if(!(Allowed(url) || (origin!=null && url.StartsWith("blob:"+origin+"/",StringComparison.Ordinal)))) {args.Cancel=true;return;}
         string name=Path.GetFileName(args.ResultFilePath); if(!Regex.IsMatch(name,"^[A-Za-z0-9._-]{1,100}$")) name="export.json";
@@ -247,14 +248,30 @@ sealed class Host : Form {
         CoreWebView2DownloadOperation operation=args.DownloadOperation;
         EventHandler<object> changed=null;
         changed=delegate(object source,object changedArgs) {
-            if(operation.State==CoreWebView2DownloadState.InProgress) return;
-            operation.StateChanged-=changed;
-            if(IsDisposed || finished) return;
-            status.Text=operation.State==CoreWebView2DownloadState.Completed
-                ? "导出完成："+target : "导出未完成："+operation.InterruptReason.ToString()+"；原成果未更改。";
+            if(IsDisposed || finished) {
+                try {operation.StateChanged-=changed;} catch(Exception) {}
+                return;
+            }
+            try {
+                CoreWebView2DownloadState state=operation.State;
+                if(state==CoreWebView2DownloadState.InProgress) return;
+                operation.StateChanged-=changed;
+                status.Text=state==CoreWebView2DownloadState.Completed
+                    ? "导出完成："+target : "导出未完成："+operation.InterruptReason.ToString()+"；原成果未更改。";
+            } catch(Exception error) {
+                try {operation.StateChanged-=changed;} catch(Exception) {}
+                status.Text="导出状态未确认；请检查 exports 和 desktop.log，原成果未更改。";
+                Write("DOWNLOAD_STATE_FAILED "+error.GetType().Name);
+            }
         };
         operation.StateChanged+=changed;
         args.Handled=true; status.Text="正在导出到程序目录 exports…";
+        changed(operation,EventArgs.Empty);
+        } catch(Exception error) {
+            args.Cancel=true;
+            status.Text="导出失败；请检查 exports 目录空间/权限，原成果未更改。";
+            Write("DOWNLOAD_START_FAILED "+error.GetType().Name);
+        }
     }
     void Stop(string message) {
         if(finished) return; status.Text=message; stopping=true;
@@ -293,6 +310,10 @@ sealed class Host : Form {
         if(exited && exitAt<0) exitAt=now;
         if(stdoutEof && !exited && eofAt<0) eofAt=now;
         if(exited && stdoutEof && stderrEof) {
+            if(origin==null && !userStopRequested) {
+                failed=true;
+                if(startupIssue==null) startupIssue="后台在工作台就绪前退出；请保留工程和 desktop.log。";
+            }
             bool clean=receipt!=null && True(receipt,"worker_stopped") && True(receipt,"clean") && True(receipt,"data_preserved");
             ExitCode=child.ExitCode==0 && clean && !failed ? 0 : 1;
             Write(new JavaScriptSerializer().Serialize(new Dictionary<string,object>{{"event","DESKTOP_EXIT"},{"child_returncode",child.ExitCode},{"receipt_verified",clean},{"ready_seen",origin!=null},{"exitcode",ExitCode}}));
