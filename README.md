@@ -1,5 +1,7 @@
 # Sim2Act
 
+> **当前源码候选97f4c0af（2026-11-01，未替代安装包）**。默认结构元数据与原始字典版本事实索引已实现；完整类型／顺序／别名、动态门、原五写及独立G1保留。310项相关／最早截止回归与3项真实信号边界通过。匹配signed120两笔保存／首次新进程回读通过，但总耗时88.585／93.331秒，对照87.910／92.292秒，**没有净提速；原30仍在首次DML前G0拒绝**。真实G1取消回滚、默认worker副本收敛CANCELLED通过。[精确源码、计时与失败原件](docs/evidence/graph-version-facts-20261101/README.md)。旧35 Linux已安装限制候选保留，不把新源码称为新版安装包、Windows／PG／大型live或全产品验收。
+
 > **默认Graph真实时钟源码：35eaa941（2026-11-01）**。已修跨Graph清理归属，并将新协议同次版本读取的重复资格核合为一次fresh C检查，完整动态门／五写／G1保留。匹配显式120两笔总计113.804/116.194降至87.406/94.006秒，保存与首次回读通过；原控制检查次数一致。189相关回归零失败／跳过；真实G1取消完整回滚，默认worker收敛CANCELLED。[原始对照、原30失败与全部边界](docs/evidence/graph-current-real-clock-20261101/README.md)。[新Linux限制候选](deliverables/limited-graph-current-20261101/README.md)实际安装CSV30/v1保存／重开通过；**原普通30仍在首次写前G0拒绝**，长锁、新Windows、正式PG／大型live未解决，非全产品完成。
 
 > **默认 Graph 完整版本协议源码：4d0b16f2（2026-10-31）**。Graph/Frontier按版本持有完整不可变V2期望，check、selector、fallback、export及G1 proof消费同版本，W5→G1仍原完整执行。相关172项零失败／零跳过；一次实际Cold五写、完整G1及SQL提交已验证，6次固定Mock、0real、文件SQLite、虚拟业务时钟，**不是原30秒性能验收**。[完整接线、失败对照、冻结版本和边界](docs/evidence/graph-version-lifecycle-20261031/README.md)。新源码未重新打包，以下2ad Linux候选保留；新Windows／正式PG／大型live及完整交付仍未验。

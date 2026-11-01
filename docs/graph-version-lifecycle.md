@@ -41,3 +41,5 @@ Graph入口先核C issuer/Source见证，再动态调用新helper。清理入口
 ## 2026-11-01 默认当前版本后端
 
 源码35eaa941以封存C `pin_resolve`完成一次fresh完整代码／模块／alias资格及无分配13锚点/current/issuer复核。创建前可选能力缺失仍走旧完整路径，已发行不得降级。真实清理归属改由C原child和mode/scope/candidate记录决定，分配失败先撤销且不遮原异常；GC覆盖新增引用，死弱child拒绝。原业务回调、完整内容、动态权限/撤权/期限、原子五写和独立完整G1保持。189相关回归、匹配两笔真实保存／首次回读及真实持锁取消已执行；原30失败与signed120效果分开，详见[本轮完整证据](evidence/graph-current-real-clock-20261101/README.md)。
+
+后续97f4c0af将原始dict的版本绑定事实接入Graph／Frontier／proof：首次完整capture前后tag一致且值全深不可变才启用，dict仍参加原正反别名域；每次信号及callback-capable清理后重核使用过的tag。新投影和reducer临时森林保留完整遍历，权限和原W5→G1不复用。310相关／截止回归、真实信号反例及两笔保存／首次回读／持锁取消通过；但整体时间没有净收益，原30仍失败。详见[完整对照与未达标边界](evidence/graph-version-facts-20261101/README.md)，不据局部索引命中扩签性能或安装范围。

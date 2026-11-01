@@ -1,0 +1,93 @@
+FF.                                                                      [100%]
+=================================== FAILURES ===================================
+__ test_late_metadata_callback_class_change_cannot_dispatch_foreign_fallback ___
+
+local_origin = namespace(store=<sim2act.db.Store object at 0x7f8b36bcefc0>, worker=<sim2act.worker.Worker object at 0x7f8b36765d60>, ..., 'citation_check': 'natural.spec_citations.v1', 'semantic_status': 'UNKNOWN', 'semantic_goal_acceptance': 'NOT_RUN'}))
+
+    def test_late_metadata_callback_class_change_cannot_dispatch_foreign_fallback(local_origin):
+        f=local_origin
+        calls=[]
+        class Foreign:
+            def _content_matches(self):
+                calls.append('foreign-content')
+                return True
+            def content_version(self):
+                calls.append('foreign-version')
+                return saved_version
+        with f.store.tx() as c,pb._source_reads(f.store,c),rejecting_scope(f,c) as graph:
+            original=type(graph)
+            value={'mutable':[1]}
+            graph.add('synthetic-class-boundary',value)
+            saved_version=graph.content_version()
+            monitor=sys.monitoring
+            slot=next(i for i in (3,4,5) if monitor.get_tool(i) is None)
+            monitor.use_tool_id(slot,'metadata callback class mutation')
+            changed=[]
+            def returned(code,offset,callee,arg):
+                if callee is guard_code._NATIVE_METADATA and not changed:
+                    changed.append(True)
+                    graph.__class__=Foreign
+                    value['mutable'].append(2)
+            code=guard_code._qualified.__code__
+            try:
+                monitor.register_callback(slot,monitor.events.C_RETURN,returned)
+>               monitor.set_local_events(slot,code,monitor.events.CALL|monitor.events.C_RETURN)
+E               ValueError: cannot set C_RETURN or C_RAISE events independently
+
+tests/test_cold_graph_structure.py:240: ValueError
+______ test_actual_owned_frontier_current_refresh_alias_and_complete_cost ______
+
+sql_facts = namespace(store=<sim2act.db.Store object at 0x7f8b36bdbec0>, settings=Settings(database_url='sqlite:////workspace/scra...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=<sim2act.worker.Worker object at 0x7f8b34b522d0>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f8b36be8dd0>
+tmp_path = PosixPath('/workspace/scratch/graph-metadata-final-target-20261101/test_actual_owned_frontier_cur0')
+
+    def test_actual_owned_frontier_current_refresh_alias_and_complete_cost(sql_facts, monkeypatch, tmp_path):
+        f = sql_facts
+        def background(graph, source, generated, candidate):
+            graph.add('synthetic-unaccounted-background', [
+                dict(id=f'unit-{i}', nested=[dict(text=f'synthetic material {i} ' * 12, value=i)])
+                for i in range(2000)
+            ])
+    
+        with f.store.tx() as c, native_segment(f, c, before_choose=background) as s:
+            assert s.mode is not None
+            frontier = s.graph._accounted_frontier
+            assert structure._qualified(s.graph, _frontier=frontier)
+            assert structure._frontier_plain(frontier, s.graph)
+            for _ in range(5):
+                s.graph.check(f.store, c)
+            assert vars(frontier)['_structure_state'].capsule is not None
+            with counts() as seen:
+                s.graph.check(f.store, c)
+            assert seen == dict(encode=0, refresh=1)
+            batches = []
+            for batch in range(3):
+                row = {}
+                for name in ('fast', 'legacy') if batch % 2 == 0 else ('legacy', 'fast'):
+                    with monkeypatch.context() as patch:
+                        if name == 'legacy':
+                            # Decline through an actual unsupported serializer
+                            # configuration; selector CODE is now witnessed.
+                            patch.setitem(structure.copyreg._extension_registry,
+                                ('synthetic','unused-legacy-comparison'),123)
+                        start = time.perf_counter()
+                        with counts() as seen:
+                            for _ in range(30):
+                                s.graph.check(f.store, c)
+                        row[name] = dict(seconds=time.perf_counter() - start, **seen)
+                batches.append(row)
+>           assert all(row['fast']['encode'] == 0 and row['fast']['refresh'] == 30
+                and row['legacy']['encode'] == 30 and row['legacy']['refresh'] == 30 for row in batches)
+E           AssertionError
+
+tests/test_cold_frontier_structure.py:79: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cold_graph_structure.py::test_late_metadata_callback_class_change_cannot_dispatch_foreign_fallback
+FAILED tests/test_cold_frontier_structure.py::test_actual_owned_frontier_current_refresh_alias_and_complete_cost
+2 failed, 1 passed, 1 warning in 8.60s

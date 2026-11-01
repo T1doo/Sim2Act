@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="3" time="0.851" timestamp="2026-11-01T02:23:11.629540+00:00" hostname="ebba0266b3c5"><testcase classname="scratch.test_graph_dictionary_signals_20261101" name="test_actual_signal_during_capture_restored_value_cannot_arm_old_interval" time="0.003" /><testcase classname="scratch.test_graph_dictionary_signals_20261101" name="test_actual_signal_after_fast_read_refuses_stale_data_or_keeps_original_error[mutate-earlier]" time="0.003"><failure message="AssertionError">action = 'mutate-earlier'
+
+    @pytest.mark.parametrize('action',['mutate-earlier','raise-original'])
+    def test_actual_signal_after_fast_read_refuses_stale_data_or_keeps_original_error(action):
+        leaves=[{'index':i,'value':7} for i in range(5000)]
+        armed=[False]
+        def arm():
+            if armed[0]:signal.setitimer(signal.ITIMER_REAL,.0001)
+        Row,reader=fixture_row(arm)
+        value=[Row(),*leaves];identity=scope()
+        saved=native.snapshot(value,Row,r.Limits,r._ColdGraphQuotedName,reader,r._cold_graph_limit_values,identity)
+        assert saved is not native.UNSUPPORTED
+        before=counters();seen=[]
+        original=RuntimeError('synthetic exact pending signal error')
+        def handler(number,frame):
+            now=counters()
+            seen.append((now['match_calls']&gt;before['match_calls'],now['flat_dictionary_hits']&gt;before['flat_dictionary_hits']))
+            if action=='raise-original':raise original
+            leaves[0]['value']=8
+        prior=signal.signal(signal.SIGALRM,handler)
+        armed[0]=True
+        try:
+            if action=='raise-original':
+                with pytest.raises(RuntimeError) as error:native.matches_fast(saved,value,identity)
+                assert error.value is original
+            else:
+&gt;               assert native.matches_fast(saved,value,identity) is not True
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               AssertionError
+
+../scratch/test_graph_dictionary_signals_20261101.py:66: AssertionError</failure></testcase><testcase classname="scratch.test_graph_dictionary_signals_20261101" name="test_actual_signal_after_fast_read_refuses_stale_data_or_keeps_original_error[raise-original]" time="0.002" /></testsuite></testsuites>

@@ -1,0 +1,73 @@
+.............................F....F...................................   [100%]
+=================================== FAILURES ===================================
+_____________ test_declined_graph_still_rejects_new_method_shadow ______________
+
+sql_facts = namespace(store=<sim2act.db.Store object at 0x7f769284e510>, settings=Settings(database_url='sqlite:////workspace/scra...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=<sim2act.worker.Worker object at 0x7f76906b35c0>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f76907ba900>
+
+    def test_declined_graph_still_rejects_new_method_shadow(sql_facts,monkeypatch):
+        calls=[]
+        def foreign(*args):calls.append(True)
+        with monkeypatch.context() as patch:
+            patch.setattr(structure,'_qualified',lambda graph,**kw:False)
+            with pytest.raises(DomainError),graph_scope(sql_facts) as (graph,limits):
+                assert graph.content_version() is None
+                graph.content_version=foreign
+                graph.check(sql_facts.store,graph.connection)
+>       assert calls==[] and not graph.active
+                                 ^^^^^
+E       UnboundLocalError: cannot access local variable 'graph' where it is not associated with a value
+
+tests/test_cold_graph_versions.py:258: UnboundLocalError
+________ test_native_optional_absence_preserves_original_complete_path _________
+
+tmp_path = PosixPath('/workspace/scratch/graph-metadata-boundaries-20261101/test_native_optional_absence_p0')
+
+    def test_native_optional_absence_preserves_original_complete_path(tmp_path):
+        import os,subprocess
+        code=r'''
+    import importlib.abc,sys
+    from pathlib import Path
+    class MissingNative(importlib.abc.MetaPathFinder):
+     def find_spec(self,fullname,path=None,target=None):
+      if fullname=='sim2act._cold_graph_structure':raise ImportError('synthetic missing optional graph accelerator')
+    sys.meta_path.insert(0,MissingNative())
+    from test_cold_accounted_sqlite import sql_facts
+    from test_cold_use_manifest_owned import graph_scope
+    from sim2act.errors import DomainError
+    from sim2act import _cold_graph_versions as versions
+    fixture=sql_facts.__wrapped__(Path(sys.argv[1]));f=next(fixture)
+    try:
+     assert versions.AVAILABLE is False
+     with graph_scope(f) as (graph,limits):
+      assert graph.content_version() is None
+      value={'full':['original']};graph.add('original-fallback',value)
+      version,raw,key=graph.export_version()
+      assert version is None and raw==graph.input_bytes() and key==graph.key
+      value['full'].append('mutation')
+      try:graph.check(f.store,graph.connection)
+      except DomainError:pass
+      else:raise AssertionError('Legacy complete mutation gate was lost')
+    except DomainError:
+     assert not graph.active
+    finally:
+     try:next(fixture)
+     except StopIteration:pass
+    print('PASS_OPTIONAL_NATIVE_ABSENCE_ORIGINAL_V2')
+    '''
+        result=subprocess.run([sys.executable,'-c',code,str(tmp_path)],capture_output=True,text=True,timeout=25)
+>       assert result.returncode==0,(result.stdout,result.stderr)
+               ^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: ('', 'Traceback (most recent call last):\n  File "<string>", line 8, in <module>\nModuleNotFoundError: No module named \'test_cold_accounted_sqlite\'\n')
+
+tests/test_cold_graph_versions.py:325: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cold_graph_versions.py::test_declined_graph_still_rejects_new_method_shadow
+FAILED tests/test_cold_graph_versions.py::test_native_optional_absence_preserves_original_complete_path
+2 failed, 68 passed, 1 warning in 55.68s

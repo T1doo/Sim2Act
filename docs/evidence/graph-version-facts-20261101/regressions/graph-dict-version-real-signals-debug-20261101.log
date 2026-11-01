@@ -1,0 +1,45 @@
+.F.                                                                      [100%]
+=================================== FAILURES ===================================
+_ test_actual_signal_after_fast_read_refuses_stale_data_or_keeps_original_error[mutate-earlier] _
+
+action = 'mutate-earlier'
+
+    @pytest.mark.parametrize('action',['mutate-earlier','raise-original'])
+    def test_actual_signal_after_fast_read_refuses_stale_data_or_keeps_original_error(action):
+        leaves=[{'index':i,'value':7} for i in range(5000)]
+        armed=[False]
+        def arm():
+            if armed[0]:signal.setitimer(signal.ITIMER_REAL,.0001)
+        Row,reader=fixture_row(arm)
+        value=[Row(),*leaves];identity=scope()
+        saved=native.snapshot(value,Row,r.Limits,r._ColdGraphQuotedName,reader,r._cold_graph_limit_values,identity)
+        assert saved is not native.UNSUPPORTED
+        before=counters();seen=[]
+        original=RuntimeError('synthetic exact pending signal error')
+        def handler(number,frame):
+            now=counters()
+            seen.append((now['match_calls']>before['match_calls'],now['flat_dictionary_hits']>before['flat_dictionary_hits'],now['flat_dictionary_hits']-before['flat_dictionary_hits']))
+            if action=='raise-original':raise original
+            leaves[0]['value']=8
+        prior=signal.signal(signal.SIGALRM,handler)
+        armed[0]=True
+        try:
+            if action=='raise-original':
+                with pytest.raises(RuntimeError) as error:native.matches_fast(saved,value,identity)
+                assert error.value is original
+            else:
+                result=native.matches_fast(saved,value,identity)
+>               assert result is not True,(seen,counters()['flat_dictionary_hits']-before['flat_dictionary_hits'])
+                       ^^^^^^^^^^^^^^^^^^
+E               AssertionError: ([(True, True, 5000)], 5000)
+
+../scratch/test_graph_dictionary_signals_debug_20261101.py:67: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../scratch/test_graph_dictionary_signals_debug_20261101.py::test_actual_signal_after_fast_read_refuses_stale_data_or_keeps_original_error[mutate-earlier]
+1 failed, 2 passed, 1 warning in 0.82s

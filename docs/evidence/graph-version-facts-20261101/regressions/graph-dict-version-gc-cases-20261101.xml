@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="18" time="0.354" timestamp="2026-11-01T02:17:26.018983+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_cold_dictionary_versions" name="test_unchanged_original_flat_dictionary_uses_full_version_proof" time="0.000" /><testcase classname="tests.test_cold_dictionary_versions" name="test_flat_dictionary_aliases_remain_in_complete_global_domain[split-dict]" time="0.000" /><testcase classname="tests.test_cold_dictionary_versions" name="test_flat_dictionary_aliases_remain_in_complete_global_domain[merge-dict]" time="0.000" /><testcase classname="tests.test_cold_dictionary_versions" name="test_flat_dictionary_aliases_remain_in_complete_global_domain[split-tuple]" time="0.000" /><testcase classname="tests.test_cold_dictionary_versions" name="test_flat_dictionary_aliases_remain_in_complete_global_domain[merge-tuple]" time="0.000" /><testcase classname="tests.test_cold_dictionary_versions" name="test_flat_dictionary_aliases_remain_in_complete_global_domain[split-text]" time="0.000" /><testcase classname="tests.test_cold_dictionary_versions" name="test_flat_dictionary_aliases_remain_in_complete_global_domain[merge-text]" time="0.000" /><testcase classname="tests.test_cold_dictionary_versions" name="test_nested_mutable_values_cannot_arm_a_dictionary" time="0.000" /><testcase classname="tests.test_cold_dictionary_versions" name="test_projection_dictionaries_outside_live_inputs_stay_full_current_walks" time="0.000" /><testcase classname="tests.test_cold_dictionary_versions" name="test_reducer_temporary_dictionaries_are_never_indexed" time="0.000" /><testcase classname="tests.test_cold_dictionary_versions" name="test_later_original_reducer_cannot_change_an_already_indexed_dictionary" time="0.000" /><testcase classname="tests.test_cold_dictionary_versions" name="test_capture_gc_change_and_restore_cannot_arm_a_mixed_version" time="0.051"><failure message="AssertionError">def test_capture_gc_change_and_restore_cannot_arm_a_mixed_version():
+        identity=scope()
+        value={'value':tuple([b'synthetic capture',17])}
+        original=value['value'];other=tuple([b'changed',18])
+        args=(value,*arguments(),identity,r._SOURCE_VIEW_TYPE,r._SOURCE_OWNER_TYPE,value)
+        before=counters()
+        old_threshold=gc.get_threshold()
+        held=[];changed=[]
+        def collecting(phase,info):
+            if phase=='start':
+                # Read-only counters locate the actual post-capture/pre-arm
+                # interval without replacing any product function or clock.
+                if counters()['dictionary_capture_candidates']&gt;before['dictionary_capture_candidates']:
+                    value['value']=other
+                    value['value']=original
+                    changed.append(True)
+            elif phase=='stop':
+                # Keep one tracked allocation after each collection so the next
+                # native inventory allocation also reaches the real collector.
+                held.append([])
+        gc.collect()
+        gc.callbacks.append(collecting)
+        try:
+            gc.set_threshold(1,old_threshold[1],old_threshold[2])
+            saved=native.snapshot(*args)
+        finally:
+            gc.callbacks.remove(collecting)
+            gc.set_threshold(*old_threshold)
+        assert saved is not native.UNSUPPORTED
+        assert changed
+&gt;       assert counters()['armed_dictionary_versions']==before['armed_dictionary_versions']
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError
+
+tests/test_cold_dictionary_versions.py:178: AssertionError</failure></testcase><testcase classname="tests.test_cold_dictionary_versions" name="test_logical_signal_boundary_work_does_not_change_full_content[1023]" time="0.000" /><testcase classname="tests.test_cold_dictionary_versions" name="test_logical_signal_boundary_work_does_not_change_full_content[1024]" time="0.000" /><testcase classname="tests.test_cold_dictionary_versions" name="test_logical_signal_boundary_work_does_not_change_full_content[1025]" time="0.000" /><testcase classname="tests.test_cold_dictionary_versions" name="test_logical_signal_boundary_work_does_not_change_full_content[2047]" time="0.000" /><testcase classname="tests.test_cold_dictionary_versions" name="test_logical_signal_boundary_work_does_not_change_full_content[2048]" time="0.000" /><testcase classname="tests.test_cold_dictionary_versions" name="test_logical_signal_boundary_work_does_not_change_full_content[2049]" time="0.000" /></testsuite></testsuites>
