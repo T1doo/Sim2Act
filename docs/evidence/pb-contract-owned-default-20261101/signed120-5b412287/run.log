@@ -1,0 +1,165 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______________ test_same_large_cold_snapshot_control[complete] ________________
+
+env = (<sim2act.db.Store object at 0x7f35dd2fa450>, Settings(database_url='sqlite:////workspace/scratch/graph-original-edge-...e7f4eeae72461a82e560ebc9ab4fc1', 'user_8955199738884b86b8c99a5b52defefa', 'proj_493665e582d24d9ab0bacfa5048d611e', ...)
+tmp_path = PosixPath('/workspace/scratch/graph-original-edge-signed120-5b412287-20261101/test_same_large_cold_snapshot_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f35dd2f9fd0>
+cancel = False
+
+    @pytest.mark.parametrize('cancel', [False, True], ids=['complete','cancel'])
+    def test_same_large_cold_snapshot_control(env, tmp_path, monkeypatch, cancel):
+        opened=snapshots(monkeypatch,env[1].database_url)
+        try:
+>           large_control_flow(env,tmp_path,monkeypatch,cancel)
+
+tests/test_cold_snapshot_full_flow.py:59: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+env = (<sim2act.db.Store object at 0x7f35dd2fa450>, Settings(database_url='sqlite:////workspace/scratch/graph-original-edge-...e7f4eeae72461a82e560ebc9ab4fc1', 'user_8955199738884b86b8c99a5b52defefa', 'proj_493665e582d24d9ab0bacfa5048d611e', ...)
+tmp_path = PosixPath('/workspace/scratch/graph-original-edge-signed120-5b412287-20261101/test_same_large_cold_snapshot_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f35dd2f9fd0>
+cancel = False, cancel_phase = 'G0'
+
+    @pytest.mark.parametrize('cancel', [True, False], ids=['owner-cancel-during-large-g0','uninterrupted-original-large-cold'])
+    def test_original_large_cold_control(env, tmp_path, monkeypatch, cancel, *, cancel_phase="G0"):
+        assert cancel_phase in ("G0", "G1")
+        assert env[0].test_only and env[0].sqlite
+        stopped = threading.Event()
+        errors, tracked, result = [], [], dict(classification='REAL_CLOCK_MOCK_DEFINITION_FILE_SQLITE_NOT_LIVE_NOT_PG', cancel=cancel)
+        server = listener = server_thread = None
+        def save():
+            result['epochs'] = [dict(run_id=e.header['id'], phase=e.phase, checks=e.checks,
+                closed=e.closed, finished_normally=e.finished_normally, seconds=e.seconds,
+                complete_g0_seconds=e.g0_seconds, observed_max_checkpoint_gap=e.max_check_gap,
+                settlement_lease_margin=e.lease_margin) for _,e in tracked]
+            (tmp_path/'large-control-result.json').write_text(json.dumps(result,indent=2)+'\n')
+        def observer():
+            nonlocal server, listener, server_thread
+            handled = False
+            eligibility = {}
+            try:
+                end = time.monotonic()+850
+                while not stopped.is_set() and time.monotonic()<end:
+                    for store, epoch in active_epochs():
+                        binding = getattr(epoch.worker,'pa_trial',None)
+                        if (binding is None or epoch.header['runtime_id']==binding.contract.runtime_id
+                                or store.engine.url.database != env[0].engine.url.database):
+                            continue
+                        if epoch not in eligibility:
+                            refs=read_db(store,'SELECT resource_refs FROM runs WHERE id=?',(epoch.header['id'],))
+                            eligibility[epoch]=bool(refs and json.loads(refs[0][0]) == [binding.contract.bindings[1].resource_id])
+                        if not eligibility[epoch]:
+                            continue
+                        if not any(old is epoch for _,old in tracked):
+                            tracked.append((store,epoch)); save()
+                        # Demand actual large validation activity before control,
+                        # rather than cancelling a queued/not-yet-started Run.
+                        if (not cancel or handled or epoch.phase!=cancel_phase or epoch.closed
+                                or epoch.checks<1000 or time.monotonic()-epoch.started<3):
+                            continue
+                        if cancel_phase == 'G1':
+                            assert epoch is tracked[0][1], 'The first target epoch escaped before cancellation'
+                            assert epoch.g0_seconds is not None
+                            if time.monotonic()-epoch.started-epoch.g0_seconds < 3:
+                                continue
+                        handled = True
+                        rid=epoch.header['id']
+                        iid=read_db(store,'SELECT instance_id FROM internal_app_runs a JOIN internal_run_bindings b ON b.app_run_id=a.id WHERE b.run_id=?',(rid,))[0][0]
+                        aid=read_db(store,"SELECT id FROM attempts WHERE run_id=? AND status='RECEIVED'",(rid,))[0][0]
+                        prior=read_db(store,'SELECT * FROM attempts WHERE id<>? ORDER BY id',(aid,))
+                        target_attempt=read_db(store,'SELECT * FROM attempts WHERE id=?',(aid,))
+                        data_before=read_db(store,'SELECT * FROM internal_instance_data ORDER BY instance_id,version')
+                        resources_before=read_db(store,'SELECT * FROM resources ORDER BY id')
+                        archive_before=read_db(store,'SELECT * FROM delivery_graph_requests ORDER BY app_id,principal_id,kind,request_key')
+                        result.update(target_run=rid,target_attempt=aid,g0_seconds_before_request=time.monotonic()-epoch.started,
+                            prior_attempts_sha256=digest_rows(prior),prior_attempt_count=len(prior),typed_history_sha256=digest_rows(data_before),
+                            received_attempt_sha256=digest_rows(target_attempt),resources_sha256=digest_rows(resources_before),archive_sha256=digest_rows(archive_before),
+                            committed_lease_margin_before_control=read_db(store,'SELECT lease_until FROM runs WHERE id=?',(rid,))[0][0]-time.time())
+                        if cancel_phase == 'G1':
+                            probe=sqlite3.connect(store.engine.url.database,timeout=0,isolation_level=None)
+                            probe_started=time.monotonic()
+                            try:
+                                try:
+                                    probe.execute('BEGIN IMMEDIATE')
+                                except sqlite3.OperationalError as error:
+                                    assert error.sqlite_errorcode == sqlite3.SQLITE_BUSY
+                                    result['writer_lock_probe']=dict(sqlite_errorcode=error.sqlite_errorcode,
+                                        seconds=time.monotonic()-probe_started,no_mutation=True)
+                                else:
+                                    raise AssertionError('G1 did not hold the actual SQLite writer lock')
+                            finally:
+                                if probe.in_transaction:probe.rollback()
+                                probe.close()
+                            assert epoch is tracked[0][1] and epoch.phase == 'G1' and not epoch.closed
+                            result['cancel_phase']='G1'
+                            result['g0_seconds_before_request']=epoch.g0_seconds
+                            result['validation_seconds_before_request']=time.monotonic()-epoch.started
+                            result['g1_seconds_before_request']=time.monotonic()-epoch.started-epoch.g0_seconds
+                        listener=socket.socket();listener.bind(('127.0.0.1',0));listener.listen(128)
+                        base='http://127.0.0.1:'+str(listener.getsockname()[1])
+                        server=uvicorn.Server(uvicorn.Config(create_app(store,epoch.worker.s),log_level='error',access_log=False))
+                        server_thread=threading.Thread(target=server.run,kwargs={'sockets':[listener]},daemon=True);server_thread.start()
+                        deadline=time.monotonic()+5
+                        while not server.started and time.monotonic()<deadline:stopped.wait(.01)
+                        assert server.started
+                        def request(method,path,body=None):
+                            raw=None if body is None else json.dumps(body).encode()
+                            req=Request(base+path,data=raw,method=method,headers={'Authorization':'Bearer synthetic-test-A','Content-Type':'application/json'})
+                            started=time.monotonic()
+                            try:
+                                with urlopen(req,timeout=8) as response:
+                                    return response.status,json.loads(response.read()),time.monotonic()-started
+                            except HTTPError as error:
+                                return error.code,json.loads(error.read()),time.monotonic()-started
+                        path=f'/api/internal/instances/{iid}/runs/{rid}'
+                        status,progress,elapsed=request('GET',path+'/control-progress')
+                        assert status==200 and progress['status']=='RUNNING' and progress['content_access'] is False,progress
+                        if cancel_phase == 'G0':
+                            assert epoch.phase=='G0' and not epoch.closed
+                        else:
+                            assert epoch is tracked[0][1] and epoch.phase=='G1' and not epoch.closed
+                        result['progress']=dict(http=status,seconds=elapsed,metadata=progress)
+                        status,reply,elapsed=request('POST',path+'/commands',dict(command='cancel',version=progress['version']))
+                        result['cancel_reply']=dict(http=status,seconds=elapsed,metadata=reply)
+                        assert status==200 and reply['status']=='RECONCILING',reply
+                        if cancel_phase == 'G0':
+                            result['g0_interrupt_closed']=epoch.closed
+                        else:
+                            result['validation_interrupt_closed']=epoch.closed
+                        # Subsequent original fail_owned is allowed to reconcile
+                        # only after the original command committed its version.
+                        result['_store']=store;result['_prior']=prior;result['_data']=data_before;result['_resources']=resources_before
+                        result['_target_attempt']=target_attempt;result['_archive']=archive_before
+                        save()
+                    stopped.wait(.01)
+            except BaseException as error:
+                errors.append(error);result['observer_error']=traceback.format_exc();save()
+        # Do not serialize Store handles into the evidence file.
+        original_save=save
+        def save():
+            private={key:result.pop(key) for key in list(result) if key.startswith('_')}
+            try:original_save()
+            finally:result.update(private)
+        thread=threading.Thread(target=observer,daemon=True);thread.start()
+        caught=None
+        try:
+            try:
+                original_flow(env,tmp_path,monkeypatch)
+            except AssertionError as error:
+                caught=error
+            if not cancel:
+>               assert caught is None, str(caught)
+                       ^^^^^^^^^^^^^^
+E               AssertionError: {"namespace":"INTERNAL_APPRUN","formal_publication_enabled":false,"id":"run_74766f09467343478fba9e8dd5758d1a","app_run_id":"iapprun_4a72357d11554967bdbbc207d6b06415","instance_id":"iinstance_b7d2974d5e7935074204dfdb40ab8d87","release_id":"irelease_703a464f983246d180742536508b65de","status":"WAITING_RESOURCE","version":2,"cancel_intent":false,"result":null,"result_version":null,"error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"},"known_effects":[],"events":[{"id":"event_7fb5203c2e83489f907036e798300f3c","run_id":"run_74766f09467343478fba9e8dd5758d1a","created_at":1793515460.5400178,"kind":"ACCEPTED","data":{"namespace":"INTERNAL_APPRUN","app_run_id":"iapprun_4a72357d11554967bdbbc207d6b06415","instance_id":"iinstance_b7d2974d5e7935074204dfdb40ab8d87","release_id":"irelease_703a464f983246d180742536508b65de","input_fingerprint":"972e2cb9b0e8e42da7c4f00cbe5ea2f68e486b0cc0a9566ddf59497045fca6d3"}},{"id":"event_0888e4732dfd4ca49668b1e4087d4513","run_id":"run_74766f09467343478fba9e8dd5758d1a","created_at":1793515466.7268398,"kind":"CLAIMED","data":{"fence":1}},{"id":"event_cc396acbec8e4d779e9b353a8195a151","run_id":"run_74766f09467343478fba9e8dd5758d1a","created_at":1793515468.5226917,"kind":"SPEC_STEP_VERIFIED","data":{"step_id":"read_pick","operation_id":"op_fff90c6d758d44d0b6b9a71efa1b8c5d","fence":1}},{"id":"event_af19db0843af4cf784b250fc785dd68e","run_id":"run_74766f09467343478fba9e8dd5758d1a","created_at":1793515493.865486,"kind":"NS_RESERVED","data":{"attempt_id":"attempt_ae5fd03044d849958c153f26232fb5c5","parameters_fingerprint":"4ed0441497e20a5809e5fd867dc92c7f2ba5ef94a2418908c84c6313f0d855bb","reserved_tokens":6307,"request_model":"intern-s2","mode":"LIVE","created_at":1793515493.8633327,"operation_id":"op_93537338efe04b50bb95da9b238a2d86","step_id":"duties_pick","fence":1,"reservation_fingerprint":"31da20c52a66c6209e6fab5bc40f05a9fef9a4480f3f6964b4b528b9bf65e505"}},{"id":"event_43454c079eda41a8bd91119fe20560cf","run_id":"run_74766f09467343478fba9e8dd5758d1a","created_at":1793515493.8693044,"kind":"NS_WIRE_ARCHIVED","data":{"attempt_id":"attempt_ae5fd03044d849958c153f26232fb5c5","archive_fingerprint":"9d4e9350ff83f408d27100fe3506453f4f505a2609c59b2a5435f8dc346e7b6b"}},{"id":"event_53e86b7441dc46d99b79dfb1068a12df","run_id":"run_74766f09467343478fba9e8dd5758d1a","created_at":1793515493.869585,"kind":"MODEL_RESERVED","data":{"attempt_id":"attempt_ae5fd03044d849958c153f26232fb5c5","mode":"live"}},{"id":"event_8979b6c23ae24cc6b84870ea908f6f09","run_id":"run_74766f09467343478fba9e8dd5758d1a","created_at":1793515493.8754435,"kind":"PA_TRIAL_BODY","data":{"attempt_id":"attempt_ae5fd03044d849958c153f26232fb5c5","family":"pa_trial_request_body.v1","body_fingerprint":"9d4e9350ff83f408d27100fe3506453f4f505a2609c59b2a5435f8dc346e7b6b","decoded_sha256":"1cec643338a5174d68973374965adc3fa372682716c836359f18479614f4f5ae","canonical_sha256":null,"byte_count":5283,"complete":true,"omission":"NONE"}},{"id":"event_55ab5aed311a454c82888ad869895a89","run_id":"run_74766f09467343478fba9e8dd5758d1a","created_at":1793515502.7866414,"kind":"PA_TRIAL_BODY","data":{"attempt_id":"attempt_ae5fd03044d849958c153f26232fb5c5","family":"pa_trial_response_body.v1","body_fingerprint":"38773ab10d7f8c392276c192f441096645712535b7dbef195c83e280df5cfcc3","decoded_sha256":"458107e7f73e7ae7103b9c02a2cb0fe28a0e55aad8839cd8319da9a5e0309aa4","canonical_sha256":"458107e7f73e7ae7103b9c02a2cb0fe28a0e55aad8839cd8319da9a5e0309aa4","byte_count":476,"complete":true,"omission":"NONE"}},{"id":"event_fde5d3474693476b89fdf825bf467b3b","run_id":"run_74766f09467343478fba9e8dd5758d1a","created_at":1793515502.789924,"kind":"NS_BODY_ARCHIVED","data":{"attempt_id":"attempt_ae5fd03044d849958c153f26232fb5c5","archive_fingerprint":"38773ab10d7f8c392276c192f441096645712535b7dbef195c83e280df5cfcc3"}},{"id":"event_d6b54b9bee7e4f11890a5e4fed744726","run_id":"run_74766f09467343478fba9e8dd5758d1a","created_at":1793515502.853803,"kind":"NS_RECEIVED","data":{"attempt_id":"attempt_ae5fd03044d849958c153f26232fb5c5","response_fingerprint":"f761425be4033844ab9cadff6db4674f4b253ac0028de8f7fdc833c4b955e02a","reception_fingerprint":"93a1e2049b79b0e1436eef7d804b1843802d450cb1cd95790ee32dd5063c6b09"}},{"id":"event_910c3a6c7cd44c5992fd31a495af54bd","run_id":"run_74766f09467343478fba9e8dd5758d1a","created_at":1793515502.933157,"kind":"NS_SETTLEMENT_LEASE_RESERVED","data":{"attempt_id":"attempt_ae5fd03044d849958c153f26232fb5c5","protocol":"sqlite-exclusive-settlement.v1","seconds":120,"contract_fingerprint":"61c661725dc16710babab78374c9cbc935ab5d7b4767c6586a22c0f3d2767fbb","worker_id":"worker_79086e03d87c436b9fa04bc75bdcda93","fence":1,"version":1,"previous_lease_until":1793515532.8486726,"lease_until":1793515622.9323628,"deadline":1793515760.535344}},{"id":"event_6d4c93b442b24c9c98e809040fc65905","run_id":"run_74766f09467343478fba9e8dd5758d1a","created_at":1793515512.6540487,"kind":"NS_SETTLEMENT_LEASE_RELEASED","data":{"attempt_id":"attempt_ae5fd03044d849958c153f26232fb5c5","fence":1,"lease_until":1793515542.6530116}},{"id":"event_091f53b32ca64745a351db7dd324dd3a","run_id":"run_74766f09467343478fba9e8dd5758d1a","created_at":1793515512.7248824,"kind":"STATE","data":{"status":"WAITING_RESOURCE","error":{"code":"VERSION_CONFLICT","message":"Malformed persisted DeliveryGraph binding","safe_retry":false,"effect_known":true,"user_action":"Check status, configuration and permissions"}}}],"steps":[{"step_id":"read_pick","status":"VERIFIED","fingerprint":"b3fe571fe5b60dccf94d38c1ad995f323cee338ed93b75f38fef40721cc74508"}],"semantic_status":"UNKNOWN","owner_acceptance":"PENDING","citation_status":"NOT_RUN","semantic_goal_acceptance":"NOT_RUN","markdown_view":null}
+
+tests/test_cold_control_full_flow.py:173: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cold_snapshot_full_flow.py::test_same_large_cold_snapshot_control[complete]
+1 failed, 1 warning in 330.35s (0:05:30)

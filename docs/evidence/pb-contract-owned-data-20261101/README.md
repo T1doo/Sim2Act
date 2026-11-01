@@ -1,5 +1,7 @@
 # Complete PB DATA ownership checkpoint
 
+This is the preserved prewire checkpoint, not the final state. Default producer/consumer wiring, the later real admission failure/fix, large-chain functional acceptance and limited installation are recorded in [the default-path evidence](../pb-contract-owned-default-20261101/README.md). That later migration has no demonstrated net performance gain; ordinary30 still fails.
+
 Source parent: c31198ad66546e090ec234d46c9f463cd978f108. This checkpoint adds a distinct, complete 27-schema PB data domain; the original 17-schema Source domain and default production consumers remain unchanged. It is not a performance or default-path acceptance result.
 
 The owner contains complete model storage, hidden storage, order and alias structure together with the original canonical dump, plus original JSON bytes/fingerprint. It contains no Graph, permission, transaction or PASS. A weak original-producer reference and fixed descriptor metadata are lifecycle metadata, outside the immutable graph pin. The original native full storage comparator checks the current constructor-private checked model at publication; every consumer must still check actual Binding identity/header and all dynamic gates. The pending/complete weak Binding registry is not yet installed at the default producer in this checkpoint.

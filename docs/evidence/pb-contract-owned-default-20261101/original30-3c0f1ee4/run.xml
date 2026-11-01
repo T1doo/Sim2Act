@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="350.028" timestamp="2026-11-01T07:05:22.447294+00:00" hostname="ebba0266b3c5"><testcase classname="scripts.diagnose_ordinary_thirty" name="test_original_thirty_large_goal_or_safe_budget_refusal" time="349.395"><failure message="AssertionError">env = (&lt;sim2act.db.Store object at 0x7ff2f6a50d70&gt;, Settings(database_url='sqlite:////workspace/scratch/graph-original-edge-...5c5760d08e46f0b5282c25220fd91b', 'user_f6c551bfb56040fda1c36d92a6d41522', 'proj_8b5973bf962142ac9170a0a6f8d6296c', ...)
+tmp_path = PosixPath('/workspace/scratch/graph-original-edge-original30-3c0f1ee4-20261101/test_original_thirty_large_goa0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7ff2f6a50bc0&gt;
+
+    def test_original_thirty_large_goal_or_safe_budget_refusal(env,tmp_path,monkeypatch):
+        source=os.environ['SIM2ACT_DIAGNOSTIC_SOURCE']
+        from sim2act import natural_spec_runtime as runtime
+        # Bind every tracked application resource, not merely the unchanged runtime
+        # module. Native callee/build qualification remains the original product's.
+        archive=subprocess.check_output(['git','archive',source,'src/sim2act'],
+            cwd=os.environ.get('SIM2ACT_SOURCE_REPO','/workspace/Sim2Act'))
+        base=Path(runtime.__file__).resolve().parent
+        checked={}
+        with tarfile.open(fileobj=io.BytesIO(archive)) as tree:
+            for member in tree:
+                if member.isdir():continue
+                assert member.isfile() and member.name.startswith('src/sim2act/')
+                relative=member.name.removeprefix('src/sim2act/')
+                expected=tree.extractfile(member).read()
+                assert (base/relative).read_bytes()==expected, relative
+                checked[relative]=hashlib.sha256(expected).hexdigest()
+        assert checked
+        opened=snapshots(monkeypatch,env[1].database_url)
+        original_prepare=controller_test.prepare_pb
+        changes=[]
+        # Restore the original helper reference before any application code runs.
+        # Only choose a freshly approved old TrialCaps payload, never mutate approval.
+        def ordinary_prepare(env,out):
+            controller_test.prepare_pb=original_prepare
+            data=controller_test.apps.setup(env)
+            account='synthetic-pb-production-shape'
+            subject=controller_test.admission.canonical_quota_subject(account)
+            data=(data[0],replace(data[1],quota_subject=subject),*data[2:])
+            data[0].initialize(quota_subject=subject)
+            original,consent=controller_test.frozen(data,ttl=1800)
+            contract=gate.PBTrialContract(**(original.model_dump()|dict(quota_subject=subject,
+                caps=gate.TrialCaps().model_dump())),path='P-B',
+                extraction_request_key='original-pb-production-extraction',
+                extraction_recipe=controller_test.apps.recipe('ordered'))
+            consent=consent.model_copy(update=dict(expected_contract_fingerprint=fingerprint(contract.model_dump())))
+            gate.approve(data[0],data[3],contract,consent)
+            changes.append({'caps':contract.caps.model_dump(),'caps_exact_type':type(contract.caps) is gate.TrialCaps,'approval_key':consent.request_key,
+                'contract_fingerprint':fingerprint(contract.model_dump()),'original_approve_used':True})
+            return data,SimpleNamespace(contract=contract,approval_key=consent.request_key,account_id=account)
+        monkeypatch.setattr(controller_test,'prepare_pb',ordinary_prepare)
+        caught=None;frame=None
+        try:original_flow(env,tmp_path,monkeypatch)
+        except AssertionError as error:
+            caught=error;tb=error.__traceback__
+            while tb:
+                if tb.tb_frame.f_code is original_flow.__code__:frame=tb.tb_frame
+                tb=tb.tb_next
+        finally:
+            # Always retain actual intervals, including an unclassified failure
+            # in this diagnostic's own assertions. No business decision uses it.
+            (tmp_path/'ordinary-thirty-observed.json').write_text(json.dumps(dict(
+                classification='RAW_REAL_CLOCK_ORDINARY30_OBSERVATIONS_NOT_GOAL_VERDICT',
+                source_commit=source, ordinary_caps=changes,
+                records=[r for store in opened for r in store._local_model_snapshot_records]),indent=2)+'\n')
+        assert len(changes)==1 and changes[0]['caps_exact_type'] is True
+        assert changes[0]['caps']['lease_seconds']==30
+        assert not {'settlement_seconds','settlement_protocol'} &amp; changes[0]['caps'].keys()
+        if caught is None:
+            records=list(opened[0]._local_model_snapshot_records)
+            assert len(records)==2 and all(r['outcome']=='COMMITTED' for r in records)
+            assert len((tmp_path/'mock-exchanges.jsonl').read_text().splitlines())==7
+            proof=json.loads((tmp_path/'pb-controller-proof.json').read_text())
+            assert proof['result']['status']=='SUCCEEDED'
+            (tmp_path/'ordinary-thirty-result.json').write_text(json.dumps(dict(
+                status='GOAL_COMPLETED_UNDER_ORIGINAL_CONTROLLER_ASSERTIONS',source_commit=source,
+                source_files=checked,ordinary_caps=changes,
+                records=records,fixed_mock_requests=7,real_model_requests=0),indent=2)+'\n')
+            return
+        assert frame is not None
+        text=Path(original_flow.__code__.co_filename).read_text()
+        wanted=next(n.lineno for n in ast.walk(ast.parse(text)) if isinstance(n,ast.Assert)
+            and ast.get_source_segment(text,n.test)=='result.status_code == 200 and result.json()["status"] == "SUCCEEDED"')
+        last=traceback.extract_tb(caught.__traceback__)[-1]
+        assert Path(last.filename)==Path(original_flow.__code__.co_filename) and last.lineno==wanted,(last,wanted)
+        binding=frame.f_locals['binding'];cold=frame.f_locals['cold_id']
+&gt;       assert type(binding.contract.caps) is gate.TrialCaps
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError
+
+scripts/diagnose_ordinary_thirty.py:138: AssertionError</failure></testcase></testsuite></testsuites>
