@@ -17,6 +17,15 @@ from sim2act import natural_live_admission as gate
 from sim2act.db import fingerprint
 
 
+def require_ordinary_caps(contract):
+    """Exact declared old schema for ordinary models and immutable PB Views."""
+    assert gate._contract_kind(contract.caps) is gate.TrialCaps
+    raw=contract.caps.model_dump()
+    assert raw['lease_seconds']==30
+    assert not {'settlement_seconds','settlement_protocol'} & raw.keys()
+    return raw
+
+
 def validate_negative_state(run, attempt, operation, internal, typed, event_rows, failure_observations):
     """Read-only budget-negative assertions, also usable on a closed saved case.
 
@@ -135,7 +144,7 @@ def test_original_thirty_large_goal_or_safe_budget_refusal(env,tmp_path,monkeypa
     last=traceback.extract_tb(caught.__traceback__)[-1]
     assert Path(last.filename)==Path(original_flow.__code__.co_filename) and last.lineno==wanted,(last,wanted)
     binding=frame.f_locals['binding'];cold=frame.f_locals['cold_id']
-    assert type(binding.contract.caps) is gate.TrialCaps
+    require_ordinary_caps(binding.contract)
     assert len(changes)==1 and changes[0]['caps']['lease_seconds']==30
     assert 'settlement_seconds' not in changes[0]['caps']
     assert len(opened)==1

@@ -68,3 +68,13 @@ def test_second_failure_selection_keeps_prior_history_separate():
     selected=diagnostic.selected_negative_events(rows,'current')
     assert rows==original
     assert selected==rows[2:]  # Source records/history are not rewritten.
+
+
+@pytest.mark.parametrize('owned',[False,True])
+def test_old_caps_schema_is_exact_across_immutable_handoff(owned):
+    from test_owned_pb_contract import contract
+    from sim2act import _owned_pb_contract as owner
+    ordinary=contract(plain=True);extended=contract(plain=False)
+    if owned:ordinary,extended=owner.issue_data(ordinary),owner.issue_data(extended)
+    assert diagnostic.require_ordinary_caps(ordinary)['lease_seconds']==30
+    with pytest.raises(AssertionError):diagnostic.require_ordinary_caps(extended)
