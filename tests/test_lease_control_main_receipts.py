@@ -387,6 +387,28 @@ def test_foreign_store_runtime_rejected_before_reading_other_workspace(env):
     assert selected.authority.check(bound)["sequence"] == 0
 
 
+def test_runtime_expected_state_is_not_a_gc_visible_mutable_registry(env):
+    import gc
+    import weakref
+    selected, _, bound = claim(env)
+    gc.collect()
+    reachable = []
+    for candidate in gc.get_objects():
+        if type(candidate) is dict:
+            value = candidate.get(id(selected))
+            if (type(value) is tuple and len(value) == 4 and type(value[0]) is weakref.ReferenceType
+                    and value[0]() is selected):
+                reachable.append(candidate)
+    assert reachable == []
+    # Manually invoking a discoverable weak callback must not revoke a living
+    # issued record (or free a record underneath a native invocation).
+    for reference in weakref.getweakrefs(selected):
+        callback = reference.__callback__
+        if callback is not None:
+            callback(reference)
+    assert selected.committed_run(bound["id"]) == bound
+
+
 def test_new_process_ack_recovers_real_main_receipt_without_issuing_old_owner(env, tmp_path):
     selected, original, bound = claim(env)
     session = selected.session(bound)

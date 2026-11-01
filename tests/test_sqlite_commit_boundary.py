@@ -278,3 +278,332 @@ def test_rollback_listener_error_preserves_original_and_discards_connection(tmp_
         assert caught.value is original and invalidated
         with store.tx() as c:assert c.exec_driver_sql('SELECT value FROM probe').scalar()=='before'
     finally:store.engine.dispose()
+
+
+def test_driver_commit_then_error_is_unknown_not_confirmed_rollback(tmp_path,monkeypatch):
+    import sqlite3
+    from sim2act import db
+    original_engine = db.create_engine
+    class Driver(sqlite3.Connection):
+        fail = False
+        commits = 0
+        def commit(self):
+            result = super().commit()
+            if type(self).fail:
+                type(self).commits += 1
+                raise RuntimeError("synthetic error after actual driver commit")
+            return result
+    def make_engine(*args, **kwargs):
+        kwargs["connect_args"] = {**kwargs.get("connect_args", {}), "factory": Driver}
+        return original_engine(*args, **kwargs)
+    monkeypatch.setattr(db, "create_engine", make_engine)
+    store = opened(tmp_path)
+    try:
+        with pytest.raises(RuntimeError, match="after actual driver commit"):
+            with snapshots.transaction(store, _commit_check=lambda: None) as c:
+                snapshots.promote(c)
+                c.exec_driver_sql("UPDATE probe SET value='actually-committed'")
+                Driver.fail = True
+        Driver.fail = False
+        assert Driver.commits == 1
+        assert store._local_model_snapshot_records[-1]["outcome"] == "UNKNOWN"
+        # Actual fresh physical connection, not a remembered callback result.
+        with sqlite3.connect(str(store.engine.url.database)) as fresh:
+            assert fresh.execute("SELECT value FROM probe").fetchone() == ("actually-committed",)
+    finally:
+        Driver.fail = False
+        store.engine.dispose()
+
+
+def test_commit_return_is_recorded_before_outer_bookkeeping_error(tmp_path, monkeypatch):
+    store = opened(tmp_path)
+    captured = []
+    original = store._sqlite_commit_boundary
+    def observed(c, check, *args):
+        scope = original(c, check, *args)
+        captured.append(scope)
+        return scope
+    monkeypatch.setattr(store, "_sqlite_commit_boundary", observed)
+    try:
+        with pytest.raises(RuntimeError, match="after raw delegate returned"):
+            with snapshots.transaction(store, _commit_check=lambda: None) as c:
+                snapshots.promote(c)
+                c.exec_driver_sql("UPDATE probe SET value='known-committed'")
+                original_commit = c.commit
+                def after_commit():
+                    original_commit()
+                    assert captured[0].committed and captured[0].commit_invoked
+                    raise RuntimeError("synthetic error after raw delegate returned")
+                monkeypatch.setattr(c, "commit", after_commit)
+        assert store._local_model_snapshot_records[-1]["outcome"] == "COMMITTED"
+        with store.engine.connect() as fresh:
+            assert fresh.exec_driver_sql("SELECT value FROM probe").scalar_one() == "known-committed"
+    finally:
+        store.engine.dispose()
+
+
+def test_callback_cannot_label_rejected_commit_as_success(tmp_path, monkeypatch):
+    store = opened(tmp_path)
+    captured = []
+    original = store._sqlite_commit_boundary
+    def observed(c, check, *args):
+        scope = original(c, check, *args)
+        captured.append(scope)
+        return scope
+    monkeypatch.setattr(store, "_sqlite_commit_boundary", observed)
+    def forged():
+        with pytest.raises(AttributeError):
+            captured[0].committed = True
+        with pytest.raises(AttributeError):
+            captured[0].commit_invoked = True
+        raise DomainError("VERSION_CONFLICT", "original validation rejection")
+    try:
+        with pytest.raises(DomainError, match="original validation rejection"):
+            with snapshots.transaction(store, _commit_check=forged) as c:
+                snapshots.promote(c)
+                c.exec_driver_sql("UPDATE probe SET value='must-not-commit'")
+        assert not captured[0].committed and not captured[0].commit_invoked
+        assert store._local_model_snapshot_records[-1]["outcome"] == "ROLLED_BACK"
+        with store.engine.connect() as fresh:
+            assert fresh.exec_driver_sql("SELECT value FROM probe").scalar_one() == "before"
+    finally:
+        store.engine.dispose()
+
+
+def test_reflection_cannot_forge_native_outcome_or_invoke_original_delegate(tmp_path, monkeypatch):
+    import gc
+    import weakref
+    from sim2act import _cold_source_owned_impl as native
+    store = opened(tmp_path)
+    captured = []
+    original = store._sqlite_commit_boundary
+    def observed(c, check, *args):
+        scope = original(c, check, *args)
+        captured.append(scope)
+        return scope
+    monkeypatch.setattr(store, "_sqlite_commit_boundary", observed)
+    def forged():
+        scope = captured[0]
+        assert type(scope).committed.fget.__closure__ is None
+        for candidate in gc.get_objects():
+            if type(candidate) is dict:
+                assert candidate.get(scope) != [False, False]
+        for reference in weakref.getweakrefs(scope):
+            callback = reference.__callback__
+            if callback is not None:
+                callback(reference)
+        with pytest.raises(ValueError, match="Commit outcome provenance changed"):
+            native.invoke_commit_outcome(scope, scope.raw)
+        with pytest.raises(ValueError, match="Commit outcome provenance changed"):
+            native.init_commit_outcome(scope, lambda: None, lambda: None)
+        assert native.read_commit_outcome(scope) == (False, False)
+        vars(scope)["committed"] = True
+        assert not scope.committed
+        raise DomainError("VERSION_CONFLICT", "original rejection after reflection")
+    try:
+        with pytest.raises(DomainError, match="original rejection after reflection"):
+            with snapshots.transaction(store, _commit_check=forged) as c:
+                snapshots.promote(c)
+                c.exec_driver_sql("UPDATE probe SET value='must-not-commit'")
+        assert store._local_model_snapshot_records[-1]["outcome"] == "ROLLED_BACK"
+        with store.engine.connect() as fresh:
+            assert fresh.exec_driver_sql("SELECT value FROM probe").scalar_one() == "before"
+    finally:
+        store.engine.dispose()
+
+
+def test_borrowed_constructor_rejected_before_foreign_instance_dispatch(tmp_path):
+    store = opened(tmp_path)
+    called = []
+    class Fake:
+        __init__ = store._sqlite_commit_boundary.__init__
+        def __setattr__(self, key, value):
+            called.append(key)
+            return object.__setattr__(self, key, value)
+    try:
+        with store.engine.connect() as c:
+            c.exec_driver_sql("BEGIN IMMEDIATE")
+            with pytest.raises(ValueError, match="Commit outcome provenance changed"):
+                Fake(c, lambda: None)
+            c.rollback()
+        assert called == []
+    finally:
+        store.engine.dispose()
+
+
+def test_final_clock_cannot_swap_physical_driver_and_commit_another_connection(tmp_path):
+    import sqlite3
+    store = opened(tmp_path)
+    other = sqlite3.connect(str(tmp_path / "other-driver.db"))
+    other.execute("CREATE TABLE probe(value TEXT)")
+    other.commit()
+    other.execute("INSERT INTO probe VALUES('not-committed')")
+    selected = []
+    original_drivers, discarded = [], []
+    event.listen(store.engine, "invalidate", lambda raw, record, error: discarded.append(raw))
+    def swap():
+        selected[0].connection.dbapi_connection = other
+    try:
+        with pytest.raises(ValueError, match="driver/transaction slots"):
+            with snapshots.transaction(store, _commit_clock_check=swap) as c:
+                selected.append(c)
+                original_drivers.append(c.connection.driver_connection)
+                snapshots.promote(c)
+                c.exec_driver_sql("UPDATE probe SET value='must-not-commit'")
+        assert other.in_transaction
+        with sqlite3.connect(str(tmp_path / "other-driver.db")) as fresh:
+            assert fresh.execute("SELECT count(*) FROM probe").fetchone() == (0,)
+        with sqlite3.connect(str(store.engine.url.database)) as fresh:
+            assert fresh.execute("SELECT value FROM probe").fetchone() == ("before",)
+        # Connection.close resets the public invalidated property. The real
+        # pool event proves the original physical handle was discarded.
+        assert discarded == original_drivers
+    finally:
+        other.rollback();other.close();store.engine.dispose()
+
+
+def test_check_cannot_replace_tail_code_before_tail_dispatch(tmp_path):
+    store = opened(tmp_path)
+    function = store._sqlite_commit_boundary.last_event
+    original = function.__code__
+    def foreign_code(engine, fail):
+        def foreign(c):
+            if engine is fail:
+                pass
+            raise AssertionError("Foreign tail was dispatched")
+        return foreign.__code__
+    changed = foreign_code(None, None)
+    assert len(changed.co_freevars) == len(original.co_freevars)
+    def mutate():
+        function.__code__ = changed
+    try:
+        with pytest.raises(ValueError, match="Commit outcome provenance changed"):
+            with snapshots.transaction(store, _commit_check=mutate) as c:
+                snapshots.promote(c)
+                c.exec_driver_sql("UPDATE probe SET value='must-not-commit'")
+    finally:
+        function.__code__ = original
+    try:
+        with store.tx() as fresh:
+            assert fresh.exec_driver_sql("SELECT value FROM probe").scalar_one() == "before"
+    finally:
+        store.engine.dispose()
+
+
+@pytest.mark.parametrize("role", ["raw", "c"])
+def test_rejected_fields_never_dispatch_foreign_cleanup(tmp_path, monkeypatch, role):
+    store = opened(tmp_path)
+    captured, called = [], []
+    original = store._sqlite_commit_boundary
+    def observed(c, check, *args):
+        scope = original(c, check, *args)
+        captured.append(scope)
+        return scope
+    monkeypatch.setattr(store, "_sqlite_commit_boundary", observed)
+    class Foreign:
+        @property
+        def in_transaction(self):
+            called.append("in_transaction")
+            return True
+        def rollback(self):called.append("rollback")
+        def invalidate(self, *args):called.append("invalidate")
+    def mutate():setattr(captured[0], role, Foreign())
+    try:
+        with pytest.raises(ValueError, match="Commit outcome provenance changed"):
+            with snapshots.transaction(store, _commit_check=mutate) as c:
+                snapshots.promote(c)
+                c.exec_driver_sql("UPDATE probe SET value='must-not-commit'")
+        assert called == []
+        assert store._local_model_snapshot_records[-1]["outcome"] == "ROLLED_BACK"
+        with store.engine.connect() as fresh:
+            assert fresh.exec_driver_sql("SELECT value FROM probe").scalar_one() == "before"
+    finally:store.engine.dispose()
+
+
+def test_rejected_class_property_cannot_forge_snapshot_commit_fact(tmp_path):
+    store = opened(tmp_path)
+    cls = store._sqlite_commit_boundary
+    original = cls.committed
+    called = []
+    def foreign(self):
+        called.append(True)
+        return True
+    def mutate():cls.committed = property(foreign)
+    try:
+        with pytest.raises(ValueError, match="Commit outcome provenance changed"):
+            with snapshots.transaction(store, _commit_check=mutate) as c:
+                snapshots.promote(c)
+                c.exec_driver_sql("UPDATE probe SET value='must-not-commit'")
+        assert called == []
+        assert store._local_model_snapshot_records[-1]["outcome"] == "ROLLED_BACK"
+    finally:cls.committed = original
+    try:
+        with store.engine.connect() as fresh:
+            assert fresh.exec_driver_sql("SELECT value FROM probe").scalar_one() == "before"
+    finally:store.engine.dispose()
+
+
+def test_delegate_start_proxy_swap_cannot_redirect_actual_commit(tmp_path):
+    import sqlite3
+    import sys
+    from sqlalchemy.engine.default import DefaultDialect
+    store = opened(tmp_path)
+    other = sqlite3.connect(str(tmp_path / "late-other.db"))
+    other.execute("CREATE TABLE probe(value TEXT)");other.commit()
+    other.execute("INSERT INTO probe VALUES('not-committed')")
+    held, seen = [], []
+    code = DefaultDialect.do_commit.__code__
+    def injected(active, offset):
+        if active is code and held:
+            proxy, raw = held[0]
+            # The documented dialect parameter now binds the actual DBAPI
+            # object, preserving one original hook call and its physical target.
+            seen.append(sys._getframe(1).f_locals["dbapi_connection"] is raw)
+            proxy.dbapi_connection = other
+    slot = next(i for i in (3, 5, 4) if sys.monitoring.get_tool(i) is None)
+    sys.monitoring.use_tool_id(slot, "late physical driver swap")
+    try:
+        sys.monitoring.register_callback(slot, sys.monitoring.events.PY_START, injected)
+        sys.monitoring.set_local_events(slot, code, sys.monitoring.events.PY_START)
+        with pytest.raises(ValueError, match="driver/transaction slots"):
+            with snapshots.transaction(store, _commit_check=lambda: None) as c:
+                snapshots.promote(c)
+                c.exec_driver_sql("UPDATE probe SET value='known-main-commit'")
+                held.append((c.connection, c.connection.driver_connection))
+        assert seen == [True]
+        assert store._local_model_snapshot_records[-1]["outcome"] == "COMMITTED"
+        assert other.in_transaction
+        with sqlite3.connect(str(tmp_path / "late-other.db")) as fresh:
+            assert fresh.execute("SELECT count(*) FROM probe").fetchone() == (0,)
+        with sqlite3.connect(str(store.engine.url.database)) as fresh:
+            assert fresh.execute("SELECT value FROM probe").fetchone() == ("known-main-commit",)
+    finally:
+        sys.monitoring.set_local_events(slot, code, 0)
+        sys.monitoring.register_callback(slot, sys.monitoring.events.PY_START, None)
+        sys.monitoring.free_tool_id(slot)
+        other.rollback();other.close();store.engine.dispose()
+
+
+def test_check_cannot_dispatch_foreign_owner_class_properties_or_cleanup(tmp_path):
+    from sqlalchemy.engine import Connection
+    store = opened(tmp_path)
+    selected, called = [], []
+    class Foreign(Connection):
+        __slots__ = ()
+        @property
+        def closed(self):called.append("closed");return False
+        @property
+        def invalidated(self):called.append("invalidated");return False
+        def invalidate(self, *args):called.append("invalidate")
+    def mutate():selected[0].__class__ = Foreign
+    try:
+        with pytest.raises(ValueError, match="physical types"):
+            with snapshots.transaction(store, _commit_check=mutate) as c:
+                selected.append(c)
+                snapshots.promote(c)
+                c.exec_driver_sql("UPDATE probe SET value='must-not-commit'")
+        assert called == []
+        assert store._local_model_snapshot_records[-1]["outcome"] == "ROLLED_BACK"
+        with store.engine.connect() as fresh:
+            assert fresh.exec_driver_sql("SELECT value FROM probe").scalar_one() == "before"
+    finally:store.engine.dispose()

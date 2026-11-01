@@ -145,7 +145,9 @@ def transaction(store, *, settlement_interval=None, _commit_check=None, _commit_
                         boundary.commit()
                 committed = True
             except BaseException as error:
-                committed = boundary is not None and boundary.committed
+                read_outcome = "sim2act:commit-outcome-read.v1"
+                committed, invoked = ((False, False) if boundary is None else
+                    (False, True) if read_outcome is None else read_outcome(boundary))
                 if settlement_interval is None and _commit_check is None and _commit_clock_check is None:
                     c.rollback()
                 else:
@@ -153,7 +155,7 @@ def transaction(store, *, settlement_interval=None, _commit_check=None, _commit_
                     except BaseException as cleanup:
                         try:c.invalidate(cleanup)
                         except BaseException:pass
-                rolled_back = not committed
+                rolled_back = not committed and not invoked
                 if (isinstance(error, OperationalError)
                         and getattr(error.orig, 'sqlite_errorcode', None) in
                         (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_BUSY_SNAPSHOT, sqlite3.SQLITE_LOCKED)):
@@ -189,3 +191,16 @@ def transaction(store, *, settlement_interval=None, _commit_check=None, _commit_
                             seconds=end-scope.started, g0_read_seconds=(scope.promoted or end)-scope.started,
                             writer_seconds=None if scope.first_write is None else end-scope.first_write,
                             outcome='COMMITTED' if committed else 'ROLLED_BACK' if rolled_back else 'UNKNOWN'))
+
+
+def _seal_outcome_reader():
+    from types import CodeType
+    from ._sqlite_commit_boundary import _outcome_native
+    read = None if _outcome_native is None else _outcome_native.read_commit_outcome
+    def seal(code):
+        return code.replace(co_consts=tuple(read if type(value) is str and value == "sim2act:commit-outcome-read.v1"
+            else seal(value) if type(value) is CodeType else value for value in code.co_consts))
+    transaction.__wrapped__.__code__ = seal(transaction.__wrapped__.__code__)
+
+
+_seal_outcome_reader()

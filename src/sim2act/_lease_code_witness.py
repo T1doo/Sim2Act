@@ -1,5 +1,6 @@
 """Import-time code metadata only; no imports of application lifecycle modules."""
 from types import FunctionType
+from builtins import type, id, set, tuple, vars, classmethod, staticmethod, property
 
 
 def function_state(function, active=None):

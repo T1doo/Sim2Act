@@ -466,10 +466,23 @@ static PyObject*lease_actor_entry(PyObject*self,PyObject*unused){
 /* Runtime provenance only. These records contain no lease/permission/PASS and
  * are inaccessible to mutable Python module dictionaries. */
 static PyObject *lease_runtime_type,*lease_runtime_issue_code,*lease_runtime_issue_globals,*lease_runtime_records;
+typedef struct {
+ PyObject *weak,*items,*store,*store_items;
+} LeaseRuntimeRecord;
+#define LEASE_RUNTIME_RECORD "sim2act.lease-runtime-record.v1"
+static void lease_runtime_record_free(PyObject*capsule){
+ LeaseRuntimeRecord*r=PyCapsule_GetPointer(capsule,LEASE_RUNTIME_RECORD);
+ if(!r){PyErr_Clear();return;}
+ Py_XDECREF(r->weak);Py_XDECREF(r->items);Py_XDECREF(r->store);Py_XDECREF(r->store_items);PyMem_Free(r);
+}
+static LeaseRuntimeRecord*lease_runtime_record(PyObject*value){
+ return value&&PyCapsule_IsValid(value,LEASE_RUNTIME_RECORD)?PyCapsule_GetPointer(value,LEASE_RUNTIME_RECORD):NULL;
+}
 static PyObject*lease_runtime_error(void){PyErr_SetString(PyExc_ValueError,"Lease runtime issuance or fields changed");return NULL;}
 static PyObject*lease_runtime_forget(PyObject*key,PyObject*weak){
  if(lease_runtime_records){PyObject*e=PyDict_GetItemWithError(lease_runtime_records,key);
-  if(e&&PyTuple_CheckExact(e)&&PyTuple_GET_ITEM(e,0)==weak){if(PyDict_DelItem(lease_runtime_records,key)<0)return NULL;}
+  LeaseRuntimeRecord*r=lease_runtime_record(e);
+  if(r&&r->weak==weak&&PyWeakref_GetObject(weak)==Py_None){if(PyDict_DelItem(lease_runtime_records,key)<0)return NULL;}
   else if(PyErr_Occurred())return NULL;}
  Py_RETURN_NONE;
 }
@@ -543,7 +556,11 @@ static PyObject*install_lease_runtime(PyObject*self,PyObject*runtime){
  callback=PyCFunction_NewEx(&lease_runtime_forget_def,key,NULL);if(!callback)goto done;
  weak=PyWeakref_NewRef(runtime,callback);if(!weak)goto done;
  items=lease_dict_items(fields);if(!items)goto done;
- entry=PyTuple_Pack(4,weak,items,store,store_items);if(!entry)goto done;
+ LeaseRuntimeRecord*record=PyMem_Calloc(1,sizeof(*record));if(!record){PyErr_NoMemory();goto done;}
+ record->weak=Py_NewRef(weak);record->items=Py_NewRef(items);
+ record->store=Py_NewRef(store);record->store_items=Py_NewRef(store_items);
+ entry=PyCapsule_New(record,LEASE_RUNTIME_RECORD,lease_runtime_record_free);
+ if(!entry){Py_DECREF(record->weak);Py_DECREF(record->items);Py_DECREF(record->store);Py_DECREF(record->store_items);PyMem_Free(record);goto done;}
  if(PyDict_SetItem(lease_runtime_records,key,entry)<0)goto done;valid=1;
 done:
  Py_XDECREF(fields);Py_XDECREF(locals);Py_XDECREF(key);Py_XDECREF(callback);Py_XDECREF(weak);Py_XDECREF(items);Py_XDECREF(store_fields);Py_XDECREF(store_items);Py_XDECREF(entry);
@@ -554,18 +571,315 @@ static PyObject*lease_runtime_current(PyObject*self,PyObject*runtime){
  if(!lease_runtime_type||!lease_runtime_records||Py_TYPE(runtime)!=(PyTypeObject*)lease_runtime_type)return lease_runtime_error();
  int gc=PyGC_Disable();PyObject*key=PyLong_FromVoidPtr(runtime),*fields=NULL,*store_fields=NULL,*result=NULL;
  if(!key)goto done;PyObject*entry=PyDict_GetItemWithError(lease_runtime_records,key);
- if(!entry||!PyTuple_CheckExact(entry)||PyTuple_GET_SIZE(entry)!=4||PyWeakref_GetObject(PyTuple_GET_ITEM(entry,0))!=runtime)goto done;
- fields=PyObject_GenericGetDict(runtime,NULL);if(!fields||!code_items(fields,PyTuple_GET_ITEM(entry,1)))goto done;
- PyObject*store=PyTuple_GET_ITEM(entry,2);
+ LeaseRuntimeRecord*record=lease_runtime_record(entry);
+ if(!record||PyWeakref_GetObject(record->weak)!=runtime)goto done;
+ fields=PyObject_GenericGetDict(runtime,NULL);if(!fields||!code_items(fields,record->items))goto done;
+ PyObject*store=record->store;
  store_fields=PyObject_GenericGetDict(store,NULL);if(!store_fields||!code_namespace(store_fields))goto done;
  if(!lease_store_fields_current(store,store_fields))goto done;
- PyObject*expected=PyTuple_GET_ITEM(entry,3);
+ PyObject*expected=record->store_items;
  for(Py_ssize_t i=0;i<PyTuple_GET_SIZE(expected);i++){PyObject*pair=PyTuple_GET_ITEM(expected,i);
   if(PyDict_GetItemWithError(store_fields,PyTuple_GET_ITEM(pair,0))!=PyTuple_GET_ITEM(pair,1))goto done;}
- result=Py_NewRef(PyTuple_GET_ITEM(entry,1));
+ result=Py_NewRef(record->items);
 done:
  Py_XDECREF(key);Py_XDECREF(fields);Py_XDECREF(store_fields);if(gc)PyGC_Enable();
  if(!result){if(PyErr_Occurred())return NULL;return lease_runtime_error();}return result;
+}
+/* Commit facts never live in a Python closure/container reachable by GC.
+ * Only the fixed guarded frame can invoke its captured original delegate. */
+typedef struct {
+ PyObject *weak,*connection,*raw,*transaction,*guarded,*original,*factory;
+ int invoked,committed,in_delegate;
+} CommitOutcomeRecord;
+#define COMMIT_OUTCOME_RECORD "sim2act.commit-outcome.v1"
+static PyObject *commit_outcome_records,*commit_outcome_factories,*commit_outcome_globals,*commit_outcome_install_code,*commit_outcome_body_code,*commit_outcome_ctor_code,*commit_outcome_exit_code,*commit_outcome_guarded_code,*commit_outcome_delegate,*commit_outcome_dialect;
+static PyObject *commit_owner_type,*commit_owner_descriptor;
+static PyObject*commit_outcome_error(void){PyErr_SetString(PyExc_ValueError,"Commit outcome provenance changed");return NULL;}
+static CommitOutcomeRecord*commit_outcome_record(PyObject*value){
+ return value&&PyCapsule_IsValid(value,COMMIT_OUTCOME_RECORD)?PyCapsule_GetPointer(value,COMMIT_OUTCOME_RECORD):NULL;
+}
+static void commit_outcome_free(PyObject*capsule){
+ CommitOutcomeRecord*r=commit_outcome_record(capsule);if(!r)return;
+ Py_XDECREF(r->weak);Py_XDECREF(r->connection);Py_XDECREF(r->raw);Py_XDECREF(r->transaction);
+ Py_XDECREF(r->guarded);Py_XDECREF(r->original);Py_XDECREF(r->factory);PyMem_Free(r);
+}
+static PyObject*commit_outcome_forget(PyObject*key,PyObject*weak){
+ if(commit_outcome_records){CommitOutcomeRecord*r=commit_outcome_record(PyDict_GetItemWithError(commit_outcome_records,key));
+  if(r&&r->weak==weak&&PyWeakref_GetObject(weak)==Py_None){if(PyDict_DelItem(commit_outcome_records,key)<0)return NULL;}
+  else if(PyErr_Occurred())return NULL;}
+ Py_RETURN_NONE;
+}
+static PyMethodDef commit_outcome_forget_def={"_commit_outcome_forget",commit_outcome_forget,METH_O,NULL};
+static PyObject*commit_child_code(PyObject*code,const char*name){
+ if(!PyCode_Check(code))return NULL;PyObject*values=((PyCodeObject*)code)->co_consts;
+ for(Py_ssize_t i=0;i<PyTuple_GET_SIZE(values);i++){PyObject*v=PyTuple_GET_ITEM(values,i);
+  if(PyCode_Check(v)&&PyUnicode_CompareWithASCIIString(((PyCodeObject*)v)->co_name,name)==0)return v;}
+ return NULL;
+}
+static PyObject*commit_frame_locals(PyObject*code){
+ PyFrameObject*frame=PyThreadState_GetFrame(PyThreadState_Get());if(!frame)return NULL;
+ PyCodeObject*actual=PyFrame_GetCode(frame);PyObject*space=PyFrame_GetGlobals(frame),*locals=NULL;
+ if((PyObject*)actual==code&&space==commit_outcome_globals)locals=PyFrame_GetLocals(frame);
+ Py_DECREF(actual);Py_DECREF(space);Py_DECREF(frame);
+ if(locals&&!code_namespace(locals)){Py_DECREF(locals);locals=NULL;}
+ return locals;
+}
+static int commit_outcome_code_current(void){
+ PyObject*ok=verify_code_range(12,13);if(!ok)return 0;int same=ok==Py_True;Py_DECREF(ok);return same;
+}
+static PyObject*register_commit_outcomes(PyObject*self,PyObject*args){
+ (void)self;PyObject*install,*delegate,*dialect;
+ if(!PyArg_ParseTuple(args,"OOO",&install,&delegate,&dialect))return NULL;
+ if(!commit_outcome_code_current()){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
+ if(commit_outcome_records||!PyFunction_Check(install)||!PyFunction_Check(delegate)||!PyType_Check(dialect))return commit_outcome_error();
+ PyObject*space=PyFunction_GetGlobals(install),*body=commit_child_code(PyFunction_GetCode(install),"Boundary");
+ PyObject*ctor=body?commit_child_code(body,"__init__"):NULL,*guarded=commit_child_code(PyFunction_GetCode(install),"guarded");
+ if(!ctor||!guarded||!commit_child_code(body,"__exit__")||!code_namespace(space)||PyDict_GetItemString(space,"install")!=install
+   ||PyDict_GetItemString(space,"_sqlite_do_commit")!=delegate||PyDict_GetItemString(space,"_sqlite_dialect")!=dialect)return commit_outcome_error();
+ PyObject*owner_type=PyDict_GetItemString(space,"_sa_connection"),*owner_descriptor=PyDict_GetItemString(space,"_object_class");
+ if(!owner_type||!PyType_Check(owner_type)||!owner_descriptor||Py_TYPE(owner_descriptor)!=&PyGetSetDescr_Type
+   ||PyDescr_TYPE(owner_descriptor)!=&PyBaseObject_Type)return commit_outcome_error();
+ PyObject*records=PyDict_New(),*factories=PyDict_New();if(!records||!factories){Py_XDECREF(records);Py_XDECREF(factories);return NULL;}
+ commit_outcome_globals=Py_NewRef(space);commit_outcome_ctor_code=Py_NewRef(ctor);commit_outcome_guarded_code=Py_NewRef(guarded);
+ commit_outcome_install_code=Py_NewRef(PyFunction_GetCode(install));commit_outcome_body_code=Py_NewRef(body);
+ commit_outcome_exit_code=Py_NewRef(commit_child_code(body,"__exit__"));
+ commit_outcome_delegate=Py_NewRef(delegate);commit_outcome_dialect=Py_NewRef(dialect);
+ commit_owner_type=Py_NewRef(owner_type);commit_owner_descriptor=Py_NewRef(owner_descriptor);
+ commit_outcome_records=records;commit_outcome_factories=factories;Py_RETURN_NONE;
+}
+/* Per-engine final class/function/closure witness, captured before install
+ * returns. The engine's explicit dispose event retires the registration. */
+static void commit_factory_free(PyObject*capsule){
+ PyObject*record=PyCapsule_GetPointer(capsule,"sim2act.commit-factory.v1");
+ if(record)Py_DECREF(record);else PyErr_Clear();
+}
+static PyObject*commit_factory_record(PyObject*capsule){
+ return capsule&&PyCapsule_IsValid(capsule,"sim2act.commit-factory.v1")?PyCapsule_GetPointer(capsule,"sim2act.commit-factory.v1"):NULL;
+}
+static int commit_factory_current(PyObject*capsule){
+ PyObject*r=commit_factory_record(capsule);
+ return r&&PyTuple_CheckExact(r)&&PyTuple_GET_SIZE(r)==5&&code_classes(PyTuple_GET_ITEM(r,0))&&code_state(PyTuple_GET_ITEM(r,1),0);
+}
+static PyObject*register_commit_factory(PyObject*self,PyObject*args){
+ (void)self;PyObject*cls,*class_state,*guarded,*guarded_state,*engine,*entries,*locals=NULL,*key=NULL,*record=NULL,*capsule=NULL;
+ if(!PyArg_ParseTuple(args,"OOOOOO",&cls,&class_state,&guarded,&guarded_state,&engine,&entries))return NULL;
+ if(!commit_outcome_code_current()){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
+ int gc=PyGC_Disable();locals=commit_frame_locals(commit_outcome_install_code);int valid=0;
+ if(!locals||!PyType_Check(cls)||Py_TYPE(cls)!=&PyType_Type||((PyTypeObject*)cls)->tp_base!=&PyBaseObject_Type
+   ||PyDict_GetItemString(locals,"Boundary")!=cls||PyDict_GetItemString(locals,"guarded")!=guarded
+   ||PyDict_GetItemString(locals,"engine")!=engine||PyDict_GetItemString(locals,"entries")!=entries
+   ||!PyTuple_CheckExact(class_state)||PyTuple_GET_SIZE(class_state)!=5||PyTuple_GET_ITEM(class_state,0)!=cls
+   ||!PyTuple_CheckExact(guarded_state)||PyTuple_GET_SIZE(guarded_state)!=7||PyTuple_GET_ITEM(guarded_state,0)!=guarded)goto done;
+ PyObject*ns=((PyTypeObject*)cls)->tp_dict,*k,*v;Py_ssize_t pos=0;
+ if(!code_namespace(ns))goto done;
+ while(PyDict_Next(ns,&pos,&k,&v)){
+  const char*name=PyUnicode_AsUTF8(k);if(!name)goto done;
+  if(PyFunction_Check(v)){
+   if(PyFunction_GetCode(v)!=commit_child_code(commit_outcome_body_code,name)||PyFunction_GetGlobals(v)!=commit_outcome_globals)goto done;
+  }else if(strcmp(name,"committed")==0||strcmp(name,"commit_invoked")==0){
+   if(Py_TYPE(v)!=&PyProperty_Type)goto done;
+   PyObject*getter=PyObject_GetAttrString(v,"fget");int same=getter&&PyFunction_Check(getter)
+     &&PyFunction_GetCode(getter)==commit_child_code(commit_outcome_body_code,name)&&PyFunction_GetGlobals(getter)==commit_outcome_globals;
+   Py_XDECREF(getter);if(!same)goto done;
+  }else if(strcmp(name,"__module__")&&strcmp(name,"__doc__")&&strcmp(name,"__dict__")&&strcmp(name,"__weakref__"))goto done;
+ }
+ const char*helpers[]={"guarded","fail","rollback","held_roles","restore_owner"};
+ for(int i=0;i<5;i++){PyObject*fn=PyDict_GetItemString(locals,helpers[i]);
+  if(!fn||!PyFunction_Check(fn)||PyFunction_GetCode(fn)!=commit_child_code(commit_outcome_install_code,helpers[i]))goto done;}
+ PyObject*classes=PyTuple_Pack(1,class_state);if(!classes)goto done;
+ record=PyTuple_Pack(5,classes,guarded_state,engine,entries,cls);Py_DECREF(classes);if(!record)goto done;
+ capsule=PyCapsule_New(record,"sim2act.commit-factory.v1",commit_factory_free);if(!capsule)goto done;record=NULL;
+ if(!commit_factory_current(capsule))goto done;
+ key=PyLong_FromVoidPtr(cls);if(!key)goto done;
+ if(PyDict_GetItemWithError(commit_outcome_factories,key)||PyErr_Occurred())goto done;
+ if(PyDict_SetItem(commit_outcome_factories,key,capsule)<0)goto done;valid=1;
+done:
+ Py_XDECREF(locals);Py_XDECREF(key);Py_XDECREF(record);Py_XDECREF(capsule);
+ if(gc)PyGC_Enable();
+ if(!valid){if(PyErr_Occurred())return NULL;return commit_outcome_error();}Py_RETURN_NONE;
+}
+static PyObject*retire_commit_factory(PyObject*self,PyObject*cls){
+ (void)self;PyObject*key=PyLong_FromVoidPtr(cls);if(!key)return NULL;
+ /* Revocation only: cannot issue a replacement class or a successful fact. */
+ if(commit_outcome_factories&&PyDict_GetItemWithError(commit_outcome_factories,key)){
+  if(PyDict_DelItem(commit_outcome_factories,key)<0){Py_DECREF(key);return NULL;}}
+ Py_DECREF(key);if(PyErr_Occurred())return NULL;Py_RETURN_NONE;
+}
+static PyObject*preinit_commit_outcome(PyObject*self,PyObject*boundary){
+ (void)self;if(!commit_outcome_code_current()){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
+ int gc=PyGC_Disable();PyObject*locals=commit_frame_locals(commit_outcome_ctor_code),*key=PyLong_FromVoidPtr(Py_TYPE(boundary));
+ PyObject*factory=key&&commit_outcome_factories?PyDict_GetItemWithError(commit_outcome_factories,key):NULL;
+ PyObject*c=locals?PyDict_GetItemString(locals,"c"):NULL;
+ int valid=locals&&PyDict_GetItemString(locals,"self")==boundary&&c
+  &&(PyObject*)Py_TYPE(c)==PyDict_GetItemString(commit_outcome_globals,"_sa_connection")&&commit_factory_current(factory);
+ Py_XDECREF(locals);Py_XDECREF(key);if(gc)PyGC_Enable();
+ if(!valid){if(PyErr_Occurred())return NULL;return commit_outcome_error();}Py_RETURN_NONE;
+}
+static PyObject*init_commit_outcome(PyObject*self,PyObject*args){
+ (void)self;PyObject*boundary,*guarded,*original;
+ if(!PyArg_ParseTuple(args,"OOO",&boundary,&guarded,&original))return NULL;
+ if(!commit_outcome_code_current()){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
+ if(!commit_outcome_records||!PyFunction_Check(guarded)||PyFunction_GetCode(guarded)!=commit_outcome_guarded_code
+   ||PyFunction_GetGlobals(guarded)!=commit_outcome_globals||!PyMethod_Check(original)
+   ||PyMethod_GET_FUNCTION(original)!=commit_outcome_delegate||Py_TYPE(PyMethod_GET_SELF(original))!=(PyTypeObject*)commit_outcome_dialect)return commit_outcome_error();
+ int gc=PyGC_Disable(),valid=0;PyObject*locals=commit_frame_locals(commit_outcome_ctor_code),*fields=NULL,*key=NULL,*callback=NULL,*capsule=NULL,*factory_key=PyLong_FromVoidPtr(Py_TYPE(boundary));
+ PyObject*factory=factory_key?PyDict_GetItemWithError(commit_outcome_factories,factory_key):NULL;
+ CommitOutcomeRecord*r=NULL;
+ if(!commit_factory_current(factory))goto done;
+ if(!locals||PyDict_GetItemString(locals,"self")!=boundary||PyDict_GetItemString(locals,"guarded")!=guarded
+   ||PyDict_GetItemString(locals,"original")!=original)goto done;
+ fields=PyObject_GenericGetDict(boundary,NULL);if(!fields||!code_namespace(fields))goto done;
+ PyObject*c=PyDict_GetItemString(fields,"c"),*raw=PyDict_GetItemString(fields,"raw"),*tx=PyDict_GetItemString(fields,"transaction");
+ if(!c||!raw||!tx||c!=PyDict_GetItemString(locals,"c"))goto done;
+ PyObject*factory_state=commit_factory_record(factory);
+ if(Py_TYPE(boundary)!=(PyTypeObject*)PyTuple_GET_ITEM(factory_state,4)
+   ||PyTuple_GET_ITEM(PyTuple_GET_ITEM(factory_state,1),0)!=guarded)goto done;
+ Py_ssize_t occupied_pos=0;PyObject*occupied_key,*occupied_value;
+ while(PyDict_Next(commit_outcome_records,&occupied_pos,&occupied_key,&occupied_value)){
+  CommitOutcomeRecord*other=commit_outcome_record(occupied_value);
+  if(other&&other->raw==raw&&other->transaction==tx&&PyWeakref_GetObject(other->weak)!=Py_None)goto done;
+ }
+ key=PyLong_FromVoidPtr(boundary);if(!key)goto done;
+ if(PyDict_GetItemWithError(commit_outcome_records,key)||PyErr_Occurred())goto done;
+ r=PyMem_Calloc(1,sizeof(*r));if(!r){PyErr_NoMemory();goto done;}
+ callback=PyCFunction_NewEx(&commit_outcome_forget_def,key,NULL);if(!callback)goto done;
+ r->weak=PyWeakref_NewRef(boundary,callback);if(!r->weak)goto done;
+ r->connection=Py_NewRef(c);r->raw=Py_NewRef(raw);r->transaction=Py_NewRef(tx);
+ r->guarded=Py_NewRef(guarded);r->original=Py_NewRef(original);
+ r->factory=Py_NewRef(factory);
+ capsule=PyCapsule_New(r,COMMIT_OUTCOME_RECORD,commit_outcome_free);if(!capsule)goto done;r=NULL;
+ if(PyDict_SetItem(commit_outcome_records,key,capsule)<0)goto done;valid=1;
+done:
+ if(r){Py_XDECREF(r->weak);Py_XDECREF(r->connection);Py_XDECREF(r->raw);Py_XDECREF(r->transaction);Py_XDECREF(r->guarded);Py_XDECREF(r->original);Py_XDECREF(r->factory);PyMem_Free(r);}
+ Py_XDECREF(locals);Py_XDECREF(fields);Py_XDECREF(key);Py_XDECREF(callback);Py_XDECREF(capsule);Py_XDECREF(factory_key);if(gc)PyGC_Enable();
+ if(!valid){if(PyErr_Occurred())return NULL;return commit_outcome_error();}Py_RETURN_NONE;
+}
+static CommitOutcomeRecord*find_commit_outcome(PyObject*boundary){
+ if(!commit_outcome_records)return NULL;PyObject*key=PyLong_FromVoidPtr(boundary);if(!key)return NULL;
+ CommitOutcomeRecord*r=commit_outcome_record(PyDict_GetItemWithError(commit_outcome_records,key));Py_DECREF(key);
+ return r&&PyWeakref_GetObject(r->weak)==boundary?r:NULL;
+}
+static PyObject*read_commit_outcome(PyObject*self,PyObject*boundary){
+ (void)self;CommitOutcomeRecord*r=find_commit_outcome(boundary);
+ if(!r){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
+ return PyTuple_Pack(2,r->committed?Py_True:Py_False,r->invoked?Py_True:Py_False);
+}
+static PyObject*read_commit_roles(PyObject*self,PyObject*boundary){
+ (void)self;CommitOutcomeRecord*r=find_commit_outcome(boundary);
+ if(!r||!r->connection||!r->raw||!r->transaction){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
+ PyObject*c=Py_NewRef(r->connection),*raw=Py_NewRef(r->raw),*tx=Py_NewRef(r->transaction);
+ PyObject*result=PyTuple_Pack(3,c,raw,tx);Py_DECREF(c);Py_DECREF(raw);Py_DECREF(tx);return result;
+}
+static PyObject*restore_commit_owner(PyObject*self,PyObject*boundary){
+ (void)self;CommitOutcomeRecord*r=find_commit_outcome(boundary);
+ if(!r||!r->connection){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
+ PyObject*owner=Py_NewRef(r->connection);int valid=1;
+ if(!code_classes(PyTuple_GET_ITEM(source_code[12],1))){Py_DECREF(owner);return commit_outcome_error();}
+ if((PyObject*)Py_TYPE(owner)!=commit_owner_type){
+  if(!Py_TYPE(commit_owner_descriptor)->tp_descr_set
+    ||Py_TYPE(commit_owner_descriptor)->tp_descr_set(commit_owner_descriptor,owner,commit_owner_type)<0)valid=0;
+ }
+ Py_DECREF(owner);if(!valid){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
+ Py_RETURN_NONE;
+}
+static int commit_physical_current(CommitOutcomeRecord*r,PyObject*proxy,int require_active);
+static PyObject*retire_commit_roles(PyObject*self,PyObject*boundary){
+ (void)self;PyObject*locals=commit_frame_locals(commit_outcome_exit_code);
+ if(!locals||PyDict_GetItemString(locals,"self")!=boundary){Py_XDECREF(locals);return commit_outcome_error();}
+ CommitOutcomeRecord*r=find_commit_outcome(boundary);Py_DECREF(locals);
+ if(!r||r->in_delegate){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
+ /* Facts stay readable until this Boundary dies; heavy roles must not keep
+  * a failed listener/Connection cycle alive through the native weak table. */
+ Py_CLEAR(r->connection);Py_CLEAR(r->raw);Py_CLEAR(r->transaction);Py_CLEAR(r->guarded);Py_CLEAR(r->original);Py_CLEAR(r->factory);Py_RETURN_NONE;
+}
+static PyObject*check_commit_outcome(PyObject*self,PyObject*boundary){
+ (void)self;if(!commit_outcome_code_current()){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
+ int gc=PyGC_Disable();CommitOutcomeRecord*r=find_commit_outcome(boundary);PyObject*fields=NULL;int valid=0;
+ if(!r||!commit_factory_current(r->factory))goto done;
+ if(!commit_physical_current(r,r->raw,0))goto done;
+ PyObject*f=commit_factory_record(r->factory);
+ if(Py_TYPE(boundary)!=(PyTypeObject*)PyTuple_GET_ITEM(f,4))goto done;
+ fields=PyObject_GenericGetDict(boundary,NULL);
+ if(!fields||!code_namespace(fields)||PyDict_GetItemString(fields,"c")!=r->connection
+   ||PyDict_GetItemString(fields,"raw")!=r->raw||PyDict_GetItemString(fields,"transaction")!=r->transaction)goto done;
+ valid=1;
+done:Py_XDECREF(fields);if(gc)PyGC_Enable();
+ if(!valid){if(PyErr_Occurred())return NULL;return commit_outcome_error();}Py_RETURN_NONE;
+}
+static int commit_closure_current(PyObject*function,PyObject*locals){
+ PyObject*names=PyCode_GetFreevars((PyCodeObject*)PyFunction_GetCode(function));if(!names)return 0;
+ PyObject*cells=PyFunction_GetClosure(function);int valid=1;
+ if(!cells||!PyTuple_CheckExact(cells)||PyTuple_GET_SIZE(cells)!=PyTuple_GET_SIZE(names))valid=0;
+ for(Py_ssize_t i=0;valid&&i<PyTuple_GET_SIZE(names);i++){
+  PyObject*cell=PyTuple_GET_ITEM(cells,i);
+  if(!PyCell_Check(cell)||PyDict_GetItemWithError(locals,PyTuple_GET_ITEM(names,i))!=PyCell_GET(cell))valid=0;
+ }
+ Py_DECREF(names);return valid;
+}
+static PyObject*commit_slot(PyObject*object,const char*name){
+ PyObject*descriptor=PyDict_GetItemString(commit_outcome_globals,name);
+ if(!descriptor||Py_TYPE(descriptor)!=&PyMemberDescr_Type)return NULL;
+ return Py_TYPE(descriptor)->tp_descr_get(descriptor,object,(PyObject*)Py_TYPE(object));
+}
+static int commit_physical_current(CommitOutcomeRecord*r,PyObject*proxy,int require_active){
+ PyObject*kind=PyDict_GetItemString(commit_outcome_globals,"_sa_connection"),*tx_kind=PyDict_GetItemString(commit_outcome_globals,"_sqlite_transaction");
+ if((PyObject*)Py_TYPE(r->connection)!=kind||(PyObject*)Py_TYPE(r->transaction)!=tx_kind){PyErr_SetString(PyExc_ValueError,"Commit outcome provenance changed (physical types)");return 0;}
+ PyObject*fields=PyObject_GenericGetDict(r->connection,NULL),*actual=NULL,*owner=NULL,*active=NULL;int valid=0;
+ const char*stage="connection fields";
+ if(!fields||!code_namespace(fields)||(require_active&&PyDict_GetItemString(fields,"_transaction")!=r->transaction)
+   ||PyDict_GetItemString(fields,"dialect")!=PyMethod_GET_SELF(r->original))goto done;
+ PyObject*held=PyDict_GetItemString(fields,"_dbapi_connection"),*proxy_kind=PyDict_GetItemString(commit_outcome_globals,"_sqlite_proxy");
+ stage="current proxy";
+ if(!held||(PyObject*)Py_TYPE(held)!=proxy_kind||(proxy!=held&&proxy!=r->raw))goto done;
+ actual=commit_slot(held,"_fairy_dbapi");owner=commit_slot(r->transaction,"_tx_connection");active=commit_slot(r->transaction,"_tx_active");
+ stage="driver/transaction slots";
+ if(actual!=r->raw||owner!=r->connection||(require_active&&active!=Py_True))goto done;
+ PyObject*f=commit_factory_record(r->factory);
+ stage="engine owner";
+ if(!f||PyDict_GetItemString(fields,"engine")!=PyTuple_GET_ITEM(f,2))goto done;
+ valid=1;
+done:Py_XDECREF(fields);Py_XDECREF(actual);Py_XDECREF(owner);Py_XDECREF(active);
+ if(!valid&&!PyErr_Occurred())PyErr_Format(PyExc_ValueError,"Commit outcome provenance changed (%s)",stage);return valid;
+}
+static PyObject*invoke_commit_outcome(PyObject*self,PyObject*args){
+ (void)self;PyObject*boundary,*proxy;if(!PyArg_ParseTuple(args,"OO",&boundary,&proxy))return NULL;
+ if(!commit_outcome_code_current()){if(PyErr_Occurred())return NULL;return commit_outcome_error();}
+ int gc=PyGC_Disable();PyObject*locals=commit_frame_locals(commit_outcome_guarded_code),*fields=NULL,*result=NULL;
+ PyObject*key=PyLong_FromVoidPtr(boundary),*held=NULL;
+ if(key&&commit_outcome_records){held=Py_XNewRef(PyDict_GetItemWithError(commit_outcome_records,key));}
+ CommitOutcomeRecord*r=find_commit_outcome(boundary);
+ const char*stage="issued frame/class/closure";
+ if(!r||!commit_factory_current(r->factory)||r->invoked||!locals||PyDict_GetItemString(locals,"entry")!=boundary
+   ||PyDict_GetItemString(locals,"proxy")!=proxy||PyDict_GetItemString(locals,"raw")!=r->raw
+   ||PyDict_GetItemString(locals,"owner")!=r->connection||PyDict_GetItemString(locals,"transaction")!=r->transaction
+   ||PyDict_GetItemString(locals,"original")!=r->original||PyFunction_GetCode(r->guarded)!=commit_outcome_guarded_code
+   ||!commit_closure_current(r->guarded,locals))goto done;
+ if(!commit_physical_current(r,proxy,1))goto done;
+ stage="held boundary fields";
+ fields=PyObject_GenericGetDict(boundary,NULL);
+ if(!fields||!code_namespace(fields)||PyDict_GetItemString(fields,"c")!=r->connection
+   ||PyDict_GetItemString(fields,"raw")!=r->raw||PyDict_GetItemString(fields,"transaction")!=r->transaction)goto done;
+ PyObject*entries=PyDict_GetItemString(locals,"entries");
+ PyObject*factory_state=commit_factory_record(r->factory);
+ stage="private entries/engine";
+ if(!entries||entries!=PyTuple_GET_ITEM(factory_state,3)
+   ||!PyDict_CheckExact(entries)||PyDict_GetItemWithError(entries,r->raw)!=boundary)goto done;
+ r->invoked=1;
+ Py_CLEAR(locals);Py_CLEAR(fields);
+ if(gc){PyGC_Enable();gc=0;}
+ /* DefaultDialect's documented argument is the actual DBAPI connection.
+  * Fix this physical target even if a Python monitoring/GC callback changes
+  * the pool proxy after the last metadata check. The hook still runs once. */
+ r->in_delegate=1;
+ result=PyObject_CallOneArg(r->original,r->raw);
+ r->in_delegate=0;
+ if(result){
+  r->committed=1;
+  if(!commit_physical_current(r,proxy,1)){Py_CLEAR(result);}
+ }
+done:
+ Py_XDECREF(locals);Py_XDECREF(fields);Py_XDECREF(key);Py_XDECREF(held);if(gc)PyGC_Enable();
+ if(!result){if(PyErr_Occurred())return NULL;PyErr_Format(PyExc_ValueError,"Commit outcome provenance changed (%s)",stage);return NULL;}return result;
 }
 static PyObject*contract_type(PyObject*self,PyObject*value){
  PyObject*model=contract_model(self,value);if(!model)return NULL;if(model!=Py_None)return model;Py_DECREF(model);return Py_NewRef((PyObject*)Py_TYPE(value));
@@ -713,6 +1027,17 @@ static PyMethodDef methods[]={
  {"register_lease_runtime",register_lease_runtime,METH_VARARGS,"One-time runtime issuer code, never authority."},
  {"install_lease_runtime",install_lease_runtime,METH_O,"Record actual runtime provenance from its fixed provisioning frame."},
  {"lease_runtime_current",lease_runtime_current,METH_O,"Fresh native runtime/Store identity, no lease or permission cache."},
+ {"register_commit_outcomes",register_commit_outcomes,METH_VARARGS,"Fixed commit issuer and original delegate roles."},
+ {"register_commit_factory",register_commit_factory,METH_VARARGS,"Pin a final per-engine Boundary class and guarded closure."},
+ {"retire_commit_factory",retire_commit_factory,METH_O,"Retire issuance only; existing facts remain known."},
+ {"init_commit_outcome",init_commit_outcome,METH_VARARGS,"Issue an opaque result record from the original Boundary constructor."},
+ {"preinit_commit_outcome",preinit_commit_outcome,METH_O,"Reject borrowed constructors before any instance dispatch."},
+ {"check_commit_outcome",check_commit_outcome,METH_O,"Check fixed actual Boundary class and private roles before dispatch."},
+ {"read_commit_outcome",read_commit_outcome,METH_O,"Read actual original-delegate invocation/return facts."},
+ {"read_commit_roles",read_commit_roles,METH_O,"Read original cleanup roles, never rejected mutable fields."},
+ {"restore_commit_owner",restore_commit_owner,METH_O,"Restore the known owned Connection class before cleanup, never dispatch a rejected class."},
+ {"retire_commit_roles",retire_commit_roles,METH_O,"Release heavy roles at actual scope exit, retaining facts."},
+ {"invoke_commit_outcome",invoke_commit_outcome,METH_VARARGS,"Invoke the fixed original delegate only in its actual guarded frame."},
  {"contract_type",contract_type,METH_O,"Explicit PB schema class or original exact type; no Python getattr or impersonation."},
  {"register_contract_binding",register_contract_binding,METH_VARARGS,"Register the original production Binding lifecycle once, never a grant."},
  {"install_contract_binding",install_contract_binding,METH_VARARGS,"Constructor-only complete PB owner/header publication."},
