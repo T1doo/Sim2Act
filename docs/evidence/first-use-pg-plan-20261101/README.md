@@ -35,3 +35,36 @@ privileges, dependency pin, resource preconditions, time/model ceilings, normal
 production identity/approval path and cleanup. Current disk fails its minimum;
 no container, image, role, new credential or model request was created here.
 Old runtime packages remain unchanged and cannot be relabelled this new source.
+
+## Frozen outcome
+
+Source `7469b9997170a9a5e99bc88cf48435ad770a96d7` was normally pushed and read back
+from the development branch. Final independent review corrected an explicit-empty
+`--config` fallback: all five commands now reject it before Settings/Store/token
+calls. It also corrected the proposed nonce network and one-final-teardown scope.
+
+Final frozen regression: 39 passed, no failures/errors/skips. This deliberately
+selected all 12 initialization tests, four original approval tests, all 22 actual
+page/HTTP scenarios and the exact source qualification positive. The other 26
+qualification negative variants were deselected on this final pass; all passed
+in the immediately preceding broader 67-test run before the two CLI condition
+changes. These overlapping runs are not added together as unique coverage.
+`validation.json`, raw XML/logs and all 22 DOM result files identify those phases.
+The DOM files contain only synthetic fixture identity/materials, not user tokens.
+No pixel screenshot, PG, model request, production identity provisioning or Windows
+execution occurred. Synthetic SQLite fixture identities are explicitly test-only.
+
+The completed broader fixture, including all copied negative-test source bytes,
+was archived locally after all-pass XML, no process cwd/fd users, and per-file
+SHA256 plus symlink round-trip verification, before deleting only its expanded
+own fixture. Archive: `/workspace/scratch/first-use-final-20261101-preserved.tar.gz`,
+27,486,270 bytes, SHA256
+`309f73643c5ef25e2436d267f8cdf87cc2a1c4d57d167b44ecde7fb601453e99`.
+Original logs/XML and archive manifest remain. The current final resource snapshot
+still fails the >=2GiB PG disk precondition; no provisioning has been attempted.
+
+Unchanged internal Windows package remains source c8fba531, not this new source:
+`Sim2Act-internal-win64-c8fba5316043-reviewed.zip`, 27,577,607 bytes, SHA256
+`43b39df326f521601c3c5bdcc7e0303e9a0ff06ef320466d561945fa30640d85`.
+It remains an internal assembled/static-checked input, not a newly accepted
+Windows/PG/R0 final product. This source slice does not relabel or publish it.
