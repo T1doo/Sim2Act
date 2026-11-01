@@ -9,7 +9,7 @@ $payload=Join-Path $probeRoot 'payload';[void][IO.Directory]::CreateDirectory($p
 $report=[ordered]@{source_commit='042ab21c4fa9c7e5ba70c4e2877fb7060d962422';test_commit=$env:GITHUB_SHA;status='STARTED';model_requests=0;browser_launched=$false;starts=@()}
 $desktopProcess=$null;$appRoot=$null;$clock=[Diagnostics.Stopwatch]::StartNew()
 function Save-Report { $report | ConvertTo-Json -Depth 12 | Set-Content (Join-Path $payload 'report.json') -Encoding UTF8 }
-function Budget { if($clock.Elapsed.TotalSeconds -gt $(if($ExerciseMaterial){75}else{115})){throw 'Finite ordinary window probe budget exhausted.'} }
+function Budget { if($clock.Elapsed.TotalSeconds -gt $(if($ExerciseMaterial){40}else{115})){throw 'Finite ordinary window probe budget exhausted.'} }
 function Events([string]$Kind) {
     $log=Join-Path $appRoot 'desktop.log'
     if(-not(Test-Path -LiteralPath $log)){return}
@@ -111,6 +111,25 @@ function Read-Local([string]$Path){
     $data=Invoke-RestMethod -Uri ($url+$Path) -Headers @{Authorization='Bearer public-synthetic-blank-workspace'} -TimeoutSec 4
     foreach($row in $data){Write-Output $row}
 }
+function Selected-Value($Control){
+    # WebView2 providers expose HTML select through different ordinary read-only
+    # UIA patterns. Keep exact value equality; never infer selection from a GET.
+    $pattern=$null
+    if($Control.TryGetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern,[ref]$pattern)){
+        $items=@(([Windows.Automation.SelectionPattern]$pattern).GetCurrentSelection())
+        if($items.Count -ne 1){throw 'Single UI selection required.'}
+        return $items[0].Current.Name
+    }
+    $pattern=$null
+    if($Control.TryGetCurrentPattern([Windows.Automation.ValuePattern]::Pattern,[ref]$pattern)){
+        return ([Windows.Automation.ValuePattern]$pattern).Current.Value
+    }
+    $pattern=$null
+    if($Control.TryGetCurrentPattern([Windows.Automation.LegacyIAccessiblePattern]::Pattern,[ref]$pattern)){
+        return ([Windows.Automation.LegacyIAccessiblePattern]$pattern).Current.Value
+    }
+    throw 'No ordinary UIA selection/value reader; unchanged submit gate rejects.'
+}
 function Check-Material {
     $projects=@(Read-Local '/api/projects'|Where-Object {$_.name -ceq 'native-window-synthetic'})
     if($projects.Count -ne 1){throw 'Exact UI-created project not unique.'}
@@ -127,11 +146,11 @@ function Save-Material($Window){
     $until=[DateTime]::UtcNow.AddSeconds(6)
     do{$projects=@(Read-Local '/api/projects'|Where-Object {$_.name -ceq 'native-window-synthetic'});if($projects.Count -eq 1){break};Start-Sleep -Milliseconds 150}while([DateTime]::UtcNow -lt $until)
     if($projects.Count -ne 1){throw 'UI project creation not confirmed; no repeat submit.'}
+    $report['ui_project_id']=$projects[0].id;Save-Report
     $until=[DateTime]::UtcNow.AddSeconds(6);$selected=$false
     do{
         Budget;$selector=Find-Control $Window '当前项目' ([Windows.Automation.ControlType]::ComboBox)
-        $selection=[Windows.Automation.SelectionPattern]$selector.GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern)
-        $items=@($selection.GetCurrentSelection());$selected=$items.Count -eq 1 -and $items[0].Current.Name -ceq 'native-window-synthetic'
+        $selected=(Selected-Value $selector) -ceq 'native-window-synthetic'
         if(-not$selected){Start-Sleep -Milliseconds 150}
     }while(-not$selected -and [DateTime]::UtcNow -lt $until)
     if(-not$selected){throw 'UI project selection not confirmed; no material submit.'}
@@ -144,8 +163,7 @@ function Save-Material($Window){
     $format.SetFocus()
     if([NativeWindowProbe]::GetForegroundWindow() -ne $desktopProcess.MainWindowHandle){throw 'Own foreground changed; no keys sent.'}
     [Windows.Forms.SendKeys]::SendWait('{HOME}c')
-    $selectedFormat=([Windows.Automation.SelectionPattern]$format.GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern)).GetCurrentSelection()
-    if(@($selectedFormat).Count -ne 1 -or $selectedFormat[0].Current.Name -cne 'csv'){throw 'CSV UI selection not confirmed; no material submit.'}
+    if((Selected-Value $format) -cne 'csv'){throw 'CSV UI selection not confirmed; no material submit.'}
     Set-FormValue $Window '授权给当前项目的文本' "item,amount,quantity`nA,10,7`nB,20,8"
     Invoke-Control (Form-Control $Window '保存并授权项目内使用（24小时）' ([Windows.Automation.ControlType]::Button))
     $until=[DateTime]::UtcNow.AddSeconds(6)
@@ -261,7 +279,7 @@ public static class NativeWindowProbe {
             try{if($desktopProcess.MainWindowHandle -ne [IntPtr]::Zero){Capture 'window-failure.png'}}catch{$report['failure_capture_error']=$_.Exception.GetType().FullName}
             $report['cleanup']='Normal close requested for own process only; unconfirmed state is retained.'
             [void]$desktopProcess.CloseMainWindow()
-            $report['cleanup_exit_confirmed']=$desktopProcess.WaitForExit(15000)
+            $report['cleanup_exit_confirmed']=$desktopProcess.WaitForExit($(if($ExerciseMaterial){5000}else{15000}))
         }
     } catch {$report['cleanup_error']=$_.Exception.GetType().FullName}
     if($null -ne $appRoot -and (Test-Path -LiteralPath (Join-Path $appRoot 'desktop.log'))){Copy-Item -LiteralPath (Join-Path $appRoot 'desktop.log') -Destination (Join-Path $payload 'desktop.log')}
