@@ -21,6 +21,91 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  complete-portable-once:
+    if: >-
+      github.repository == 'T1doo/Sim2Act' &&
+      github.event.repository.private == false &&
+      github.ref == 'refs/heads/dev/cloud-g0-live-20261028' &&
+      github.run_attempt == 1 &&
+      contains(github.event.head_commit.message, '[windows-full-package-once-20261101]')
+    runs-on: windows-2025
+    timeout-minutes: 8
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      SIM2ACT_MODEL_MODE: mock
+      SIM2ACT_LIVE_ENABLED: 'false'
+      SIM2ACT_INTERN_TOKEN: ''
+      INTERN_API_TOKEN: ''
+      PYTHONPATH: ''
+      PYTHONUTF8: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      PIP_NO_CACHE_DIR: '1'
+      CL: /std:c11
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        timeout-minutes: 2
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.gitignore
+            /.gitattributes
+            /README.md
+            /.env.example
+            /setup.py
+            /pyproject.toml
+            /requirements.lock
+            /requirements-windows.lock
+            /src/
+            /scripts/
+            /tests/
+            /schemas/
+            /docs/Installation.md
+            /docs/ProductionConnection.md
+            /docs/FirstUse.md
+            /docs/LocalCandidate.md
+            /docs/PreviewRelease.md
+            /docs/LimitedTextCandidate.md
+            /docs/F2/BlankSyntheticWorkspaceQuickstart.md
+            /docs/evidence/bounded-agent-offline-20261006/independent-gold.json
+            /docs/evidence/g0-monitored-third-20261021/RUN/mock-exchanges.jsonl
+            /docs/evidence/protocol-store-loop-20261006/evaluation/
+            /deliverables/windows-afternoon-20261023/portable-inputs.json
+            /deliverables/windows-afternoon-20261023/Sim2Act-preview-win64-7794748c.zip
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        timeout-minutes: 1
+        with:
+          python-version: '3.12.10'
+          architecture: x64
+      - name: Locked ordinary build and test tools; no cache or system installer
+        timeout-minutes: 3
+        run: |
+          python -m venv .venv
+          ./.venv/Scripts/python.exe -m pip install --only-binary=:all: --retries 0 --timeout 30 -r requirements-windows.lock
+          if ($LASTEXITCODE -ne 0) { throw 'Locked Windows dependencies unavailable; no fallback/retry.' }
+      - name: Compile four extensions and same-source host, assemble and check ordinary backend
+        timeout-minutes: 5
+        run: |
+          ./.venv/Scripts/python.exe scripts/windows_full_package_ci.py
+          if ($LASTEXITCODE -ne 0) { throw 'Complete build/backend check failed; preserve actual stage and stop.' }
+      - name: Retain only explicit public build payload for one day; no workspace or credentials
+        if: ${{ always() && env.SIM2ACT_FULL_PAYLOAD != '' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        timeout-minutes: 1
+        with:
+          name: sim2act-full-${{ github.sha }}
+          path: ${{ env.SIM2ACT_FULL_PAYLOAD }}/*
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+          include-hidden-files: false
+      - name: Preserve exact execution boundary
+        if: always()
+        run: |
+          'Single new round <=8 minutes on standard public Windows Server 2025. Native compiler/import/ordinary SQLite backend checks only. Desktop EXE, WebView2/browser, system security setters, PG and live models NOT_RUN. No automatic rerun, paid runner or cache.' | Add-Content $env:GITHUB_STEP_SUMMARY
+
   desktop-recovery-once:
     if: >-
       github.repository == 'T1doo/Sim2Act' &&

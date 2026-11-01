@@ -169,3 +169,16 @@ def test_host_inputs_cannot_mix_with_other_source_candidate(candidate):
     manifest.write_text(json.dumps(data))
     with pytest.raises(ValueError, match="candidate input missing"):
         builder.checked_desktop_inputs(manifest)
+
+
+def test_frozen_runtime_image_excludes_old_app_and_rejects_dependency_drift():
+    directory = ROOT / "deliverables/windows-afternoon-20261023"
+    inputs = json.loads((directory / "portable-inputs.json").read_bytes())
+    image = directory / "Sim2Act-preview-win64-7794748c.zip"
+    files = builder.checked_runtime_image(image, inputs)
+    assert "runtime/python312.dll" in files and "runtime/python.exe" in files
+    assert not any(name.startswith(("runtime/Lib/site-packages/sim2act/",
+        "runtime/Lib/site-packages/sim2act-0.1.0.dist-info/")) for name in files)
+    inputs["wheels"][0]["version"] = "unapproved-version"
+    with pytest.raises(ValueError, match="versions/provenance"):
+        builder.checked_runtime_image(image, inputs)

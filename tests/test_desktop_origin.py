@@ -15,6 +15,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+import sim2act
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from test_pa_spec_apps import SOURCE, confirm, generate, instance, material
@@ -41,7 +42,7 @@ def business_fingerprints(root):
 
 
 def start(root, log, *, new=False):
-    source = Path(__file__).resolve().parents[1] / "src"
+    source = Path(sim2act.__file__).resolve().parent.parent
     child = subprocess.Popen([sys.executable, "-B", "-m", "sim2act.cli", "synthetic-workspace",
         "--data-dir", str(root), "--control-stdin", *(["--new"] if new else [])],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,

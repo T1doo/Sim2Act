@@ -10,6 +10,7 @@ import threading
 import time
 import httpx
 from pathlib import Path
+import sim2act
 
 from sim2act.synthetic_workspace import DATABASE, _read_owned_control
 
@@ -46,7 +47,7 @@ sys.monitoring.register_callback(slot,sys.monitoring.events.PY_START,first)
 sys.monitoring.set_local_events(slot,Worker.once.__code__,sys.monitoring.events.PY_START)
 main()
 '''
-    source=Path(__file__).resolve().parents[1]/'src'
+    source=Path(sim2act.__file__).resolve().parent.parent
     child=subprocess.Popen([sys.executable,'-u','-c',script,'synthetic-workspace','--data-dir',str(root),'--control-stdin'],
         stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,
         env={**os.environ,'PYTHONPATH':str(source)})
@@ -116,7 +117,7 @@ def test_wrong_worker_does_not_stop_until_pipe_eof():
 
 
 def test_real_consoleless_child_eof_preserves_existing_shutdown_receipt(tmp_path):
-    source = Path(__file__).resolve().parents[1] / "src"
+    source = Path(sim2act.__file__).resolve().parent.parent
     child = subprocess.Popen(
         [
             sys.executable,

@@ -131,7 +131,41 @@ def checked_desktop_inputs(candidate_manifest):
     return result
 
 
-def build(inputs, assets, app_wheel, output, *, candidate_manifest=None):
+def checked_runtime_image(path, specification):
+    """Reuse only the exact prior dependency image, never its application bytes."""
+    import io
+
+    data = read_asset(path, dict(bytes=18974609,
+        sha256="05933fea0ab45831dc0a5e28165979ba2aa718a3a0000f18fc22551a9e592f0c"))
+    prefix = "Sim2Act-preview/"
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        raw = archive.read(prefix + "portable-manifest.json")
+        if digest(raw) != "2d655d1b86e48a4e62bc23d58e8180328f53169d57a50440d8fc19e300252efa":
+            raise ValueError("Historical dependency image manifest mismatch")
+        manifest = json.loads(raw)
+        provenance = json.loads(archive.read(prefix + "THIRD-PARTY-SOURCES.json"))
+        selected = [w for w in specification["wheels"]
+                    if w["name"].replace("_", "-") not in ("psycopg", "psycopg-binary")]
+        keys = ("name", "version", "url", "sha256", "license", "license_expression", "source_distribution_urls")
+        if provenance != dict(python=specification["python"],
+                              wheels=[{k: w[k] for k in keys} for w in selected]):
+            raise ValueError("Dependency image versions/provenance do not match frozen inputs")
+        files = {}
+        for name, expected in manifest["files"].items():
+            if not name.startswith("runtime/"):
+                continue
+            value = archive.read(prefix + name)
+            if dict(bytes=len(value), sha256=digest(value)) != expected:
+                raise ValueError("Dependency image file mismatch: " + name)
+            if name.startswith(("runtime/Lib/site-packages/sim2act/", "runtime/Lib/site-packages/sim2act-0.1.0.dist-info/")):
+                continue
+            files[name] = value
+        if not {"runtime/python.exe", "runtime/python312.dll", "runtime/python312.zip"} <= set(files):
+            raise ValueError("Complete historical Python runtime required")
+        return files
+
+
+def build(inputs, assets, app_wheel, output, *, candidate_manifest=None, runtime_image=None):
     if output.exists():
         raise ValueError("Output already exists; do not overwrite a candidate")
     specification = json.loads(inputs.read_text(encoding="utf-8"))
@@ -139,9 +173,10 @@ def build(inputs, assets, app_wheel, output, *, candidate_manifest=None):
     # archives. A mismatch cannot produce a partially relabelled output.
     app, candidate_digest = checked_app(app_wheel, specification, candidate_manifest)
     desktop_inputs = checked_desktop_inputs(candidate_manifest)
-    files = {}
+    files = {} if runtime_image is None else checked_runtime_image(runtime_image, specification)
     runtime = specification["python"]
-    merge_archive(files, read_asset(assets / runtime["filename"], runtime), "runtime/")
+    if runtime_image is None:
+        merge_archive(files, read_asset(assets / runtime["filename"], runtime), "runtime/")
     selected = []
     # PG drivers are not reachable from the explicit SQLite-only preview.
     # Do not distribute a dormant LGPL driver/bundled libpq without its full
@@ -149,11 +184,12 @@ def build(inputs, assets, app_wheel, output, *, candidate_manifest=None):
     for wheel in specification["wheels"]:
         if wheel["name"].replace("_", "-") in ("psycopg", "psycopg-binary"):
             continue
-        merge_archive(
-            files,
-            read_asset(assets / "runtime-wheels" / wheel["filename"], wheel),
-            "runtime/Lib/site-packages/",
-        )
+        if runtime_image is None:
+            merge_archive(
+                files,
+                read_asset(assets / "runtime-wheels" / wheel["filename"], wheel),
+                "runtime/Lib/site-packages/",
+            )
         selected.append(
             {
                 key: wheel[key]
@@ -227,6 +263,9 @@ def build(inputs, assets, app_wheel, output, *, candidate_manifest=None):
     )
     if candidate_digest is not None:
         manifest["app_candidate_manifest_sha256"] = candidate_digest
+    if runtime_image is not None:
+        manifest["dependency_image_sha256"] = digest(runtime_image.read_bytes())
+        manifest["dependency_image_role"] = "UNCHANGED_RUNTIME_DEPENDENCIES_ONLY_OLD_APP_EXCLUDED"
     manifest_bytes = (json.dumps(manifest, indent=2) + "\n").encode()
     files["portable-manifest.json"] = manifest_bytes
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -253,6 +292,8 @@ if __name__ == "__main__":
     parser.add_argument("--inputs", type=Path, required=True)
     parser.add_argument("--assets", type=Path, required=True)
     parser.add_argument("--app-wheel", type=Path, required=True)
+    parser.add_argument("--runtime-image", type=Path,
+                        help="Exact frozen prior dependency image; all old application bytes excluded")
     parser.add_argument(
         "--candidate-manifest",
         type=Path,
@@ -268,6 +309,7 @@ if __name__ == "__main__":
                 args.app_wheel,
                 args.output,
                 candidate_manifest=args.candidate_manifest,
+                runtime_image=args.runtime_image,
             ),
             indent=2,
         )
