@@ -7,7 +7,7 @@
 #endif
 /* Prototype immutable parsed data owner. No model/row/permission object may
  * enter data. Wire metadata is derived here, never supplied by a caller. */
-typedef struct {PyObject_HEAD PyObject *data,*pin,*parents,*contract_models,*dump_refs,*contract_json,*contract_fp,*contract_origin,*contract_config;Py_ssize_t contract_ref,dump_ref;unsigned int depth;} Owned;
+typedef struct {PyObject_HEAD PyObject *data,*pin,*parents,*contract_models,*dump_refs,*contract_json,*contract_fp,*contract_origin,*contract_config,*dump_models;Py_ssize_t contract_ref,dump_ref;unsigned int depth;} Owned;
 static PyTypeObject OwnedType;
 typedef struct {PyObject_HEAD Owned*owner;Py_ssize_t ref;} SourceView;
 static PyTypeObject SourceViewType;
@@ -47,7 +47,7 @@ static int immutable(PyObject*v,size_t*work,size_t*bytes,int depth){
 }
 static void owned_free(PyObject*v){
  Owned*o=(Owned*)v;PyObject*error=PyErr_GetRaisedException();
- Py_XDECREF(o->data);Py_XDECREF(o->pin);Py_XDECREF(o->parents);Py_XDECREF(o->contract_models);Py_XDECREF(o->dump_refs);Py_XDECREF(o->contract_json);Py_XDECREF(o->contract_fp);Py_XDECREF(o->contract_origin);Py_XDECREF(o->contract_config);Py_TYPE(v)->tp_free(v);
+ Py_XDECREF(o->data);Py_XDECREF(o->pin);Py_XDECREF(o->parents);Py_XDECREF(o->contract_models);Py_XDECREF(o->dump_refs);Py_XDECREF(o->contract_json);Py_XDECREF(o->contract_fp);Py_XDECREF(o->contract_origin);Py_XDECREF(o->contract_config);Py_XDECREF(o->dump_models);Py_TYPE(v)->tp_free(v);
  if(error)PyErr_SetRaisedException(error);
 }
 static PyObject*no_new(PyTypeObject*t,PyObject*a,PyObject*k){
@@ -109,7 +109,7 @@ static PyObject*make_owned_domain(PyObject*data,PyObject*parents,PyObject*contra
  Py_DECREF(parent_pins);Py_DECREF(wire);if(!pin)return NULL;
  Owned*o=PyObject_New(Owned,&OwnedType);if(!o){Py_DECREF(pin);return NULL;}
  o->data=Py_NewRef(data);o->pin=pin;o->parents=Py_NewRef(parents);o->depth=depth;
- o->contract_models=Py_XNewRef(contract_models);o->dump_refs=o->contract_json=o->contract_fp=o->contract_origin=o->contract_config=NULL;o->contract_ref=o->dump_ref=-1;return (PyObject*)o;
+ o->contract_models=Py_XNewRef(contract_models);o->dump_refs=o->contract_json=o->contract_fp=o->contract_origin=o->contract_config=o->dump_models=NULL;o->contract_ref=o->dump_ref=-1;return (PyObject*)o;
 }
 static PyObject*make_owned_core(PyObject*data,PyObject*parents){return make_owned_domain(data,parents,NULL);}
 static PyObject*make_owned(PyObject*self,PyObject*data){
@@ -199,6 +199,7 @@ static int contract_pair_map(Owned*o,Py_ssize_t actual,Py_ssize_t raw,int depth,
  Py_UCS4 at=PyUnicode_READ_CHAR(PyTuple_GET_ITEM(a,0),0),bt=PyUnicode_READ_CHAR(PyTuple_GET_ITEM(b,0),0);
  if(at=='m'){
   if(bt!='d')return 0;
+  PyObject*prior=PyTuple_GET_ITEM(o->dump_models,raw);PyTuple_SET_ITEM(o->dump_models,raw,Py_NewRef(Py_True));Py_DECREF(prior);
   if(!PyTuple_GET_ITEM(o->dump_refs,actual)){
    PyObject*r=PyLong_FromSsize_t(raw);if(!r)return -1;PyTuple_SET_ITEM(o->dump_refs,actual,r);
   }
@@ -319,6 +320,8 @@ static PyObject*make_contract_owned(PyObject*self,PyObject*args){
  if(PyErr_Occurred())goto error;
  if(shape_tag(nodes,PyTuple_GET_ITEM(refs,0))!='m'||shape_tag(nodes,PyTuple_GET_ITEM(refs,1))!='d')goto refuse;
  o->dump_refs=PyTuple_New(PyTuple_GET_SIZE(nodes));if(!o->dump_refs)goto error;
+ o->dump_models=PyTuple_New(PyTuple_GET_SIZE(nodes));if(!o->dump_models)goto error;
+ for(Py_ssize_t i=0;i<PyTuple_GET_SIZE(nodes);i++)PyTuple_SET_ITEM(o->dump_models,i,Py_NewRef(Py_False));
  size_t work=0;int mapped=contract_pair_map(o,o->contract_ref,o->dump_ref,0,&work,0);
  if(mapped<0)goto error;if(!mapped)goto refuse;
  PyObject*catalog=PyTuple_GET_ITEM(o->data,7);
@@ -360,6 +363,13 @@ static PyObject*contract_fingerprint(PyObject*self,PyObject*value){
 static PyObject*contract_json(PyObject*self,PyObject*value){
  (void)self;if(Py_TYPE(value)!=&SourceViewType)return view_error();SourceView*v=(SourceView*)value;
  if(!v->owner->contract_models||v->ref!=v->owner->contract_ref||!v->owner->contract_json)return view_error();return Py_NewRef(v->owner->contract_json);
+}
+static PyObject*contract_dump(PyObject*self,PyObject*value){
+ (void)self;if(Py_TYPE(value)!=&SourceViewType)return view_error();SourceView*v=(SourceView*)value;
+ if(!v->owner->contract_models||!v->owner->dump_refs)return view_error();
+ PyObject*ref=PyTuple_GET_ITEM(v->owner->dump_refs,v->ref);
+ if(!PyLong_CheckExact(ref))return view_error();
+ return view_read(v->owner,PyLong_AsSsize_t(ref));
 }
 /* The original _schema_shape grammar, checked with no Python callbacks,
  * tracked allocations, getters, user equality, or previous PASS. */
@@ -479,7 +489,7 @@ static int contract_constructor_frame(PyObject*binding,PyObject*checked){
  for(int i=0;frame&&i<3;i++){
   PyCodeObject*code=PyFrame_GetCode(frame);PyObject*globals=PyFrame_GetGlobals(frame);
   if((PyObject*)code==contract_binding_code&&globals==contract_binding_globals){
-   PyObject*locals=PyFrame_GetLocals(frame);if(locals){found=PyDict_GetItemString(locals,"self")==binding&&PyDict_GetItemString(locals,"checked")==checked;Py_DECREF(locals);}
+   PyObject*locals=PyFrame_GetLocals(frame);if(locals){found=code_namespace(locals)&&PyDict_GetItemString(locals,"self")==binding&&PyDict_GetItemString(locals,"checked")==checked;Py_DECREF(locals);}
   }
   Py_DECREF(code);Py_DECREF(globals);PyFrameObject*back=PyFrame_GetBack(frame);Py_DECREF(frame);frame=back;
   if(found)break;
@@ -488,6 +498,14 @@ static int contract_constructor_frame(PyObject*binding,PyObject*checked){
 }
 static int contract_late_current(void){
  PyObject*ok=verify_code_range(0,10);if(!ok)return 0;int same=ok==Py_True;Py_DECREF(ok);
+ return same&&contract_schemas_current_internal();
+}
+/* The registered DATA reader executes no Python verifier, Graph, SQL or
+ * authority code. Its complete dependencies are family nine, the original
+ * Binding/model/schema witnesses and its private C registry/header below.
+ * Installation and issuance retain their separate full 0..9 gates. */
+static int contract_read_current(void){
+ PyObject*ok=verify_code_range(9,10);if(!ok)return 0;int same=ok==Py_True;Py_DECREF(ok);
  return same&&contract_schemas_current_internal();
 }
 static int contract_origin_current(SourceView*view,PyObject*checked){
@@ -557,7 +575,7 @@ static PyObject*contract_binding_current(PyObject*self,PyObject*binding){
  PyObject*fields=PyObject_GenericGetDict(binding,NULL),*again=NULL,*result=NULL;
  if(!fields)goto done;
  again=PyObject_GenericGetDict(binding,NULL);if(!again)goto done;
- if(again!=fields||(PyObject*)Py_TYPE(binding)!=contract_binding_type||!PyTuple_CheckExact(entry)||PyTuple_GET_SIZE(entry)!=4||PyTuple_GET_ITEM(entry,3)!=Py_True||PyWeakref_GetObject(PyTuple_GET_ITEM(entry,0))!=binding||!contract_late_current()||!contract_binding_fields(fields,PyTuple_GET_ITEM(entry,1),PyTuple_GET_ITEM(entry,2)))goto invalid;
+ if(again!=fields||(PyObject*)Py_TYPE(binding)!=contract_binding_type||!PyTuple_CheckExact(entry)||PyTuple_GET_SIZE(entry)!=4||PyTuple_GET_ITEM(entry,3)!=Py_True||PyWeakref_GetObject(PyTuple_GET_ITEM(entry,0))!=binding||!contract_read_current()||!contract_binding_fields(fields,PyTuple_GET_ITEM(entry,1),PyTuple_GET_ITEM(entry,2)))goto invalid;
  result=Py_NewRef(PyTuple_GET_ITEM(entry,1));goto done;
  invalid:if(!PyErr_Occurred())contract_binding_error();
  done:Py_XDECREF(again);Py_XDECREF(fields);Py_DECREF(entry);return result;
@@ -572,6 +590,7 @@ static PyMethodDef methods[]={
  {"contract_model",contract_model,METH_O,"Exact original model class of an immutable PB view, or None."},
  {"contract_fingerprint",contract_fingerprint,METH_O,"Original canonical JSON SHA256 of immutable PB DATA, never an approval."},
  {"contract_json",contract_json,METH_O,"Original canonical UTF8 JSON of immutable PB DATA."},
+ {"contract_dump",contract_dump,METH_O,"Exact immutable canonical model-dump view, sharing the full model owner."},
  {"register_contract_schemas",register_contract_schemas,METH_VARARGS,"Original complete schema/code expectations, never model data or a PASS."},
  {"contract_schema_current",contract_schema_current,METH_NOARGS,"Fresh complete live PB schema configuration, with no Python callback."},
  {"contract_entry",contract_entry,METH_NOARGS,"Fresh fixed Python data-entry roles before any foreign dispatch."},

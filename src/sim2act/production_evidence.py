@@ -135,7 +135,10 @@ def _contract_data(value, depth=0):
     """Extract only declared trusted schema data, without instance serializers."""
     if depth > 16:
         _deny("Production evidence original contract exceeds its data depth")
-    kind = type(value)
+    kind = gate._contract_kind(value)
+    if gate._contract_owned(value):
+        # A fresh complete original canonical copy; no hidden mutable root.
+        return value.model_dump()
     if kind in (str, int, float, bool, type(None)):
         return value
     if kind is list:
@@ -157,11 +160,15 @@ def requirements_for(user, contract, approval_key) -> EvidenceRequirements:
     This helper alone does not read consent, current permissions or revocation.
     The complete contract fingerprint binds both materials/Goals and all caps.
     """
-    if (type(contract) not in (gate.TrialContract, gate.TrialContractV2, gate.PBTrialContract)
+    if (gate._contract_kind(contract) not in (gate.TrialContract, gate.TrialContractV2, gate.PBTrialContract)
             or type(user) is not str or type(approval_key) is not str):
         _deny("Production evidence requires an exact original trial contract")
     try:
-        original = gate.parse_contract(_contract_data(contract))
+        if gate._contract_owned(contract):
+            from ._owned_pb_contract import current
+            original = current(contract)
+        else:
+            original = gate.parse_contract(_contract_data(contract))
         if original.principal_id != user:
             _deny("Production evidence principal differs from the original contract")
         return EvidenceRequirements(principal_id=user, project_id=original.project_id,

@@ -1,3 +1,9 @@
+
+
+def _pb_contract_kind(value):
+    from .natural_live_admission import _contract_kind
+    return _contract_kind(value)
+
 import argparse
 import hashlib
 import json
@@ -164,7 +170,7 @@ class Worker:
             proof_reads = (_journal_reads(self, c) if natural_spec_request is not None
                 and self.store.test_only and self.store.sqlite
                 and _production_binding(self.pa_trial)
-                and type(self.pa_trial.contract) is PBTrialContract else nullcontext())
+                and _pb_contract_kind(self.pa_trial.contract) is PBTrialContract else nullcontext())
             with proof_reads:
                 run = self.store.guard(c, run_id, fence)
                 from .exact_read import enforce_selection

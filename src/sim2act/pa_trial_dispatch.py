@@ -56,7 +56,7 @@ _JOURNAL_METADATA_PROJECTION = select(
 def _checked_trial_contract(contract, approval_key, account_id):
     from .production_evidence import _contract_data, requirements_for
 
-    gate.require(type(contract) in (gate.TrialContractV2, gate.TrialContract, gate.PBTrialContract))
+    gate.require(gate._contract_kind(contract) in (gate.TrialContractV2, gate.TrialContract, gate.PBTrialContract))
     original = gate.parse_contract(_contract_data(contract))
     requirements_for(original.principal_id, original, approval_key)
     gate.require(original.quota_subject == production.canonical_quota_subject(account_id))
@@ -118,6 +118,8 @@ def _binding(worker):
     binding = worker.pa_trial
     if _production_binding(binding):
         from .spec_production import environment
+        from ._owned_pb_contract import bound
+        bound(binding)
         environment(worker.store, worker.s, worker.goal_planner_transport)
         gate.require(worker.store is worker._journal_trial_store
             and binding is worker._journal_trial_binding and not worker._journal_trial_drift
@@ -179,7 +181,7 @@ def _admission(worker, *, _source_out=None):
         if _journal_binding(b):
             from . import production_trial_policy as policy
             context = policy.check_run(store, c, user, contract, key, stage, rid, version, fence, worker.id)
-            if type(contract) is gate.PBTrialContract and stage == "cold":
+            if gate._contract_kind(contract) is gate.PBTrialContract and stage == "cold":
                 _pb_source(worker, c, b)
             current_source = _journal_source(store, c, b)
             if _source_out is not None:
@@ -192,7 +194,7 @@ def _admission(worker, *, _source_out=None):
             return context
         _, result = production._account_admit(store, c, user, contract, key, stage,
             rid, version, fence, b.registry, worker.id)
-        if type(contract) is gate.PBTrialContract and stage == "cold":
+        if gate._contract_kind(contract) is gate.PBTrialContract and stage == "cold":
             _pb_source(worker, c, b)
         current = _binding(worker)
         gate.require(
@@ -251,7 +253,7 @@ def check_commit(worker, c, run, *, _read_out=None, _model_out=None):
                 worker.store, c, run["principal_id"], b.contract, b.approval_key,
                 _stage(b, run), run["id"], run["version"], run["fence"])
         if _model_out is not None:
-            gate.require(_production_binding(b) and type(b.contract) is gate.PBTrialContract
+            gate.require(_production_binding(b) and gate._contract_kind(b.contract) is gate.PBTrialContract
                          and context.stage == "cold")
             _model_out.update(approval=context.approval_fingerprint,
                 phase=context.stage_fingerprint, requirements=context.requirements_fingerprint,
@@ -259,7 +261,7 @@ def check_commit(worker, c, run, *, _read_out=None, _model_out=None):
         if read_entry is not None:
             from .pb_natural_specs import _source_reads_current
             token = c.info.get("pb_source_reads")
-            if (_production_binding(b) and type(b.contract) is gate.PBTrialContract
+            if (_production_binding(b) and gate._contract_kind(b.contract) is gate.PBTrialContract
                     and context.stage == "cold" and _source_reads_current(worker.store, c, token)):
                 from .natural_trial_runs import associated_sql
                 actual = c.execute(select(runs).where(runs.c.id == run["id"])).mappings().one()
@@ -273,7 +275,7 @@ def check_commit(worker, c, run, *, _read_out=None, _model_out=None):
                     _read_out["stamp"] = stamp
         return
     gate._approved(worker.store, c, b.contract.principal_id, b.contract, b.approval_key)
-    if type(b.contract) is gate.PBTrialContract and _stage(b, run) == "cold":
+    if gate._contract_kind(b.contract) is gate.PBTrialContract and _stage(b, run) == "cold":
         _pb_source(worker, c, b)
     _account(worker, _binding(worker))
 
@@ -302,7 +304,7 @@ class _CommitReadback:
 def _commit_readback_entry(worker, c, run):
     from .pb_natural_specs import _source_reads_current
     b, token = worker.pa_trial, c.info.get("pb_source_reads")
-    if (not _production_binding(b) or type(b.contract) is not gate.PBTrialContract
+    if (not _production_binding(b) or gate._contract_kind(b.contract) is not gate.PBTrialContract
             or getattr(worker, "_journal_trial_store", None) is not worker.store
             or getattr(worker, "_journal_trial_binding", None) is not b
             or getattr(worker, "_journal_trial_drift", None) is not False
@@ -436,7 +438,7 @@ def check_terminal_commit(worker, c, run, state):
             and fingerprint(phase.model_dump()) == consent.expected_authority_fingerprint)
     journal_stage_accounted(worker.store, c, run["principal_id"], b.contract,
                             b.approval_key, run["id"], stage)
-    if type(b.contract) is gate.PBTrialContract and stage == "cold":
+    if gate._contract_kind(b.contract) is gate.PBTrialContract and stage == "cold":
         _pb_source(worker, c, b)
     _binding(worker)
     if _production_binding(b):
@@ -484,7 +486,7 @@ def _pb_accounting(store, c, user, contract, key):
     from .production_trial_journal import KIND
     from .spec_production import VERSION, ProductionTrialBinding
 
-    gate.require(type(contract) is gate.PBTrialContract and c.in_transaction())
+    gate.require(gate._contract_kind(contract) is gate.PBTrialContract and c.in_transaction())
     gate._approved(store, c, user, contract, key)
     generation = c.execute(select(runs.c.id).where(runs.c.principal_id == user,
         runs.c.project_id == contract.project_id, runs.c.runtime_id == contract.runtime_id,
@@ -575,14 +577,14 @@ def extract_pb(worker, user, source_id, body):
     from . import pb_natural_specs as pb
 
     b = _binding(worker)
-    gate.require(type(b.contract) is gate.PBTrialContract and user == b.contract.principal_id)
+    gate.require(gate._contract_kind(b.contract) is gate.PBTrialContract and user == b.contract.principal_id)
     gate.require(type(body) is pb.ExtractInput
         and pb.ExtractInput.model_validate(body.model_dump()) == body)
     cold = b.contract.bindings[1]
     review = body.review
     gate.require(review.source_run_id == source_id
         and review.request_key == b.contract.extraction_request_key
-        and review.recipe == b.contract.extraction_recipe
+        and gate._contract_recipe_equal(review.recipe, b.contract.extraction_recipe)
         and review.card_id == cold.card_id
         and review.expected_goal_version == cold.goal_version
         and review.expected_goal_fingerprint == cold.goal_fingerprint
@@ -1239,7 +1241,7 @@ def check_journal_claim(store, c, run, b):
         gate.require(current == accepted.authority and accepted.approval_key == b.approval_key
             and fingerprint(current.model_dump()) == accepted.expected_authority_fingerprint)
         gate._stage_review_window(current)
-        if type(b.contract) is gate.PBTrialContract and stage == "cold":
+        if gate._contract_kind(b.contract) is gate.PBTrialContract and stage == "cold":
             _pb_source_bound(store, c, b)
     frozen_seconds = store.frozen_contract(c, run).limits.run_seconds
     deadline = min(run["created_at"] + min(b.contract.caps.run_seconds, frozen_seconds),
@@ -1506,7 +1508,7 @@ def _graph_journal_state(graph, store, c, b):
         _guard()
         gate.require(b is graph.binding)
         _guard()
-        gate.require(gate._trial_result(_production_binding(b), _guard) and type(b.contract) is gate.PBTrialContract)
+        gate.require(gate._trial_result(_production_binding(b), _guard) and gate._contract_kind(b.contract) is gate.PBTrialContract)
         value = gate._trial_result(_journal_state(store, c, b, _guard=_guard), _guard)
         _guard()
         state, cursor, revision = value
@@ -1704,7 +1706,7 @@ def _graph_pb_accounting(graph, store, c, b, generation, state, *, _owned=None):
         if _owned is not None:
             from .cold_accounted import _prewrite_mode
             _prewrite_mode(_owned, graph).assert_run('generate', generation)
-        gate.require(gate._trial_result(_production_binding(b), _guard) and type(b.contract) is gate.PBTrialContract)
+        gate.require(gate._trial_result(_production_binding(b), _guard) and gate._contract_kind(b.contract) is gate.PBTrialContract)
         user, contract, key = (b.contract.principal_id, b.contract, b.approval_key)
         gate._trial_result(gate._approved(store, c, user, contract, key, **{'_guard': _guard} if _guard is not None else {}), _guard)
         gate.require(generation['principal_id'] == user and generation['project_id'] == contract.project_id and (generation['runtime_id'] == contract.runtime_id) and (generation['request_key'] == contract.stage_keys.generate))

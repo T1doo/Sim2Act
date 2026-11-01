@@ -7,6 +7,13 @@ and are committed by the existing pa_spec_apps transaction only.
 
 from __future__ import annotations
 
+
+def _pb_contract_kind(value):
+    from .natural_live_admission import _contract_kind
+    return _contract_kind(value)
+
+
+
 import builtins as _raw_read_builtins
 from builtins import type, vars, all, any, dict, str, list, tuple, set, bool, len, getattr, object, isinstance
 import copy
@@ -178,8 +185,8 @@ def _model_settlement_writer(worker, job, deadline, state, *, attempt_id=None, _
     from .spec_production import ProductionTrialBinding
     binding = getattr(worker, "pa_trial", None)
     extended = (worker.store.sqlite and type(binding) is ProductionTrialBinding
-        and type(binding.contract) is PBTrialContract
-        and type(binding.contract.caps) is SQLiteSettlementCaps)
+        and _pb_contract_kind(binding.contract) is PBTrialContract
+        and _pb_contract_kind(binding.contract.caps) is SQLiteSettlementCaps)
     if not worker.store.sqlite:
         renew(worker, job, deadline, _heartbeat_state=state)
         yield
@@ -2313,7 +2320,7 @@ class _ColdGraphRead:
 
         require(type(worker) is Worker and type(worker.store) is Store
             and type(worker.s) is Settings and type(worker.pa_trial) is ProductionTrialBinding
-            and type(worker.pa_trial.contract) is PBTrialContract
+            and _pb_contract_kind(worker.pa_trial.contract) is PBTrialContract
             and phase in {"pre", "post"} and type(inputs) is dict and bool(inputs)
             and type(role_limits) is dict
             and set(role_limits) == {"source", "generate", "platform", "trial", "per_use"}
@@ -2359,7 +2366,7 @@ class _ColdGraphRead:
         require(self._accounted_frontier is None or _frontier_inputs is not None,
             "Native candidate continuity cannot be exported as legacy origin bytes")
         b = self.binding
-        require(type(b) is ProductionTrialBinding and type(b.contract) is PBTrialContract,
+        require(type(b) is ProductionTrialBinding and _pb_contract_kind(b.contract) is PBTrialContract,
             "Exact Cold graph trial binding required")
         selected = None
         typed_candidate = getattr(self, '_typed_native_candidate', None)
@@ -2379,9 +2386,9 @@ class _ColdGraphRead:
                     selected = _typed_native_code.select_candidate(typed_candidate, PBTrialContract, b.contract)
         # Legacy must execute at its original frame depth, after the selector
         # returns. Never retry a native projection failure.
-        contract = (_trial_typed_storage(PBTrialContract, b.contract)
-            if selected is None else selected)
-        if _validate:
+        from .natural_live_admission import _contract_graph, _contract_owned
+        contract = (_contract_graph(b) if selected is None else selected)
+        if _validate and not _contract_owned(b.contract):
             require(_trial_typed_equal(contract, PBTrialContract.model_dump(b.contract, warnings=False)),
                 "Cold graph trial storage and fixed schema dump differ")
         values = dict(inputs=self.inputs if _frontier_inputs is None else _frontier_inputs, role_limits=self.role_limits, phase=self.phase,
@@ -3117,9 +3124,14 @@ def _raw_seed_eligible(facts, guard):
             or not (type(pd.get('original')) is dict or type(pd.get('original')) is _ColdGraphRowMapping)):
         return False
     contract = object.__getattribute__(guard.binding, '__dict__').get('contract')
-    if type(contract) is not _row_native_code.PBTrialContract:
+    if _pb_contract_kind(contract) is not _row_native_code.PBTrialContract:
         return False
-    contract_raw = object.__getattribute__(contract, '__dict__')
+    if _source_owned_code.native.contract_model(contract) is not None:
+        from .natural_live_admission import _contract_graph
+        _contract_graph(guard.binding)
+        contract_raw = contract
+    else:
+        contract_raw = object.__getattribute__(contract, '__dict__')
     if any(type(contract_raw.get(key)) is not str for key in ('principal_id', 'project_id')):
         return False
     # Walk complete compared packets, including unused row positions and both
@@ -4829,7 +4841,7 @@ class _ColdTrialGraph:
             self.accounted_prewrite.assert_family(g, self.source_accounted, 'source')
         if getattr(self, 'accounted_candidate', None) is not None:
             self.accounted_candidate.stage('source', self.source_accounted)
-        expected_recipe = contract.extraction_recipe.model_dump(exclude_none=True)
+        expected_recipe = gate._contract_recipe(contract)
         pin()
         gate._stage_recipe_from_facts(expected_recipe, t.binding['draft'], _guard=pin)
         pin()
@@ -5111,7 +5123,7 @@ def _cold_model_eligible(worker, c, current):
 
     binding = getattr(worker, 'pa_trial', None)
     return (type(binding) is ProductionTrialBinding
-        and type(binding.contract) is PBTrialContract
+        and _pb_contract_kind(binding.contract) is PBTrialContract
         and worker.store.test_only and worker.store.sqlite
         and current['runtime_id'] != binding.contract.runtime_id
         and current['resource_refs'] == [binding.contract.bindings[1].resource_id]
@@ -5148,7 +5160,7 @@ def _cold_model_before(worker, c, current, inputs, platform, *, _mock_accounted_
     selected_config = _mock_accounted_config
     if selected_config is None:
         from .natural_live_admission import SQLiteSettlementCaps
-        if type(worker.pa_trial.contract.caps) is SQLiteSettlementCaps:
+        if _pb_contract_kind(worker.pa_trial.contract.caps) is SQLiteSettlementCaps:
             from ._cold_accounted_native import _bounded_settlement_config
             selected_config = _bounded_settlement_config()
     roles = _cold_model_roles(worker, platform, first='platform')
@@ -5431,7 +5443,7 @@ def _model_settlement_read(worker, c, inputs):
     from .natural_trial_runs import associated_sql
     from .pb_natural_specs import _source_reads_current
     b, store = getattr(worker, "pa_trial", None), worker.store
-    eligible = (b is not None and trial._production_binding(b) and type(b.contract) is gate.PBTrialContract
+    eligible = (b is not None and trial._production_binding(b) and _pb_contract_kind(b.contract) is gate.PBTrialContract
         and trial._stage(b, inputs["current"]) == "cold"
         and _source_reads_current(store, c, c.info.get("pb_source_reads")))
     if eligible:
@@ -5826,7 +5838,7 @@ def advance_model(worker, run, *, _heartbeat_state=None):
             require(type(candidate) is MockCandidate and store.test_only and store.sqlite,
                 "Owned G0 candidate is explicit synthetic SQLite only")
             selected_binding = getattr(worker, "pa_trial", None)
-            if (selected_binding is not None and type(selected_binding.contract) is PBTrialContract
+            if (selected_binding is not None and _pb_contract_kind(selected_binding.contract) is PBTrialContract
                     and run["runtime_id"] != selected_binding.contract.runtime_id
                     and run["resource_refs"] == [selected_binding.contract.bindings[1].resource_id]):
                 plan = candidate.prepare(worker, binding, graph_call, limits)
@@ -6060,7 +6072,7 @@ def _register_graph_source_witness():
     global _GRAPH_SOURCE_WITNESS_REGISTERED
     if _GRAPH_SOURCE_WITNESS_REGISTERED:
         return
-    _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_limit_values','_cold_release_row',
+    _source_owned_code.register(4,globals(),('_pb_contract_kind','_cold_graph_row_storage','_cold_graph_limit_values','_cold_release_row',
         'require','_cold_native_audit_fact','_cold_audit_seed','_cold_first_binding','_cold_generated_model_facet',
         '_source_data_kind','_source_fields_equal','_cold_seed_audit_rows','_cold_seed_fixed_rows','_cold_seed_fixed_check',
         '_cold_run_raw_seed','_cold_run_facts','_check_run_facts','_cold_read_checkpoint',
@@ -6094,7 +6106,7 @@ def _register_graph_source_witness():
             (vars(_release_fact_code),('owned_release_pointer','_checkpoint_release_read',
                 '_read_release_prefix','_read_release_suffix','_cold_release_prefix','_release_same',
                 '_cold_release_from_origin','_cold_release_complete','_cold_release_facet_prefix','record_schema')),
-            (vars(_release_apps_code),('validate_source_family','compile_preview',
+            (vars(_release_apps_code),('_pb_contract_kind','validate_source_family','compile_preview',
                 '_cold_candidate_prefix','_frozen_candidate_prefix','_record_candidate_origin',
                 '_checkpoint_candidate_read','_cold_candidate_from_origin'))),
         constant_helpers=((vars(_graph_structure_code),('native','_NATIVE','_NATIVE_METADATA','_SOURCE_OK','_State',

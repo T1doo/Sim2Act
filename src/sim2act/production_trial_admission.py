@@ -24,7 +24,7 @@ from .db import attempts, fingerprint, runs
 from .errors import DomainError
 from .text_continuations import ANCHOR_HASH
 
-PRODUCTION_QUALIFICATION_HASH = "ca48eb002ac1067126e77c79575424e23dc2d35dd2b87a5f0cd291008ef14258"
+PRODUCTION_QUALIFICATION_HASH = "7590ebc58a8e0562043f8b3b945198cfdcafd6b6fb5ebad85aabbfdb0b3fef0a"
 
 
 class AccountEvidence(Strict):
@@ -237,7 +237,7 @@ def _source_usage(attempt, slot, proof):
 
 
 def _source(store, c, user, contract, approval_key, stage, account, source_contract, resolver):
-    if stage != "cold" or not isinstance(contract, gate.PBTrialContract):
+    if stage != "cold" or gate._contract_kind(contract) is not gate.PBTrialContract:
         gate.require(source_contract is None and resolver is None)
         return
     from . import pa_spec_apps as spec

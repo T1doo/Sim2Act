@@ -323,9 +323,23 @@ def test_native_dynamic_and_frontier_invalidation(sql_facts, damage):
         if damage == 'settings':
             object.__setattr__(f.settings, 'run_seconds', f.settings.run_seconds - 1)
         elif damage == 'model':
-            object.__setattr__(f.contract, 'model', 'changed')
+            if gate._contract_owned(f.contract):
+                with pytest.raises(AttributeError):
+                    object.__setattr__(f.contract, 'model', 'changed')
+                bad=gate.PBTrialContract.model_validate(f.contract.model_dump())
+                object.__setattr__(bad,'model','changed')
+                object.__setattr__(f.binding,'contract',bad)
+            else:
+                object.__setattr__(f.contract, 'model', 'changed')
         elif damage == 'max_tokens':
-            object.__setattr__(f.contract.caps, 'max_output_tokens', 1)
+            if gate._contract_owned(f.contract):
+                with pytest.raises(AttributeError):
+                    object.__setattr__(f.contract.caps,'max_output_tokens',1)
+                bad=gate.PBTrialContract.model_validate(f.contract.model_dump())
+                object.__setattr__(bad.caps,'max_output_tokens',1)
+                object.__setattr__(f.binding,'contract',bad)
+            else:
+                object.__setattr__(f.contract.caps, 'max_output_tokens', 1)
         elif damage == 'stop':
             f.worker.stop.set()
         elif damage == 'write':

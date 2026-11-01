@@ -94,8 +94,8 @@ def interval(worker, job, attempt_id, deadline, state):
     store, binding = worker.store, worker.pa_trial
     _require(not hasattr(worker, "_settlement_interval"), "Settlement cannot reenter")
     _require(store.sqlite and type(binding) is ProductionTrialBinding
-        and type(binding.contract) is gate.PBTrialContract
-        and type(binding.contract.caps) is gate.SQLiteSettlementCaps,
+        and gate._contract_kind(binding.contract) is gate.PBTrialContract
+        and gate._contract_kind(binding.contract.caps) is gate.SQLiteSettlementCaps,
         "Explicit signed SQLite settlement policy required")
     contract = binding.contract
     caps = gate.SQLiteSettlementCaps.model_validate(contract.caps.model_dump())

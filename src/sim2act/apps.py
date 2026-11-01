@@ -1,5 +1,11 @@
 """Bounded read-only declarative previews. No release, model or generated code executor."""
 
+
+def _pb_contract_kind(value):
+    from .natural_live_admission import _contract_kind
+    return _contract_kind(value)
+
+
 import copy
 import json
 import time
@@ -47,7 +53,7 @@ class _ColdGraphOriginFacts:
 
         require(type(worker) is Worker and type(worker.store) is Store and type(worker.s) is Settings
             and type(worker.pa_trial) is ProductionTrialBinding
-            and type(worker.pa_trial.contract) is PBTrialContract
+            and _pb_contract_kind(worker.pa_trial.contract) is PBTrialContract
             and role in {"source", "generate", "cold"}
             and type(inputs) is dict and bool(inputs)
             and type(role_limits) is dict
@@ -84,15 +90,16 @@ class _ColdGraphOriginFacts:
         from .spec_production import ProductionTrialBinding
 
         b = self.binding
-        require(type(b) is ProductionTrialBinding and type(b.contract) is PBTrialContract
+        require(type(b) is ProductionTrialBinding and _pb_contract_kind(b.contract) is PBTrialContract
             and type(self.origin) is tuple and len(self.origin) == 4
             and type(self.origin[0]) is AppManifest,
             "Exact Cold graph origin binding and manifest required")
         manifest, report, source, goal = self.origin
-        contract = _trial_typed_storage(PBTrialContract, b.contract)
+        from .natural_live_admission import _contract_graph, _contract_owned
+        contract = _contract_graph(b)
         manifest_raw = _trial_typed_storage(AppManifest, manifest)
         if _validate:
-            require(_trial_typed_equal(contract, PBTrialContract.model_dump(b.contract, warnings=False))
+            require((_contract_owned(b.contract) or _trial_typed_equal(contract, PBTrialContract.model_dump(b.contract, warnings=False)))
                 and _trial_typed_equal(manifest_raw, AppManifest.model_dump(manifest, warnings=False)),
                 "Cold graph origin storage and fixed schema dumps differ")
         values = dict(inputs=self.inputs, role=self.role, role_limits=self.role_limits,

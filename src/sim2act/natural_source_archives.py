@@ -280,8 +280,8 @@ def _resolve_source_before_extraction(store, c, user, contract, approval_key):
     from . import pa_spec_apps as spec
 
     require(c.in_transaction() and store.owns_connection(c))
-    require(type(contract) is gate.PBTrialContract
-            and gate.PBTrialContract.model_validate(contract.model_dump()) == contract)
+    require(gate._contract_kind(contract) is gate.PBTrialContract
+            and gate._contract_validated(contract))
     with store.proof_authorities(c) as authorities:
         approval, ledger, current, job, proof = _source_prefix(store, c, user, contract, approval_key)
         requests, responses, public = _source_bodies(c, user, contract, job, ledger)
@@ -303,8 +303,8 @@ def _resolve_source_before_extraction(store, c, user, contract, approval_key):
 def resolve_trial_source(store, user, contract, approval_key):
     from . import natural_live_admission as gate
 
-    require(type(contract) is gate.PBTrialContract)
-    require(gate.PBTrialContract.model_validate(contract.model_dump()) == contract)
+    require(gate._contract_kind(contract) is gate.PBTrialContract)
+    require(gate._contract_validated(contract))
     with store.tx() as c:
         return _resolve_trial_source(store, c, user, contract, approval_key)
 
@@ -315,9 +315,8 @@ def _resolve_trial_source(store, c, user, contract, approval_key):
     from . import pa_spec_apps as spec
     from . import pb_natural_specs as pb
 
-    require(type(contract) is gate.PBTrialContract)
-    exact = gate.PBTrialContract.model_validate(contract.model_dump())
-    require(exact == contract)
+    require(gate._contract_kind(contract) is gate.PBTrialContract)
+    require(gate._contract_validated(contract))
     require(c.in_transaction() and store.owns_connection(c),
             "Original source proof requires the caller transaction")
     with store.proof_authorities(c) as authorities:
@@ -390,7 +389,7 @@ def _source_bodies_from_rows(c, user, contract, job, ledger, rows, *, _guard=Non
 def _source_extraction_from_facts(contract, source_id, source_proof, extracted, target, goal, *, _guard=None):
     from . import natural_live_admission as gate
     cold = contract.bindings[1]
-    require(extracted.review.source_run_id == source_id and extracted.review.request_key == contract.extraction_request_key and (extracted.review.recipe == contract.extraction_recipe) and (extracted.review.expected_source_proof_fingerprint == gate._trial_result(fingerprint(source_proof), _guard)) and (target['resource_id'] == cold.resource_id) and (target['hash'] == cold.source_hash) and (target['content'] == cold.content) and (goal == dict(card_id=cold.card_id, version=cold.goal_version, fingerprint=cold.goal_fingerprint, snapshot=gate._trial_result(cold.goal_snapshot.model_dump(), _guard))))
+    require(extracted.review.source_run_id == source_id and extracted.review.request_key == contract.extraction_request_key and (gate._contract_recipe_equal(extracted.review.recipe, contract.extraction_recipe)) and (extracted.review.expected_source_proof_fingerprint == gate._trial_result(fingerprint(source_proof), _guard)) and (target['resource_id'] == cold.resource_id) and (target['hash'] == cold.source_hash) and (target['content'] == cold.content) and (goal == dict(card_id=cold.card_id, version=cold.goal_version, fingerprint=cold.goal_fingerprint, snapshot=gate._trial_result(cold.goal_snapshot.model_dump(), _guard))))
 
 
 def _graph_source_bodies(graph, store, c, user, contract, ledger, source_facts, *, _accounted_test=None, _owned=None):
@@ -488,7 +487,7 @@ def _graph_resolve_trial_source(graph, store, c, user, contract, approval_key, l
         gate._graph_trial_accounted_models(graph, store, c, _models, source_facts, 'source', **{'_owned': _owned} if _owned is not None else {})
         gate._graph_trial_extraction_models(graph, store, c, _models, extraction_facts)
         _guard()
-        require(type(contract) is gate.PBTrialContract and gate._trial_result(gate.PBTrialContract.model_validate(gate._trial_result(contract.model_dump(), _guard)), _guard) == contract)
+        require(gate._contract_kind(contract) is gate.PBTrialContract and gate._contract_validated(contract, _guard=_guard))
         with gate._trial_result(store.proof_authorities(c), _guard) as authorities:
             gate._trial_result(None, _guard)
             approval = gate._trial_result(gate._approved(store, c, user, contract, approval_key, **{'_guard': _guard} if _guard is not None else {}), _guard)

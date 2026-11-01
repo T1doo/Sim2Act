@@ -54,6 +54,10 @@ class ProductionTrialBinding:
 
         # Reuse the original closed contract and account/slot validation.
         checked = _checked_trial_contract(self.contract, self.approval_key, self.account_id)
+        from ._owned_pb_contract import publish
+        approval_key, account_id = self.approval_key, self.account_id
+        if publish(self, checked, approval_key, account_id):
+            return
         object.__setattr__(self, "contract", checked)
         object.__setattr__(self, "contract_fingerprint", fingerprint(evidence._contract_data(checked)))
 
@@ -83,6 +87,8 @@ def source(store, c, binding):
 
     gate.require(type(binding) is ProductionTrialBinding and store.owns_connection(c)
                  and c.in_transaction())
+    from ._owned_pb_contract import bound
+    bound(binding)
     gate.require(fingerprint(evidence._contract_data(binding.contract))
                  == binding.contract_fingerprint)
     gate._approved(store, c, binding.contract.principal_id, binding.contract, binding.approval_key)

@@ -331,7 +331,16 @@ def test_current_dynamic_or_content_changes_still_reject(local_origin, change):
         elif change == 'role':
             graph.role_limits['source'].max_requests -= 1
         else:
-            graph.binding.contract.caps.run_seconds -= 1
+            from sim2act import natural_live_admission as gate
+            from sim2act import _owned_pb_contract as pb_owner
+            if gate._contract_owned(graph.binding.contract):
+                with pytest.raises(AttributeError):
+                    graph.binding.contract.caps.run_seconds -= 1
+                changed=gate.PBTrialContract.model_validate(graph.binding.contract.model_dump())
+                changed.caps.run_seconds -= 1
+                object.__setattr__(graph.binding,'contract',changed)
+            else:
+                graph.binding.contract.caps.run_seconds -= 1
         with pytest.raises(DomainError):
             graph.check(f.store, c)
         assert not graph.active and '_structure_state' not in vars(graph)
@@ -526,3 +535,29 @@ def test_frontier_storage_subclass_rejects_before_iteration(owner):
     with pytest.raises(DomainError) as failed:_receipt_for_frontier(frontier)
     assert failed.value.code=='VERSION_CONFLICT'
     assert calls==[]
+
+
+def test_contract_cohort_refuses_another_legitimate_same_value_owner(local_origin):
+    from sim2act import natural_live_admission as gate
+    from sim2act.spec_production import ProductionTrialBinding
+    f=local_origin
+    with f.store.tx() as c, pb._source_reads(f.store,c), scope(f,c) as graph:
+        other=ProductionTrialBinding(graph.binding.contract,graph.binding.approval_key,graph.binding.account_id)
+        assert gate._contract_owned(other.contract)
+        assert other.contract == graph.binding.contract
+        assert not gate._contract_same(other.contract,graph.binding.contract)
+        with pytest.raises(DomainError,match='owner changed'):
+            gate._graph_trial_contract_models(graph,f.store,c,[],other.contract)
+
+
+def test_pb_data_read_does_not_grant_a_changed_source_graph(local_origin,monkeypatch):
+    from sim2act import _cold_source_packet as source
+    from sim2act import natural_live_admission as gate
+    f=local_origin
+    with f.store.tx() as c, pb._source_reads(f.store,c), rejecting_scope(f,c) as graph:
+        with monkeypatch.context() as patch:
+            patch.setattr(source,'_SOURCE_OK',False)
+            value=source.native.contract_binding_current(graph.binding)
+            assert gate._contract_same(value,graph.binding.contract)
+            with pytest.raises(DomainError):
+                graph.check(f.store,c)

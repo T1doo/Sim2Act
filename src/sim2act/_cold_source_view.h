@@ -232,7 +232,16 @@ static PyObject*view_items(PyObject*o,PyObject*unused){
 /* Fresh old-JSON compatibility output. Only an immutable canonical dump is
  * traversed; no live model, serializer, scope or successful gate is retained.
  * The memo preserves the ORIGINAL canonical output's container alias domain. */
-static PyObject*view_export(Owned*owner,Py_ssize_t ref,PyObject*memo,int depth,size_t*work){
+/* Pydantic exclude_none omits MODEL fields, not arbitrary dict entries.
+ * All canonical occurrences are marked during the complete model/dump join,
+ * including repeated aliases of the same actual nested model. */
+static int export_omit(Owned*owner,Py_ssize_t ref,PyObject*pair,int exclude_none){
+ if(!exclude_none||!owner->dump_models||PyTuple_GET_ITEM(owner->dump_models,ref)!=Py_True)return 0;
+ Py_ssize_t child=PyLong_AsSsize_t(PyTuple_GET_ITEM(pair,1));
+ PyObject*node=PyTuple_GET_ITEM(PyTuple_GET_ITEM(owner->data,1),child);
+ return PyUnicode_READ_CHAR(PyTuple_GET_ITEM(node,0),0)=='n';
+}
+static PyObject*view_export(Owned*owner,Py_ssize_t ref,PyObject*memo,int depth,size_t*work,int exclude_none){
  if(++*work>1000000||depth>64){PyErr_SetString(PyExc_ValueError,"PB export bound");return NULL;}
  PyObject*node=PyTuple_GET_ITEM(PyTuple_GET_ITEM(owner->data,1),ref),*p=PyTuple_GET_ITEM(node,1);
  Py_UCS4 tag=PyUnicode_READ_CHAR(PyTuple_GET_ITEM(node,0),0);
@@ -251,12 +260,13 @@ static PyObject*view_export(Owned*owner,Py_ssize_t ref,PyObject*memo,int depth,s
  for(Py_ssize_t i=0;i<count;i++){
   PyObject*r=PyTuple_GET_ITEM(p,i);
   if(tag=='d'){
+   if(export_omit(owner,ref,r,exclude_none))continue;
    PyObject*k=view_read(owner,PyLong_AsSsize_t(PyTuple_GET_ITEM(r,0)));
-   PyObject*v=k?view_export(owner,PyLong_AsSsize_t(PyTuple_GET_ITEM(r,1)),memo,depth+1,work):NULL;
+   PyObject*v=k?view_export(owner,PyLong_AsSsize_t(PyTuple_GET_ITEM(r,1)),memo,depth+1,work,exclude_none):NULL;
    int ok=k&&v&&PyUnicode_CheckExact(k)&&PyDict_SetItem(result,k,v)==0;Py_XDECREF(k);Py_XDECREF(v);
    if(!ok){Py_DECREF(result);if(!PyErr_Occurred())PyErr_SetString(PyExc_TypeError,"PB JSON key");return NULL;}
   }else{
-   PyObject*v=view_export(owner,PyLong_AsSsize_t(r),memo,depth+1,work);if(!v){Py_DECREF(result);return NULL;}
+   PyObject*v=view_export(owner,PyLong_AsSsize_t(r),memo,depth+1,work,exclude_none);if(!v){Py_DECREF(result);return NULL;}
    PyObject*old=tag=='l'?PyList_GET_ITEM(result,i):PyTuple_GET_ITEM(result,i);
    if(tag=='l')PyList_SET_ITEM(result,i,v);else PyTuple_SET_ITEM(result,i,v);Py_DECREF(old);
   }
@@ -264,7 +274,7 @@ static PyObject*view_export(Owned*owner,Py_ssize_t ref,PyObject*memo,int depth,s
  return result;
 }
 typedef struct {PyObject*value;Py_ssize_t ref;} ExportAlias;
-typedef struct {Owned*owner;PyObject**forward;ExportAlias*reverse;size_t slots,work;} ExportCheck;
+typedef struct {Owned*owner;PyObject**forward;ExportAlias*reverse;size_t slots,work;int exclude_none;} ExportCheck;
 static int export_check(ExportCheck*c,Py_ssize_t ref,PyObject*value,int depth){
  if(++c->work>1000000||depth>64)return 0;
  PyObject*n=PyTuple_GET_ITEM(PyTuple_GET_ITEM(c->owner->data,1),ref),*p=PyTuple_GET_ITEM(n,1);
@@ -282,9 +292,13 @@ static int export_check(ExportCheck*c,Py_ssize_t ref,PyObject*value,int depth){
  c->reverse[slot]=(ExportAlias){value,ref};c->forward[ref]=value;
  Py_ssize_t count=PyTuple_GET_SIZE(p);
  if(tag=='d'){
-  if(PyDict_GET_SIZE(value)!=count)return 0;
+  Py_ssize_t kept=0;
+  for(Py_ssize_t j=0;j<count;j++)if(!export_omit(c->owner,ref,PyTuple_GET_ITEM(p,j),c->exclude_none))kept++;
+  if(PyDict_GET_SIZE(value)!=kept)return 0;
   Py_ssize_t pos=0,i=0;PyObject*k,*v;
   while(PyDict_Next(value,&pos,&k,&v)){
+   while(i<count&&export_omit(c->owner,ref,PyTuple_GET_ITEM(p,i),c->exclude_none))i++;
+   if(i>=count)return 0;
    PyObject*pair=PyTuple_GET_ITEM(p,i++);
    int ok=export_check(c,PyLong_AsSsize_t(PyTuple_GET_ITEM(pair,0)),k,depth+1);if(ok<=0)return ok;
    ok=export_check(c,PyLong_AsSsize_t(PyTuple_GET_ITEM(pair,1)),v,depth+1);if(ok<=0)return ok;
@@ -297,28 +311,33 @@ static int export_check(ExportCheck*c,Py_ssize_t ref,PyObject*value,int depth){
  }
  return 1;
 }
-static int export_complete(Owned*owner,Py_ssize_t ref,PyObject*value){
+static int export_complete(Owned*owner,Py_ssize_t ref,PyObject*value,int exclude_none){
  size_t count=(size_t)PyTuple_GET_SIZE(PyTuple_GET_ITEM(owner->data,1)),slots=1024;while(slots<count*2)slots*=2;
- ExportCheck check={.owner=owner,.slots=slots};check.forward=PyMem_Calloc(count,sizeof(PyObject*));check.reverse=PyMem_Calloc(slots,sizeof(ExportAlias));
+ ExportCheck check={.owner=owner,.slots=slots,.exclude_none=exclude_none};check.forward=PyMem_Calloc(count,sizeof(PyObject*));check.reverse=PyMem_Calloc(slots,sizeof(ExportAlias));
  if(!check.forward||!check.reverse){PyMem_Free(check.forward);PyMem_Free(check.reverse);PyErr_NoMemory();return -1;}
  int ok=export_check(&check,ref,value,0);PyMem_Free(check.forward);PyMem_Free(check.reverse);return ok;
 }
 static PyObject*view_model_dump(PyObject*o,PyObject*args,PyObject*kw){
  if(PyTuple_GET_SIZE(args)){PyErr_SetString(PyExc_TypeError,"PB model_dump accepts keyword options only");return NULL;}
+ int exclude_none=0;
  if(kw){Py_ssize_t pos=0;PyObject*k,*v;while(PyDict_Next(kw,&pos,&k,&v)){
-  if(!PyUnicode_CheckExact(k)||PyUnicode_CompareWithASCIIString(k,"warnings")!=0){PyErr_SetString(PyExc_TypeError,"Only the original PB warnings option is supported");return NULL;}
+  if(PyUnicode_CheckExact(k)&&PyUnicode_CompareWithASCIIString(k,"exclude_none")==0){
+   if(v!=Py_True&&v!=Py_False){PyErr_SetString(PyExc_TypeError,"PB exclude_none must be bool");return NULL;}
+   exclude_none=v==Py_True;continue;
+  }
+  if(!PyUnicode_CheckExact(k)||PyUnicode_CompareWithASCIIString(k,"warnings")!=0){PyErr_SetString(PyExc_TypeError,"Only the original PB warnings/exclude_none options are supported");return NULL;}
   if(v!=Py_True&&v!=Py_False&&(!PyUnicode_CheckExact(v)||(PyUnicode_CompareWithASCIIString(v,"none")&&PyUnicode_CompareWithASCIIString(v,"warn")&&PyUnicode_CompareWithASCIIString(v,"error")))){PyErr_SetString(PyExc_TypeError,"Unsupported PB warnings option");return NULL;}
  }}
  SourceView*view=(SourceView*)o;Owned*owner=view->owner;Py_UCS4 tag;PyObject*p;
  if(!owner->contract_models||!owner->dump_refs||!view_node(view,&tag,&p)||tag!='m')return view_error();
  PyObject*r=PyTuple_GET_ITEM(owner->dump_refs,view->ref);if(!PyLong_CheckExact(r))return view_error();
  PyObject*memo=PyDict_New();if(!memo)return NULL;size_t work=0;
- Py_ssize_t ref=PyLong_AsSsize_t(r);PyObject*result=view_export(owner,ref,memo,0,&work);
+ Py_ssize_t ref=PyLong_AsSsize_t(r);PyObject*result=view_export(owner,ref,memo,0,&work,exclude_none);
  PyObject*error=PyErr_GetRaisedException();Py_DECREF(memo);if(error)PyErr_SetRaisedException(error);
  /* Cleanup can run a finalizer holding an exported temporary. Inspect the
   * COMPLETE returned copy only AFTER that callback-capable cleanup, using
   * no Python calls, allocations of tracked objects or stale PASS. */
- if(result){int ok=export_complete(owner,ref,result);if(ok<=0){if(!PyErr_Occurred())PyErr_SetString(PyExc_ValueError,"PB export changed during construction");error=PyErr_GetRaisedException();Py_DECREF(result);PyErr_SetRaisedException(error);return NULL;}}
+ if(result){int ok=export_complete(owner,ref,result,exclude_none);if(ok<=0){if(!PyErr_Occurred())PyErr_SetString(PyExc_ValueError,"PB export changed during construction");error=PyErr_GetRaisedException();Py_DECREF(result);PyErr_SetRaisedException(error);return NULL;}}
  return result;
 }
 static PyMethodDef view_methods[]={

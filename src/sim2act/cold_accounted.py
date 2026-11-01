@@ -771,6 +771,11 @@ class _OwnedPrewriteMode:
         def header(value, kind):
             # A missing Pydantic field can dispatch through a foreign extra.
             # Match the existing full storage header WITHOUT model attributes.
+            if gate._contract_owned(value):
+                if gate._contract_kind(value) is not kind:
+                    return None
+                gate._contract_graph(binding)
+                return value
             if type(value) is not kind:
                 return None
             try:
@@ -793,8 +798,8 @@ class _OwnedPrewriteMode:
         if contract is None:
             return False
         actual_caps = contract.get('caps')
-        caps = (header(actual_caps, type(actual_caps))
-            if type(actual_caps) in (gate.TrialCaps, gate.SQLiteSettlementCaps) else None)
+        caps = (header(actual_caps, gate._contract_kind(actual_caps))
+            if gate._contract_kind(actual_caps) in (gate.TrialCaps, gate.SQLiteSettlementCaps) else None)
         if (caps is None or type(contract.get('model')) is not str
                 or type(caps.get('max_output_tokens')) is not int):
             return False

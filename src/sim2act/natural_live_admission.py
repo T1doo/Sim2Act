@@ -214,6 +214,73 @@ class PBTrialContract(TrialContract):
         return self
 
 
+def _contract_kind(value):
+    """Exact original schema identity of a PB data View; never an authority."""
+    classify = 'sim2act:pb-contract-kind.v1'
+    return classify(value)
+
+
+def _contract_owned(value):
+    classify = 'sim2act:pb-contract-owned.v1'
+    return classify is not None and classify(value) is not None
+
+
+def _contract_graph(binding):
+    """Complete current owner or an unregistered original mutable contract."""
+    current = 'sim2act:pb-contract-binding.v1'
+    if current is not None:
+        try:
+            owner = current(binding)
+        except ValueError:
+            raise DomainError("VERSION_CONFLICT", "PB binding ownership or lifecycle changed") from None
+        if owner is not None:
+            return owner
+    return _trial_typed_storage(PBTrialContract, binding.contract)
+
+
+def _contract_same(left, right):
+    pin = 'sim2act:pb-contract-pin.v1'
+    return pin(left) == pin(right)
+
+
+def _contract_raw(value):
+    canonical = 'sim2act:pb-contract-raw.v1'
+    return canonical(value)
+
+
+def _contract_validated(contract, *, _guard=None):
+    raw = _trial_result(contract.model_dump(), _guard)
+    actual = _trial_result(PBTrialContract.model_validate(raw), _guard)
+    return (_trial_typed_equal(actual.model_dump(warnings=False), raw)
+        if _contract_owned(contract) else actual == contract)
+
+
+def _contract_recipe(contract):
+    return contract.extraction_recipe.model_dump(exclude_none=True)
+
+
+def _contract_recipe_equal(actual, expected):
+    if _contract_owned(expected):
+        require(type(actual) is Recipe)
+        from ._owned_pb_contract import current
+        current(expected)
+        # Both original recipes have complete standard model storage. Preserve
+        # Pydantic's business dictionary equality without a new validator call.
+        raw = _trial_typed_storage_body(actual)
+        if type(actual.steps) is not list or len(actual.steps) != len(expected.steps):
+            return False
+        for step, original in zip(actual.steps, expected.steps, strict=True):
+            if type(step) is not _contract_kind(original) or type(step.inputs) is not dict:
+                return False
+            if step.inputs.keys() != set(original.inputs.keys()):
+                return False
+            if any(type(value) is not _contract_kind(original.inputs[key])
+                    for key, value in step.inputs.items()):
+                return False
+        return raw == expected.model_dump()
+    return actual == expected
+
+
 def contract_model(value):
     if value.get("namespace") == "natural-live-trial.v2":
         return TrialContractV2
@@ -390,13 +457,13 @@ def _stage_current(store, c, user, contract, stage, run_id):
     from .pb_natural_specs import _source_reads
     from .spec_production import VERSION as PRODUCTION_VERSION
 
-    if store.test_only and store.sqlite and type(contract) in (TrialContract, TrialContractV2, PBTrialContract):
+    if store.test_only and store.sqlite and _contract_kind(contract) in (TrialContract, TrialContractV2, PBTrialContract):
         versions = c.execute(select(attempts.c.parameters["pa_trial_binding"]["version"].as_string())
             .select_from(runs).join(attempts, attempts.c.run_id == runs.c.id)
             .where(runs.c.principal_id == user, runs.c.project_id == contract.project_id,
                 runs.c.runtime_id == contract.runtime_id,
                 runs.c.request_key == contract.stage_keys.generate)).scalars().all()
-        eligible = (versions == [PRODUCTION_VERSION] * 3 if type(contract) is PBTrialContract
+        eligible = (versions == [PRODUCTION_VERSION] * 3 if _contract_kind(contract) is PBTrialContract
             else versions in ([JOURNAL_VERSION] * 3, [PRODUCTION_VERSION] * 3, ["pa-trial-dispatch.v1"] * 3))
         if eligible:
             with _source_reads(store, c):
@@ -440,14 +507,14 @@ def _stage_current_bound(store, c, user, contract, stage, job, bound, epoch, *, 
 
     snapshot, draft, release = bound["snapshot"], bound["draft"], bound["release"]
     require(natural_specs.is_candidate(draft["candidate"]))
-    pb_cold = isinstance(contract, PBTrialContract) and stage == "cold"
+    pb_cold = _contract_kind(contract) is PBTrialContract and stage == "cold"
     ordinary = (not {"human_correction", "logic_check", "pb_use", "pa_use",
                         "project_check", "offline_replay"}.intersection(snapshot)
         and not {"natural_logic_origin", "correction_run_id", "pb_use_run_id", "pa_use_run_id"}.intersection(draft)
         and "natural_logic_source" not in release["snapshot"])
-    original_pb_source = (type(contract) is PBTrialContract and stage == "source"
+    original_pb_source = (_contract_kind(contract) is PBTrialContract and stage == "source"
         and "spec_task" not in draft["candidate"])
-    journal_plain = (_journal and type(contract) in (TrialContract, TrialContractV2)
+    journal_plain = (_journal and _contract_kind(contract) in (TrialContract, TrialContractV2)
         and natural_specs.is_candidate(draft["candidate"])
         and "spec_task" not in draft["candidate"]
         and not {"human_correction", "logic_check", "pb_use", "project_check", "offline_replay"}.intersection(snapshot)
@@ -492,7 +559,7 @@ def _stage_current_bound(store, c, user, contract, stage, job, bound, epoch, *, 
         _stage_goal_origin_from_facts(original, gen_id)
     # Existing bound/audit proves the whole app lineage. Additionally require its
     # actual graph to be exactly the original generated graph (no edited extras).
-    expected_recipe = (contract.extraction_recipe.model_dump(exclude_none=True)
+    expected_recipe = (_contract_recipe(contract)
                        if pb_cold else raw["spec_recipe"])
     _stage_recipe_from_facts(expected_recipe, draft)
     backend = _generation_accounted(store, c, user, contract, approval.request.request_key, gen_id)
@@ -521,7 +588,7 @@ def _source_stage_current(store, c, user, contract, source_id):
     from . import natural_specs, pa_spec_apps, pb_natural_specs
     from .contracts import validate_value
 
-    require(type(contract) is PBTrialContract)
+    require(_contract_kind(contract) is PBTrialContract)
     require(pa_spec_apps.job_scope_gate(store, c, user, source_id))
     job = c.execute(select(runs).where(runs.c.id == source_id)).mappings().first()
     require(job is not None and job["principal_id"] == user
@@ -581,7 +648,7 @@ def _pb_origin(store, c, user, contract, approval_key, bound):
     require(not ledger["halted"] and source_id is not None
             and body.review.source_run_id == source_id
             and body.review.request_key == contract.extraction_request_key
-            and body.review.recipe == contract.extraction_recipe
+            and _contract_recipe_equal(body.review.recipe, contract.extraction_recipe)
             and len(slots) == len(actual) == 2
             and {s["reservation"]["request_key"] for s in slots} == {a["id"] for a in actual},
             "P-B requires this original trial's fully accounted successful source")
@@ -791,7 +858,7 @@ def _approved(store, c, user, contract, approval_key, *, active=True, _guard=Non
     eid = _trial_result(entity(contract, **{'_guard': _guard} if _guard is not None else {}), _guard)
     require(not _trial_result(_keys(c, user, eid, CLOSED, **{'_guard': _guard} if _guard is not None else {}), _guard), 'Natural trial preparation irreversibly closed')
     require(_trial_result(_keys(c, user, eid, SCOPE, **{'_guard': _guard} if _guard is not None else {}), _guard) == {'scope'} and _trial_result(_keys(c, user, eid, APPROVE, **{'_guard': _guard} if _guard is not None else {}), _guard) == {'approve'} and (_trial_result(_keys(c, user, eid, REVOKE, **{'_guard': _guard} if _guard is not None else {}), _guard) <= {'revoke'}))
-    saved = _trial_result(_saved(c, user, eid, SCOPE, 'scope', type(contract), **{'_guard': _guard} if _guard is not None else {}), _guard)
+    saved = _trial_result(_saved(c, user, eid, SCOPE, 'scope', _contract_kind(contract), **{'_guard': _guard} if _guard is not None else {}), _guard)
     approval = _trial_result(_saved(c, user, eid, APPROVE, 'approve', Approval, **{'_guard': _guard} if _guard is not None else {}), _guard)
     fp = _trial_result(fingerprint(_trial_result(contract.model_dump(), _guard)), _guard)
     require(_trial_result(fingerprint(_trial_result(saved.model_dump(), _guard)), _guard) == fp == approval.contract_fingerprint == approval.request.expected_contract_fingerprint and approval.principal_id == user and (approval.project_id == contract.project_id) and (approval.request.request_key == approval_key) and _trial_result(math.isfinite(approval.approved_at), _guard) and (approval.approved_at > 0) and (approval.expires_at == contract.expires_at) and (approval.approved_at < approval.expires_at))
@@ -990,7 +1057,7 @@ def _graph_stage_current(graph, store, c, user, contract, stage, stage_facts, *,
         _graph_trial_contract_models(graph, store, c, _models, contract)
         _graph_trial_stage_models(graph, store, c, _models, stage_facts, **{'_owned': _owned} if _owned is not None else {})
         _guard()
-        require(type(contract) is PBTrialContract and stage in ('source', 'cold'))
+        require(_contract_kind(contract) is PBTrialContract and stage in ('source', 'cold'))
         job, bound, raw, metadata, gen, frozen, generated, source, extraction = stage_facts
         stage_prefix = _trial_result(_graph_stage_before_generation(graph, store, c, user, contract, stage, job, bound), _guard)
         draft, release = (bound['draft'], bound['release'])
@@ -1049,7 +1116,7 @@ def _graph_stage_current(graph, store, c, user, contract, stage, stage_facts, *,
                 _trial_result(_stage_generation_origin_from_facts(ids[0], gen_id, _guard=_guard), _guard)
             else:
                 _trial_result(_stage_goal_origin_from_facts(original, gen_id, _guard=_guard), _guard)
-        expected_recipe = _trial_result(contract.extraction_recipe.model_dump(exclude_none=True), _guard) if stage == 'cold' else raw['spec_recipe']
+        expected_recipe = _trial_result(_contract_recipe(contract), _guard) if stage == 'cold' else raw['spec_recipe']
         _trial_result(_stage_recipe_from_facts(expected_recipe, draft, _guard=_guard), _guard)
         if stage == 'cold':
             accepted = _trial_result(_saved(c, user, _trial_result(entity(contract, **{'_guard': _guard} if _guard is not None else {}), _guard), PHASE, 'source', StageApproveInput, **{'_guard': _guard} if _guard is not None else {}), _guard)
@@ -1081,7 +1148,7 @@ def _graph_run_context(graph, store, c, user, contract, approval_key, stage, run
         _graph_trial_contract_models(graph, store, c, _models, contract)
         _graph_trial_stage_models(graph, store, c, _models, stage_facts, **{'_owned': _owned} if _owned is not None else {})
         _guard()
-        require(type(contract) is PBTrialContract and stage == 'cold')
+        require(_contract_kind(contract) is PBTrialContract and stage == 'cold')
         require(stage_facts[0]['id'] == run_id, 'Stage facts belong to another Run')
         approval = _trial_result(_approved(store, c, user, contract, approval_key, **{'_guard': _guard} if _guard is not None else {}), _guard)
         _graph_trial_produced(graph, store, c, _models, Approval, approval)
@@ -1139,7 +1206,7 @@ def _stage_accepted_from_facts(phase, accepted, *, _guard=None):
 
 
 def _stage_pb_origin_from_facts(contract, body, source_id, *, _guard=None):
-    require(source_id is not None and body.review.source_run_id == source_id and (body.review.request_key == contract.extraction_request_key) and (body.review.recipe == contract.extraction_recipe), "P-B requires this original trial's successful source and exact extraction")
+    require(source_id is not None and body.review.source_run_id == source_id and (body.review.request_key == contract.extraction_request_key) and (_contract_recipe_equal(body.review.recipe, contract.extraction_recipe)), "P-B requires this original trial's successful source and exact extraction")
 
 
 def _run_context_row(c, run_id, *, _guard=None):
@@ -1212,7 +1279,7 @@ def _graph_stage_before_generation(graph, store, c, user, contract, stage, job, 
         _guard()
         _graph_trial_contract_models(graph, store, c, _models, contract)
         _guard()
-        require(type(contract) is PBTrialContract and stage in ('source', 'cold'))
+        require(_contract_kind(contract) is PBTrialContract and stage in ('source', 'cold'))
         require(_trial_result(pa_spec_apps.job_scope_gate(store, c, user, job['id'], _graph_read=graph), _guard))
         require(job['principal_id'] == user and job['project_id'] == contract.project_id)
         snapshot, draft, release = (bound['snapshot'], bound['draft'], bound['release'])
@@ -1243,7 +1310,7 @@ def _graph_stage_before_accounting(graph, store, c, user, contract, stage, job, 
         _graph_trial_contract_models(graph, store, c, _models, contract)
         _graph_trial_frozen_models(graph, store, c, _models, frozen)
         _guard()
-        require(type(contract) is PBTrialContract and stage in ('source', 'cold'))
+        require(_contract_kind(contract) is PBTrialContract and stage in ('source', 'cold'))
         inst, current_release, target, gen_id = stage_prefix
         require(gen['id'] == gen_id)
         _trial_result(_stage_generation_metadata_from_facts(contract, metadata, _guard=_guard), _guard)
@@ -1404,6 +1471,12 @@ def _trial_typed_storage(expected, model):
     roots, allowed = _trial_typed_classes(), _trial_typed_nested_classes()
     require(any(expected is kind for kind in roots) and type(model) is expected,
         'Exact typed trial fact required')
+    return _trial_typed_storage_body(model)
+
+
+def _trial_typed_storage_body(model):
+    from .contracts import BranchCondition, WorkflowStep
+    allowed = _trial_typed_nested_classes()
     active: set[int] = set()
     seen: dict[int, Any] = {}
 
@@ -1460,6 +1533,12 @@ def _trial_typed_values(models):
     for entry in models:
         require(type(entry) is tuple and len(entry) == 3, 'Exact trial model triple required')
         expected, model, raw = entry
+        if expected is PBTrialContract and _contract_owned(model):
+            require(_contract_kind(model) is PBTrialContract, 'Exact PB root schema required')
+            from ._owned_pb_contract import current
+            current(model)
+            require(_contract_same(_contract_raw(model), raw), 'PB canonical owner changed')
+            continue
         if _stream_values(expected, model, raw):
             continue
         # A modified serializer retains the original pre-serializer raw
@@ -1491,6 +1570,11 @@ def _trial_typed_guard(parent, models):
 
 def _trial_typed_hold(models, expected, model, raw):
     """Identity-only lexical triples; no cached validation result or permit."""
+    if expected is PBTrialContract and _contract_owned(model):
+        require(_contract_kind(model) is PBTrialContract, 'Exact PB root schema required')
+        require(type(models) is list and _contract_same(_contract_raw(model),raw),
+            'Exact immutable PB model/canonical owner required')
+        return
     require(type(models) is list and type(model) is expected and type(raw) is dict)
     for entry in models:
         require(type(entry) is tuple and len(entry) == 3)
@@ -1536,6 +1620,13 @@ def _graph_trial_produced_legacy(graph, store, c, models, expected, model):
         _graph_trial_pin(graph, store, c)
     checked = _trial_typed_guard(parent, models)
     checked()
+    if expected is PBTrialContract and _contract_owned(model):
+        require(_contract_same(_contract_graph(graph.binding), model), 'PB contract owner changed')
+        raw = _contract_raw(model)
+        checked()
+        _graph_trial_hold(graph, store, c, models, expected, model, raw)
+        checked()
+        return raw
     # Exact type is checked before invoking a fixed class serialization method.
     require(any(expected is kind for kind in _trial_typed_classes()) and type(model) is expected)
     raw = expected.model_dump(model)
@@ -1547,6 +1638,10 @@ def _graph_trial_produced_legacy(graph, store, c, models, expected, model):
 
 def _graph_trial_contract_models(graph, store, c, models, contract):
     _graph_trial_pin(graph, store, c)
+    if _contract_owned(contract):
+        require(_contract_same(_contract_graph(graph.binding), contract), 'PB contract owner changed')
+        _graph_trial_pin(graph, store, c)
+        return
     raw = PBTrialContract.model_dump(graph.binding.contract)
     _graph_trial_pin(graph, store, c)
     _graph_trial_hold(graph, store, c, models, PBTrialContract, contract, raw)
@@ -1829,6 +1924,20 @@ def raw_snapshot_backend():
 
 
 from . import _cold_source_packet as _source_owned_code
+# Classifiers are fixed native callees, with explicit optional-extension fallback.
+from types import CodeType as _ContractCodeType
+_contract_callees = {
+    'sim2act:pb-contract-kind.v1': type if not _SOURCE_OWNED_ENABLED else _source_owned_code.native.contract_type,
+    'sim2act:pb-contract-owned.v1': None if not _SOURCE_OWNED_ENABLED else _source_owned_code.native.contract_model,
+    'sim2act:pb-contract-pin.v1': None if not _SOURCE_OWNED_ENABLED else _source_owned_code.native.view_pin,
+    'sim2act:pb-contract-raw.v1': None if not _SOURCE_OWNED_ENABLED else _source_owned_code.native.contract_dump,
+    'sim2act:pb-contract-binding.v1': None if not _SOURCE_OWNED_ENABLED else _source_owned_code.native.contract_binding_current,
+}
+for _contract_fn in (_contract_kind, _contract_owned, _contract_graph, _contract_same, _contract_raw):
+    _contract_fn.__code__ = _contract_fn.__code__.replace(co_consts=tuple(
+        _contract_callees.get(item, item) if type(item) is str else item
+        for item in _contract_fn.__code__.co_consts))
+del _contract_fn, _contract_callees
 _COHORT_BUILTIN_ROLES = tuple((name, globals().get(name, __builtins__[name]
     if type(__builtins__) is dict else getattr(__builtins__, name))) for name in (
         'type','dict','list','tuple','set','str','int','float','bool','bytes','object',

@@ -149,7 +149,13 @@ def _typed(value, model):
 
 def _requirements(user, contract, key, *, _guard=None):
     requirements = gate._trial_result(evidence.requirements_for(user, contract, key), _guard)
-    original = gate._trial_result(gate.parse_contract(gate._trial_result(evidence._contract_data(contract), _guard), **{'_guard': _guard} if _guard is not None else {}), _guard)
+    if gate._contract_owned(contract):
+        from ._owned_pb_contract import current
+        # Current complete immutable data, not a previous authority result.
+        original = gate._trial_result(current(contract), _guard)
+        gate._trial_result(None, _guard)
+    else:
+        original = gate._trial_result(gate.parse_contract(gate._trial_result(evidence._contract_data(contract), _guard), **{'_guard': _guard} if _guard is not None else {}), _guard)
     gate._trial_result(budget.scope_for(original, key), _guard)
     return (original, requirements)
 

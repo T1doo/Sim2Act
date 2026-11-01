@@ -476,7 +476,7 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
         )
 
     _require(
-        type(contract)
+        policy.gate._contract_kind(contract)
         in (policy.gate.TrialContract, policy.gate.TrialContractV2, policy.gate.PBTrialContract)
     )
     item = policy._typed(identity, policy.ReservationIdentity)
