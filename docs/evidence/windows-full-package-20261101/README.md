@@ -116,3 +116,17 @@ Windows本机正式传输helper是否恢复由唯一协调任务另行核实；�
 本轮候选在8bc未执行的有界发现基础上，先核生产资源页独有说明文字确实在当前可见UIA树，再记录导航后与页面确认后的实际100个可见控件Name/type/SupportedPatterns（只读标识，不读编辑值、文档正文或其他窗口），带同一PID和真实elapsed。该证据先落盘再执行展开／保存／下载；若仍失败，保留真实树供第二次据事实修复，不再只有“多等几秒”的推断。原包042和产品源码、完整内容核对、唯一提交、原生下载、退出／首开门不变。诊断预案见`material-diagnosis-20261101/diagnosis.json`。
 
 计时口径：上次job124922922114从17:28:59到17:29:36是37秒，计入runner总账；父级邮件43秒是workflow总耗时，不把二者混加，也不用邮件时间替代job计时。0模型，标准公共Windows2025，无新安全setter／系统网络设置／凭据／费用／用户电脑或付费fallback。新运行须先独审冻结并记录准确提交，结果待真实终态；Release继续未发布。
+
+### 第一轮实际UI保存／原生导出／关闭首开通过，第二轮不执行
+
+验收提交`a859e55cc85016be7c5381c088ec013abc2f1506`，[run41332996015](https://github.com/T1doo/Sim2Act/actions/runs/41332996015)，job124926837536，17:44:25–17:45:08 UTC，43秒，SUCCESS。标准WindowsServer2025／已装WebView2 155.0.4283.62／合成SQLite，0模型。应用仍原042包，全部1779文件核后启动，未改产品或扩大安全条件。
+
+实际原EXE页面创建项目、选中项目、资源页填写CSV并点击原保存授权按钮；HTTP仅GET核当前持久记录，没有API POST造材料。原页面“下载文件”触发原宿主DownloadStarting，UIA核原生“导出完成：…”状态；真实导出34字节，逐字节等于固定原文`item,amount,quantity\nA,10,7\nB,20,8`（其中\n表示实际LF），SHA256`c2b518247feb58bdec221956e375fc3d4a3e3d18aa8bd384b4960f3ce72dd558`。不是脚本写文件假下载。正常关、首次新原EXE启动后，项目／材料ID、全部内容与格式完全一致，页面仍显示native-window.csv，原导出同名／bytes／hash不变。
+
+两不同worker各有实际READY→STOPPED clean/worker_stopped/data_preserved→DESKTOP_EXIT receipt_verified/ready_seen/child0/exit0；两原生进程exit0、同origin/principal/data_dir、无残锁门均通过。实际看两张1024×690PNG：首次有材料行及原生导出完成底栏，首开仍有同材料。两图及原artifact保留在本地与现有授权CI制品，不新增公开图片分享。
+
+实际AX证据已补：导航后18.3635012秒的73条未截断快照，在页面内容区域出现21条PropertyNotFound错误；资源页caption在18.3824314秒确认，18.7179856秒第二份60条未截断且无错误，出现Name=添加材料、ControlType.Button、ExpandCollapse/ScrollItem支持。该轮证明导航期间AX节点尚不稳定、页面确认后恢复预期控件；旧失败没有AX原件，不能回填旧树或断言每次失败都同因。真正修复是页面身份同步及可验证的控件生命周期，未改Name猜测或跳保存检查。
+
+7成员artifact13094147553，189038字节，SHA256`f23557ab4377c6d59012f941143745389dd90e9300790245e75ac2d1f0b54477`；正式工具file身份`file_00000000240481f58505b4a1384453fa`。原始report／两AX快照／desktop.log／实际CSV／完整job日志与hash在`material-evidence1/`，PNG和原zip不公开入库。
+
+账目444+43=487/900，算术余413，第一轮已达目标，无不同实质缺陷需要第二轮，所以不执行第二次。该job入口再次显式if:false关闭。原37秒job与邮件43秒workflow区分保留；本次43秒是job自身起止。本轮可签窗口材料保存／原生导出／正常关首开；UI内创建并运行CSV应用、目标Win11、live、PG和大型Cold仍不扩签。此前同包后台CSV30/v1、15/v2与本次UI材料流程分开证明。进入同包Release材料准备，尚未发布。
