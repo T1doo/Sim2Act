@@ -4,15 +4,14 @@ import hashlib
 import importlib
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import time
 import zipfile
+from pathlib import Path
 
 import httpx
-
 from candidate_wheel import MODULES, record
 from package_windows_portable import build
 from windows_pe import inspect
@@ -94,7 +93,7 @@ def main():
             assert pe["machine"] == "0x8664" and pe["pe32plus"] and pe["dll"]
             assert "PyInit_" + name in pe["exports"] and "python312.dll" in [v.lower() for v in pe["imports"]]
             native[name] = dict(file=path.name, **record(path.read_bytes()), pe=pe, source_sha256=module.SOURCE_SHA256)
-        from sim2act import natural_spec_runtime, _cold_source_packet, _cold_typed_cohort
+        from sim2act import _cold_source_packet, _cold_typed_cohort, natural_spec_runtime  # noqa: F401 -- registers actual fixed source roles
         from sim2act.production_trial_admission import _qualified
         _qualified()
         assert _cold_source_packet.available()
@@ -117,9 +116,22 @@ def main():
         specification["product_commit"] = commit
         specification_file = out / "inputs.json"
         specification_file.write_text(json.dumps(specification), encoding="utf-8")
+        pg_assets = out / "runtime-wheels"
+        pg_assets.mkdir(exist_ok=False)
+        # Existing original pins only; ordinary build inputs, no PG server,
+        # login, role, configuration or credential creation.
+        with httpx.Client(timeout=30, follow_redirects=True) as client:
+            for item in specification["wheels"]:
+                if item["name"].replace("_", "-") not in ("psycopg", "psycopg-binary"):
+                    continue
+                response = client.get(item["url"])
+                response.raise_for_status()
+                assert record(response.content) == dict(bytes=item["bytes"], sha256=item["sha256"])
+                (pg_assets / item["filename"]).write_bytes(response.content)
         stage_zip = out / "stage.zip"
         build(specification_file, out, wheel, stage_zip, candidate_manifest=manifest,
-              runtime_image=ROOT / "deliverables/windows-afternoon-20261023/Sim2Act-preview-win64-7794748c.zip")
+              runtime_image=ROOT / "deliverables/windows-afternoon-20261023/Sim2Act-preview-win64-7794748c.zip",
+              configured_runtime=True)
         with zipfile.ZipFile(stage_zip) as z:
             z.extractall(out / "stage")
         stage = out / "stage/Sim2Act-preview"
@@ -134,8 +146,7 @@ def main():
         host_pe = inspect((stage / "Sim2Act.exe").read_bytes())
         assert host_pe["machine"] == "0x8664" and host_pe["pe32plus"] and not host_pe["dll"] and host_pe["subsystem"] == 2
         report["host_pe"] = host_pe
-        expected_runtime = {w["name"]: w["version"] for w in specification["wheels"]
-                            if w["name"].replace("_", "-") not in ("psycopg", "psycopg-binary")}
+        expected_runtime = {w["name"]: w["version"] for w in specification["wheels"]}
         expected_runtime["sim2act"] = "0.1.0"
         (payload / "expected-native.json").write_text(json.dumps(dict(native=native,
             dependencies=expected_runtime)), encoding="utf-8")
@@ -152,6 +163,8 @@ for name,record in expected['native'].items():
 from sim2act import natural_spec_runtime,_cold_source_packet,_cold_typed_cohort
 from sim2act.production_trial_admission import _qualified
 _qualified();assert _cold_source_packet.available();_cold_source_packet.current()
+import psycopg
+assert psycopg.__version__=='3.3.3' and psycopg.pq.__impl__=='binary'
 canonical=lambda value:re.sub(r'[-_.]+','-',value).lower()
 dependencies={}
 for dist in importlib.metadata.distributions():

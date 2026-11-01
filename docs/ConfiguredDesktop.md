@@ -62,3 +62,25 @@ controller, a wrong Worker PID, a blocked actual app heartbeat and an undrained
 preflight. Existing real-store cancellation/commit/lease negative tests are
 separate. None of these substitute for configured PostgreSQL, Windows native,
 P-A/P-B model execution or full R0 acceptance.
+
+## Same-version build inputs
+
+`package_windows_portable.py --configured-runtime` now mechanically includes both
+original pinned psycopg 3.3.3 archives, all their supplied license files, original
+wheel copies for provenance/replacement, and the configured launcher. It no longer
+relies on the old SQLite dependency image for PostgreSQL. PG-RUNTIME-INPUTS.json
+keeps redistribution review explicitly unevaluated and the project license
+unchanged; this is build integration, not a publication/compliance decision.
+
+The local source builder can use `--reuse-windows-native-wheel` only with the
+exact previously imported 042ab21c wheel and its frozen actual-import report.
+It verifies the unchanged setup recipe and every complete native input group,
+original bytes, source witness and CP312 Windows PE identity, then assembles the
+current pure Python inventory with those unchanged PE files and regenerates the
+wheel RECORD. The manifest explicitly records REUSED_UNCHANGED_NATIVE and does
+not claim that current Python executed on Windows. Any changed native dependency
+requires recompilation; a Linux binary cannot be relabelled as Windows.
+
+The existing Windows full-package script is prepared to include these original
+PG drivers and to check actual private-runtime binary imports on its next
+explicitly authorized run. No workflow trigger or budget was expanded here.

@@ -182,3 +182,56 @@ def test_frozen_runtime_image_excludes_old_app_and_rejects_dependency_drift():
     inputs["wheels"][0]["version"] = "unapproved-version"
     with pytest.raises(ValueError, match="versions/provenance"):
         builder.checked_runtime_image(image, inputs)
+
+
+@pytest.mark.parametrize("fault", [None, "missing-driver", "changed-driver", "missing-notice"])
+def test_configured_build_requires_both_pinned_drivers_and_preserves_original_inputs(candidate, tmp_path, fault):
+    """Mechanical synthetic archive test, never Windows import/PG/permit proof."""
+    wheel, manifest, data, _ = candidate
+    guide = "docs/ConfiguredDesktop.md"
+    data["files"][guide] = record((ROOT / guide).read_bytes())
+    manifest.write_text(json.dumps(data))
+    assets = tmp_path / "pg-assets"
+    (assets / "runtime-wheels").mkdir(parents=True)
+    runtime = archive({"python.exe": b"synthetic nonexecutable runtime", "LICENSE.txt": b"fixture"})
+    (assets / "runtime.zip").write_bytes(runtime)
+    drivers = []
+    archives = {}
+    for name, package in (("psycopg", "psycopg"), ("psycopg-binary", "psycopg_binary")):
+        files = {package + "/__init__.py": b"# synthetic package bytes, never executed\n"}
+        if not (fault == "missing-notice" and name == "psycopg-binary"):
+            files[package + "-3.3.3.dist-info/licenses/LICENSE.txt"] = b"synthetic original notice"
+        value = archive(files)
+        filename = package + "-synthetic.whl"
+        info = dict(name=name, version="3.3.3", filename=filename, url="https://example.invalid/" + filename,
+            license=None, license_expression="synthetic", source_distribution_urls=[], **record(value))
+        drivers.append(info)
+        archives[filename] = value
+        if not (fault == "missing-driver" and name == "psycopg-binary"):
+            (assets / "runtime-wheels" / filename).write_bytes(value + (b"changed" if fault == "changed-driver" and name == "psycopg-binary" else b""))
+    specification = dict(product_commit=COMMIT, wheels=drivers,
+        python={"filename": "runtime.zip", "version": "3.12.10", **record(runtime)})
+    inputs = tmp_path / "pg-inputs.json"
+    inputs.write_text(json.dumps(specification))
+    output = tmp_path / "configured.zip"
+    if fault:
+        with pytest.raises((ValueError, FileNotFoundError)):
+            builder.build(inputs, assets, wheel, output, candidate_manifest=manifest, configured_runtime=True)
+        assert not output.exists()
+        return
+    builder.build(inputs, assets, wheel, output, candidate_manifest=manifest, configured_runtime=True)
+    with zipfile.ZipFile(output) as z:
+        prefix = "Sim2Act-preview/"
+        metadata = json.loads(z.read(prefix + "portable-manifest.json"))
+        assert metadata["format"] == "sim2act-offline-windows-configured-build.v1" and metadata["omitted"] == []
+        assert metadata["configured_backend"] == "SOURCE_INTEGRATED_NOT_POSTGRESQL_OR_WINDOWS_ACCEPTED"
+        source = json.loads(z.read(prefix + "PG-RUNTIME-INPUTS.json"))
+        assert source["distribution_review"] == "NOT_EVALUATED" and source["project_license"] == "UNSPECIFIED_UNCHANGED"
+        assert set(source["dependencies"]) == {"psycopg", "psycopg-binary"}
+        for name, value in archives.items():
+            assert z.read(prefix + "dependency-inputs/" + name) == value
+        launcher = z.read(prefix + "Start-Configured-Sim2Act.cmd").decode("ascii")
+        assert '--config "%~1"' in launcher and '--spec-selection "%~2"' in launcher
+        assert z.read(prefix + guide) == (ROOT / guide).read_bytes()
+        for name, expected in metadata["files"].items():
+            assert record(z.read(prefix + name)) == expected

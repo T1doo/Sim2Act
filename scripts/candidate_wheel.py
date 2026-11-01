@@ -82,3 +82,85 @@ def verify_source(data, source, profile):
         for name, expected_record in source.items():
             if record(wheel.read(name)) != expected_record:
                 raise ValueError("App wheel source bytes mismatch: " + name)
+
+
+def reuse_windows_native(pure_filename, pure_data, native_path, setup_bytes, proof_path):
+    """Repackage current Python with exact unchanged, previously imported PE parts.
+
+    No compiler or Windows execution occurs. The original reviewed build recipe,
+    each full native input group, archive, actual-import report and PE ABI must
+    all match. Changed native sources require a real new build, never a tag edit.
+    """
+    import base64
+    import csv
+    import json
+
+    from windows_pe import inspect
+
+    if record(setup_bytes)["sha256"] != "0bbab56172ee0dab2cf8788eab50b0e9bca18f6286ac4337e3c353a50862dee0":
+        raise ValueError("Original native build recipe changed; new compilation required")
+    native_data = Path(native_path).read_bytes()
+    if record(native_data) != dict(bytes=1551930, sha256="bbefc8d561d35126164967e4018a9d58337c9fa5aa287469937787060fd959b3"):
+        raise ValueError("Original accepted Windows wheel changed")
+    proof_raw = Path(proof_path).read_bytes()
+    if record(proof_raw)["sha256"] != "406c97ca44922c05a10ae04a873e8f43336e2b2bff3b1dc0c29e61d807eb6b10":
+        raise ValueError("Original actual Windows import report changed")
+    proof = json.loads(proof_raw)
+    if proof["source_commit"] != "042ab21c4fa9c7e5ba70c4e2877fb7060d962422":
+        raise ValueError("Original source identity changed")
+    if wheel_profile(pure_filename, pure_data)["tags"] != ["py3-none-any"]:
+        raise ValueError("Current exact pure Python input required before native reuse")
+    old_profile = wheel_profile(Path(native_path).name, native_data, target="windows")
+    if len(old_profile["native_artifacts"]) != len(MODULES):
+        raise ValueError("Original complete Windows native inventory required")
+    groups = {
+        "_raw_snapshot": ["_raw_snapshot.c"],
+        "_cold_graph_structure": ["_cold_graph_structure.c"],
+        "_cold_typed_cohort": ["_cold_typed_cohort.c", "_cold_typed_native_impl.c", "_raw_snapshot.c", "_cold_cohort_backend.py"],
+        "_cold_source_owned_impl": ["_cold_source_owned_impl.c", "_cold_source_live_match.h", "_cold_source_code.h", "_cold_source_view.h", "_cold_source_shape.h"],
+    }
+    with zipfile.ZipFile(io.BytesIO(pure_data)) as current, zipfile.ZipFile(io.BytesIO(native_data)) as old:
+        files = {n: current.read(n) for n in current.namelist() if not n.endswith("/")}
+        source = {n: record(value) for n, value in files.items() if n.startswith("sim2act/")}
+        verify_source(pure_data, source, wheel_profile(pure_filename, pure_data))
+        reused = {}
+        for module, inputs in groups.items():
+            if any("sim2act/" + n not in files or "sim2act/" + n not in old.namelist() for n in inputs):
+                raise ValueError("Complete original native dependency inventory required")
+            if any(files["sim2act/" + n] != old.read("sim2act/" + n) for n in inputs):
+                raise ValueError("Native dependency bytes changed; new compilation required: " + module)
+            source_hash = hashlib.sha256(b"".join(files["sim2act/" + n] for n in inputs)).hexdigest()
+            observed = proof["native"][module]
+            path = "sim2act/" + observed["file"]
+            value = old.read(path)
+            if source_hash != observed["source_sha256"] or record(value) != old_profile["native_artifacts"][path] or record(value) != {k: observed[k] for k in ("bytes", "sha256")}:
+                raise ValueError("Native source/actual import/binary witness mismatch")
+            pe = inspect(value)
+            if pe != observed["pe"] or pe["machine"] != "0x8664" or not pe["pe32plus"] or not pe["dll"] or "PyInit_" + module not in pe["exports"] or "python312.dll" not in [x.lower() for x in pe["imports"]] or source_hash.encode() not in value:
+                raise ValueError("Original native PE/ABI/source witness mismatch")
+            files[path] = value
+            reused[module] = dict(file=path, inputs=inputs, source_sha256=source_hash, **record(value))
+    wheel_header = files[META_PREFIX + "WHEEL"]
+    if wheel_header.count(b"Root-Is-Purelib: true") != 1 or wheel_header.count(b"Tag: py3-none-any") != 1:
+        raise ValueError("Exact source-only wheel header required")
+    files[META_PREFIX + "WHEEL"] = wheel_header.replace(b"Root-Is-Purelib: true", b"Root-Is-Purelib: false").replace(b"Tag: py3-none-any", b"Tag: cp312-cp312-win_amd64")
+    files.pop(META_PREFIX + "RECORD")
+    rows = io.StringIO(newline="")
+    writer = csv.writer(rows, lineterminator="\n")
+    for name, value in sorted(files.items()):
+        writer.writerow([name, "sha256=" + base64.urlsafe_b64encode(hashlib.sha256(value).digest()).rstrip(b"=").decode(), len(value)])
+    writer.writerow([META_PREFIX + "RECORD", "", ""])
+    files[META_PREFIX + "RECORD"] = rows.getvalue().encode()
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as zipped:
+        for name, value in sorted(files.items()):
+            info = zipfile.ZipInfo(name, (2026, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o100644 << 16
+            zipped.writestr(info, value)
+    filename = "sim2act-0.1.0-cp312-cp312-win_amd64.whl"
+    result = output.getvalue()
+    verify_source(result, source, wheel_profile(filename, result, target="windows"))
+    return filename, result, dict(status="REUSED_UNCHANGED_NATIVE_NOT_CURRENT_WINDOWS_EXECUTED",
+        original_source=proof["source_commit"], original_wheel=record(native_data),
+        original_actual_import_report=record(proof_raw), setup=record(setup_bytes), modules=reused)

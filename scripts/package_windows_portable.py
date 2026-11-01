@@ -1,4 +1,4 @@
-"""Assemble an offline Windows SQLite preview; no target-side installation.
+"""Assemble an offline Windows build input; no target-side installation.
 
 Inputs are already downloaded official, hash-pinned archives. This builder
 never downloads, compiles, executes Windows code or loads private settings.
@@ -115,7 +115,7 @@ def checked_app(app_wheel, specification, candidate_manifest=None):
     return data, digest(record_bytes)
 
 
-def checked_desktop_inputs(candidate_manifest):
+def checked_desktop_inputs(candidate_manifest, *, configured_runtime=False):
     if candidate_manifest is None:
         raise ValueError("Native host stage requires an exact current candidate manifest")
     records = json.loads(candidate_manifest.read_bytes())["files"]
@@ -123,6 +123,8 @@ def checked_desktop_inputs(candidate_manifest):
     names = ["scripts/portable_desktop.py", "scripts/package_windows_portable.py", "docs/PreviewRelease.md",
              "docs/F2/BlankSyntheticWorkspaceQuickstart.md", "docs/LimitedTextCandidate.md"]
     names += ["scripts/windows/" + name for name in ("Sim2ActDesktop.cs", "Build-Desktop.ps1", "desktop.manifest", "README.md")]
+    if configured_runtime:
+        names.append("docs/ConfiguredDesktop.md")
     result = {}
     for name in names:
         if type(records.get(name)) is not dict:
@@ -165,31 +167,61 @@ def checked_runtime_image(path, specification):
         return files
 
 
-def build(inputs, assets, app_wheel, output, *, candidate_manifest=None, runtime_image=None):
+def build(inputs, assets, app_wheel, output, *, candidate_manifest=None, runtime_image=None,
+          configured_runtime=False):
+    if type(configured_runtime) is not bool:
+        raise ValueError("Explicit configured runtime profile required")
     if output.exists():
         raise ValueError("Output already exists; do not overwrite a candidate")
     specification = json.loads(inputs.read_text(encoding="utf-8"))
     # Complete app/version qualification before reading or assembling runtime
     # archives. A mismatch cannot produce a partially relabelled output.
     app, candidate_digest = checked_app(app_wheel, specification, candidate_manifest)
-    desktop_inputs = checked_desktop_inputs(candidate_manifest)
+    provenance = None
+    if candidate_manifest is not None:
+        raw = candidate_manifest.read_bytes()
+        if digest(raw) != candidate_digest:
+            raise ValueError("Candidate changed during assembly")
+        candidate = json.loads(raw)
+        provenance = dict(source_commit=candidate["source_commit"],
+            artifact_profile=candidate.get("artifact_profile"),
+            native_reuse=candidate.get("native_reuse"),
+            status="BUILD_INPUT_NOT_CURRENT_WINDOWS_EXECUTION")
+    desktop_inputs = checked_desktop_inputs(candidate_manifest, configured_runtime=configured_runtime)
     files = {} if runtime_image is None else checked_runtime_image(runtime_image, specification)
     runtime = specification["python"]
     if runtime_image is None:
         merge_archive(files, read_asset(assets / runtime["filename"], runtime), "runtime/")
     selected = []
-    # PG drivers are not reachable from the explicit SQLite-only preview.
-    # Do not distribute a dormant LGPL driver/bundled libpq without its full
-    # source/relinking obligations, or pretend this is a production PG package.
+    pg_inputs = {}
+    # Historical SQLite builds keep their profile. The explicit
+    # configured build needs the ORIGINAL pinned driver archives, not the old
+    # dependency image's intentionally incomplete PostgreSQL inventory.
     for wheel in specification["wheels"]:
-        if wheel["name"].replace("_", "-") in ("psycopg", "psycopg-binary"):
+        is_pg = wheel["name"].replace("_", "-") in ("psycopg", "psycopg-binary")
+        if is_pg and not configured_runtime:
             continue
-        if runtime_image is None:
+        if runtime_image is None or is_pg:
+            original = read_asset(assets / "runtime-wheels" / wheel["filename"], wheel)
             merge_archive(
                 files,
-                read_asset(assets / "runtime-wheels" / wheel["filename"], wheel),
+                original,
                 "runtime/Lib/site-packages/",
             )
+            if is_pg:
+                # Keep the complete unmodified archive for provenance and
+                # dependency replacement, including every supplied license.
+                import io
+                with zipfile.ZipFile(io.BytesIO(original)) as archive:
+                    notices = {n: record for n in archive.namelist()
+                        if not n.endswith("/") and any(s in n.lower() for s in ("license", "copying", "notice"))
+                        for record in [dict(bytes=len(archive.read(n)), sha256=digest(archive.read(n)))]}
+                if not notices:
+                    raise ValueError("Original PostgreSQL dependency license files missing")
+                files["dependency-inputs/" + wheel["filename"]] = original
+                pg_inputs[wheel["name"].replace("_", "-")] = dict(filename=wheel["filename"],
+                    bytes=len(original), sha256=digest(original), original_notices=notices,
+                    source_distribution_urls=wheel["source_distribution_urls"])
         selected.append(
             {
                 key: wheel[key]
@@ -204,16 +236,30 @@ def build(inputs, assets, app_wheel, output, *, candidate_manifest=None, runtime
                 )
             }
         )
+    if configured_runtime:
+        if set(pg_inputs) != {"psycopg", "psycopg-binary"}:
+            raise ValueError("Both exact PostgreSQL dependency archives required")
+        # Mechanically verified input provenance is not a legal opinion or
+        # release approval. Do not invent a project license or redistribution PASS.
+        files["PG-RUNTIME-INPUTS.json"] = (json.dumps(dict(
+            status="ORIGINAL_DRIVER_INPUTS_ONLY_NOT_PG_OR_RELEASE_ACCEPTANCE",
+            distribution_review="NOT_EVALUATED", project_license="UNSPECIFIED_UNCHANGED",
+            dependencies=pg_inputs), indent=2, sort_keys=True) + "\n").encode()
     merge_archive(files, app, "runtime/Lib/site-packages/")
+    if provenance is not None:
+        files["app-build-provenance.json"] = (json.dumps(provenance, indent=2, sort_keys=True) + "\n").encode()
     files["runtime/python312._pth"] = b"python312.zip\n.\nLib\\site-packages\nimport site\n"
     files["runtime/LOCAL-CHANGES.txt"] = (
         b"Only python312._pth adds private Lib/site-packages. Binaries and packages are unchanged.\n"
-        b"This isolated synthetic SQLite preview omits PostgreSQL drivers.\n"
+        + (b"Configured runtime includes original pinned PostgreSQL driver archives and supplied notices; execution and redistribution review remain separate.\n"
+           if configured_runtime else b"This isolated synthetic SQLite preview omits PostgreSQL drivers.\n")
     )
     files["desktop.py"] = desktop_inputs["scripts/portable_desktop.py"]
     files["使用说明.md"] = desktop_inputs["docs/PreviewRelease.md"]
     for name in ("docs/F2/BlankSyntheticWorkspaceQuickstart.md", "docs/LimitedTextCandidate.md"):
         files[name] = desktop_inputs[name]
+    if configured_runtime:
+        files["docs/ConfiguredDesktop.md"] = desktop_inputs["docs/ConfiguredDesktop.md"]
     # Native desktop is the product entry. Browser access is explicit developer preview.
     for name in ("Sim2ActDesktop.cs", "Build-Desktop.ps1", "desktop.manifest", "README.md"):
         files["desktop-build/" + name] = desktop_inputs["scripts/windows/" + name]
@@ -222,6 +268,14 @@ def build(inputs, assets, app_wheel, output, *, candidate_manifest=None, runtime
         'if not exist "%~dp0Sim2Act.exe" (echo Native desktop build required. See desktop-build/README.md & exit /b 1)\r\n'
         '"%~dp0Sim2Act.exe"\r\nexit /b %ERRORLEVEL%\r\n'
     ).encode("ascii")
+    if configured_runtime:
+        files["Start-Configured-Sim2Act.cmd"] = (
+            '@echo off\r\nsetlocal\r\ncd /d "%~dp0"\r\n'
+            'if "%~1"=="" (echo Supply an existing private config file, then optionally the existing approved selection file. & exit /b 1)\r\n'
+            'if not exist "%~dp0Sim2Act.exe" (echo Matching native desktop build required. & exit /b 1)\r\n'
+            'if "%~2"=="" ("%~dp0Sim2Act.exe" --config "%~1") else ("%~dp0Sim2Act.exe" --config "%~1" --spec-selection "%~2")\r\n'
+            'exit /b %ERRORLEVEL%\r\n'
+        ).encode("ascii")
     files["Developer-Browser-Preview.cmd"] = (
         '@echo off\r\nsetlocal\r\ncd /d "%~dp0"\r\n'
         '"%~dp0runtime\\python.exe" -I -B -X utf8 "%~dp0desktop.py" --browser-preview\r\n'
@@ -245,17 +299,30 @@ def build(inputs, assets, app_wheel, output, *, candidate_manifest=None, runtime
         "Bundled Python 3.12.10 is superseded; engineering candidate, not long-term deployment.\n"
         "Exact archive/license/source records remain in THIRD-PARTY-SOURCES.json and runtime notices.\n"
     ).encode("utf-8")
+    if configured_runtime:
+        files["CONFIGURED-BUILD-INPUT.txt"] = (
+            "INTERNAL CONFIGURED DESKTOP BUILD INPUT - NOT R0 OR RELEASE ACCEPTANCE\n"
+            "Use the newly compiled same-revision EXE and Start-Configured-Sim2Act.cmd with an existing private config.\n"
+            "Configured uses original API/Worker processes, existing PostgreSQL app-role URL, login and approvals.\n"
+            "No database/user/grant/token/runtime is created or installed by the launcher.\n"
+            "Default Start-Sim2Act.cmd remains the explicit synthetic local workspace.\n"
+            "The PG wheels and supplied license files are original pinned archives; source provenance is in PG-RUNTIME-INPUTS.json.\n"
+            "Project licensing and full dependency redistribution review remain unresolved; no license or review PASS is invented here.\n"
+            "Configured PG, native Windows and P-A/P-B/R0 acceptance must be separately established.\n"
+        ).encode()
     files["THIRD-PARTY-SOURCES.json"] = (
         json.dumps(dict(python=runtime, wheels=selected), indent=2) + "\n"
     ).encode()
     manifest = dict(
-        format="sim2act-offline-windows-sqlite-preview.v1",
+        format=("sim2act-offline-windows-configured-build.v1" if configured_runtime
+                else "sim2act-offline-windows-sqlite-preview.v1"),
         product_commit=specification["product_commit"],
         python=runtime["version"],
         status="NATIVE_HOST_BUILD_REQUIRED_NOT_WINDOWS_EXECUTED",
         desktop_entry="Sim2Act.exe",
         installed_runtime_wheels=len(selected),
-        omitted=["psycopg", "psycopg-binary"],
+        omitted=[] if configured_runtime else ["psycopg", "psycopg-binary"],
+        configured_backend="SOURCE_INTEGRATED_NOT_POSTGRESQL_OR_WINDOWS_ACCEPTED" if configured_runtime else "NOT_INCLUDED",
         app_wheel_sha256=digest(app),
         files={
             name: dict(bytes=len(data), sha256=digest(data)) for name, data in sorted(files.items())
@@ -300,6 +367,8 @@ if __name__ == "__main__":
         help="Exact package_local_candidate manifest for a new app revision",
     )
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--configured-runtime", action="store_true",
+                        help="Include original pinned PG drivers; not PG/native/Release acceptance")
     args = parser.parse_args()
     print(
         json.dumps(
@@ -310,6 +379,7 @@ if __name__ == "__main__":
                 args.output,
                 candidate_manifest=args.candidate_manifest,
                 runtime_image=args.runtime_image,
+                configured_runtime=args.configured_runtime,
             ),
             indent=2,
         )

@@ -26,6 +26,7 @@ FILES = [
     ".env.example",
     "docs/Installation.md",
     "docs/ProductionConnection.md",
+    "docs/ConfiguredDesktop.md",
     "docs/FirstUse.md",
     "docs/LocalCandidate.md",
     "docs/PreviewRelease.md",
@@ -43,6 +44,7 @@ FILES = [
     "scripts/local-candidate/mock-fixtures.json",
     "scripts/package_local_candidate.py",
     "scripts/candidate_wheel.py",
+    "scripts/windows_pe.py",
     "scripts/package_windows_portable.py",
     "scripts/portable_desktop.py",
     "scripts/windows/Sim2ActDesktop.cs",
@@ -65,7 +67,11 @@ def main():
         action="store_true",
         help="Explicit fallback preview; never native performance acceptance",
     )
+    parser.add_argument("--reuse-windows-native-wheel", type=Path,
+                        help="Exact previously imported wheel; requires unchanged complete native inputs")
     args = parser.parse_args()
+    if args.python_preview and args.reuse_windows_native_wheel:
+        parser.error("Choose pure preview or explicit unchanged-native Windows reassembly")
     if importlib.metadata.version("setuptools") != "82.0.1":
         parser.error("Existing setuptools==82.0.1 required; this command will not download it")
     helper = importlib.util.spec_from_file_location(
@@ -105,7 +111,7 @@ def main():
             **os.environ,
             "SOURCE_DATE_EPOCH": git("show", "-s", "--format=%ct", commit).decode().strip(),
         }
-        environment["SIM2ACT_BUILD_PYTHON_PREVIEW"] = "1" if args.python_preview else "0"
+        environment["SIM2ACT_BUILD_PYTHON_PREVIEW"] = "1" if args.python_preview or args.reuse_windows_native_wheel else "0"
         result = subprocess.run(
             [
                 sys.executable,
@@ -133,6 +139,16 @@ def main():
         parser.exit(1, "Expected one built wheel; output preserved\n")
     wheel = wheels[0]
     wheel_data = wheel.read_bytes()
+    reuse = None
+    if args.reuse_windows_native_wheel:
+        name, wheel_data, reuse = wheel_tools.reuse_windows_native(wheel.name, wheel_data,
+            args.reuse_windows_native_wheel, contents["setup.py"],
+            ROOT / "docs/evidence/windows-full-package-20261101/attempt-2/report.json")
+        # Preserve the source-only intermediate as an explicitly named input;
+        # exactly one distributable application wheel enters the manifest.
+        wheel.rename(output / (wheel.name + ".source-only-input"))
+        wheel = output / name
+        wheel.write_bytes(wheel_data)
     profile = wheel_tools.wheel_profile(wheel.name, wheel_data)
     source = {
         name[4:]: wheel_tools.record(value)
@@ -165,6 +181,7 @@ def main():
         wheel_profile=profile,
         build_platform=sys.platform,
         qualification="BUILT_NOT_ACCEPTED",
+        native_reuse=reuse,
         real_model_requests=0,
         env_template_only=True,
         excluded=[

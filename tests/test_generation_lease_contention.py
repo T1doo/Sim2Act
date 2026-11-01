@@ -12,7 +12,6 @@ import sys
 import threading
 import time
 from contextlib import contextmanager
-from functools import wraps
 from types import CodeType
 
 import pytest
@@ -38,7 +37,7 @@ def _frames(thread_id):
         frame = frame.f_back
 
 
-def test_generate_recovers_one_bounded_sqlite_busy_without_losing_original_lease(env, tmp_path, monkeypatch):
+def test_generate_recovers_one_bounded_sqlite_busy_without_losing_original_lease(env, tmp_path, monkeypatch, request):
     data, binding, fixture, factory = configured(env, tmp_path, monkeypatch, prepare_case=prepare_pb)
     store = data[0]
     events, io_errors = [], []
@@ -176,26 +175,54 @@ def test_generate_recovers_one_bounded_sqlite_busy_without_losing_original_lease
     monkeypatch.setattr(Worker, "reserve", traced_reserve)
     monkeypatch.setattr(db, "time", ExactClockProbe())
 
-    def observe_span(owner, name):
-        original = getattr(owner, name)
-
-        @wraps(original)
-        def observed(*args, **kwargs):
-            token = next(numbers)
-            record("span_enter", span=token, function=name)
-            try:
-                return original(*args, **kwargs)
-            finally:
-                record("span_exit", span=token, function=name)
-
-        monkeypatch.setattr(owner, name, observed)
-
     from sim2act import goal_runs, ordinary_artifacts, ordinary_corrections, ordinary_csv
-    for owner, name in ((Store, "_frozen_contract_after_scope"),
+    observed_codes = {getattr(owner, name).__code__: name for owner, name in (
+                        (Store, "_frozen_contract_after_scope"),
                         (generation, "source_scope_gate"), (goal_runs, "verify_source"),
                         (ordinary_csv, "frozen"), (ordinary_artifacts, "validate_contract"),
-                        (ordinary_corrections, "validate")):
-        observe_span(owner, name)
+                        (ordinary_corrections, "validate"))}
+    # These are fixed production callees in the PB data protocol. Rebinding a
+    # wrapper correctly trips the native entry check before dispatch. Observe
+    # the real code instead; no function/class/default/closure is replaced and
+    # the real BUSY, renewal and guard assertions below remain unchanged.
+    slot = next(i for i in (3, 4, 5) if sys.monitoring.get_tool(i) is None)
+    sys.monitoring.use_tool_id(slot, "generation-contention-observer")
+
+    def stop_observing():
+        sys.monitoring.set_events(slot, 0)
+        for code in observed_codes:
+            sys.monitoring.set_local_events(slot, code, 0)
+        for event_kind in (sys.monitoring.events.PY_START,
+                           sys.monitoring.events.PY_RETURN, sys.monitoring.events.PY_UNWIND):
+            sys.monitoring.register_callback(slot, event_kind, None)
+        sys.monitoring.free_tool_id(slot)
+
+    request.addfinalizer(stop_observing)
+    span_tokens = {}
+
+    def span_enter(code, offset):
+        token = next(numbers)
+        span_tokens[(threading.get_ident(), id(sys._getframe(1)))] = token
+        record("span_enter", span=token, function=observed_codes[code])
+
+    def span_exit(code, offset, result):
+        token = span_tokens.pop((threading.get_ident(), id(sys._getframe(1))), None)
+        record("span_exit", span=token, function=observed_codes[code])
+
+    def span_unwind(code, offset, error):
+        if code in observed_codes:
+            token = span_tokens.pop((threading.get_ident(), id(sys._getframe(1))), None)
+            record("span_exit", span=token, function=observed_codes[code], unwound=True)
+
+    sys.monitoring.register_callback(slot, sys.monitoring.events.PY_START, span_enter)
+    sys.monitoring.register_callback(slot, sys.monitoring.events.PY_RETURN, span_exit)
+    sys.monitoring.register_callback(slot, sys.monitoring.events.PY_UNWIND, span_unwind)
+    # CPython 3.12 exposes PY_UNWIND as a global-only event; filter to the same
+    # exact code objects. PY_START/PY_RETURN remain local to those functions.
+    sys.monitoring.set_events(slot, sys.monitoring.events.PY_UNWIND)
+    for code in observed_codes:
+        sys.monitoring.set_local_events(slot, code, sys.monitoring.events.PY_START
+            | sys.monitoring.events.PY_RETURN)
 
     def before_sql(c, cursor, statement, parameters, context, executemany):
         token = next(numbers)
@@ -259,7 +286,14 @@ def test_generate_recovers_one_bounded_sqlite_busy_without_losing_original_lease
     guard_error, counters = None, None
     try:
         assert foreground_held.wait(50), "Second reserve boundary not reached"
-        assert busy.wait(22), "Known writer did not produce one actual SQLite BUSY"
+        # The sender coalesces a foreground renewal observed after its first
+        # cadence wait. Its first actual write may therefore be the second
+        # cadence, not ten seconds after dispatch. Anchor observation to the
+        # real owned writer, leaving the original lease a finite safety margin.
+        assert request_lock.wait(25), "Actual background write was never requested"
+        assert lock_acquired.wait(3), "Owned writer was not acquired"
+        busy_window = min(7, selected["old_lease"] - time.time() - 3)
+        assert busy_window > 0 and busy.wait(busy_window), "Known writer did not produce one actual SQLite BUSY"
         assert release_lock.is_set() and holder.join(timeout=3) is None and not holder.is_alive()
         # Use the actual previous committed lease and the actual wall clock.
         # The foreground owns no transaction throughout this scheduler hold.
@@ -290,9 +324,12 @@ def test_generate_recovers_one_bounded_sqlite_busy_without_losing_original_lease
         record("test_teardown", foreground_alive=running.is_alive(), writer_alive=holder.is_alive())
         (tmp_path / "directed-lease-proof.json").write_text(json.dumps(dict(
             scope="DIRECTED_SCHEDULER_AND_OWNED_SQLITE_WRITER_NOT_COMPLETE_PB_ACCEPTANCE",
+            fixed_callee_observer="sys.monitoring; fixed production functions are not rebound",
             real_models=0, mock_exchanges=len(fixture["sends"]), foreground_reserve_calls=len(reserve_calls),
             original_lease=selected.get("old_lease"), recovered=recovered.is_set(), guard_error=guard_error,
-            counters=counters, observation_errors=io_errors, foreground_errors=failure, events=events), indent=2))
+            counters=counters, observation_errors=io_errors, foreground_errors=failure, events=events),
+            indent=2, default=lambda value: dict(python_type=type(value).__name__,
+                callable_name=getattr(value, "__qualname__", None))))
         data[2].close()
         event.remove(store.engine, "before_cursor_execute", before_sql)
         event.remove(store.engine, "after_cursor_execute", after_sql)
