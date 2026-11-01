@@ -1,0 +1,64 @@
+..............................F......................................... [ 69%]
+................................                                         [100%]
+=================================== FAILURES ===================================
+_____ test_check_cannot_dispatch_foreign_owner_class_properties_or_cleanup _____
+
+tmp_path = PosixPath('/workspace/scratch/lease-control-native-outcome-v7-20261101/test_check_cannot_dispatch_for0')
+
+    def test_check_cannot_dispatch_foreign_owner_class_properties_or_cleanup(tmp_path):
+        store = opened(tmp_path)
+        selected, called = [], []
+        class Foreign:
+            @property
+            def closed(self):called.append("closed");return False
+            @property
+            def invalidated(self):called.append("invalidated");return False
+            def invalidate(self, *args):called.append("invalidate")
+        def mutate():selected[0].__class__ = Foreign
+        try:
+            with pytest.raises(ValueError, match="physical types"):
+>               with snapshots.transaction(store, _commit_check=mutate) as c:
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_sqlite_commit_boundary.py:599: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/_sqlite_model_snapshot.py:145: in transaction
+    boundary.commit()
+src/sim2act/_sqlite_commit_boundary.py:166: in commit
+    owner.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+src/sim2act/_sqlite_commit_boundary.py:64: in guarded
+    check()
+src/sim2act/_sqlite_model_snapshot.py:110: in final_check
+    _commit_check()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   def mutate():selected[0].__class__ = Foreign
+                 ^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: __class__ assignment: 'Foreign' object layout differs from 'Connection'
+
+tests/test_sqlite_commit_boundary.py:596: TypeError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_sqlite_commit_boundary.py::test_check_cannot_dispatch_foreign_owner_class_properties_or_cleanup
+1 failed, 103 passed, 1 warning in 23.62s

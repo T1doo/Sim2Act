@@ -1,0 +1,2200 @@
+...F...............FF...............F............F.FFF.FFFFFFFFFFFFFFFFF [ 75%]
+FFFFF...................                                                 [100%]
+=================================== FAILURES ===================================
+_________ test_admission_30_seconds_is_not_a_new_writer_lifetime_limit _________
+
+tmp_path = PosixPath('/workspace/scratch/lease-control-native-outcome-v2-20261101/test_admission_30_seconds_is_n0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc59cb233e0>
+
+    def test_admission_30_seconds_is_not_a_new_writer_lifetime_limit(tmp_path,monkeypatch):
+        store=opened(tmp_path)
+        try:
+>           with snapshots.transaction(store,settlement_interval=(time.monotonic()+120,time.time()+120)) as c:
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_sqlite_commit_boundary.py:64: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/_sqlite_model_snapshot.py:145: in transaction
+    boundary.commit()
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc59c91e1b0>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+_______ test_driver_commit_then_error_is_unknown_not_confirmed_rollback ________
+
+tmp_path = PosixPath('/workspace/scratch/lease-control-native-outcome-v2-20261101/test_driver_commit_then_error_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc59caaa510>
+
+    def test_driver_commit_then_error_is_unknown_not_confirmed_rollback(tmp_path,monkeypatch):
+        import sqlite3
+        from sim2act import db
+        original_engine = db.create_engine
+        class Driver(sqlite3.Connection):
+            fail = False
+            commits = 0
+            def commit(self):
+                result = super().commit()
+                if type(self).fail:
+                    type(self).commits += 1
+                    raise RuntimeError("synthetic error after actual driver commit")
+                return result
+        def make_engine(*args, **kwargs):
+            kwargs["connect_args"] = {**kwargs.get("connect_args", {}), "factory": Driver}
+            return original_engine(*args, **kwargs)
+        monkeypatch.setattr(db, "create_engine", make_engine)
+        store = opened(tmp_path)
+        try:
+            with pytest.raises(RuntimeError, match="after actual driver commit"):
+>               with snapshots.transaction(store, _commit_check=lambda: None) as c:
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_sqlite_commit_boundary.py:303: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/_sqlite_model_snapshot.py:145: in transaction
+    boundary.commit()
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc59c36b9b0>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+________ test_commit_return_is_recorded_before_outer_bookkeeping_error _________
+
+tmp_path = PosixPath('/workspace/scratch/lease-control-native-outcome-v2-20261101/test_commit_return_is_recorded0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc59cb3bd40>
+
+    def test_commit_return_is_recorded_before_outer_bookkeeping_error(tmp_path, monkeypatch):
+        store = opened(tmp_path)
+        captured = []
+        original = store._sqlite_commit_boundary
+        def observed(c, check, *args):
+            scope = original(c, check, *args)
+            captured.append(scope)
+            return scope
+        monkeypatch.setattr(store, "_sqlite_commit_boundary", observed)
+        try:
+            with pytest.raises(RuntimeError, match="after raw delegate returned"):
+>               with snapshots.transaction(store, _commit_check=lambda: None) as c:
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_sqlite_commit_boundary.py:329: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/_sqlite_model_snapshot.py:145: in transaction
+    boundary.commit()
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+tests/test_sqlite_commit_boundary.py:334: in after_commit
+    original_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc59c5109b0>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+_______ test_first_dml_busy_timeout_is_capped_and_restored_without_fifo ________
+
+tmp_path = PosixPath('/workspace/scratch/lease-control-native-outcome-v2-20261101/test_first_dml_busy_timeout_is0')
+
+    def test_first_dml_busy_timeout_is_capped_and_restored_without_fifo(tmp_path):
+        store=opened(tmp_path)
+        try:
+>           with snapshots.transaction(store,settlement_interval=interval(.5)) as c:
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_snapshot_admission_deadline.py:92: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/_sqlite_model_snapshot.py:145: in transaction
+    boundary.commit()
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc59c512390>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+___ test_handoff_uses_actual_committed_main_marker_and_keeps_history_anchor ____
+
+env = (<sim2act.db.Store object at 0x7fc59c394290>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...f1b8518c86408d8443ee3fab2fc004', 'user_6c9bb45dfcb2491985e769cbf79096fb', 'proj_8a5658d1d1d74a8bb7abcf116c60a0fe', ...)
+
+    def test_handoff_uses_actual_committed_main_marker_and_keeps_history_anchor(env):
+>       selected, original, bound = claim(env)
+                                    ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc59c510dd0>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+________ test_activation_rechecks_competing_version_after_marker_commit ________
+
+env = (<sim2act.db.Store object at 0x7fc599aa5850>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...58d2a0f0fd4dd2bea1a1549f72ccaf', 'user_5f3098fd4c894b6abbb7117df2040860', 'proj_af43df306718404bb0e4d2b65553479b', ...)
+
+    def test_activation_rechecks_competing_version_after_marker_commit(env):
+        import sqlite3
+        store, settings = env[:2]
+        selected = store._enable_authoritative_leases(settings, create=True)
+        rid = enqueue(env, "competing-main-control-claim")
+        original = store.claim("original-worker", 30)
+        competed = []
+        def after_main_close(raw, record):
+            if competed:
+                return
+            competed.append(True)
+            with sqlite3.connect(str(selected.path)) as other:
+                other.execute("UPDATE runs SET version=version+1 WHERE id=?", (rid,))
+        event.listen(store.engine.pool, "checkin", after_main_close)
+        try:
+            with pytest.raises(DomainError, match="Main claim receipt changed before activation"):
+>               selected.bind_claim(original)
+
+tests/test_lease_control_main_receipts.py:71: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc59cb4c950>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+___________ test_uncommitted_main_receipt_cannot_acknowledge_control ___________
+
+env = (<sim2act.db.Store object at 0x7fc599c04d10>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...ad866f4f4644ba9288d8fbd5d48504', 'user_6a0c2d617502463fa567ecde96cb55ae', 'proj_be2c42770f9149829e0dc0917ca80708', ...)
+
+    def test_uncommitted_main_receipt_cannot_acknowledge_control(env):
+>       selected, original, bound = claim(env)
+                                    ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:81: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc59b2f44d0>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+______ test_runtime_identity_cannot_be_reissued_from_mutable_python_state ______
+
+env = (<sim2act.db.Store object at 0x7fc59998af90>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...2bd48f6b274717a5b3234e2fa0caa6', 'user_c0aef2ada0654a9da95aa0d6c8d2c8f2', 'proj_f21727157c5d40669e80782f05e4279d', ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc599fabb00>
+
+    def test_runtime_identity_cannot_be_reissued_from_mutable_python_state(env, monkeypatch):
+>       selected, _, bound = claim(env)
+                             ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:98: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc5998cd3d0>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+_______ test_runtime_rejects_store_type_disguise_before_foreign_dispatch _______
+
+env = (<sim2act.db.Store object at 0x7fc5994c9520>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...8b17ac7e2b480ebe98d751fb1bb510', 'user_58b4c84cb4ba464f9d497f5ffa61121a', 'proj_8e802850ae1b481787df7fdf8fcf672e', ...)
+
+    def test_runtime_rejects_store_type_disguise_before_foreign_dispatch(env):
+>       selected, _, bound = claim(env)
+                             ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:138: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc59af85970>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+_____ test_runtime_rejects_store_method_shadow_before_foreign_dispatch[tx] _____
+
+env = (<sim2act.db.Store object at 0x7fc5996d4890>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...e75764106f4ce68cc3f0d1b86b5df3', 'user_e14b185e78194505a6ea00213fdaa816', 'proj_81b135ba9a5f4650b4173859d1ef56da', ...)
+role = 'tx'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc59af10110>
+
+    @pytest.mark.parametrize("role", ["tx", "guard", "owns_connection", "frozen_contract", "event"])
+    def test_runtime_rejects_store_method_shadow_before_foreign_dispatch(env, role, monkeypatch):
+>       selected, _, bound = claim(env)
+                             ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc59b200470>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+___ test_runtime_rejects_store_method_shadow_before_foreign_dispatch[guard] ____
+
+env = (<sim2act.db.Store object at 0x7fc59912ea50>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...69174eb6414eb0922f9dfa224ae1e2', 'user_f0305408ac994394b4758485394a7864', 'proj_f203356fc1e14c82bbb1cc8fdd0cc7f1', ...)
+role = 'guard'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc59a1fd610>
+
+    @pytest.mark.parametrize("role", ["tx", "guard", "owns_connection", "frozen_contract", "event"])
+    def test_runtime_rejects_store_method_shadow_before_foreign_dispatch(env, role, monkeypatch):
+>       selected, _, bound = claim(env)
+                             ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc5998cff50>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+_ test_runtime_rejects_store_method_shadow_before_foreign_dispatch[owns_connection] _
+
+env = (<sim2act.db.Store object at 0x7fc59956ce00>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...f5bdd32ebe4e67926de350e7952360', 'user_9cca561d99f342c1be89e42bd956df96', 'proj_95a8e221b9ab439db271e1e14fd5cd44', ...)
+role = 'owns_connection'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc59990d3a0>
+
+    @pytest.mark.parametrize("role", ["tx", "guard", "owns_connection", "frozen_contract", "event"])
+    def test_runtime_rejects_store_method_shadow_before_foreign_dispatch(env, role, monkeypatch):
+>       selected, _, bound = claim(env)
+                             ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc59a1e9250>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+_ test_runtime_rejects_store_method_shadow_before_foreign_dispatch[frozen_contract] _
+
+env = (<sim2act.db.Store object at 0x7fc59af7b230>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...143f24f6574a9186b1dd9d77a9b1fd', 'user_c3f02f1d6fec4002b4aaf15e7f007918', 'proj_bdc599cdf2274565a2774e8ad8bc55d4', ...)
+role = 'frozen_contract'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc598dca960>
+
+    @pytest.mark.parametrize("role", ["tx", "guard", "owns_connection", "frozen_contract", "event"])
+    def test_runtime_rejects_store_method_shadow_before_foreign_dispatch(env, role, monkeypatch):
+>       selected, _, bound = claim(env)
+                             ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc5993bdf70>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+___ test_runtime_rejects_store_method_shadow_before_foreign_dispatch[event] ____
+
+env = (<sim2act.db.Store object at 0x7fc5992f13d0>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...5920233e51483b9174580d50ea4ead', 'user_b1f71c1334334dd2a02ce32ef818b2d7', 'proj_815c291a8ce24a96b0a3321b5e245614', ...)
+role = 'event'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc599ad6c60>
+
+    @pytest.mark.parametrize("role", ["tx", "guard", "owns_connection", "frozen_contract", "event"])
+    def test_runtime_rejects_store_method_shadow_before_foreign_dispatch(env, role, monkeypatch):
+>       selected, _, bound = claim(env)
+                             ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc598ab1df0>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+________ test_post_state_method_shadow_rechecks_before_foreign_dispatch ________
+
+env = (<sim2act.db.Store object at 0x7fc59b0126f0>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...bf94145cff41c8ab3fd28715d539f5', 'user_d63861725b9248a8a1619bec135dd835', 'proj_1f56e461420f408c85ddbce487ab23a3', ...)
+
+    def test_post_state_method_shadow_rechecks_before_foreign_dispatch(env):
+>       selected, _, bound = claim(env)
+                             ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:171: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc59a08a330>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+________ test_activation_rejects_same_connection_select_callback_write _________
+
+env = (<sim2act.db.Store object at 0x7fc5997789b0>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...2e599a318d456385ddfb43a6cc61b4', 'user_d64569aa19e64149934ce7bb44b7e1cc', 'proj_486ab714a5b74725aafb3b2009e930e6', ...)
+
+    def test_activation_rejects_same_connection_select_callback_write(env):
+        store, settings = env[:2]
+        selected = store._enable_authoritative_leases(settings, create=True)
+        rid = enqueue(env, "same-connection-main-control-claim")
+        original = store.claim("original-worker", 30)
+        writes = []
+        def after_read(c, cursor, statement, parameters, context, many):
+            if statement.startswith("SELECT runs.") and "WHERE runs.id =" in statement and not writes:
+                # The first read belongs to legacy guard; wait until the marker
+                # handoff has committed and the second writer begins activation.
+                raw = c.connection.driver_connection
+                marker = raw.execute("SELECT context FROM runs WHERE id=?", (rid,)).fetchone()[0]
+                if control.CONTEXT in json.loads(marker):
+                    writes.append(True)
+                    raw.execute("UPDATE runs SET version=version+1 WHERE id=?", (rid,))
+        event.listen(store.engine, "after_cursor_execute", after_read)
+        try:
+            with pytest.raises(DomainError, match="Main activation barrier wrote protected data"):
+>               selected.bind_claim(original)
+
+tests/test_lease_control_main_receipts.py:214: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc598fbd6d0>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+_ test_store_heartbeat_commits_past_old_lease_with_main_snapshot_or_writer[False] _
+
+env = (<sim2act.db.Store object at 0x7fc598fbabd0>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...f02d765820499e90812cbae7954ccd', 'user_d69a484d239846d4bccb6bf65afe748f', 'proj_b16de5328488426a8df8e546925e47e7', ...)
+main_write = False
+tmp_path = PosixPath('/workspace/scratch/lease-control-native-outcome-v2-20261101/test_store_heartbeat_commits_p0')
+
+    @pytest.mark.parametrize("main_write", [False, True])
+    def test_store_heartbeat_commits_past_old_lease_with_main_snapshot_or_writer(env, main_write, tmp_path):
+        import sqlite3
+        import time
+        from dataclasses import replace
+        local_env = (env[0], replace(env[1], lease_seconds=1), *env[2:])
+>       selected, original, bound = claim(local_env)
+                                    ^^^^^^^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:230: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc5990153d0>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+_ test_store_heartbeat_commits_past_old_lease_with_main_snapshot_or_writer[True] _
+
+env = (<sim2act.db.Store object at 0x7fc59b2b2e70>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...0df911d5da4bab988a1f48a724a081', 'user_155d5fa97f1f4af8bf565a18d533a748', 'proj_56447b27dd674927a5240ef105f57bae', ...)
+main_write = True
+tmp_path = PosixPath('/workspace/scratch/lease-control-native-outcome-v2-20261101/test_store_heartbeat_commits_p1')
+
+    @pytest.mark.parametrize("main_write", [False, True])
+    def test_store_heartbeat_commits_past_old_lease_with_main_snapshot_or_writer(env, main_write, tmp_path):
+        import sqlite3
+        import time
+        from dataclasses import replace
+        local_env = (env[0], replace(env[1], lease_seconds=1), *env[2:])
+>       selected, original, bound = claim(local_env)
+                                    ^^^^^^^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:230: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc599df40b0>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+_ test_store_control_heartbeat_rejects_changed_identity_or_intent_without_renewal[version] _
+
+env = (<sim2act.db.Store object at 0x7fc59a449b50>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...0de51d729e40b894722999d3ef1498', 'user_b1bd3abfd14b44d9b7e560c6cd7e8915', 'proj_a2b38e62baaa439bb10f6068d4f76967', ...)
+failure = 'version'
+
+    @pytest.mark.parametrize("failure", ["version", "owner", "cancel", "deadline", "missing-version"])
+    def test_store_control_heartbeat_rejects_changed_identity_or_intent_without_renewal(env, failure):
+        import time
+>       selected, original, bound = claim(env)
+                                    ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:265: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc599ebae70>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+_ test_store_control_heartbeat_rejects_changed_identity_or_intent_without_renewal[owner] _
+
+env = (<sim2act.db.Store object at 0x7fc5997c5070>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...df515b1ca4474db715abafcb3df14f', 'user_a1e9548e05f94cd6ad8af13c502c6938', 'proj_4189654fe95942b5b89b367e9d363a51', ...)
+failure = 'owner'
+
+    @pytest.mark.parametrize("failure", ["version", "owner", "cancel", "deadline", "missing-version"])
+    def test_store_control_heartbeat_rejects_changed_identity_or_intent_without_renewal(env, failure):
+        import time
+>       selected, original, bound = claim(env)
+                                    ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:265: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc598b5aff0>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+_ test_store_control_heartbeat_rejects_changed_identity_or_intent_without_renewal[cancel] _
+
+env = (<sim2act.db.Store object at 0x7fc59a4717f0>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...8b62841cd14aa2a14453c426e1af09', 'user_6fcfc6a487174a8b8e667e248ef6c224', 'proj_1e7c923b53ea4c95a4117efc46fb8fbc', ...)
+failure = 'cancel'
+
+    @pytest.mark.parametrize("failure", ["version", "owner", "cancel", "deadline", "missing-version"])
+    def test_store_control_heartbeat_rejects_changed_identity_or_intent_without_renewal(env, failure):
+        import time
+>       selected, original, bound = claim(env)
+                                    ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:265: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc5995c50d0>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+_ test_store_control_heartbeat_rejects_changed_identity_or_intent_without_renewal[deadline] _
+
+env = (<sim2act.db.Store object at 0x7fc598766cc0>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...3e2ac3bf0f465d9fce508c409e1419', 'user_3c2cae001d854de39237705ea6ff4ee5', 'proj_9cc1dc3e56cb4f51a55b762103b19f71', ...)
+failure = 'deadline'
+
+    @pytest.mark.parametrize("failure", ["version", "owner", "cancel", "deadline", "missing-version"])
+    def test_store_control_heartbeat_rejects_changed_identity_or_intent_without_renewal(env, failure):
+        import time
+>       selected, original, bound = claim(env)
+                                    ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:265: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc598e07e30>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+_ test_store_control_heartbeat_rejects_changed_identity_or_intent_without_renewal[missing-version] _
+
+env = (<sim2act.db.Store object at 0x7fc59aff67b0>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...782a78c2e6497ab6b5f9012de180a9', 'user_86cec9fc912846b189562c36e11aee5d', 'proj_89d6cc97ab03443f98fc15475ea1507d', ...)
+failure = 'missing-version'
+
+    @pytest.mark.parametrize("failure", ["version", "owner", "cancel", "deadline", "missing-version"])
+    def test_store_control_heartbeat_rejects_changed_identity_or_intent_without_renewal(env, failure):
+        import time
+>       selected, original, bound = claim(env)
+                                    ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:265: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc598ce9c70>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+_ test_heartbeat_final_read_crossing_earlier_node_deadline_does_not_publish_success _
+
+env = (<sim2act.db.Store object at 0x7fc59a2c9520>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...54112cc74b4e67acb266c5f302c86d', 'user_b3b497e161a1414a82381f9882795fad', 'proj_856eb407992240b992e3d865f8f2847d', ...)
+
+    def test_heartbeat_final_read_crossing_earlier_node_deadline_does_not_publish_success(env):
+        import threading
+        import time
+>       selected, original, bound = claim(env)
+                                    ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:288: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc598a248f0>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+______ test_heartbeat_rechecks_committed_revocation_after_control_renewal ______
+
+env = (<sim2act.db.Store object at 0x7fc593fce3c0>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...325652ba534368b396b40ec482e78d', 'user_e1aaceace634451cbe20a21ffe8169da', 'proj_4978dedd572e44bc8e191ce7dbbbe366', ...)
+
+    def test_heartbeat_rechecks_committed_revocation_after_control_renewal(env):
+        import sqlite3
+>       selected, original, bound = claim(env)
+                                    ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:318: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc593f40d10>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+_ test_store_control_heartbeat_refuses_missing_storage_without_creating_replacement _
+
+env = (<sim2act.db.Store object at 0x7fc5990cdac0>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...8f376a9b6b4278a5ab55ab280e20c6', 'user_868b0a26e44f4799aab729c43aced8d6', 'proj_e9ec41fba3774776b997d69e19e39baa', ...)
+
+    def test_store_control_heartbeat_refuses_missing_storage_without_creating_replacement(env):
+>       selected, original, bound = claim(env)
+                                    ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:348: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc598bc8ef0>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+________ test_store_control_heartbeat_does_not_resurrect_expired_owner _________
+
+env = (<sim2act.db.Store object at 0x7fc59974dca0>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...18a844ca78480c8819bab3ccf8535c', 'user_ee796527208b472a8fba55ae5287ea7a', 'proj_a55955a74c10482196e60c254fe2a1fe', ...)
+
+    def test_store_control_heartbeat_does_not_resurrect_expired_owner(env):
+        import threading
+        from dataclasses import replace
+        local_env = (env[0], replace(env[1], lease_seconds=1), *env[2:])
+>       selected, original, bound = claim(local_env)
+                                    ^^^^^^^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc5989c4410>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+______ test_foreign_store_runtime_rejected_before_reading_other_workspace ______
+
+env = (<sim2act.db.Store object at 0x7fc593eb1160>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...5f3b6376f244d9a8cb8cafd16c871d', 'user_e07589df0a034bd69c52f03d61cabfc2', 'proj_fff137c6715e448e99a12b2070779022', ...)
+
+    def test_foreign_store_runtime_rejected_before_reading_other_workspace(env):
+        from sim2act.db import Store
+>       selected, original, bound = claim(env)
+                                    ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:378: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc593e4c0b0>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+_______ test_runtime_expected_state_is_not_a_gc_visible_mutable_registry _______
+
+env = (<sim2act.db.Store object at 0x7fc598b84560>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...e34c2ffcfc45be8a7c31477594c7f9', 'user_245677ccb1294abc85caef3784fe8429', 'proj_9c3f1c7b8ea24d4f96b6802bcf94f1bd', ...)
+
+    def test_runtime_expected_state_is_not_a_gc_visible_mutable_registry(env):
+        import gc
+        import weakref
+>       selected, _, bound = claim(env)
+                             ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:393: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc598dcc230>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+__ test_new_process_ack_recovers_real_main_receipt_without_issuing_old_owner ___
+
+env = (<sim2act.db.Store object at 0x7fc59980ed80>, Settings(database_url='sqlite:////workspace/scratch/lease-control-native...b3885ca3a84c9a96957ae5f30d65f6', 'user_fc0b1d51d340419ba143794c8b27ea85', 'proj_152d4885734144e58048db3768074bd6', ...)
+tmp_path = PosixPath('/workspace/scratch/lease-control-native-outcome-v2-20261101/test_new_process_ack_recovers_0')
+
+    def test_new_process_ack_recovers_real_main_receipt_without_issuing_old_owner(env, tmp_path):
+>       selected, original, bound = claim(env)
+                                    ^^^^^^^^^^
+
+tests/test_lease_control_main_receipts.py:413: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_lease_control_main_receipts.py:23: in claim
+    bound = selected.bind_claim(original)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/sim2act/_lease_control_runtime.py:190: in bind_claim
+    with self.store.tx(_commit_clock_check=clock) as c:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/contextlib.py:144: in __exit__
+    next(self.gen)
+src/sim2act/db.py:914: in tx
+    finite.commit() if finite is not None else c.commit()
+    ^^^^^^^^^^^^^^^
+src/sim2act/_sqlite_commit_boundary.py:132: in commit
+    self.c.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:996: in commit
+    self._transaction.commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2640: in commit
+    self._do_commit()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2745: in _do_commit
+    self._connection_commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2716: in _connection_commit_impl
+    self.connection._commit_impl()
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1147: in _commit_impl
+    self._handle_dbapi_exception(e, None, None, None, None)
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2366: in _handle_dbapi_exception
+    raise exc_info[1].with_traceback(exc_info[2])
+.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1145: in _commit_impl
+    self.engine.dialect.do_commit(self.connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+proxy = <sqlalchemy.pool.base._ConnectionFairy object at 0x7fc599868050>
+
+    def guarded(proxy):
+        raw = proxy if isinstance(proxy, sqlite3.Connection) else proxy.driver_connection
+        entry = entries.get(raw)
+        if entry is None:
+            return original(proxy)
+        entered = False
+        check, tail, clock = entry.check, entry.last_event, entry.clock_check
+        owner, transaction, changes = entry.c, entry.transaction, entry.changes
+        try:
+            entry.identity()
+            if raw in active:fail('Finite commit boundary cannot reenter')
+            active.add(raw)
+            entered = True
+            check()
+            tail(owner)
+            if (entry.check is not check or entry.clock_check is not clock
+                    or entry.c is not owner or entry.raw is not raw
+                    or entry.transaction is not transaction or entry.changes != changes
+                    or raw.total_changes != changes):
+                fail('Finite commit callback changed held roles or protected data')
+            if clock is not None:
+                clock()
+            invoke = "sim2act:commit-outcome-invoke.v1"
+>           return original(proxy) if invoke is None else invoke(entry, proxy)
+                                                          ^^^^^^^^^^^^^^^^^^^^
+E           ValueError: Commit outcome provenance changed
+
+src/sim2act/_sqlite_commit_boundary.py:53: ValueError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_sqlite_commit_boundary.py::test_admission_30_seconds_is_not_a_new_writer_lifetime_limit
+FAILED tests/test_sqlite_commit_boundary.py::test_driver_commit_then_error_is_unknown_not_confirmed_rollback
+FAILED tests/test_sqlite_commit_boundary.py::test_commit_return_is_recorded_before_outer_bookkeeping_error
+FAILED tests/test_snapshot_admission_deadline.py::test_first_dml_busy_timeout_is_capped_and_restored_without_fifo
+FAILED tests/test_lease_control_main_receipts.py::test_handoff_uses_actual_committed_main_marker_and_keeps_history_anchor
+FAILED tests/test_lease_control_main_receipts.py::test_activation_rechecks_competing_version_after_marker_commit
+FAILED tests/test_lease_control_main_receipts.py::test_uncommitted_main_receipt_cannot_acknowledge_control
+FAILED tests/test_lease_control_main_receipts.py::test_runtime_identity_cannot_be_reissued_from_mutable_python_state
+FAILED tests/test_lease_control_main_receipts.py::test_runtime_rejects_store_type_disguise_before_foreign_dispatch
+FAILED tests/test_lease_control_main_receipts.py::test_runtime_rejects_store_method_shadow_before_foreign_dispatch[tx]
+FAILED tests/test_lease_control_main_receipts.py::test_runtime_rejects_store_method_shadow_before_foreign_dispatch[guard]
+FAILED tests/test_lease_control_main_receipts.py::test_runtime_rejects_store_method_shadow_before_foreign_dispatch[owns_connection]
+FAILED tests/test_lease_control_main_receipts.py::test_runtime_rejects_store_method_shadow_before_foreign_dispatch[frozen_contract]
+FAILED tests/test_lease_control_main_receipts.py::test_runtime_rejects_store_method_shadow_before_foreign_dispatch[event]
+FAILED tests/test_lease_control_main_receipts.py::test_post_state_method_shadow_rechecks_before_foreign_dispatch
+FAILED tests/test_lease_control_main_receipts.py::test_activation_rejects_same_connection_select_callback_write
+FAILED tests/test_lease_control_main_receipts.py::test_store_heartbeat_commits_past_old_lease_with_main_snapshot_or_writer[False]
+FAILED tests/test_lease_control_main_receipts.py::test_store_heartbeat_commits_past_old_lease_with_main_snapshot_or_writer[True]
+FAILED tests/test_lease_control_main_receipts.py::test_store_control_heartbeat_rejects_changed_identity_or_intent_without_renewal[version]
+FAILED tests/test_lease_control_main_receipts.py::test_store_control_heartbeat_rejects_changed_identity_or_intent_without_renewal[owner]
+FAILED tests/test_lease_control_main_receipts.py::test_store_control_heartbeat_rejects_changed_identity_or_intent_without_renewal[cancel]
+FAILED tests/test_lease_control_main_receipts.py::test_store_control_heartbeat_rejects_changed_identity_or_intent_without_renewal[deadline]
+FAILED tests/test_lease_control_main_receipts.py::test_store_control_heartbeat_rejects_changed_identity_or_intent_without_renewal[missing-version]
+FAILED tests/test_lease_control_main_receipts.py::test_heartbeat_final_read_crossing_earlier_node_deadline_does_not_publish_success
+FAILED tests/test_lease_control_main_receipts.py::test_heartbeat_rechecks_committed_revocation_after_control_renewal
+FAILED tests/test_lease_control_main_receipts.py::test_store_control_heartbeat_refuses_missing_storage_without_creating_replacement
+FAILED tests/test_lease_control_main_receipts.py::test_store_control_heartbeat_does_not_resurrect_expired_owner
+FAILED tests/test_lease_control_main_receipts.py::test_foreign_store_runtime_rejected_before_reading_other_workspace
+FAILED tests/test_lease_control_main_receipts.py::test_runtime_expected_state_is_not_a_gc_visible_mutable_registry
+FAILED tests/test_lease_control_main_receipts.py::test_new_process_ack_recovers_real_main_receipt_without_issuing_old_owner
+30 failed, 66 passed, 1 warning in 20.81s
