@@ -8,6 +8,13 @@ from email.parser import BytesParser
 from pathlib import Path
 
 MODULES = ("_raw_snapshot", "_cold_graph_structure", "_cold_typed_cohort", "_cold_source_owned_impl")
+NATIVE_SOURCE_GROUPS = {
+    "_raw_snapshot": ["_raw_snapshot.c"],
+    "_cold_graph_structure": ["_cold_graph_structure.c"],
+    "_cold_typed_cohort": ["_cold_typed_cohort.c", "_cold_typed_native_impl.c", "_raw_snapshot.c", "_cold_cohort_backend.py"],
+    "_cold_source_owned_impl": ["_cold_source_owned_impl.c", "_cold_source_live_match.h", "_cold_source_code.h", "_cold_source_view.h", "_cold_source_shape.h"],
+}
+
 META_PREFIX = "sim2act-0.1.0.dist-info/"
 METADATA = {
     META_PREFIX + name
@@ -113,12 +120,7 @@ def reuse_windows_native(pure_filename, pure_data, native_path, setup_bytes, pro
     old_profile = wheel_profile(Path(native_path).name, native_data, target="windows")
     if len(old_profile["native_artifacts"]) != len(MODULES):
         raise ValueError("Original complete Windows native inventory required")
-    groups = {
-        "_raw_snapshot": ["_raw_snapshot.c"],
-        "_cold_graph_structure": ["_cold_graph_structure.c"],
-        "_cold_typed_cohort": ["_cold_typed_cohort.c", "_cold_typed_native_impl.c", "_raw_snapshot.c", "_cold_cohort_backend.py"],
-        "_cold_source_owned_impl": ["_cold_source_owned_impl.c", "_cold_source_live_match.h", "_cold_source_code.h", "_cold_source_view.h", "_cold_source_shape.h"],
-    }
+    groups = NATIVE_SOURCE_GROUPS
     with zipfile.ZipFile(io.BytesIO(pure_data)) as current, zipfile.ZipFile(io.BytesIO(native_data)) as old:
         files = {n: current.read(n) for n in current.namelist() if not n.endswith("/")}
         source = {n: record(value) for n, value in files.items() if n.startswith("sim2act/")}
