@@ -1,0 +1,103 @@
+FFFFF                                                                    [100%]
+=================================== FAILURES ===================================
+_________ test_acknowledged_receipt_cannot_enter_commit_delegate_again _________
+
+tmp_path = PosixPath('/workspace/scratch/lease-control-review-counterexamples-20261101/test_acknowledged_receipt_cann0')
+
+    def test_acknowledged_receipt_cannot_enter_commit_delegate_again(tmp_path):
+        authority, row, session = owner(tmp_path)
+        receipt = session.prepare("d" * 64)
+        calls = []
+        session.commit(receipt, lambda: calls.append(True), stop=threading.Event(),
+                       clock=lambda: None, durable_check=lambda _: None)
+>       with pytest.raises(DomainError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE DomainError
+
+tests/test_lease_control_primitives.py:137: Failed
+________ test_stop_callback_cannot_consume_last_lease_then_allow_commit ________
+
+tmp_path = PosixPath('/workspace/scratch/lease-control-review-counterexamples-20261101/test_stop_callback_cannot_cons0')
+
+    def test_stop_callback_cannot_consume_last_lease_then_allow_commit(tmp_path):
+        authority, row, session = owner(tmp_path, .12)
+        receipt = session.prepare("e" * 64)
+        calls = []
+        class SlowStop:
+            def is_set(self):
+                threading.Event().wait(.08)
+                return False
+>       with pytest.raises(DomainError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE DomainError
+
+tests/test_lease_control_primitives.py:151: Failed
+_________ test_foreign_session_role_is_rejected_before_dispatch[lock] __________
+
+tmp_path = PosixPath('/workspace/scratch/lease-control-review-counterexamples-20261101/test_foreign_session_role_is_r0')
+field = 'lock'
+
+    @pytest.mark.parametrize("field", ["lock", "authority"])
+    def test_foreign_session_role_is_rejected_before_dispatch(tmp_path, field):
+        authority, row, session = owner(tmp_path)
+        calls = []
+        class Foreign:
+            def __enter__(self):calls.append("lock");return self
+            def __exit__(self, *_):return False
+            def connection(self, **_):calls.append("connection");return self
+        setattr(session, field, Foreign())
+        with pytest.raises(DomainError):session.check()
+>       assert calls == []
+E       AssertionError: assert ['lock'] == []
+E         
+E         Left contains one more item: 'lock'
+E         Use -v to get more diff
+
+tests/test_lease_control_primitives.py:167: AssertionError
+_______ test_foreign_session_role_is_rejected_before_dispatch[authority] _______
+
+tmp_path = PosixPath('/workspace/scratch/lease-control-review-counterexamples-20261101/test_foreign_session_role_is_r1')
+field = 'authority'
+
+    @pytest.mark.parametrize("field", ["lock", "authority"])
+    def test_foreign_session_role_is_rejected_before_dispatch(tmp_path, field):
+        authority, row, session = owner(tmp_path)
+        calls = []
+        class Foreign:
+            def __enter__(self):calls.append("lock");return self
+            def __exit__(self, *_):return False
+            def connection(self, **_):calls.append("connection");return self
+        setattr(session, field, Foreign())
+        with pytest.raises(DomainError):session.check()
+>       assert calls == []
+E       AssertionError: assert ['connection', 'lock'] == []
+E         
+E         Left contains 2 more items, first extra item: 'connection'
+E         Use -v to get more diff
+
+tests/test_lease_control_primitives.py:167: AssertionError
+_______ test_direct_remember_cannot_authorize_an_extended_session_clock ________
+
+tmp_path = PosixPath('/workspace/scratch/lease-control-review-counterexamples-20261101/test_direct_remember_cannot_au0')
+
+    def test_direct_remember_cannot_authorize_an_extended_session_clock(tmp_path):
+        authority, row, session = owner(tmp_path)
+        session.mono += 300
+>       with pytest.raises(DomainError):session._remember()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE DomainError
+
+tests/test_lease_control_primitives.py:173: Failed
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_lease_control_primitives.py::test_acknowledged_receipt_cannot_enter_commit_delegate_again
+FAILED tests/test_lease_control_primitives.py::test_stop_callback_cannot_consume_last_lease_then_allow_commit
+FAILED tests/test_lease_control_primitives.py::test_foreign_session_role_is_rejected_before_dispatch[lock]
+FAILED tests/test_lease_control_primitives.py::test_foreign_session_role_is_rejected_before_dispatch[authority]
+FAILED tests/test_lease_control_primitives.py::test_direct_remember_cannot_authorize_an_extended_session_clock
+5 failed, 7 deselected, 1 warning in 0.34s

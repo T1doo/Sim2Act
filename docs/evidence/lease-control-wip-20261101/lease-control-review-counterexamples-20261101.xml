@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="5" skipped="0" tests="5" time="0.339" timestamp="2026-11-01T08:11:01.100452+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_lease_control_primitives" name="test_acknowledged_receipt_cannot_enter_commit_delegate_again" time="0.015"><failure message="Failed: DID NOT RAISE DomainError">tmp_path = PosixPath('/workspace/scratch/lease-control-review-counterexamples-20261101/test_acknowledged_receipt_cann0')
+
+    def test_acknowledged_receipt_cannot_enter_commit_delegate_again(tmp_path):
+        authority, row, session = owner(tmp_path)
+        receipt = session.prepare("d" * 64)
+        calls = []
+        session.commit(receipt, lambda: calls.append(True), stop=threading.Event(),
+                       clock=lambda: None, durable_check=lambda _: None)
+&gt;       with pytest.raises(DomainError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE DomainError
+
+tests/test_lease_control_primitives.py:137: Failed</failure></testcase><testcase classname="tests.test_lease_control_primitives" name="test_stop_callback_cannot_consume_last_lease_then_allow_commit" time="0.171"><failure message="Failed: DID NOT RAISE DomainError">tmp_path = PosixPath('/workspace/scratch/lease-control-review-counterexamples-20261101/test_stop_callback_cannot_cons0')
+
+    def test_stop_callback_cannot_consume_last_lease_then_allow_commit(tmp_path):
+        authority, row, session = owner(tmp_path, .12)
+        receipt = session.prepare("e" * 64)
+        calls = []
+        class SlowStop:
+            def is_set(self):
+                threading.Event().wait(.08)
+                return False
+&gt;       with pytest.raises(DomainError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE DomainError
+
+tests/test_lease_control_primitives.py:151: Failed</failure></testcase><testcase classname="tests.test_lease_control_primitives" name="test_foreign_session_role_is_rejected_before_dispatch[lock]" time="0.008"><failure message="AssertionError: assert ['lock'] == []&#10;  &#10;  Left contains one more item: 'lock'&#10;  Use -v to get more diff">tmp_path = PosixPath('/workspace/scratch/lease-control-review-counterexamples-20261101/test_foreign_session_role_is_r0')
+field = 'lock'
+
+    @pytest.mark.parametrize("field", ["lock", "authority"])
+    def test_foreign_session_role_is_rejected_before_dispatch(tmp_path, field):
+        authority, row, session = owner(tmp_path)
+        calls = []
+        class Foreign:
+            def __enter__(self):calls.append("lock");return self
+            def __exit__(self, *_):return False
+            def connection(self, **_):calls.append("connection");return self
+        setattr(session, field, Foreign())
+        with pytest.raises(DomainError):session.check()
+&gt;       assert calls == []
+E       AssertionError: assert ['lock'] == []
+E         
+E         Left contains one more item: 'lock'
+E         Use -v to get more diff
+
+tests/test_lease_control_primitives.py:167: AssertionError</failure></testcase><testcase classname="tests.test_lease_control_primitives" name="test_foreign_session_role_is_rejected_before_dispatch[authority]" time="0.007"><failure message="AssertionError: assert ['connection', 'lock'] == []&#10;  &#10;  Left contains 2 more items, first extra item: 'connection'&#10;  Use -v to get more diff">tmp_path = PosixPath('/workspace/scratch/lease-control-review-counterexamples-20261101/test_foreign_session_role_is_r1')
+field = 'authority'
+
+    @pytest.mark.parametrize("field", ["lock", "authority"])
+    def test_foreign_session_role_is_rejected_before_dispatch(tmp_path, field):
+        authority, row, session = owner(tmp_path)
+        calls = []
+        class Foreign:
+            def __enter__(self):calls.append("lock");return self
+            def __exit__(self, *_):return False
+            def connection(self, **_):calls.append("connection");return self
+        setattr(session, field, Foreign())
+        with pytest.raises(DomainError):session.check()
+&gt;       assert calls == []
+E       AssertionError: assert ['connection', 'lock'] == []
+E         
+E         Left contains 2 more items, first extra item: 'connection'
+E         Use -v to get more diff
+
+tests/test_lease_control_primitives.py:167: AssertionError</failure></testcase><testcase classname="tests.test_lease_control_primitives" name="test_direct_remember_cannot_authorize_an_extended_session_clock" time="0.007"><failure message="Failed: DID NOT RAISE DomainError">tmp_path = PosixPath('/workspace/scratch/lease-control-review-counterexamples-20261101/test_direct_remember_cannot_au0')
+
+    def test_direct_remember_cannot_authorize_an_extended_session_clock(tmp_path):
+        authority, row, session = owner(tmp_path)
+        session.mono += 300
+&gt;       with pytest.raises(DomainError):session._remember()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE DomainError
+
+tests/test_lease_control_primitives.py:173: Failed</failure></testcase></testsuite></testsuites>
