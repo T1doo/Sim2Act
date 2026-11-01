@@ -205,6 +205,14 @@ async function boot(hash = "") {
       assert.deepEqual(Object.keys(selected).sort(),["account","approval","project","trial","user"]);
       check(selected.account==="intern-ai-configured-account" && selected.project===info.project && selected.trial===key,"export binds original project/trial and fixed account without credentials");
       check(requests.slice(before).length===1 && requests[before].method==="GET" && requests[before].path.endsWith("/preparation"),"export freshly reauthorizes exact original scope by GET only");
+      $("trial-existing-approval").value=selected.approval;
+      const recoveredStart=requests.length;
+      await click("trial-existing-read");
+      check(!$("trial-existing-export").disabled && $("trial-existing-proof").textContent.includes("EXISTING_APPROVED_TRIAL_SELECTION"),"original approval key recovers authenticated launcher selection");
+      await click("trial-existing-export");
+      assert.deepEqual(JSON.parse(await blobs[1].text()),selected);
+      check(requests.slice(recoveredStart).length===2 && requests.slice(recoveredStart).every(r=>r.method==="GET" && r.path.endsWith("/worker-selection")),"existing approval read and export each freshly reauthorize without new approval or dispatch");
+      blobs.pop();downloads.pop();
       w.eval("trialEntry().receipt.worker_selection.user='user_'+ '0'.repeat(32);renderTrialConsent()");
       check(button.disabled,"identity mismatch disables export rather than creating a guessed selection");
       await click("trial-recover");
@@ -221,7 +229,11 @@ async function boot(hash = "") {
     if (originalScenario === "lost-withdrawal") { check($("trial-new").disabled, "lost withdrawal stays unknown"); await click("trial-recover"); }
     check(posts("/withdrawal") === 1, "withdrawal posted once");
     check($("trial-status").textContent.includes("已撤回") && $("trial-consent").disabled, "withdrawn approval cannot be reused");
-    if(originalScenario === "configured-selection")check($("trial-export-selection").disabled,"revoked approval cannot export a runnable selection");
+    if(originalScenario === "configured-selection") {
+      check($("trial-export-selection").disabled,"revoked approval cannot export a runnable selection");
+      await click("trial-existing-read");
+      check($("trial-existing-export").disabled && $("trial-existing-proof").textContent.includes("读取未确认"),"revoked original approval cannot be recovered for export");
+    }
     if (originalScenario === "new-revoked") await restartPreparation(key);
   }
   check(!requests.some(r => /\/application-runs|\/runs(?:$|\/)|\/admission|\/stage-approval/.test(r.path) && r.method === "POST"), "page never creates Run reserves slot or asks for LIVE admission");

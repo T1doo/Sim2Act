@@ -77,6 +77,31 @@ def original_contract(store, user, pid, key):
         return contract
 
 
+@controlled
+def existing_worker_selection(store, user, pid, key, approval_key):
+    """Recover either original P-A or P-B approval; never prepare/rebind one.
+
+    This metadata is a launcher choice, not a permit. The ordinary launcher
+    and Worker recheck environment, account source and execution authority.
+    """
+    from .production_evidence import ACCOUNT_ID
+    from .production_trial_admission import canonical_quota_subject
+
+    contract = original_contract(store, user, pid, key)
+    with store.tx() as c:
+        store.lock_project(c, user, pid)
+        approved = gate._approved(store, c, user, contract, approval_key)
+        configured = contract.quota_subject == canonical_quota_subject(ACCOUNT_ID)
+        return dict(status="EXISTING_APPROVED_TRIAL_SELECTION", path=getattr(contract, "path", "P-A"),
+            contract_fingerprint=fingerprint(contract.model_dump()),
+            approval_fingerprint=fingerprint(approved.model_dump()), expires_at=contract.expires_at,
+            worker_selection=dict(user=user, project=pid, trial=key, approval=approval_key,
+                account=ACCOUNT_ID) if configured else None,
+            selection_blocked_reason=None if configured else "ORIGINAL_SCOPE_NOT_CONFIGURED_ACCOUNT",
+            live_allowed=False, actual_model_requests=0, new_runs=0, new_slots=0,
+            formal_publication_enabled=False)
+
+
 def mount(app, store, identity, settings=None):
     dependency = Depends(identity)
     base = "/api/projects/{pid}/natural-trials/{key}"
@@ -117,6 +142,12 @@ def mount(app, store, identity, settings=None):
     def recover(pid: str, key: str, approval_key: str, user=dependency):
         contract = original_contract(store, user, pid, key)
         return gate.recover(store, user, contract, approval_key)
+
+    @app.get(base + "/approvals/{approval_key}/worker-selection")
+    def worker_selection(pid: str, key: str, approval_key: str, user=dependency):
+        gate.require(re.fullmatch(gate.KEY, key) is not None
+            and re.fullmatch(gate.KEY, approval_key) is not None)
+        return existing_worker_selection(store, user, pid, key, approval_key)
 
     @app.post(base + "/revocation")
     def revoke(pid: str, key: str, body: RevokeRequest, user=dependency):

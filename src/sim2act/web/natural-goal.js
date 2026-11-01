@@ -356,6 +356,7 @@ async function renderNaturalReceiptCandidate(r,id,current){
 // Only original keys and transient page state; never model/Run submission.
 const trialEntries = new Map();
 let trialGeneration = 0, trialCards = [];
+let existingTrialSelection = null, existingTrialReadGeneration = 0;
 let trialBudgetGeneration = 0, trialBudgetRead = null, trialBudgetSelection = null;
 function clearTrialBudget() {
   trialBudgetGeneration++;trialBudgetRead=null;trialBudgetSelection=null;
@@ -391,6 +392,7 @@ function trialHistoryChanged() {
   renderTrialConsent();
 }
 function clearTrialConsent() {
+  clearExistingTrialSelection();
   clearTrialBudget();
   trialGeneration++; trialCards = [];
   for (const entry of trialEntries.values()) { entry.operation = (entry.operation || 0) + 1; entry.receipt = null; if (["known", "sending", "unapproved", "closed"].includes(entry.state)) entry.state = "unknown"; }
@@ -399,6 +401,53 @@ function clearTrialConsent() {
   $("trial-status").textContent = "读取两张已保存的完整目标卡，准备七槽同意范围。LIVE 仍关闭。";
   $("trial-original-key").value = trialEntry()?.key || "";
   renderTrialConsent();
+}
+function clearExistingTrialSelection() {
+  existingTrialReadGeneration++; existingTrialSelection=null;
+  $("trial-existing-proof").textContent="";$("trial-existing-export").disabled=true;
+}
+function existingTrialKeys() {
+  const key=$("trial-original-key").value.trim(),approval=$("trial-existing-approval").value.trim();
+  if(!/^[A-Za-z0-9_-]{1,100}$/.test(key)||!/^[A-Za-z0-9_-]{1,100}$/.test(approval))throw Error("填写原试运行键和原批准键；不创建新的批准。");
+  return {key,approval};
+}
+function validateExistingTrialSelection(value,ctx,keys) {
+  const selection=value?.worker_selection;
+  if(value?.status!=="EXISTING_APPROVED_TRIAL_SELECTION" || !["P-A","P-B"].includes(value.path)
+    || value.live_allowed!==false || value.actual_model_requests!==0 || value.new_runs!==0 || value.new_slots!==0
+    || !/^[a-f0-9]{64}$/.test(value.contract_fingerprint) || !/^[a-f0-9]{64}$/.test(value.approval_fingerprint)
+    || !Number.isFinite(value.expires_at) || Date.now()>=value.expires_at*1000)throw Error("原批准回执未通过核查。");
+  if(selection===null && value.selection_blocked_reason==="ORIGINAL_SCOPE_NOT_CONFIGURED_ACCOUNT")return value;
+  if(!selection || value.selection_blocked_reason!==null || Object.keys(selection).sort().join(",")!=="account,approval,project,trial,user"
+    || selection.account!=="intern-ai-configured-account" || selection.project!==ctx.project || selection.trial!==keys.key
+    || selection.approval!==keys.approval || !/^user_[a-f0-9]{32}$/.test(selection.user))throw Error("启动选择身份或范围不匹配。");
+  return value;
+}
+async function readExistingTrialSelection(download=false) {
+  const ctx=trialContext(),keys=existingTrialKeys();
+  if(!ctx.identity||!ctx.project)return;
+  const previous=existingTrialSelection;
+  if(download && (!previous || previous.ctx.identity!==ctx.identity || previous.ctx.connection!==ctx.connection
+    || previous.ctx.project!==ctx.project || previous.keys.key!==keys.key || previous.keys.approval!==keys.approval))return;
+  clearExistingTrialSelection();const serial=existingTrialReadGeneration;
+  const current=()=>trialCurrent(ctx)&&serial===existingTrialReadGeneration
+    && $("trial-original-key").value.trim()===keys.key && $("trial-existing-approval").value.trim()===keys.approval;
+  $("trial-existing-proof").textContent="正在按原键重新鉴权并读取已有批准…";
+  try {
+    const value=await api(`/api/projects/${ctx.project}/natural-trials/${keys.key}/approvals/${keys.approval}/worker-selection`);
+    if(!current())return;
+    const fresh=validateExistingTrialSelection(value,ctx,keys);
+    if(download && (fresh.contract_fingerprint!==previous.receipt.contract_fingerprint
+      || fresh.approval_fingerprint!==previous.receipt.approval_fingerprint))throw Error("原批准范围变化；请重新读取。");
+    existingTrialSelection={ctx,keys,receipt:fresh};
+    $("trial-existing-proof").textContent=JSON.stringify(fresh,null,2);
+    $("trial-existing-export").disabled=!fresh.worker_selection;
+    if(!fresh.worker_selection){$("trial-existing-proof").textContent+="\n原范围未绑定当前固定账户；不能自动改绑，请走原准备与审批路径。";return;}
+    if(!download)return;
+    const url=URL.createObjectURL(new Blob([JSON.stringify(fresh.worker_selection,null,2)+"\n"],{type:"application/json;charset=utf-8"}));
+    try{const link=document.createElement("a");link.href=url;link.download="trial-selection.json";link.hidden=true;document.body.append(link);try{link.click();}finally{link.remove();}}
+    finally{URL.revokeObjectURL(url);}
+  } catch(error){if(current()){clearExistingTrialSelection();$("trial-existing-proof").textContent=`读取未确认：${error.detail||error.message}。未导出、未批准或运行任务。`;}}
 }
 function trialEntry() { return trialEntries.get(trialIndex(trialContext())); }
 const trialReviewDeadline = c => c?.namespace === "natural-live-trial.v2" ? c.review_expires_at : c?.expires_at;
@@ -677,6 +726,10 @@ async function endTrialPreparation() {
   finally { if (trialCurrent(ctx)) { $("trial-end-ack").checked = false; renderTrialConsent(); } }
 }
 $("trial-export-selection").onclick = safe(exportTrialSelection);
+$("trial-existing-read").onclick = safe(()=>readExistingTrialSelection());
+$("trial-existing-export").onclick = safe(()=>readExistingTrialSelection(true));
+$("trial-existing-approval").oninput=clearExistingTrialSelection;
+$("trial-original-key").addEventListener("input",clearExistingTrialSelection);
 $("trial-end").onclick = safe(endTrialPreparation);
 $("trial-end-ack").onchange = renderTrialConsent;
 $("trial-refresh").onclick = safe(refreshTrialCards);

@@ -12,12 +12,15 @@ def main():
     parser.add_argument("command", choices=["migrate", "init-user", "schemas", "probe", "synthetic-workspace"])
     parser.add_argument("--name", default="Local user")
     parser.add_argument("--output")
+    parser.add_argument("--config", help="Explicit private config for migrate/init-user only")
     parser.add_argument("--data-dir")
     parser.add_argument("--new", action="store_true")
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--control-stdin", action="store_true", help="Private desktop-owned synthetic shutdown pipe")
     parser.add_argument("--exact-read-live", action="store_true", help="Explicit bounded Intern verbatim-read example; synthetic materials only")
     args = parser.parse_args()
+    if args.config is not None and args.command not in {"migrate", "init-user"}:
+        parser.error("--config belongs to explicit migrate/init-user only")
     if args.command != "synthetic-workspace" and (args.data_dir or args.new or args.port != 0 or args.control_stdin or args.exact_read_live):
         parser.error("--data-dir, --new, --port, --control-stdin and --exact-read-live belong to synthetic-workspace only")
     if args.command == "synthetic-workspace":
@@ -63,15 +66,31 @@ def main():
                 json.dumps(cls.model_json_schema(), indent=2) + "\n"
             )
         return
-    s = Settings.from_env()
-    store = Store(s.database_url)
-    if args.command == "migrate":
-        store.initialize(s.quota_subject)
-        print("Schema initialized; keep migration role separate from runtime role.")
-    else:
-        token = secrets.token_urlsafe(32)
-        store.user(args.name, token)
-        print("Local UI bearer token (shown once; store privately, never commit): " + token)
+    store = None
+    try:
+        if args.config is not None:
+            from .launch_configuration import import_config
+
+            import_config(args.config)
+        s = Settings.from_env()
+        store = Store(s.database_url)
+        if args.command == "migrate":
+            store.initialize(s.quota_subject)
+            print("Schema initialized; keep migration role separate from runtime role.")
+        else:
+            token = secrets.token_urlsafe(32)
+            store.user(args.name, token)
+            print("Local UI bearer token (shown once; store privately, never commit): " + token)
+    except Exception:
+        # A DDL/DML failure can have partial or unknown effects. Never imply a
+        # rollback or print the DSN, password, generated token or raw exception.
+        parser.exit(1, "Initialization not confirmed; preserve database/private config. Values suppressed.\n")
+    finally:
+        if store is not None:
+            try:
+                store.engine.dispose()
+            except Exception:
+                parser.exit(1, "Initialization cleanup not confirmed; preserve database/private config. Values suppressed.\n")
 
 
 if __name__ == "__main__":

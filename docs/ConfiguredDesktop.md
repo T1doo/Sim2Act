@@ -84,3 +84,27 @@ requires recompilation; a Linux binary cannot be relabelled as Windows.
 The existing Windows full-package script is prepared to include these original
 PG drivers and to check actual private-runtime binary imports on its next
 explicitly authorized run. No workflow trigger or budget was expanded here.
+
+## Explicit first-use initialization and existing approvals
+
+The installed CLI now accepts an explicitly selected existing private config for
+its original initialization commands only:
+
+```text
+python -m sim2act.cli migrate --config <existing-migration.env>
+python -m sim2act.cli init-user --config <existing-app.env> --name <local-user-name>
+```
+
+Use the separate original migration/app roles. These are deliberate mutating
+commands, not Doctor or automatic desktop startup. They do not create a database
+or SQL role. `init-user` prints its new application bearer once: run it only for
+a genuinely new identity and privately retain the result; do not run again for
+an existing login or include its output in shared logs. On failed initialization,
+retain private configuration and database state; effects may be unknown.
+
+For an already approved P-A or P-B scope, enter its original trial and approval
+keys in “正式连接与启动选择”, read the existing approval, then recheck/export.
+The original five-field selection contains no credentials or authority. An old
+unconfigured-account scope cannot be silently rebound by this reader. Fresh
+seven-slot preparation in this panel remains P-A only; P-B still needs its
+original typed contract, recipe, source chain and explicit approval procedure.
