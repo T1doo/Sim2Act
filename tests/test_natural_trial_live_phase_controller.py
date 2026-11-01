@@ -134,12 +134,17 @@ def test_nested_public_output_does_not_expose_known_secret_or_change_business_ob
     assert original["live_result"]["result"] == "unit-private-value echoed"
 
 
-@pytest.mark.parametrize("bad_source_receipt", [False, True])
+@pytest.mark.parametrize(
+    "phase_case",
+    ["full-protocol-only", "bad-source-receipt", "generate-only", "generate-withdrawal-unknown"],
+)
 def test_protocol_stub_runs_all_stages_and_never_calls_generic_extraction(
     prepared_data,  # noqa: F811
-    bad_source_receipt,
+    phase_case,
 ):
     # Structured wire replay only. No production account source, provider IO or PG.
+    bad_source_receipt = phase_case == "bad-source-receipt"
+    generate_only = phase_case in {"generate-only", "generate-withdrawal-unknown"}
     from test_natural_spec_apps import recipe
 
     from sim2act import natural_live_admission as gate
@@ -155,12 +160,15 @@ def test_protocol_stub_runs_all_stages_and_never_calls_generic_extraction(
             choices,
             path="P-B",
             extraction_recipe=recipe("single"),
-            scope_window="NEW_EXACT_SEVEN_SLOT_1200_SECONDS",
         ),
     )
     assert made.status_code == 200, made.text
     contract = gate.PBTrialContract.model_validate(made.json()["contract"]).model_copy(
-        update={"quota_subject": live.canonical_quota_subject(live.ACCOUNT_ID)}
+        update={
+            "quota_subject": live.canonical_quota_subject(live.ACCOUNT_ID),
+            # Protocol-only metadata, not product preparation/approval or timing proof.
+            **({} if generate_only else {"expires_at": time.time() + 1200}),
+        }
     )
     selection = dict(
         user=contract.principal_id,
@@ -378,6 +386,8 @@ def test_protocol_stub_runs_all_stages_and_never_calls_generic_extraction(
             elif "/runs/" in path:
                 result = dict(status="SUCCEEDED", result={"synthetic_protocol_only": True})
             elif path.endswith("/withdrawal"):
+                if phase_case == "generate-withdrawal-unknown":
+                    return httpx.Response(503, json={})
                 result = dict(status="REVOKED")
             else:
                 raise AssertionError("Unexpected protocol route " + path)
@@ -404,8 +414,24 @@ def test_protocol_stub_runs_all_stages_and_never_calls_generic_extraction(
         review_token=fingerprint(contract.model_dump()),
     )
     try:
-        result = live.run_stages(Wire(), contract, selection, state, bridge, cleanup_client=Wire())
+        result = live.run_stages(
+            Wire(),
+            contract,
+            selection,
+            state,
+            bridge,
+            cleanup_client=Wire(),
+            generate_only=generate_only,
+        )
     except live.PhaseError as error:
+        if phase_case == "generate-withdrawal-unknown":
+            assert error.code == "GENERATION_WITHDRAWAL_UNCONFIRMED"
+            assert error.state["saved_candidate"]["id"] == apps[0]
+            assert error.state["model_requests"] == 3
+            assert error.state["cancellation"]["trial_withdrawn"] is False
+            assert len([p for p, b in calls if p.endswith("/withdrawal")]) == 1
+            assert dispatched == {"generate"} and not bridges
+            return
         if bad_source_receipt:
             assert error.code == "ORIGINAL_RUN_SCOPE_CHANGED"
             assert error.state["active_run"] is None and error.state["validated_target"] is None
@@ -416,6 +442,13 @@ def test_protocol_stub_runs_all_stages_and_never_calls_generic_extraction(
             return
         pytest.fail("Controlled protocol fixture failure: " + str(error.__context__))
     assert not bad_source_receipt
+    if generate_only:
+        assert result["status"] == "ORIGINAL_GENERATION_CANDIDATE_SAVED"
+        assert result["actual_model_requests"] == 3 and not bridges
+        assert result["source_cold_status"] == "NOT_RUN_SELECTED_GENERATE_ONLY"
+        assert dispatched == {"generate"}
+        assert result["cancellation"]["trial_withdrawn"] is True
+        return
     assert result["status"] == "ORIGINAL_MODEL_CHAIN_TECHNICALLY_SAVED"
     assert (
         len(bridges) == 1 and result["actual_model_requests"] == 6
@@ -488,3 +521,87 @@ def test_unvalidated_accepted_id_can_only_withdraw_original_trial():
         Client(), dict(base="/scope", review_token="f" * 64, active_run="run_unvalidated")
     )
     assert result["status"] == "CANCELLATION_UNKNOWN" and result["trial_withdrawn"] is True
+
+
+def test_original_300s_full_chain_refuses_before_any_model_dispatch():
+    calls = []
+
+    class Client:
+        event_hooks = {"request": []}
+
+        def post(self, path, json):
+            calls.append(path)
+            assert path == "/original/withdrawal"
+            return httpx.Response(200, json=dict(status="REVOKED"))
+
+        def get(self, path):
+            pytest.fail("no model Run or source identity exists before feasibility refusal")
+
+    contract = SimpleNamespace(expires_at=time.time() + 300, bindings=[object(), object()])
+    with pytest.raises(live.PhaseError, match="ORIGINAL_WINDOW_CANNOT_FIT_NEXT_STAGE"):
+        live.run_stages(
+            Client(),
+            contract,
+            None,
+            dict(base="/original", review_token="f" * 64),
+            None,
+            cleanup_client=Client(),
+        )
+    assert calls == ["/original/withdrawal"]
+
+
+def test_actual_spec_three_call_profile_cannot_fit_full_original_scope(monkeypatch):
+    monkeypatch.setattr(controller, "resources", lambda: {})
+    monkeypatch.setattr(controller, "dependencies", lambda: {})
+    value = controller.plan("0" * 40, with_live=True, live_stages="all")
+    assert value["original_scope_seconds"] == 300
+    assert value["full_chain_minimum_spacing_seconds"] == 300
+    assert value["full_chain_executable"] is False
+    assert value["model_requests"] == 6 and value["optional_live"]["generate"] == 3
+    assert value["optional_live"]["original_contract_caps"] == dict(
+        generate=3, source=2, cold=2, total=7
+    )
+
+
+def test_full_live_scope_refuses_before_any_provisioning_or_secret(monkeypatch):
+    monkeypatch.setattr(controller, "checked_source", lambda _: None)
+    monkeypatch.setattr(controller, "plan", lambda *_: {})
+    monkeypatch.setattr(controller.secrets, "token_hex", lambda *_: pytest.fail("no new scope"))
+    monkeypatch.setattr(
+        controller.secrets, "token_urlsafe", lambda *_: pytest.fail("no credentials")
+    )
+    monkeypatch.setattr(controller, "run", lambda *_a, **_kw: pytest.fail("no command"))
+    with pytest.raises(controller.ProbeError, match="ORIGINAL_SCOPE_CANNOT_FIT_FULL_CHAIN"):
+        controller.execute("0" * 40, None, None, True, "all")
+
+
+def test_original_natural_spec_generate_preserves_three_call_checker_path(env):
+    """Real original Worker+SQLite+MockTransport, not wire replay or live/PG."""
+    import json
+    from dataclasses import replace
+
+    from fastapi.testclient import TestClient
+    from test_natural_spec_apps import generate, setup
+    from test_pa_spec_apps import confirm
+
+    from sim2act.api import create_app
+
+    data = list(setup(env))
+    data[2].close()
+    data[1] = replace(data[1], max_requests=3, max_repairs=0)
+    data[2] = TestClient(create_app(data[0], data[1]))
+    data[2].headers["Authorization"] = "Bearer synthetic-test-A"
+    try:
+        rid, result, sent = generate(data, "ordered", repair=False)
+        assert len(sent) == 3 and result["status"] == "PARTIAL"
+        first = json.loads(next(m["content"] for m in sent[1]["messages"] if m["role"] == "tool"))
+        assert first["data"]["content"]
+        feedback = json.loads(
+            [m["content"] for m in sent[2]["messages"] if m["role"] == "tool"][-1]
+        )
+        assert feedback["data"]["status"] == "PASS"
+        saved = confirm(data, rid, result)
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["id"].startswith("app_")
+    finally:
+        data[2].close()

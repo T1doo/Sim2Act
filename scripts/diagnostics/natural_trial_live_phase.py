@@ -27,7 +27,8 @@ from sim2act.production_evidence import ACCOUNT_ID
 from sim2act.production_trial_admission import canonical_quota_subject
 
 MAX_SECONDS = 1080
-STAGE_LIMITS = {"generate": 3, "source": 2, "cold": 2}
+# This probe narrows the original3/2/2 caps; it does not modify the contract.
+STAGE_LIMITS = {"generate": 3, "source": 2, "cold": 1}
 TERMINAL = {"SUCCEEDED", "FAILED", "CANCELLED", "PARTIAL"}
 
 
@@ -75,7 +76,7 @@ def save_selection(root, value):
     return path
 
 
-def prepare(client, recipe, record, window_seconds=300):
+def prepare(client, recipe, record):
     project = request(
         client, "/api/projects", dict(name="Bounded existing-free Intern synthetic trial"), 201
     )["id"]
@@ -108,12 +109,8 @@ def prepare(client, recipe, record, window_seconds=300):
     base = f"/api/projects/{project}/natural-trials/{key}"
     state = dict(stage="prepare", trial=key, project=project, base=base, model_requests=0)
     record(state)
-    require(window_seconds in (300, 1200), "EXPLICIT_SCOPE_WINDOW_REQUIRED")
     body = dict(bindings=choices, path="P-B", extraction_recipe=recipe)
-    if window_seconds == 1200:
-        body["scope_window"] = "NEW_EXACT_SEVEN_SLOT_1200_SECONDS"
     receipt = request(client, base + "/preparation", body)
-    require(receipt.get("new_scope_window_seconds") == window_seconds, "NEW_SCOPE_WINDOW_MISMATCH")
     contract = gate.PBTrialContract.model_validate(receipt["contract"])
     require(
         contract.project_id == project
@@ -374,6 +371,7 @@ def run_stages(
     stop=None,
     checkpoint=lambda: None,
     cleanup_client=None,
+    generate_only=False,
 ):
     """Original model lifecycle. Budgets are observed only after terminal stages,
     avoiding a read-lock wait disguised as a provider failure during G0/G1.
@@ -381,6 +379,7 @@ def run_stages(
     stop = stop or threading.Event()
     runs = {}
     generation = None
+    attempted_cleanup = None
     until = min(
         time.monotonic() + MAX_SECONDS - 90,
         time.monotonic() + max(0, contract.expires_at - time.time()),
@@ -434,6 +433,10 @@ def run_stages(
     try:
         current()
         source, cold = contract.bindings
+        # natural_spec requires read/checker/final:3 requests even without repair.
+        # Source2/Cold1 gives six reservations:300s spacing before computation.
+        # Original300s preparation cannot fit full chain; never extend/reapprove.
+        enough_window(contract, dict(last_reserved_at=None), 3 if generate_only else 6)
         generation = accept(
             "generate",
             lambda: request(
@@ -472,6 +475,28 @@ def run_stages(
                 artifact_write_consent=natural.CONSENT,
             ),
         )
+        if generate_only:
+            save(stage="generation_candidate_saved_cleanup_pending", saved_candidate=saved)
+            attempted_cleanup = cancel_original(cleanup_client, state)
+            require(
+                attempted_cleanup.get("trial_withdrawn") is True
+                and attempted_cleanup.get("status") == "TERMINAL_OBSERVED",
+                "GENERATION_WITHDRAWAL_UNCONFIRMED",
+            )
+            cancellation = attempted_cleanup
+            save(stage="generation_candidate_saved", active_run=None, cancellation=cancellation)
+            return dict(
+                status="ORIGINAL_GENERATION_CANDIDATE_SAVED",
+                actual_model_requests=budget["reserved_requests"],
+                trial_key=contract.trial_key,
+                contract_fingerprint=fingerprint(contract.model_dump()),
+                runs=runs,
+                result=saved,
+                cancellation=cancellation,
+                source_cold_status="NOT_RUN_SELECTED_GENERATE_ONLY",
+                semantic_goal_acceptance="NOT_RUN",
+                owner_acceptance="PENDING",
+            )
         app, release, instance = release_instance(
             client, saved["id"], contract.stage_keys.generate + "_instance"
         )
@@ -642,7 +667,11 @@ def run_stages(
             owner_acceptance="PENDING",
         )
     except Exception as error:
-        cancellation = cancel_original(cleanup_client, state)
+        cancellation = (
+            attempted_cleanup
+            if attempted_cleanup is not None
+            else cancel_original(cleanup_client, state)
+        )
         save(
             stage="stopped_or_unknown",
             cancellation=cancellation,

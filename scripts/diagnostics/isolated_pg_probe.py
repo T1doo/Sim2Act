@@ -269,10 +269,10 @@ def finite_pb_recipe():
     )
 
 
-def plan(source, manifest=None, with_live=False, live_window=300):
+def plan(source, manifest=None, with_live=False, live_stages="generate"):
     require(
-        live_window in (300, 1200) and (with_live or live_window == 300),
-        "EXPLICIT_LIVE_WINDOW_OPTION_REQUIRED",
+        live_stages in ("generate", "all") and (with_live or live_stages == "generate"),
+        "EXPLICIT_LIVE_STAGE_OPTION_REQUIRED",
     )
     facts = resources()
     return dict(
@@ -288,8 +288,8 @@ def plan(source, manifest=None, with_live=False, live_window=300):
         image=IMAGE,
         platform="linux/amd64",
         mode="CORE_THEN_BOUNDED_FREE_LIVE" if with_live else "CORE_MODEL0",
-        model_requests=7 if with_live else 0,
-        max_seconds=CORE_SECONDS + 1080 if with_live else CORE_SECONDS,
+        model_requests=(3 if live_stages == "generate" else 6) if with_live else 0,
+        max_seconds=CORE_SECONDS + 480 if with_live else CORE_SECONDS,
         cleanup_reserve_seconds=CLEANUP_SECONDS,
         dependency_manifest_verified=manifest_check(manifest),
         local_dependencies=dependencies(),
@@ -306,15 +306,21 @@ def plan(source, manifest=None, with_live=False, live_window=300):
         no_trust=True,
         no_force_cleanup=True,
         unknown_preserved=True,
-        live_new_scope_window_seconds=live_window if with_live else None,
+        live_stages=live_stages if with_live else None,
+        original_scope_seconds=300,
+        full_chain_minimum_spacing_seconds=300,
+        full_chain_executable=False,
+        full_chain_actual_runtime_fit="NOT_VERIFIED",
         optional_live=dict(
             implemented=True,
-            max_requests=7,
+            max_requests=3 if live_stages == "generate" else 6,
+            original_contract_caps=dict(generate=3, source=2, cold=2, total=7),
             generate=3,
             source=2,
-            cold=2,
-            max_seconds=1080,
-            reason="original API stages and strict production extraction bridge implemented; no real PG/model execution evidence",
+            cold=1,
+            repairs=0,
+            max_seconds=480,
+            reason="natural_spec requires3 Generate requests including checker; Source2/Cold1 requires at least6 total, so original300s scope cannot fit full chain at1RPM; only Generate-only executable; PG/model NOT_RUN",
         ),
     )
 
@@ -781,11 +787,12 @@ def password_rejected(error, port, user):
     return re.fullmatch(expression, str(error)) is not None
 
 
-def execute(source, manifest, expected_hash, with_live=False, live_window=300):
+def execute(source, manifest, expected_hash, with_live=False, live_stages="generate"):
     """No effects before all exact source/dependency/resource/confirmation gates."""
     global DEADLINE
     checked_source(source)
-    value = plan(source, manifest, with_live, live_window)
+    value = plan(source, manifest, with_live, live_stages)
+    require(not with_live or live_stages == "generate", "ORIGINAL_SCOPE_CANNOT_FIT_FULL_CHAIN")
     require(value["dependency_manifest_verified"], "DEPENDENCY_NOT_VERIFIED")
     require(
         value["preconditions"]["disk_ready"] and value["preconditions"]["memory_ready"],
@@ -813,7 +820,11 @@ def execute(source, manifest, expected_hash, with_live=False, live_window=300):
     bearer = None
     safe = False
     state = dict(
-        status="PREPARING", source_sha=source, plan_sha256=plan_hash(value), model_requests=0
+        status="PREPARING",
+        source_sha=source,
+        plan_sha256=plan_hash(value),
+        model_requests=0,
+        live_stages=live_stages if with_live else None,
     )
 
     def checkpoint():
@@ -1149,8 +1160,8 @@ def execute(source, manifest, expected_hash, with_live=False, live_window=300):
         record()
         if with_live:
             DEADLINE = min(
-                started + CORE_SECONDS + 1080 - CLEANUP_SECONDS,
-                time.monotonic() + 1080 - CLEANUP_SECONDS,
+                started + CORE_SECONDS + 480 - CLEANUP_SECONDS,
+                time.monotonic() + 480 - CLEANUP_SECONDS,
             )
             text = (root / "app.env").read_text().splitlines()
             text = [
@@ -1165,9 +1176,9 @@ def execute(source, manifest, expected_hash, with_live=False, live_window=300):
                 "SIM2ACT_RPM=1",
                 "SIM2ACT_GOAL_PLANNER_PROVIDER=intern-s2",
                 "SIM2ACT_APPLICATION_GENERATION_ACTIVATION_ENABLED=true",
-                "SIM2ACT_MAX_REQUESTS=4",
+                "SIM2ACT_MAX_REQUESTS=3",
                 "SIM2ACT_MAX_TOOLS=4",
-                "SIM2ACT_MAX_REPAIRS=1",
+                "SIM2ACT_MAX_REPAIRS=0",
                 "SIM2ACT_MAX_TOTAL_TOKENS=64000",
                 "SIM2ACT_MAX_OUTPUT_TOKENS=1024",
                 "SIM2ACT_RUN_SECONDS=300",
@@ -1216,7 +1227,7 @@ def execute(source, manifest, expected_hash, with_live=False, live_window=300):
                 ready = preparer.event("DESKTOP_SERVICE_READY")
                 with phase.new_client(ready["url"], bearer, checkpoint=checkpoint) as client:
                     contract, selected, live_state = phase.prepare(
-                        client, finite_pb_recipe(), live_record, live_window
+                        client, finite_pb_recipe(), live_record
                     )
                     selected_file = phase.save_selection(root, selected)
             finally:
@@ -1246,6 +1257,7 @@ def execute(source, manifest, expected_hash, with_live=False, live_window=300):
                         stop=stop,
                         checkpoint=checkpoint,
                         cleanup_client=cleanup_client,
+                        generate_only=live_stages == "generate",
                     )
             finally:
                 selected_worker.close()
@@ -1283,7 +1295,7 @@ def execute(source, manifest, expected_hash, with_live=False, live_window=300):
         if pg is not None:
             pg.close()
         if safe and container is not None:
-            DEADLINE = started + CORE_SECONDS + (1080 if with_live else 0)
+            DEADLINE = started + CORE_SECONDS + (480 if with_live else 0)
             # No implicit SIGKILL: normal PostgreSQL fast shutdown, exact owned IDs.
             try:
                 info = json.loads(run([*DOCKER, "inspect", container]))[0]
@@ -1338,7 +1350,9 @@ def execute(source, manifest, expected_hash, with_live=False, live_window=300):
                     )
                     path.unlink()
                 state.update(
-                    status="CORE_AND_LIVE_COMPLETE" if with_live else "CORE_MODEL0_COMPLETE",
+                    status="CORE_AND_SELECTED_LIVE_STAGES_COMPLETE"
+                    if with_live
+                    else "CORE_MODEL0_COMPLETE",
                     cleanup="normal app STOP/dualEOF + pg_ctl fast + nonforce exact container/network remove; private credentials removed",
                     image_cache="retained; no image removal authority",
                 )
@@ -1348,7 +1362,8 @@ def execute(source, manifest, expected_hash, with_live=False, live_window=300):
                 record()
                 raise ProbeError("CLEANUP_UNKNOWN_RETAINED") from None
     require(
-        state["status"] == ("CORE_AND_LIVE_COMPLETE" if with_live else "CORE_MODEL0_COMPLETE"),
+        state["status"]
+        == ("CORE_AND_SELECTED_LIVE_STAGES_COMPLETE" if with_live else "CORE_MODEL0_COMPLETE"),
         "CLEANUP_NOT_CONFIRMED",
     )
     return public_state()
@@ -1365,11 +1380,10 @@ def main():
         help="Separate exact-plan existing-free Intern phase; never implied by core",
     )
     parser.add_argument(
-        "--live-window",
-        type=int,
-        choices=[300, 1200],
-        default=300,
-        help="Explicit NEW original P-B scope window; never changes existing approval",
+        "--live-stages",
+        choices=["generate", "all"],
+        default="generate",
+        help="Generate3 only; all is refused before effects: original300s cannot fit3/2/1 at1RPM",
     )
     parser.add_argument("--confirmed-plan-sha256")
     args = parser.parse_args()
@@ -1381,11 +1395,11 @@ def main():
                 args.manifest,
                 args.confirmed_plan_sha256,
                 args.with_live,
-                args.live_window,
+                args.live_stages,
             )
         else:
             checked_source(args.source_sha)
-            value = plan(args.source_sha, args.manifest, args.with_live, args.live_window)
+            value = plan(args.source_sha, args.manifest, args.with_live, args.live_stages)
             value["plan_sha256"] = plan_hash(value)
             value["execution_performed"] = False
         print(json.dumps(value, indent=2))
