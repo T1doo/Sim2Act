@@ -34,9 +34,12 @@ loopback HTTP and an explicit TEST_ONLY SQLite fixture. The positive flow:
    retain the same origin, original sum result/material, original Run key and
    cancelled result. Stop via parent EOF with the same complete receipts.
 
-The read-only final database observation contains exactly one SUCCEEDED and one
+The saved `actual-test-only-processes/database-final-observation.json` records
+the read-only method, SQL, exact DB digest and counts: one SUCCEEDED and one
 CANCELLED Run, zero model attempts and zero reservations. All data is generated
 project test material; no real provider or private user document is involved.
+Controller timeline values are monotonic elapsed time since Popen;
+`stopped_elapsed_seconds` is not latency measured from a STOP request.
 The actual blocked-app-heartbeat test separately proves that the old two-second
 join does not make a still-live sender disappear from service cleanup.
 
