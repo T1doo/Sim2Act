@@ -243,6 +243,184 @@ static PyObject *same_classes(PyObject *self, PyObject *args) {
     Py_RETURN_TRUE;
 }
 
+/* One import-time expectation; NEVER a stored qualification verdict. Every
+ * call below rereads all current functions, ordered dictionaries and aliases.
+ * Expected tuples own their references. Only direct C fields are inspected,
+ * so the successful bounded segment neither allocates nor dispatches Python. */
+static PyObject *structure_config;
+/* Namespace-format index only: no value, code, class, graph or PASS is saved.
+ * CPython 3.12 assigns a fresh nonzero dictionary version on EVERY mutation.
+ * A strong reference excludes address reuse; zero/other ABIs always rescan.
+ * Function.__code__/defaults and all actual aliases are reread regardless.
+ * A changed-and-restored dictionary has a NEW tag and must rescan its keys. */
+typedef struct {PyObject *dictionary; uint64_t version;} ConfigNamespace;
+static ConfigNamespace config_namespaces[64];
+static int config_items(PyObject *dictionary, PyObject *items) {
+    if (!PyDict_CheckExact(dictionary) || !PyTuple_CheckExact(items)
+            || PyDict_GET_SIZE(dictionary) != PyTuple_GET_SIZE(items)) return 0;
+    Py_ssize_t pos = 0, i = 0;
+    PyObject *key, *value;
+    while (PyDict_Next(dictionary, &pos, &key, &value)) {
+        PyObject *pair = PyTuple_GET_ITEM(items, i++);
+        if (!PyTuple_CheckExact(pair) || PyTuple_GET_SIZE(pair) != 2
+                || key != PyTuple_GET_ITEM(pair, 0) || value != PyTuple_GET_ITEM(pair, 1)) return 0;
+    }
+    return 1;
+}
+static int config_namespace(PyObject *dictionary) {
+    if (!PyDict_CheckExact(dictionary)) return 0;
+#if PY_VERSION_HEX >= 0x030C0000 && PY_VERSION_HEX < 0x030D0000 && !defined(Py_LIMITED_API)
+    uint64_t version = ((PyDictObject *)dictionary)->ma_version_tag;
+    ConfigNamespace *available = NULL;
+    for (size_t i = 0; i < 64; i++) {
+        if (config_namespaces[i].dictionary == dictionary) {
+            if (version && config_namespaces[i].version == version) return 1;
+            available = config_namespaces+i;
+            break;
+        }
+        if (!available && !config_namespaces[i].dictionary) available = config_namespaces+i;
+    }
+#endif
+    Py_ssize_t pos = 0;
+    PyObject *key, *value;
+    while (PyDict_Next(dictionary, &pos, &key, &value))
+        if (!PyUnicode_CheckExact(key)) return 0;
+#if PY_VERSION_HEX >= 0x030C0000 && PY_VERSION_HEX < 0x030D0000 && !defined(Py_LIMITED_API)
+    if (available && version) {
+        if (!available->dictionary) available->dictionary = Py_NewRef(dictionary);
+        available->version = version;
+    }
+#endif
+    return 1;
+}
+static PyObject *register_structure_config(PyObject *self, PyObject *record) {
+    (void)self;
+    if (structure_config || !PyTuple_CheckExact(record) || PyTuple_GET_SIZE(record) != 7) {
+        PyErr_SetString(PyExc_RuntimeError, "Structure configuration is one-time and complete");
+        return NULL;
+    }
+    /* This is the same trusted import-time boundary as register_pin_code.
+     * Shape validation remains in the fresh reader, before every use. */
+    structure_config = Py_NewRef(record);
+    Py_RETURN_NONE;
+}
+static int config_aliases(PyObject *groups) {
+    if (!PyTuple_CheckExact(groups) || PyTuple_GET_SIZE(groups) > 64) return 0;
+    for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(groups); i++) {
+        PyObject *entry = PyTuple_GET_ITEM(groups, i);
+        if (!PyTuple_CheckExact(entry) || PyTuple_GET_SIZE(entry) != 2) return 0;
+        PyObject *module = PyTuple_GET_ITEM(entry, 0), *pairs = PyTuple_GET_ITEM(entry, 1);
+        if (!Py_IS_TYPE(module, &PyModule_Type)) return 0;
+        PyObject *dictionary = PyModule_GetDict(module);
+        if (!dictionary) return -1;
+        /* The caller has checked every namespace once in this callback-free
+         * segment. Do not repeat a whole module walk for each alias group. */
+        if (!PyTuple_CheckExact(pairs) || PyTuple_GET_SIZE(pairs) > 256) return 0;
+        for (Py_ssize_t j = 0; j < PyTuple_GET_SIZE(pairs); j++) {
+            PyObject *pair = PyTuple_GET_ITEM(pairs, j);
+            if (!PyTuple_CheckExact(pair) || PyTuple_GET_SIZE(pair) != 2
+                    || !PyUnicode_CheckExact(PyTuple_GET_ITEM(pair, 0))) return 0;
+            PyObject *actual = PyDict_GetItemWithError(dictionary, PyTuple_GET_ITEM(pair, 0));
+            if (PyErr_Occurred()) return -1;
+            if (actual != PyTuple_GET_ITEM(pair, 1)) return 0;
+        }
+    }
+    return 1;
+}
+static PyObject *qualify_metadata(PyObject *self, PyObject *graph) {
+    (void)self;
+    if (!structure_config) return Py_NewRef(unsupported);
+    PyObject *record = structure_config;
+    for (int i = 0; i < 7; i++)
+        if (!PyTuple_CheckExact(PyTuple_GET_ITEM(record, i))) Py_RETURN_FALSE;
+    /* Unknown representations return before the original signal boundary;
+     * the retained Python path owns that callback, without a replay. */
+    PyObject *groups = PyTuple_GET_ITEM(record, 3);
+    if (PyTuple_GET_SIZE(groups) > 64) Py_RETURN_FALSE;
+    for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(groups); i++) {
+        PyObject *entry = PyTuple_GET_ITEM(groups, i);
+        if (!PyTuple_CheckExact(entry) || PyTuple_GET_SIZE(entry) != 2) Py_RETURN_FALSE;
+        PyObject *module = PyTuple_GET_ITEM(entry, 0);
+        if (!Py_IS_TYPE(module, &PyModule_Type)) return Py_NewRef(unsupported);
+        if (!config_namespace(PyModule_GetDict(module))) return Py_NewRef(unsupported);
+    }
+    PyObject *marker_support = PyTuple_GET_ITEM(record, 5);
+    if (PyTuple_GET_SIZE(marker_support) != 6) Py_RETURN_FALSE;
+    if (!config_namespace(PyTuple_GET_ITEM(marker_support, 4))) return Py_NewRef(unsupported);
+    PyObject *prefix = PyTuple_GET_ITEM(record, 6);
+    if (PyTuple_GET_SIZE(prefix) != 7) Py_RETURN_FALSE;
+    int same = config_aliases(PyTuple_GET_ITEM(prefix, 0));
+    if (same < 0) return NULL;
+    if (!same || (PyObject *)Py_TYPE(graph) != PyTuple_GET_ITEM(prefix, 6)) Py_RETURN_FALSE;
+    PyObject *state = PyTuple_GET_ITEM(prefix, 1), *init = PyTuple_GET_ITEM(prefix, 4);
+    size_t state_work = 0;
+    if (!PyType_Check(state) || ((PyTypeObject *)state)->tp_mro != PyTuple_GET_ITEM(prefix, 2)
+            || !PyFunction_Check(init) || PyFunction_GET_CODE(init) != PyTuple_GET_ITEM(prefix, 5)) Py_RETURN_FALSE;
+    same = same_namespace((PyTypeObject *)state, PyTuple_GET_ITEM(prefix, 3), &state_work);
+    if (same < 0) return NULL;
+    if (!same) Py_RETURN_FALSE;
+    /* Retain the old same_classes callback only after the old prefix passes.
+     * Do not use any prefix PASS after this callback. */
+    if (PyErr_CheckSignals() < 0) return NULL;
+    for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(groups); i++) {
+        PyObject *module = PyTuple_GET_ITEM(PyTuple_GET_ITEM(groups, i), 0);
+        if (!Py_IS_TYPE(module, &PyModule_Type) || !config_namespace(PyModule_GetDict(module))) Py_RETURN_FALSE;
+    }
+    same = config_aliases(PyTuple_GET_ITEM(prefix, 0));
+    if (same < 0) return NULL;
+    if (!same || (PyObject *)Py_TYPE(graph) != PyTuple_GET_ITEM(prefix, 6)) Py_RETURN_FALSE;
+    size_t work = 0;
+    for (int group = 0; group < 2; group++) {
+        PyObject *entries = PyTuple_GET_ITEM(record, group);
+        if (PyTuple_GET_SIZE(entries) > 256) Py_RETURN_FALSE;
+        for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(entries); i++) {
+            PyObject *entry = PyTuple_GET_ITEM(entries, i);
+            if (!PyTuple_CheckExact(entry) || PyTuple_GET_SIZE(entry) != (group ? 4 : 3)) Py_RETURN_FALSE;
+            PyObject *kind = PyTuple_GET_ITEM(entry, 0);
+            PyObject *meta = group ? PyTuple_GET_ITEM(entry, 1) : (PyObject *)&PyType_Type;
+            if (!PyType_Check(kind) || (PyObject *)Py_TYPE(kind) != meta
+                    || ((PyTypeObject *)kind)->tp_mro != PyTuple_GET_ITEM(entry, group ? 2 : 1)) Py_RETURN_FALSE;
+            int same = same_namespace((PyTypeObject *)kind, PyTuple_GET_ITEM(entry, group ? 3 : 2), &work);
+            if (same < 0) return NULL;
+            if (!same) Py_RETURN_FALSE;
+        }
+    }
+    PyObject *functions = PyTuple_GET_ITEM(record, 2);
+    if (PyTuple_GET_SIZE(functions) > 256) Py_RETURN_FALSE;
+    for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(functions); i++) {
+        PyObject *entry = PyTuple_GET_ITEM(functions, i);
+        if (!PyTuple_CheckExact(entry) || PyTuple_GET_SIZE(entry) != 5) Py_RETURN_FALSE;
+        PyObject *fn = PyTuple_GET_ITEM(entry, 0), *kw = PyTuple_GET_ITEM(entry, 3);
+        if (!PyFunction_Check(fn) || PyFunction_GET_CODE(fn) != PyTuple_GET_ITEM(entry, 1)
+                || (PyFunction_GET_DEFAULTS(fn) ? PyFunction_GET_DEFAULTS(fn) : Py_None) != PyTuple_GET_ITEM(entry, 2)
+                || (PyFunction_GET_KW_DEFAULTS(fn) ? PyFunction_GET_KW_DEFAULTS(fn) : Py_None) != kw) Py_RETURN_FALSE;
+        if (kw != Py_None && !config_items(kw, PyTuple_GET_ITEM(entry, 4))) Py_RETURN_FALSE;
+    }
+    same = config_aliases(groups);
+    if (same < 0) return NULL;
+    if (!same) Py_RETURN_FALSE; /* Never replay a signal callback on deopt. */
+    PyObject *dictionaries = PyTuple_GET_ITEM(record, 4);
+    if (PyTuple_GET_SIZE(dictionaries) > 64) Py_RETURN_FALSE;
+    for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(dictionaries); i++) {
+        PyObject *entry = PyTuple_GET_ITEM(dictionaries, i);
+        if (!PyTuple_CheckExact(entry) || PyTuple_GET_SIZE(entry) != 2
+                || !config_items(PyTuple_GET_ITEM(entry, 0), PyTuple_GET_ITEM(entry, 1))) Py_RETURN_FALSE;
+    }
+    PyObject *marker = PyTuple_GET_ITEM(record, 5);
+    if (PyTuple_GET_SIZE(marker) != 6) Py_RETURN_FALSE;
+    PyObject *fn = PyTuple_GET_ITEM(marker, 0), *modules = PyTuple_GET_ITEM(marker, 4);
+    if (!PyFunction_Check(fn)) Py_RETURN_FALSE;
+    PyFunctionObject *function = (PyFunctionObject *)fn;
+    if (function->func_module != PyTuple_GET_ITEM(marker, 1)
+            || function->func_qualname != PyTuple_GET_ITEM(marker, 2)
+            || function->func_name != PyTuple_GET_ITEM(marker, 3)) Py_RETURN_FALSE;
+    if (!config_namespace(modules) || !PyUnicode_CheckExact(function->func_module)) Py_RETURN_FALSE;
+    PyObject *actual = PyDict_GetItemWithError(modules, function->func_module);
+    if (PyErr_Occurred()) return NULL;
+    if (actual != PyTuple_GET_ITEM(marker, 5)) Py_RETURN_FALSE;
+    Py_RETURN_TRUE;
+}
+
 
 /* A publication owns the EXACT original V2 bytes, not a hash-only verdict or
  * a tree reconstructed from later mutable inputs. Versions never change.
@@ -396,6 +574,7 @@ static PyObject*pin_lookup_raw(PyObject*subject){
  return Py_NewRef(journal);
 }
 static PyObject*pin_lookup(PyObject*subject){
+ if((PyObject*)Py_TYPE(subject)!=pin_graph_class&&(PyObject*)Py_TYPE(subject)!=pin_frontier_class)return pin_error();
  PyObject*j=pin_lookup_raw(subject);if(!j)return NULL;
  if(j!=Py_None||((PyObject*)Py_TYPE(subject)==pin_graph_class&&pin_source_verifier!=Py_None)){
   if(!pin_code_current()){Py_DECREF(j);if(!PyErr_Occurred())pin_error();return NULL;}
@@ -616,6 +795,8 @@ static PyObject*pin_revoke(PyObject*self,PyObject*subject){
  Py_DECREF(fields);return PyBool_FromLong(safe);
 }
 static PyMethodDef methods[]={
+ {"register_structure_config",register_structure_config,METH_O,"Capture original immutable structure configuration once, not a verdict."},
+ {"qualify_metadata",qualify_metadata,METH_O,"Fresh complete bounded metadata comparison without cached PASS."},
  {"register_pin_code",register_pin_code,METH_VARARGS,"One-time fixed publication caller metadata."},
  {"pin_read_scope",pin_read_scope,METH_O,"Exact instance roots without foreign attribute callbacks."},
  {"pin_registered",pin_registered,METH_O,"Find the original issuer independently of Python fields."},

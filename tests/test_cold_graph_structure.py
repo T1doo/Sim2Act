@@ -120,6 +120,160 @@ def warm(f, c, graph):
     assert vars(graph)['_structure_state'].capsule is not None
 
 
+@pytest.mark.parametrize('damage',[
+    'code','defaults','kwdefaults-object','kwdefaults-value','kwdefaults-order',
+    'alias','native-alias','dispatch-object','dispatch-items','extension-items',
+    'class-items','state-items','marker-module','marker-qualname','marker-name',
+    'module-registry','match-role','snapshot-role',
+])
+def test_native_metadata_rechecks_complete_original_expectation(local_origin, monkeypatch, damage):
+    """Default native decision agrees with the retained full Python checker.
+
+    Every mutation happens AFTER capture and is restored before scope cleanup.
+    No graph PASS or previous metadata result may survive any of these changes.
+    """
+    f = local_origin
+    with f.store.tx() as c, pb._source_reads(f.store, c), scope(f, c) as graph:
+        assert guard_code._qualified_legacy(graph) is True
+        assert guard_code._qualified(graph) is True
+        with monkeypatch.context() as patch:
+            fn = r._ColdGraphRead.input_bytes
+            if damage == 'code':
+                patch.setattr(fn, '__code__', (lambda self: None).__code__)
+            elif damage == 'defaults':
+                patch.setattr(fn, '__defaults__', (object(),))
+            elif damage == 'kwdefaults-object':
+                patch.setattr(fn, '__kwdefaults__', dict(fn.__kwdefaults__))
+            elif damage == 'kwdefaults-value':
+                patch.setitem(fn.__kwdefaults__, '_validate', True)
+            elif damage == 'kwdefaults-order':
+                saved = list(fn.__kwdefaults__.items())
+                fn.__kwdefaults__.clear()
+                fn.__kwdefaults__.update(reversed(saved))
+                try:
+                    assert guard_code._qualified(graph) is False
+                    assert guard_code._qualified_legacy(graph) is False
+                finally:
+                    fn.__kwdefaults__.clear()
+                    fn.__kwdefaults__.update(saved)
+                return
+            elif damage == 'alias':
+                patch.setattr(r, '_ColdGraphBytesIO', object())
+            elif damage == 'native-alias':
+                patch.setattr(native, 'matches_fast', lambda *args: True)
+            elif damage == 'match-role':
+                patch.setattr(guard_code, '_NATIVE_MATCH', lambda *args: True)
+            elif damage == 'snapshot-role':
+                patch.setattr(guard_code, '_NATIVE_SNAPSHOT', lambda *args: True)
+            elif damage == 'dispatch-object':
+                patch.setattr(copyreg, 'dispatch_table', dict(copyreg.dispatch_table))
+            elif damage == 'dispatch-items':
+                patch.setitem(copyreg.dispatch_table, object, lambda value: ())
+            elif damage == 'extension-items':
+                patch.setitem(copyreg._extension_registry, ('synthetic','metadata'), 123)
+            elif damage == 'class-items':
+                patch.setattr(r._ColdGraphPickler, 'synthetic_metadata', 1, raising=False)
+            elif damage == 'state-items':
+                patch.setattr(guard_code._State, 'synthetic_metadata', 1, raising=False)
+            elif damage.startswith('marker-'):
+                attr = {'marker-module':'__module__','marker-qualname':'__qualname__',
+                        'marker-name':'__name__'}[damage]
+                patch.setattr(r._cold_graph_pickle_marker, attr, 'synthetic_changed')
+            elif damage == 'module-registry':
+                patch.setitem(sys.modules, r.__name__, object())
+            assert guard_code._qualified(graph) is False
+            if damage not in ('match-role','snapshot-role'):
+                assert guard_code._qualified_legacy(graph) is False
+            else:
+                # Newly pinned actual consumer roles close this old gap.
+                assert guard_code._qualified_legacy(graph) is True
+        assert guard_code._qualified(graph) is True
+
+
+def test_metadata_expectation_cannot_be_recaptured_after_mutation(monkeypatch):
+    with pytest.raises(RuntimeError, match='one-time'):
+        native.register_structure_config(((),)*6)
+
+
+def test_namespace_format_index_invalidates_after_add_and_remove(local_origin):
+    f=local_origin
+    calls=[]
+    class ForeignKey:
+        def __hash__(self):return 123456789
+        def __eq__(self,other):calls.append('eq');return False
+    key=ForeignKey()
+    namespace=vars(native)
+    with f.store.tx() as c,pb._source_reads(f.store,c),scope(f,c) as graph:
+        assert guard_code._qualified(graph) is True
+        namespace[key]=None
+        try:
+            assert guard_code._NATIVE_METADATA(graph) is native.UNSUPPORTED
+            assert calls==[]
+        finally:
+            del namespace[key]
+        assert guard_code._qualified(graph) is True
+
+
+@pytest.mark.parametrize('role',['_NATIVE_MATCH','_NATIVE_SNAPSHOT'])
+def test_changed_selector_consumer_cannot_run_or_hide_content(local_origin,monkeypatch,role):
+    f=local_origin
+    calls=[]
+    with f.store.tx() as c,pb._source_reads(f.store,c),rejecting_scope(f,c) as graph:
+        value={'mutable':[1]}
+        graph.add('synthetic-role-boundary',value)
+        warm(f,c,graph)
+        value['mutable'].append(2)
+        with monkeypatch.context() as patch:
+            patch.setattr(guard_code,role,lambda *args:calls.append(True) or True)
+            with pytest.raises(DomainError):graph.check(f.store,c)
+            assert calls==[]
+
+
+def test_late_metadata_callback_class_change_cannot_dispatch_foreign_fallback(local_origin):
+    f=local_origin
+    calls=[]
+    class Foreign:
+        def _content_matches(self):
+            calls.append('foreign-content')
+            return True
+        def content_version(self):
+            calls.append('foreign-version')
+            return saved_version
+    with f.store.tx() as c,pb._source_reads(f.store,c),rejecting_scope(f,c) as graph:
+        original=type(graph)
+        value={'mutable':[1]}
+        graph.add('synthetic-class-boundary',value)
+        saved_version=graph.content_version()
+        monitor=sys.monitoring
+        slot=next(i for i in (3,4,5) if monitor.get_tool(i) is None)
+        monitor.use_tool_id(slot,'metadata callback class mutation')
+        changed=[]
+        seen=[]
+        def returned(code,offset,callee,arg):
+            if code.co_name.startswith('_qualified'):
+                seen.append((code.co_name,getattr(callee,'__name__','?')))
+            if code is guard_code._qualified.__code__ and callee is guard_code._NATIVE_METADATA and not changed:
+                changed.append(True)
+                graph.__class__=Foreign
+                value['mutable'].append(2)
+        code=guard_code._qualified.__code__
+        try:
+            monitor.register_callback(slot,monitor.events.CALL,lambda *args:None)
+            monitor.register_callback(slot,monitor.events.C_RETURN,returned)
+            monitor.set_events(slot,monitor.events.CALL|monitor.events.C_RETURN|monitor.events.C_RAISE)
+            caught=None
+            try:graph.check(f.store,c)
+            except DomainError as error:caught=error
+            assert caught is not None,(changed,seen,guard_code._SOURCE_OK)
+            assert changed==[True] and calls==[]
+        finally:
+            monitor.set_events(slot,0)
+            monitor.register_callback(slot,monitor.events.CALL,None)
+            monitor.register_callback(slot,monitor.events.C_RETURN,None)
+            monitor.free_tool_id(slot)
+            graph.__class__=original
+
+
 @pytest.mark.parametrize('producer',['compile_preview','validate_source_family'])
 def test_replaced_production_function_still_rejects_before_callback(local_origin,monkeypatch,producer):
     from sim2act import apps

@@ -2555,6 +2555,11 @@ class _ColdGraphRead:
                 selected = select(self)
             else:
                 vars(self).pop("_structure_state", None)
+            # A signal/monitor callback inside selection can replace this
+            # instance's class. Refuse before any fallback method lookup.
+            if _pin_entry is not None:
+                try:_pin_entry(self)
+                except ValueError:raise DomainError("VERSION_CONFLICT", "Graph changed during content selection") from None
             require((self._content_matches() if selected is None else selected)
                     if self._accounted_frontier is None else self._accounted_frontier.check() is None,
                 "Cold graph read segment or complete role inputs changed")
@@ -6047,49 +6052,70 @@ _graph_accounted_versions.rt = _graph_version_sys.modules[__name__]
 from . import _cold_accounted_values as _graph_version_values
 _graph_version_values._bind_row_storage(_cold_graph_row_storage)
 _graph_versions.register(_ColdGraphRead, _graph_accounted_versions._Frontier)
-_source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_limit_values','_cold_release_row',
-    'require','_cold_native_audit_fact','_cold_audit_seed','_cold_first_binding','_cold_generated_model_facet',
-    '_source_data_kind','_source_fields_equal','_cold_seed_audit_rows','_cold_seed_fixed_rows','_cold_seed_fixed_check',
-    '_cold_run_raw_seed','_cold_run_facts','_check_run_facts','_cold_read_checkpoint',
-    '_cold_sqlite_order','_cold_attempt_order','_model_value','_model_inputs',
-    '_invalidate_cold_run_raw_seed','_invalidate_cold_run_facts','fingerprint',
-    '_raw_seed_plain','_raw_seed_eligible','_raw_dynamic_eligible','_RAW_READ_SOURCE_BODY',
-    '_counters_from_facts','_counters','_counter_checkpoint','_node_proof_inputs',
-    '_prove_node_from_facts','_prove_node','_prove_pending_from_facts','_prove_pending',
-    'messages','parse','_anchor','strict_json','response_archive'),
-    (_ColdGraphRead,_graph_accounted_versions._Frontier,_ColdTrialGraph,_ColdRunRawSeed,_ColdRunFacts,_ColdAuditSeed,
-        _RAW_CONTROL_CLASS,_RAW_CONTROL_EPOCH,
-        _generation_fact_code._GenerationFactsReader,_generation_fact_code._ColdGenerationRawSeed,
-        _release_fact_code._ColdReleasePrefix,_release_fact_code._ColdReleaseFacts,
-        _release_apps_code._ColdCandidatePrefix,_release_apps_code._ColdGraphOriginFacts),
-    constants=('DomainError','_ColdNativeFunctionType','type','vars','all','any','dict','str','list','tuple','set','bool','len','getattr','object','isinstance','AppManifest','_COLD_RELEASE_ROW_ENTRY','_release_apps_code','_release_fact_code','_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_source_owned_code','_manifest_code','_SOURCE_VIEW_TYPE','_SOURCE_VIEW_PIN','_SOURCE_OWNER_TYPE','_SOURCE_OWNER_PIN',
-        '_graph_versions','_raw_read_control','_RAW_CONTROL_CLASS','_RAW_CONTROL_EPOCH','_RAW_CONTROL_CHECKPOINT',
-        '_RAW_CONTROL_CHECKPOINT_CODE','_RAW_CONTROL_LOCK_TYPE','_RAW_CONTROL_LOCAL_TYPE','_RAW_CONTROL_BUILTINS'),
-    helpers=((vars(_graph_version_values),('_bind_row_storage',)),
-        (vars(_graph_versions),('require','register','_scope','_code','create','publish','current','matches','close','seal_entries')),
-        (vars(_generation_fact_code),('_generation_plain','_generation_mapping',
-        '_history_core','_cold_generation_reader','_cold_generation_source','_cold_history_from_source',
-        '_cold_candidate_from_history','_parse_candidate_core','_read_receipt_core',
-        '_check_counters_core','_check_counter_rows','_check_counters_from_facts',
-        '_candidate_attempt_from_history','_candidate_validation_seal','_candidate_from_checked_facts',
-        '_source_scope_gate','source_scope_gate','_source_body','_initial_messages_from_facts','stage_tools','parse_generation',
-        'checked_usage','normalize_usage','returned_model_identity','require_returned_model',
-        'fingerprint','strict_json','response_archive','body','parse_response','authorized_read')),
-        (vars(_generation_fact_code.copy),('deepcopy',)),
-        (vars(_release_fact_code),('owned_release_pointer','_checkpoint_release_read',
-            '_read_release_prefix','_read_release_suffix','_cold_release_prefix','_release_same',
-            '_cold_release_from_origin','_cold_release_complete','_cold_release_facet_prefix','record_schema')),
-        (vars(_release_apps_code),('validate_source_family','compile_preview',
-            '_cold_candidate_prefix','_frozen_candidate_prefix','_record_candidate_origin',
-            '_checkpoint_candidate_read','_cold_candidate_from_origin'))),
-    constant_helpers=((vars(_graph_version_values),('_ROW_ROLE',)),
-        (vars(_raw_read_builtins),('type','vars','all','any','dict','str','list','tuple','set','bool','len','getattr','object','isinstance')),
-        (vars(hashlib),('sha256',)),
-        (vars(_graph_accounted_versions),('versions','rt')),
-        (vars(_graph_versions.native),_graph_versions._NAMES) if _graph_versions.AVAILABLE else (globals(),()),
-        (vars(_graph_versions.hashlib),('sha256',)),
-        (vars(_graph_versions),('native','_MODULE','_NAMES','_ENTRIES','AVAILABLE','JOURNAL','VERSION','REVOKE','LOOKUP','OWNED','RESOLVE','hashlib','sys','_SHA','_REGISTERED','source','_SOURCE_CHECK','DomainError','object','type','tuple','vars','bool','getattr','bytes','all','hasattr','dict')),
-        (vars(_release_apps_code),('_ColdCandidatePrefix','_ColdGraphOriginFacts')),
-        (vars(_release_fact_code),('_RELEASE_OWNED_CHECK','_release_owned_code','_ColdReleasePrefix','_ColdReleaseFacts','select','internal_releases','fingerprint','copy','DomainError')),
-        (vars(_generation_fact_code),('_generation_owned','_GenerationFactsReader','_ColdGenerationRawSeed',
-        'FrozenRunContract','copy','json','httpx')),))
+from . import _cold_graph_structure_guard as _graph_structure_code
+_GRAPH_SOURCE_WITNESS_REGISTERED = False
+
+
+def _register_graph_source_witness():
+    global _GRAPH_SOURCE_WITNESS_REGISTERED
+    if _GRAPH_SOURCE_WITNESS_REGISTERED:
+        return
+    _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_limit_values','_cold_release_row',
+        'require','_cold_native_audit_fact','_cold_audit_seed','_cold_first_binding','_cold_generated_model_facet',
+        '_source_data_kind','_source_fields_equal','_cold_seed_audit_rows','_cold_seed_fixed_rows','_cold_seed_fixed_check',
+        '_cold_run_raw_seed','_cold_run_facts','_check_run_facts','_cold_read_checkpoint',
+        '_cold_sqlite_order','_cold_attempt_order','_model_value','_model_inputs',
+        '_invalidate_cold_run_raw_seed','_invalidate_cold_run_facts','fingerprint',
+        '_raw_seed_plain','_raw_seed_eligible','_raw_dynamic_eligible','_RAW_READ_SOURCE_BODY',
+        '_counters_from_facts','_counters','_counter_checkpoint','_node_proof_inputs',
+        '_prove_node_from_facts','_prove_node','_prove_pending_from_facts','_prove_pending',
+        'messages','parse','_anchor','strict_json','response_archive'),
+        (_ColdGraphRead,_graph_accounted_versions._Frontier,_ColdTrialGraph,_ColdRunRawSeed,_ColdRunFacts,_ColdAuditSeed,
+            _RAW_CONTROL_CLASS,_RAW_CONTROL_EPOCH,
+            _generation_fact_code._GenerationFactsReader,_generation_fact_code._ColdGenerationRawSeed,
+            _release_fact_code._ColdReleasePrefix,_release_fact_code._ColdReleaseFacts,
+            _release_apps_code._ColdCandidatePrefix,_release_apps_code._ColdGraphOriginFacts),
+        constants=('DomainError','_ColdNativeFunctionType','type','vars','all','any','dict','str','list','tuple','set','bool','len','getattr','object','isinstance','AppManifest','_COLD_RELEASE_ROW_ENTRY','_release_apps_code','_release_fact_code','_SOURCE_OWNED_CHECK','_SOURCE_BINDING_TYPE','_source_owned_code','_manifest_code','_SOURCE_VIEW_TYPE','_SOURCE_VIEW_PIN','_SOURCE_OWNER_TYPE','_SOURCE_OWNER_PIN',
+            '_graph_versions','_raw_read_control','_RAW_CONTROL_CLASS','_RAW_CONTROL_EPOCH','_RAW_CONTROL_CHECKPOINT',
+            '_RAW_CONTROL_CHECKPOINT_CODE','_RAW_CONTROL_LOCK_TYPE','_RAW_CONTROL_LOCAL_TYPE','_RAW_CONTROL_BUILTINS'),
+        helpers=((vars(_graph_structure_code),('_qualified','_qualified_legacy','_same_items','_fixed_classes',
+            '_register_metadata','select','select_frontier','_frontier_plain','_frontier_values')),
+            (vars(_graph_version_values),('_bind_row_storage',)),
+            (vars(_graph_versions),('require','register','_scope','_code','create','publish','current','matches','close','seal_entries')),
+            (vars(_generation_fact_code),('_generation_plain','_generation_mapping',
+            '_history_core','_cold_generation_reader','_cold_generation_source','_cold_history_from_source',
+            '_cold_candidate_from_history','_parse_candidate_core','_read_receipt_core',
+            '_check_counters_core','_check_counter_rows','_check_counters_from_facts',
+            '_candidate_attempt_from_history','_candidate_validation_seal','_candidate_from_checked_facts',
+            '_source_scope_gate','source_scope_gate','_source_body','_initial_messages_from_facts','stage_tools','parse_generation',
+            'checked_usage','normalize_usage','returned_model_identity','require_returned_model',
+            'fingerprint','strict_json','response_archive','body','parse_response','authorized_read')),
+            (vars(_generation_fact_code.copy),('deepcopy',)),
+            (vars(_release_fact_code),('owned_release_pointer','_checkpoint_release_read',
+                '_read_release_prefix','_read_release_suffix','_cold_release_prefix','_release_same',
+                '_cold_release_from_origin','_cold_release_complete','_cold_release_facet_prefix','record_schema')),
+            (vars(_release_apps_code),('validate_source_family','compile_preview',
+                '_cold_candidate_prefix','_frozen_candidate_prefix','_record_candidate_origin',
+                '_checkpoint_candidate_read','_cold_candidate_from_origin'))),
+        constant_helpers=((vars(_graph_structure_code),('native','_NATIVE','_NATIVE_METADATA','_SOURCE_OK','_State',
+            '_STATE_CLASS','_STATE_MRO','_STATE_ITEMS','_STATE_INIT_CODE','_META_OK','_CODE','_ALIASES',
+            '_NATIVE_ENTRIES','_BUILTINS','_META_CONFIG','_CLASS_CONFIG','_DISPATCH','_DISPATCH_ITEMS',
+            '_EXTENSIONS','_EXTENSION_ITEMS','_MARKER','_MARKER_NAMES','_SHA',
+            '_NATIVE_MATCH','_NATIVE_SNAPSHOT','_NATIVE_CLASSES','_UNSUPPORTED','_ARGS')),
+            (vars(_graph_version_values),('_ROW_ROLE',)),
+            (vars(_raw_read_builtins),('type','vars','all','any','dict','str','list','tuple','set','bool','len','getattr','object','isinstance')),
+            (vars(hashlib),('sha256',)),
+            (vars(_graph_accounted_versions),('versions','rt')),
+            (vars(_graph_versions.native),_graph_versions._NAMES) if _graph_versions.AVAILABLE else (globals(),()),
+            (vars(_graph_versions.hashlib),('sha256',)),
+            (vars(_graph_versions),('native','_MODULE','_NAMES','_ENTRIES','AVAILABLE','JOURNAL','VERSION','REVOKE','LOOKUP','OWNED','RESOLVE','hashlib','sys','_SHA','_REGISTERED','source','_SOURCE_CHECK','DomainError','object','type','tuple','vars','bool','getattr','bytes','all','hasattr','dict')),
+            (vars(_release_apps_code),('_ColdCandidatePrefix','_ColdGraphOriginFacts')),
+            (vars(_release_fact_code),('_RELEASE_OWNED_CHECK','_release_owned_code','_ColdReleasePrefix','_ColdReleaseFacts','select','internal_releases','fingerprint','copy','DomainError')),
+            (vars(_generation_fact_code),('_generation_owned','_GenerationFactsReader','_ColdGenerationRawSeed',
+            'FrozenRunContract','copy','json','httpx')),))
+    _GRAPH_SOURCE_WITNESS_REGISTERED = True
+
+
+# Guard-first imports defer, rather than weaken, the same complete family.
+if hasattr(_graph_structure_code, 'select_frontier'):
+    _register_graph_source_witness()

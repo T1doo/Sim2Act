@@ -66,7 +66,14 @@ def test_actual_owned_frontier_current_refresh_alias_and_complete_cost(sql_facts
             for name in ('fast', 'legacy') if batch % 2 == 0 else ('legacy', 'fast'):
                 with monkeypatch.context() as patch:
                     if name == 'legacy':
-                        patch.setattr(structure, 'select_frontier', lambda frontier: None)
+                        # Decline through an actual unsupported serializer
+                        # configuration; selector CODE is now witnessed.
+                        patch.setitem(structure.copyreg._extension_registry,
+                            ('synthetic','unused-legacy-comparison'),123)
+                    else:
+                        # A real decline correctly discards its old capsule.
+                        # Measure warm full comparisons after restoring config.
+                        for _ in range(5):s.graph.check(f.store,c)
                     start = time.perf_counter()
                     with counts() as seen:
                         for _ in range(30):

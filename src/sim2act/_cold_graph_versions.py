@@ -19,7 +19,8 @@ except ImportError:
 
 _MODULE = native
 _NAMES = ('PinJournal','PinVersion','register_pin_code','pin_create','pin_publish',
-    'pin_current','pin_matches','pin_close','pin_registered','pin_revoke','pin_read_scope','pin_owned_frontier','pin_resolve')
+    'pin_current','pin_matches','pin_close','pin_registered','pin_revoke','pin_read_scope','pin_owned_frontier','pin_resolve',
+    'register_structure_config','qualify_metadata')
 _ENTRIES = (() if native is None or not all(hasattr(native,n) for n in _NAMES)
     else tuple((n,getattr(native,n)) for n in _NAMES))
 AVAILABLE = bool(_ENTRIES) and native.SOURCE_SHA256 == hashlib.sha256(

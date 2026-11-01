@@ -27,10 +27,12 @@ except ImportError:
 
 _NATIVE = native
 _NATIVE_ENTRIES = (() if native is None else
-    tuple((name, getattr(native, name, None)) for name in ('snapshot', 'matches_fast', 'UNSUPPORTED', 'same_classes')))
+    tuple((name, getattr(native, name, None)) for name in ('snapshot', 'matches_fast', 'UNSUPPORTED', 'same_classes',
+        'register_structure_config', 'qualify_metadata')))
 _NATIVE_SNAPSHOT = None if native is None else getattr(native, 'snapshot', None)
 _NATIVE_MATCH = None if native is None else getattr(native, 'matches_fast', None)
 _NATIVE_CLASSES = None if native is None else getattr(native, 'same_classes', None)
+_NATIVE_METADATA = None if native is None else getattr(native, 'qualify_metadata', None)
 _UNSUPPORTED = None if native is None else native.UNSUPPORTED
 _SOURCE_OK = (native is not None and native.SOURCE_SHA256 ==
     hashlib.sha256(Path(__file__).with_name('_cold_graph_structure.c').read_bytes()).hexdigest())
@@ -111,7 +113,7 @@ def _fixed_classes():
     return _META_OK and _NATIVE_CLASSES(_META_CONFIG, _CLASS_CONFIG)
 
 
-def _qualified(graph, *, _frontier=None):
+def _qualified_legacy(graph, *, _frontier=None):
     if (not _SOURCE_OK or native is not _NATIVE or type(native) is not ModuleType
             or _State is not _STATE_CLASS
             or type.__getattribute__(_State, '__mro__') is not _STATE_MRO
@@ -159,6 +161,75 @@ _STATE_CLASS = _State
 _STATE_MRO = type.__getattribute__(_State, '__mro__')
 _STATE_ITEMS = tuple(vars(_State).items())
 _STATE_INIT_CODE = _State.__init__.__code__
+
+
+def _register_metadata():
+    """Publish only original complete expectation objects, once at import.
+
+    The native registry retains these immutable tuples; callers cannot replace
+    the expectation by assigning a new Python metadata tuple after issuance.
+    All CURRENT functions/namespaces are still scanned on every qualification.
+    """
+    if not _SOURCE_OK or _NATIVE_METADATA is None or not _META_OK:
+        return
+    groups = {}
+    aliases = [*_ALIASES,
+        *((native, name, value) for name, value in _NATIVE_ENTRIES),
+        *((builtins, name, value) for name, value in _BUILTINS),
+        (copyreg, 'dispatch_table', _DISPATCH),
+        (copyreg, '_extension_registry', _EXTENSIONS),
+        (r.hashlib, 'sha256', _SHA),
+        (sys, 'modules', sys.modules),
+        (r, _MARKER.__qualname__, _MARKER),
+        (r._row_native_code, '_trial_typed_storage', typed._trial_typed_storage),
+    ]
+    # Self aliases cover every old qualification expectation that could be
+    # rebound independently of its mutable current function/module/class.
+    space = sys.modules[__name__]
+    aliases.extend((space, name, globals()[name]) for name in (
+        'native','_NATIVE','_SOURCE_OK','_State','_STATE_CLASS','_STATE_MRO',
+        '_STATE_ITEMS','_STATE_INIT_CODE','_NATIVE_METADATA','_META_OK',
+        '_NATIVE_MATCH','_NATIVE_SNAPSHOT','_NATIVE_CLASSES','_UNSUPPORTED','_ARGS'))
+    for owner, name, value in aliases:
+        entry = groups.setdefault(id(owner), (owner, []))
+        entry[1].append((name, value))
+    functions = (*_CODE, (_State.__init__, _STATE_INIT_CODE,
+        _State.__init__.__defaults__, _State.__init__.__kwdefaults__,
+        tuple((_State.__init__.__kwdefaults__ or {}).items())))
+    classes = (*_CLASS_CONFIG, (_State, type(_State), _STATE_MRO, _STATE_ITEMS))
+    marker = (_MARKER, _MARKER.__module__, _MARKER.__qualname__,
+        _MARKER.__name__, sys.modules, r)
+    if marker[3] in ('__newobj__', '__newobj_ex__'):
+        return
+    prefix_groups = ((native, _NATIVE_ENTRIES), (builtins, _BUILTINS),
+        (r, (('_ColdGraphRead', r._ColdGraphRead),)),
+        (space, tuple((name, globals()[name]) for name in (
+            'native','_NATIVE','_SOURCE_OK','_State','_STATE_CLASS','_STATE_MRO',
+            '_STATE_ITEMS','_STATE_INIT_CODE'))))
+    prefix = (prefix_groups, _State, _STATE_MRO, _STATE_ITEMS,
+        _State.__init__, _STATE_INIT_CODE, r._ColdGraphRead)
+    native.register_structure_config((_META_CONFIG, classes, functions,
+        tuple((owner, tuple(pairs)) for owner, pairs in groups.values()),
+        ((_DISPATCH, _DISPATCH_ITEMS), (_EXTENSIONS, _EXTENSION_ITEMS)), marker, prefix))
+
+
+_register_metadata()
+
+
+def _qualified(graph, *, _frontier=None):
+    if not _SOURCE_OK or native is not _NATIVE or _NATIVE_METADATA is None:
+        return _qualified_legacy(graph, _frontier=_frontier)
+    result = _NATIVE_METADATA(graph)
+    if result is _UNSUPPORTED:
+        return _qualified_legacy(graph, _frontier=_frontier)
+    if result is not True or type(graph) is not r._ColdGraphRead:
+        return False
+    fields = object.__getattribute__(graph, '__dict__')
+    return (not any(name in fields for name in ('input_bytes', 'input_key', '_frontier_input_key'))
+        and type(fields.get('phase')) is str and fields['phase'] in ('pre', 'post')
+        and type(fields.get('key')) is str and type(fields.get('epoch')) is int
+        and fields.get('_accounted_frontier') is _frontier
+        and fields.get('_typed_native_candidate') is None and fields.get('active') is True)
 
 
 def select(graph):
@@ -291,3 +362,11 @@ def select_frontier(frontier):
         versions.require(versions.current(frontier) is version)
     state.capsule = capsule
     return True
+
+
+# Importing this module first may have made runtime reach EOF before our full
+# declarations. Complete the SAME one-time witness only after every consumer.
+_finish_runtime = getattr(r, '_register_graph_source_witness', None)
+if _finish_runtime is not None:
+    _finish_runtime()
+del _finish_runtime

@@ -250,7 +250,10 @@ def test_declined_graph_still_rejects_new_method_shadow(sql_facts,monkeypatch):
     calls=[]
     def foreign(*args):calls.append(True)
     with monkeypatch.context() as patch:
-        patch.setattr(structure,'_qualified',lambda graph,**kw:False)
+        # Unknown serializer configuration declines optional acceleration.
+        # Replacing the qualification CODE itself is now correctly rejected
+        # by the complete source witness before any Graph can be issued.
+        patch.setitem(structure.copyreg._extension_registry,('synthetic','unused-decline'),123)
         with pytest.raises(DomainError),graph_scope(sql_facts) as (graph,limits):
             assert graph.content_version() is None
             graph.content_version=foreign
@@ -325,17 +328,23 @@ print('PASS_OPTIONAL_NATIVE_ABSENCE_ORIGINAL_V2')
     assert result.returncode==0,(result.stdout,result.stderr)
 
 
-def test_three_fresh_import_orders_bind_original_reducer():
+def test_fresh_import_orders_bind_original_reducer_and_complete_selector():
     import subprocess
     orders=[('sim2act._cold_accounted_values','sim2act.natural_spec_runtime'),
         ('sim2act._cold_accounted_native','sim2act.natural_spec_runtime'),
-        ('sim2act.natural_spec_runtime','sim2act._cold_accounted_native')]
+        ('sim2act.natural_spec_runtime','sim2act._cold_accounted_native'),
+        ('sim2act._cold_graph_structure_guard','sim2act.natural_spec_runtime'),
+        ('sim2act.pb_natural_uses','sim2act._cold_graph_structure_guard')]
     for order in orders:
         code='import importlib\n'+''.join('importlib.import_module('+repr(n)+')\n' for n in order)+r'''
 from sim2act import natural_spec_runtime as rt,_cold_accounted_values as values
 assert values._ROW_ROLE[0] is rt._cold_graph_row_storage
 from sim2act import _cold_graph_versions as versions
 assert versions.AVAILABLE and versions._REGISTERED
+from sim2act import _cold_source_packet as packet,_cold_graph_structure_guard as structure
+assert rt._GRAPH_SOURCE_WITNESS_REGISTERED
+assert structure._NATIVE_METADATA is not None
+packet.current()
 '''
         result=subprocess.run([sys.executable,'-c',code],capture_output=True,text=True,timeout=20)
         assert result.returncode==0,(order,result.stdout,result.stderr)
