@@ -6,6 +6,7 @@ No authorization, Graph PASS or transaction is transferred between scopes.
 """
 from builtins import object, type, tuple, vars, bool, getattr, bytes, all, hasattr, dict
 import hashlib
+import sys
 from pathlib import Path
 from .errors import DomainError
 from . import _cold_source_packet as source
@@ -18,7 +19,7 @@ except ImportError:
 
 _MODULE = native
 _NAMES = ('PinJournal','PinVersion','register_pin_code','pin_create','pin_publish',
-    'pin_current','pin_matches','pin_close','pin_registered','pin_revoke','pin_read_scope','pin_owned_frontier')
+    'pin_current','pin_matches','pin_close','pin_registered','pin_revoke','pin_read_scope','pin_owned_frontier','pin_resolve')
 _ENTRIES = (() if native is None or not all(hasattr(native,n) for n in _NAMES)
     else tuple((n,getattr(native,n)) for n in _NAMES))
 AVAILABLE = bool(_ENTRIES) and native.SOURCE_SHA256 == hashlib.sha256(
@@ -28,6 +29,7 @@ VERSION = None if not AVAILABLE else native.PinVersion
 REVOKE = None if not AVAILABLE else native.pin_revoke
 LOOKUP = None if not AVAILABLE else native.pin_registered
 OWNED = None if not AVAILABLE else native.pin_owned_frontier
+RESOLVE = None if not AVAILABLE else native.pin_resolve
 _SHA = hashlib.sha256
 _REGISTERED = False
 
@@ -43,7 +45,8 @@ def register(graph_type, frontier_type):
     native.register_pin_code(create,publish,
         (graph_type.__init__,frontier_type.__init__),
         (graph_type.__init__,graph_type.add,frontier_type.__init__,frontier_type.added),
-        graph_type,frontier_type,source.native.verify_code if source.native is not None else None)
+        graph_type,frontier_type,source.native.verify_code if source.native is not None else None,
+        (sys.modules[__name__],source,hashlib,native,source.native))
     _REGISTERED=True
 
 
@@ -93,19 +96,9 @@ def publish(subject, raw, *, predecessor, frontier=False):
 
 
 def current(subject):
-    _lookup = "sim2act:pin-lookup-const.v1"
-    if _lookup is None:return None  # Capability chosen before this Graph existed.
-    try:journal=_lookup(subject)
-    except ValueError:raise DomainError('VERSION_CONFLICT','Graph original issuer changed') from None
-    if journal is None:_scope(subject)
-    fields=vars(subject);require(type(fields) is dict)
-    if journal is None:
-        require('_pin_journal' not in fields or fields['_pin_journal'] is None)
-        return None
-    _code()
-    scope=_scope(subject)
-    require(fields.get('_pin_journal') is journal)
-    try:return native.pin_current(journal,scope,None)
+    _resolve = "sim2act:pin-resolve-const.v1"
+    if _resolve is None:return None  # Capability fixed before Graph creation.
+    try:return _resolve(subject)
     except ValueError:raise DomainError('VERSION_CONFLICT','Graph publication version changed') from None
 
 
@@ -130,7 +123,8 @@ def seal_entries(function):
     """
     markers={'sim2act:pin-revoke-const.v1':REVOKE,
         'sim2act:pin-lookup-const.v1':LOOKUP,
-        'sim2act:pin-owned-cleanup-const.v1':OWNED}
+        'sim2act:pin-owned-cleanup-const.v1':OWNED,
+        'sim2act:pin-resolve-const.v1':RESOLVE}
     constants=function.__code__.co_consts
     function.__code__=function.__code__.replace(co_consts=tuple(
         markers.get(value,value) if type(value) is str else value for value in constants))

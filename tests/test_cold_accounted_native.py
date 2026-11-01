@@ -5,8 +5,10 @@ The harness mirrors original mid-edge validations, not an acceptance run.
 """
 
 from contextlib import contextmanager
+import gc
 from types import SimpleNamespace
 import sys
+import weakref
 
 import pytest
 from accounted_sqlite_fixture import seed_cold
@@ -500,6 +502,20 @@ def test_candidate_release_uses_original_child_not_borrowed_fields(sql_facts, da
                 owner.candidate.graph = owner.graph
         assert tuple(other.mode.scope._issued) == issued and other.mode.active
         other.mode.assert_current()
+
+
+def test_published_frontier_cannot_disappear_into_parent_legacy_version(sql_facts):
+    f=sql_facts
+    with f.store.tx() as c:
+        with pytest.raises(DomainError),native_segment(f,c) as s:
+            child=weakref.ref(s.candidate.frontier)
+            s.graph._accounted_frontier=None
+            s.candidate.frontier=None
+            vars(s.graph).pop('_structure_state',None)
+            gc.collect()
+            assert child() is None
+            with pytest.raises(DomainError):s.graph.content_version()
+            s.graph.check(f.store,c)
 
 
 @pytest.mark.parametrize('damage', ['version', 'fence', 'lease'])

@@ -24,7 +24,7 @@ from .db import attempts, fingerprint, runs
 from .errors import DomainError
 from .text_continuations import ANCHOR_HASH
 
-PRODUCTION_QUALIFICATION_HASH = "cb164c21efd8378130146f9c25cf35abc05d561867131f954b38bdd4b03872ef"
+PRODUCTION_QUALIFICATION_HASH = "5f3fe7aa39f5e8d9ad30b6e6374076492860523ede44f2f28ad1a43765dda16b"
 
 
 class AccountEvidence(Strict):

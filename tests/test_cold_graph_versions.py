@@ -3,6 +3,7 @@ from contextlib import contextmanager
 import gc
 import hashlib
 import sys
+import types
 import weakref
 
 import pytest
@@ -71,6 +72,37 @@ def test_cleanup_allocation_failure_keeps_primary_and_original_issuer_revoked(sq
         monitor.set_local_events(slot, code, 0)
         monitor.register_callback(slot, monitor.events.CALL, None)
         monitor.free_tool_id(slot)
+
+
+@pytest.mark.parametrize('kind', ['versions','source','hashlib','native','source-native'])
+def test_resolve_rejects_module_class_change_without_getters(sql_facts,kind):
+    calls=[]
+    class Foreign(types.ModuleType):
+        def __getattribute__(self,name):
+            calls.append(name)
+            return super().__getattribute__(name)
+    module={'versions':versions,'source':versions.source,'hashlib':versions.hashlib,
+        'native':versions.native,'source-native':versions.source.native}[kind]
+    with pytest.raises(DomainError),graph_scope(sql_facts) as (graph,limits):
+        prior=module.__class__
+        try:
+            module.__class__=Foreign
+            graph.check(sql_facts.store,graph.connection)
+        finally:
+            module.__class__=prior
+    assert calls==[] and graph.active is False
+
+
+@pytest.mark.parametrize('kind',['pin_resolve','pin_current','pin_matches','sha256'])
+def test_resolve_checks_all_native_and_hash_roles_before_foreign_call(sql_facts,monkeypatch,kind):
+    calls=[]
+    def foreign(*args,**kwargs):calls.append(True);return None
+    with monkeypatch.context() as patch:
+        with pytest.raises(DomainError),graph_scope(sql_facts) as (graph,limits):
+            if kind=='sha256':patch.setattr(versions.hashlib,kind,foreign)
+            else:patch.setattr(versions.native,kind,foreign)
+            graph.check(sql_facts.store,graph.connection)
+    assert calls==[] and graph.active is False
 
 
 @pytest.mark.parametrize('damage',['delete-journal','none-journal','old-key','capability-false'])

@@ -251,6 +251,7 @@ static PyObject *same_classes(PyObject *self, PyObject *args) {
 typedef struct {PyObject_HEAD PyObject *raw,*key,*scope,*sequence,*journal;} PinVersion;
 typedef struct {PyObject_HEAD PyObject *scope,*version,*frontier,*cleanup;size_t sequence;int closed;PyObject*weakrefs;} PinJournal;
 static PyTypeObject pin_version_type,pin_journal_type;
+static PyObject *pin_modules,*pin_keys;
 static PyObject *pin_create_code,*pin_publish_code,*pin_constructors,*pin_publishers,*pin_issued,*pin_graph_class,*pin_frontier_class,*pin_source_verifier;
 static int pin_version_traverse(PinVersion*v,visitproc visit,void*arg){Py_VISIT(v->raw);Py_VISIT(v->key);Py_VISIT(v->scope);Py_VISIT(v->sequence);Py_VISIT(v->journal);return 0;}
 static int pin_version_clear(PinVersion*v){Py_CLEAR(v->raw);Py_CLEAR(v->key);Py_CLEAR(v->scope);Py_CLEAR(v->sequence);Py_CLEAR(v->journal);return 0;}
@@ -350,19 +351,26 @@ static int pin_callsite(PyObject*helper,PyObject*allowed,PyObject*subject,PyObje
  Py_DECREF(parent);return ok;
 }
 static PyObject*register_pin_code(PyObject*self,PyObject*args){
- (void)self;PyObject*a,*b,*c,*d,*graph,*frontier,*verifier;if(!PyArg_ParseTuple(args,"OOOOOOO",&a,&b,&c,&d,&graph,&frontier,&verifier))return NULL;
+ (void)self;PyObject*a,*b,*c,*d,*graph,*frontier,*verifier,*modules;if(!PyArg_ParseTuple(args,"OOOOOOOO",&a,&b,&c,&d,&graph,&frontier,&verifier,&modules))return NULL;
+ if(!PyTuple_CheckExact(modules)||PyTuple_GET_SIZE(modules)!=5)return pin_error();
+ for(Py_ssize_t i=0;i<5;i++){PyObject*m=PyTuple_GET_ITEM(modules,i);if(m!=Py_None&&!PyModule_CheckExact(m))return pin_error();}
  if(!PyType_Check(graph)||!PyType_Check(frontier)||(verifier!=Py_None&&!PyCFunction_Check(verifier)))return pin_error();
  if(pin_create_code||!PyFunction_Check(a)||!PyFunction_Check(b)||!PyTuple_CheckExact(c)||!PyTuple_CheckExact(d))return pin_error();
- PyObject*constructors=PyTuple_New(2),*publishers=PyTuple_New(4),*ca=NULL,*cb=NULL;
+ PyObject*constructors=PyTuple_New(2),*publishers=PyTuple_New(4),*ca=NULL,*cb=NULL,*keys=NULL,*issued=NULL;
  if(!constructors||!publishers)goto bad;
  for(int group=0;group<2;group++){PyObject*t=group?d:c,*out=group?publishers:constructors;
   if(PyTuple_GET_SIZE(t)!=(group?4:2))goto bad;
   for(Py_ssize_t i=0;i<PyTuple_GET_SIZE(t);i++){PyObject*record=pin_function(PyTuple_GET_ITEM(t,i));if(!record)goto bad;PyTuple_SET_ITEM(out,i,record);}}
  ca=pin_function(a);cb=pin_function(b);if(!ca||!cb)goto bad;
+ static const char*names[]={"nonce","inputs","role_limits","binding","connection","transaction","scope","epoch","phase","driver","thread","graph","_pin_journal","key","expected","_accounted_frontier","content_version","export_version","_content_matches","check","add","invalidate","input_key","input_bytes","_check_dynamic","values","_refresh","added"};
+ keys=PyTuple_New(28);if(!keys)goto bad;
+ for(int i=0;i<28;i++){PyObject*k=PyUnicode_InternFromString(names[i]);if(!k)goto bad;PyTuple_SET_ITEM(keys,i,k);}
+ issued=PyDict_New();if(!issued)goto bad;
  pin_graph_class=Py_NewRef(graph);pin_frontier_class=Py_NewRef(frontier);pin_source_verifier=Py_NewRef(verifier);
+ pin_modules=Py_NewRef(modules);pin_keys=keys;pin_issued=issued;
  pin_create_code=ca;pin_publish_code=cb;pin_constructors=constructors;pin_publishers=publishers;
- pin_issued=PyDict_New();if(!pin_issued)return NULL;Py_RETURN_NONE;
- bad:Py_XDECREF(constructors);Py_XDECREF(publishers);Py_XDECREF(ca);Py_XDECREF(cb);if(!PyErr_Occurred())return pin_error();return NULL;
+ Py_RETURN_NONE;
+ bad:Py_XDECREF(keys);Py_XDECREF(issued);Py_XDECREF(constructors);Py_XDECREF(publishers);Py_XDECREF(ca);Py_XDECREF(cb);if(!PyErr_Occurred())return pin_error();return NULL;
 }
 static PyObject*pin_forget(PyObject*key,PyObject*weak){
  if(pin_issued){PyObject*entry=PyDict_GetItemWithError(pin_issued,key);
@@ -480,9 +488,68 @@ static PyObject*pin_current(PyObject*self,PyObject*args){
   PyObject*fields=PyObject_GenericGetDict(PyTuple_GET_ITEM(scope,0),NULL);if(!fields)return NULL;
   PyObject*actual=PyDict_CheckExact(fields)?PyDict_GetItemString(fields,"_accounted_frontier"):NULL;
   PyObject*expected=j->frontier?PyWeakref_GetObject(j->frontier):Py_None;
-  int ok=actual==expected;Py_DECREF(fields);if(!ok)return pin_error();
+  int ok=actual==expected&&(!j->frontier||expected!=Py_None);Py_DECREF(fields);if(!ok)return pin_error();
  }
  return Py_NewRef(j->version);
+}
+/* One fresh complete code gate for one Version read. Scope/dict materializing
+ * happens before the gate; after it all lookups use fixed exact Unicode keys.
+ * The registered verifier reads C metadata with GC disabled/restored itself:
+ * no allocation, Python callback or GIL release occurs in the final segment.
+ * This is DATA currentness; never a Graph/permission/lease PASS. */
+static int pin_modules_current(void){
+ if(!pin_modules||!PyTuple_CheckExact(pin_modules))return 0;
+ for(Py_ssize_t i=0;i<PyTuple_GET_SIZE(pin_modules);i++){
+  PyObject*m=PyTuple_GET_ITEM(pin_modules,i);if(m!=Py_None&&!PyModule_CheckExact(m))return 0;
+ }
+ return 1;
+}
+static PyObject*pin_value(PyObject*fields,int index){return PyDict_GetItemWithError(fields,PyTuple_GET_ITEM(pin_keys,index));}
+static int pin_plain(PyObject*d){
+ if(!PyDict_CheckExact(d))return 0;Py_ssize_t pos=0;PyObject*k,*v;
+ while(PyDict_Next(d,&pos,&k,&v))if(!PyUnicode_CheckExact(k))return 0;
+ return 1;
+}
+static PyObject*pin_resolve(PyObject*self,PyObject*subject){
+ (void)self;PyObject*j=NULL,*sf=NULL,*gf=NULL,*again=NULL,*graph=NULL,*result=NULL;
+ int is_graph=(PyObject*)Py_TYPE(subject)==pin_graph_class;
+ if(!pin_modules_current()||!pin_keys||(!is_graph&&(PyObject*)Py_TYPE(subject)!=pin_frontier_class))return pin_error();
+ j=pin_lookup_raw(subject);if(!j)return NULL;
+ sf=pin_fields(subject);if(!sf)goto done;
+ PyObject*borrowed_graph=is_graph?subject:pin_value(sf,11);
+ if(!borrowed_graph||(PyObject*)Py_TYPE(borrowed_graph)!=pin_graph_class)goto invalid;
+ graph=Py_NewRef(borrowed_graph);gf=pin_fields(graph);if(!gf)goto done;
+ /* A materialization/reentrant GC may have replaced either dictionary. If a
+  * final lookup needs to materialize anew its identity differs: fail closed.
+  * Passing these exact identities means both final lookups allocated nothing. */
+ again=PyObject_GenericGetDict(subject,NULL);if(!again)goto done;
+ if(again!=sf)goto invalid;Py_CLEAR(again);
+ again=PyObject_GenericGetDict(graph,NULL);if(!again)goto done;
+ if(again!=gf)goto invalid;Py_CLEAR(again);
+ if((j!=Py_None||is_graph)&&pin_source_verifier!=Py_None&&!pin_code_current())goto invalid;
+ /* Everything below the fresh code gate is no-allocation on success. */
+ if(!pin_modules_current()||!pin_plain(sf)||!pin_plain(gf))goto invalid;
+ for(int i=16;i<=24;i++)if(pin_value(sf,i))goto invalid;
+ if(!is_graph)for(int i=25;i<=27;i++)if(pin_value(sf,i))goto invalid;
+ if(!is_graph&&pin_value(sf,13))goto invalid;
+ if(!is_graph&&pin_value(sf,11)!=graph)goto invalid;
+ PyObject*items[13];items[0]=subject;items[1]=graph;
+ for(int i=0;i<11;i++){items[i+2]=pin_value(gf,i);if(!items[i+2])goto invalid;}
+ if(!PyLong_CheckExact(items[9])||!PyUnicode_CheckExact(items[10])||!pin_thread(items[12]))goto invalid;
+ PyObject*stored=pin_value(sf,12);
+ if(j==Py_None){if(stored&&stored!=Py_None)goto invalid;result=Py_NewRef(Py_None);goto done;}
+ PinJournal*journal=(PinJournal*)j;
+ if(journal->closed||stored!=j||!pin_scope(journal->scope)||!journal->version||Py_TYPE(journal->version)!=&pin_version_type)goto invalid;
+ for(int i=0;i<13;i++)if(items[i]!=PyTuple_GET_ITEM(journal->scope,i))goto invalid;
+ PinVersion*v=(PinVersion*)journal->version;
+ if(v->journal!=j||pin_value(sf,is_graph?13:14)!=v->key)goto invalid;
+ if(is_graph){
+  PyObject*expected=journal->frontier?PyWeakref_GetObject(journal->frontier):Py_None;
+  if((journal->frontier&&expected==Py_None)||pin_value(sf,15)!=expected)goto invalid;
+ }
+ result=Py_NewRef(journal->version);goto done;
+ invalid:if(!PyErr_Occurred())pin_error();
+ done:Py_XDECREF(again);Py_XDECREF(gf);Py_XDECREF(sf);Py_XDECREF(graph);Py_XDECREF(j);return result;
 }
 static PyObject*pin_matches(PyObject*self,PyObject*args){
  (void)self;PyObject*object,*raw;if(!PyArg_ParseTuple(args,"OO",&object,&raw))return NULL;
@@ -554,6 +621,7 @@ static PyMethodDef methods[]={
  {"pin_registered",pin_registered,METH_O,"Find the original issuer independently of Python fields."},
  {"pin_create",pin_create,METH_O,"Create one scoped publication journal."},
  {"pin_publish",pin_publish,METH_VARARGS,"Publish complete immutable original bytes."},
+ {"pin_resolve",pin_resolve,METH_O,"Resolve one current Version with a fresh complete code and scope check."},
  {"pin_current",pin_current,METH_VARARGS,"Require the same current scoped version."},
  {"pin_matches",pin_matches,METH_VARARGS,"Full byte comparison, never a hash verdict."},
  {"pin_revoke",pin_revoke,METH_O,"Idempotently revoke the original issuer with no Python callback."},

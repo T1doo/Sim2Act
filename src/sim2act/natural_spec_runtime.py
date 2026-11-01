@@ -2392,12 +2392,10 @@ class _ColdGraphRead:
         return values if _snapshot_values else _cold_graph_bytes(values)
 
     def content_version(self):
-        """The original issuer/current version, never re-created from live data."""
-        _pin_entry = "sim2act:pin-lookup-const.v1"
-        if _pin_entry is not None:
-            try:_pin_entry(self)
-            except ValueError:raise DomainError("VERSION_CONFLICT", "Graph entry code or instance changed") from None
-        return _graph_versions.current(self)
+        _resolve = "sim2act:pin-resolve-const.v1"
+        if _resolve is None:return None
+        try:return _resolve(self)
+        except ValueError:raise DomainError("VERSION_CONFLICT", "Graph publication version changed") from None
 
     def export_version(self, expected=None):
         """Export original complete V2 bytes after fresh current validation."""
@@ -6088,7 +6086,9 @@ _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_
         (vars(_raw_read_builtins),('type','vars','all','any','dict','str','list','tuple','set','bool','len','getattr','object','isinstance')),
         (vars(hashlib),('sha256',)),
         (vars(_graph_accounted_versions),('versions','rt')),
-        (vars(_graph_versions),('native','_MODULE','_NAMES','_ENTRIES','AVAILABLE','JOURNAL','VERSION','REVOKE','LOOKUP','OWNED','_SHA','_REGISTERED','source','_SOURCE_CHECK','DomainError','object','type','tuple','vars','bool','getattr','bytes','all','hasattr','dict')),
+        (vars(_graph_versions.native),_graph_versions._NAMES) if _graph_versions.AVAILABLE else (globals(),()),
+        (vars(_graph_versions.hashlib),('sha256',)),
+        (vars(_graph_versions),('native','_MODULE','_NAMES','_ENTRIES','AVAILABLE','JOURNAL','VERSION','REVOKE','LOOKUP','OWNED','RESOLVE','hashlib','sys','_SHA','_REGISTERED','source','_SOURCE_CHECK','DomainError','object','type','tuple','vars','bool','getattr','bytes','all','hasattr','dict')),
         (vars(_release_apps_code),('_ColdCandidatePrefix','_ColdGraphOriginFacts')),
         (vars(_release_fact_code),('_RELEASE_OWNED_CHECK','_release_owned_code','_ColdReleasePrefix','_ColdReleaseFacts','select','internal_releases','fingerprint','copy','DomainError')),
         (vars(_generation_fact_code),('_generation_owned','_GenerationFactsReader','_ColdGenerationRawSeed',
