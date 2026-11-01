@@ -4,7 +4,6 @@
 #include <Python.h>
 #include <stdint.h>
 #include <string.h>
-#include <time.h>
 /* Independent bounded structure. Original mutable references are identity-only;
  * edges and scalar bits are owned. No content/permission verdict survives calls. */
 static PyObject *unsupported, *unsupported_error;
@@ -14,17 +13,7 @@ typedef struct {PyObject*row,*limits,*quoted,*readrow,*readlimits,*marker,*reduc
 typedef struct {PyObject*original;unsigned char kind;uint64_t bits;size_t count,*edges,pure_work,flat_work;uint64_t dictionary_version;int active,pure;} Node;
 typedef struct {Node*nodes;size_t count,capacity,work,bytes;Map map;PyObject*args,*scope,*stable_root;Encoder types;Map immutable;PyObject*immutable_held;size_t immutable_work,stable_dict_count;int counter_phase;} Tree;
 /* Diagnostics only, never read by qualification or matching decisions. */
-static uint64_t structure_counts[3][13];
-/* Temporary attribution counters only. They never feed a match, clock,
- * deadline or routing predicate. The reported clock domain is explicit. */
-static uint64_t comparison_cpu_ns(void){
-#if defined(CLOCK_THREAD_CPUTIME_ID)
- struct timespec value;
- if(clock_gettime(CLOCK_THREAD_CPUTIME_ID,&value)==0)
-  return (uint64_t)value.tv_sec*UINT64_C(1000000000)+(uint64_t)value.tv_nsec;
-#endif
- return (uint64_t)clock()*(UINT64_C(1000000000)/CLOCKS_PER_SEC);
-}
+static uint64_t structure_counts[3][9];
 static int counter_phase(PyObject *scope){
  PyObject*p=PyTuple_GET_ITEM(scope,4);
  if(!PyUnicode_CheckExact(p))return 2;
@@ -36,12 +25,11 @@ static PyObject*read_structure_counts(PyObject*self,PyObject*unused){
  (void)self;(void)unused;
  const char*phases[]={"pre","post","other"};
  const char*names[]={"capture_calls","complete_capsules","armed_dictionary_versions","match_calls",
-  "flat_dictionary_hits","changed_original_dictionary_tags","logical_immutable_edge_steps_skipped","signal_dictionary_deopts","dictionary_capture_candidates",
-  "buffer_allocate_cpu_ns","complete_walk_cpu_ns","cleanup_and_final_tags_cpu_ns","reducer_cpu_ns"};
+  "flat_dictionary_hits","changed_original_dictionary_tags","logical_immutable_edge_steps_skipped","signal_dictionary_deopts","dictionary_capture_candidates"};
  PyObject*result=PyDict_New();if(!result)return NULL;
  for(int p=0;p<3;p++){
   PyObject*row=PyDict_New();if(!row){Py_DECREF(result);return NULL;}
-  for(int i=0;i<13;i++){
+  for(int i=0;i<9;i++){
    PyObject*value=PyLong_FromUnsignedLongLong(structure_counts[p][i]);
    if(!value||PyDict_SetItemString(row,names[i],value)<0){Py_XDECREF(value);Py_DECREF(row);Py_DECREF(result);return NULL;}
    Py_DECREF(value);
@@ -199,10 +187,47 @@ static PyObject*snapshot(PyObject*self,PyObject*args){
 typedef struct {Tree*t;PyObject**actual;size_t*assigned,*flat_ids;Map changed;size_t work,flat_used;} Compare;
 
 static int compare_node(Compare*c,size_t id,PyObject*v,int depth);
+static int compare_node_data(Compare*c,size_t id,PyObject*v,int depth);
+/* The same complete dictionary proof, shared by the full walker and the
+ * original-dictionary edge. No data/PASS survives the current comparison. */
+static inline int compare_original_dictionary(Compare*c,Node*n,size_t id){
+ PyObject*v=n->original;
+ if(PyErr_CheckSignals()<0)return -1;
+ if(dict_content_version(v)!=n->dictionary_version){
+  structure_counts[c->t->counter_phase][7]++;PyErr_SetString(unsupported_error,"Cold graph dictionary changed during signal callback");return -1;
+ }
+ if(n->flat_work>1000000-c->work){PyErr_SetString(unsupported_error,"Cold graph compare bounds");return -1;}
+ size_t target=c->work+n->flat_work;
+ size_t next=(c->work+1023)&~(size_t)1023;
+ while(next<target){
+  c->work=next+1;
+  if(PyErr_CheckSignals()<0)return -1;
+  if(dict_content_version(v)!=n->dictionary_version){
+   structure_counts[c->t->counter_phase][7]++;PyErr_SetString(unsupported_error,"Cold graph dictionary changed during signal callback");return -1;
+  }
+  next+=1024;
+ }
+ if(c->flat_used>=c->t->stable_dict_count){PyErr_SetString(PyExc_RuntimeError,"Cold graph dictionary inventory overflow");return -1;}
+ c->flat_ids[c->flat_used++]=id;
+ c->work=target;structure_counts[c->t->counter_phase][4]++;structure_counts[c->t->counter_phase][6]+=n->flat_work;return 1;
+}
 /* Only leaf/current-call memo work is inlined. First mutable/reducer visits
  * still enter the original full walker. Signal/work/depth order is retained. */
 static inline int compare_edge(Compare*c,size_t id,PyObject*v,int depth){
  Node*n=c->t->nodes+id;int k=n->kind;
+ /* Exact original dicts cannot change their builtin type. Avoid recursive
+  * type dispatch for this measured common edge, but retain the ORIGINAL
+  * entry work/signal boundary, alias assignment, complete current tag proof
+  * and final cleanup-time tag proof. A signal changing the tag goes through
+  * the full body at the already-counted work position, never a replay. */
+ if(k=='m'&&v==n->original&&n->dictionary_version&&!c->actual[id]){
+  if((c->work++&1023)==0&&PyErr_CheckSignals()<0)return -1;
+  if(c->work>1000000||depth>64){PyErr_SetString(unsupported_error,"Cold graph compare bounds");return -1;}
+  if(dict_content_version(v)!=n->dictionary_version)return compare_node_data(c,id,v,depth);
+  size_t*assigned=c->assigned+id;if(*assigned&&*assigned!=id+1)return 0;
+  *assigned=id+1;c->actual[id]=v;
+  return compare_original_dictionary(c,n,id);
+ }
  int cached=c->actual[id]==v&&(k=='m'||k=='l'||k=='q'||k=='s'||k=='b'||k=='p');
  int scalar=v==n->original&&(k=='n'||k=='t'||k=='f'||k=='i'||k=='d');
  int text=v==n->original&&(k=='s'||k=='b');
@@ -224,6 +249,9 @@ static inline int compare_edge(Compare*c,size_t id,PyObject*v,int depth){
 static int compare_node(Compare*c,size_t id,PyObject*v,int depth){
  if((c->work++&1023)==0&&PyErr_CheckSignals()<0)return -1;
  if(c->work>1000000||depth>64){PyErr_SetString(unsupported_error,"Cold graph compare bounds");return -1;}
+ return compare_node_data(c,id,v,depth);
+}
+static int compare_node_data(Compare*c,size_t id,PyObject*v,int depth){
  Node*n=c->t->nodes+id;int k=kind(&c->t->types,v);if(k!=n->kind)return 0;
  if(v!=n->original&&memoized(k)){
   Entry*before=find(&c->t->immutable,n->original),*now=find(&c->t->immutable,v);
@@ -266,27 +294,7 @@ static int compare_node(Compare*c,size_t id,PyObject*v,int depth){
   * full current data proof for this dictionary, never Graph/authority PASS. */
  if(k=='m'&&v==n->original&&n->dictionary_version
    &&dict_content_version(v)==n->dictionary_version){
-  if(PyErr_CheckSignals()<0)return -1;
-  if(dict_content_version(v)!=n->dictionary_version){
-   structure_counts[c->t->counter_phase][7]++;PyErr_SetString(unsupported_error,"Cold graph dictionary changed during signal callback");return -1;
-  }
-  if(n->flat_work>1000000-c->work){PyErr_SetString(unsupported_error,"Cold graph compare bounds");return -1;}
-  size_t target=c->work+n->flat_work;
-  /* Original checks use the pre-increment work: [work,target).
-   * Each delivered callback is immediately followed by a fresh version test.
-   * A changed dictionary deopts once; never replay callbacks in this walker. */
-  size_t next=(c->work+1023)&~(size_t)1023;
-  while(next<target){
-   c->work=next+1;
-   if(PyErr_CheckSignals()<0)return -1;
-   if(dict_content_version(v)!=n->dictionary_version){
-    structure_counts[c->t->counter_phase][7]++;PyErr_SetString(unsupported_error,"Cold graph dictionary changed during signal callback");return -1;
-   }
-   next+=1024;
-  }
-  if(c->flat_used>=c->t->stable_dict_count){PyErr_SetString(PyExc_RuntimeError,"Cold graph dictionary inventory overflow");return -1;}
-  c->flat_ids[c->flat_used++]=id;
-  c->work=target;structure_counts[c->t->counter_phase][4]++;structure_counts[c->t->counter_phase][6]+=n->flat_work;return 1;
+  return compare_original_dictionary(c,n,id);
  }
  if(k=='s'){if(v==n->original)return 1;int same=PyUnicode_Compare(v,n->original);if(same==-1&&PyErr_Occurred())return -1;return same==0;}
  if(k=='b')return v==n->original||(PyBytes_GET_SIZE(v)==PyBytes_GET_SIZE(n->original)&&!memcmp(PyBytes_AS_STRING(v),PyBytes_AS_STRING(n->original),PyBytes_GET_SIZE(v)));
@@ -299,9 +307,7 @@ static int compare_node(Compare*c,size_t id,PyObject*v,int depth){
   if(k=='p'){
    PyObject*module=PyObject_GetAttrString(v,"__module__"),*name=PyObject_GetAttrString(v,"__qualname__");if(module&&name)payload=PyTuple_Pack(2,module,name);Py_XDECREF(module);Py_XDECREF(name);if(!payload){result=-1;goto done;}seq=payload;
   }else if(k=='c'||k=='r'||k=='u'||k=='o'){
-   uint64_t reducer_started=comparison_cpu_ns();
    payload=PyObject_CallFunctionObjArgs(c->t->types.reduce,Py_None,v,NULL);
-   structure_counts[c->t->counter_phase][12]+=comparison_cpu_ns()-reducer_started;
    if(!payload){result=-1;goto done;}
    if(!PyTuple_CheckExact(payload)||PyTuple_GET_SIZE(payload)!=2||PyTuple_GET_ITEM(payload,0)!=c->t->types.marker||!PyTuple_CheckExact(PyTuple_GET_ITEM(payload,1))){PyErr_SetString(unsupported_error,"Cold graph reducer result");result=-1;goto done;}seq=payload;
   }
@@ -317,13 +323,10 @@ static PyObject*matches_fast(PyObject*self,PyObject*args){
  PyFrameObject*frame=PyThreadState_GetFrame(PyThreadState_Get());int frames=0;while(frame){PyFrameObject*back=PyFrame_GetBack(frame);Py_DECREF(frame);frame=back;frames++;}
  if(Py_GetRecursionLimit()-frames<256)return Py_NewRef(unsupported);
  structure_counts[t->counter_phase][3]++;
- uint64_t allocation_started=comparison_cpu_ns();
  Compare c={.t=t};c.actual=PyMem_Calloc(t->count?t->count:1,sizeof(PyObject*));c.assigned=PyMem_Calloc(t->count?t->count:1,sizeof(size_t));
  if(t->stable_dict_count)c.flat_ids=PyMem_Malloc(t->stable_dict_count*sizeof(size_t));
  if(!c.actual||!c.assigned||(t->stable_dict_count&&!c.flat_ids)){PyMem_Free(c.actual);PyMem_Free(c.assigned);PyMem_Free(c.flat_ids);return PyErr_NoMemory();}
- uint64_t walk_started=comparison_cpu_ns();structure_counts[t->counter_phase][9]+=walk_started-allocation_started;
  int result=compare_node(&c,0,v,0);
- uint64_t cleanup_started=comparison_cpu_ns();structure_counts[t->counter_phase][10]+=cleanup_started-walk_started;
  PyObject*error=PyErr_GetRaisedException();for(size_t i=0;i<t->count;i++)if(c.actual[i]!=t->nodes[i].original)Py_XDECREF(c.actual[i]);
  /* A later reducer, signal or destructor can mutate an EARLIER indexed
   * dictionary. Revalidate every used version after all callback-capable
@@ -333,7 +336,6 @@ static PyObject*matches_fast(PyObject*self,PyObject*args){
   if(dict_content_version(n->original)!=n->dictionary_version){structure_counts[t->counter_phase][5]++;result=0;break;}
  }
  PyMem_Free(c.actual);PyMem_Free(c.assigned);PyMem_Free(c.flat_ids);PyMem_Free(c.changed.entries);if(error)PyErr_SetRaisedException(error);
- structure_counts[t->counter_phase][11]+=comparison_cpu_ns()-cleanup_started;
  if(result<0){if(PyErr_ExceptionMatches(unsupported_error)){PyErr_Clear();return Py_NewRef(unsupported);}return NULL;}return PyBool_FromLong(result);
 }
 static int same_namespace(PyTypeObject *kind, PyObject *items, size_t *work) {
