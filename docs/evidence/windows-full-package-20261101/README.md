@@ -88,3 +88,7 @@ Windows本机正式传输helper是否恢复由唯一协调任务另行核实；�
 拟仅一次Windows2025标准免费job，硬上限180秒；90秒工作门外保留正常停止、证据和上传时间。按该有余量的整分钟配置，需要在原73秒余量上补107秒，新的最大累计为587秒。已准备独立新trigger marker，当前无该marker的提交不会运行；额外预算尚未落实，禁止自动触发或因新turn重置480秒。父级可审`material-export-prepared/plan.json`、脚本和workflow后统一处理。没有改系统显示/sandbox/ACL、安装runtime、消费模型或使用用户电脑。
 
 云端只跑现有`test_local_csv_file_actual_http[business]`：Linux JSDOM产品JS+真实HTTP/SQLite/普通Worker，1项通过、8项未选择、0跳过，6.06秒；实际核对UTF-8/CRLF文件保存、重复表单提交仅保存一次、两个持久结果20.25/v1与9/v2、冷页回读0次POST；该business参数没有取消任务，0模型。与Windows固定CSV30/15输入分开，不移用为同样本成绩。原XML／driver／results保存在`material-export-prepared/`。这不是Windows保存、原生下载或新脚本实测，不能据此签收Release；完整包／旧窗口成功与本次待验范围继续分开。
+
+### 父级明确扩充后的单次执行
+
+父级按既有免费CI授权将本批总上限从480扩为587秒，仅增加107秒；407秒既有实际耗时不清零。余180秒仅执行已独审冻结`b85f1c24860a867362fbc97f6fe3dbb6928a815f`脚本和原042完整包的单次材料保存／原生下载／完整bytes／正常关闭首开流程。标准公共Windows2025，无付费runner或fallback，不增加token/Runtime/系统安全/显示/网络设置，也不使用用户电脑。失败停，不自动第二次；运行后关闭触发入口并按实际job时间和退出回执记账。此段只记录授权，结果待该次真实终态。
