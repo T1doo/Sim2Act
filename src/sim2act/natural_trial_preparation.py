@@ -38,6 +38,12 @@ class PBPrepareInput(PrepareInput):
     extraction_recipe: gate.Recipe
 
 
+class PBSevenSlotInput(PBPrepareInput):
+    """New explicit original V1 scope, never an extension of an old key."""
+
+    scope_window: Literal["NEW_EXACT_SEVEN_SLOT_1200_SECONDS"]
+
+
 class ConsentInput(Strict):
     review_token: str = Field(pattern=gate.HASH)
     confirm_exact_scope: Literal[True]
@@ -93,7 +99,10 @@ def _load(store, c, user, pid, key, *, current=True):
     store.authorize(c, user, project["runtime_id"], pid, pid, "artifact.save_text")
     path = c.execute(query.with_only_columns(delivery_graph_requests.c.snapshot[
         "response"]["path"].as_string())).scalar()
-    request_model = PBPrepareInput if path == "P-B" else PrepareInput
+    window = c.execute(query.with_only_columns(delivery_graph_requests.c.snapshot[
+        "request"]["scope_window"].as_string())).scalar()
+    request_model = (PBSevenSlotInput if window == "NEW_EXACT_SEVEN_SLOT_1200_SECONDS"
+        else PBPrepareInput) if path == "P-B" else PrepareInput
     request, value = pair(c, user, eid, PREPARE, "prepare", request_model)
     contract = gate.parse_contract(value)
     gate.require(contract.principal_id == user and contract.project_id == pid
@@ -125,6 +134,13 @@ def _receipt(store, c, user, contract):
         expired=time.time() >= contract.expires_at, live_allowed=False,
         new_runs=0, new_slots=0, actual_model_requests=0,
         fee_status="NOT_VERIFIED", formal_publication_enabled=False)
+    if isinstance(contract, gate.PBTrialContract):
+        selected = c.execute(select(delivery_graph_requests.c.snapshot["request"]["scope_window"].as_string()).where(
+            delivery_graph_requests.c.principal_id == user,
+            delivery_graph_requests.c.app_id == entity(user, contract.project_id, contract.trial_key),
+            delivery_graph_requests.c.kind == PREPARE,
+            delivery_graph_requests.c.request_key == "prepare")).scalar()
+        receipt["new_scope_window_seconds"] = 1200 if selected == "NEW_EXACT_SEVEN_SLOT_1200_SECONDS" else 300
     if isinstance(contract, gate.TrialContractV2):
         receipt["review_expired"] = time.time() >= contract.review_expires_at
     if approved:
@@ -192,7 +208,7 @@ def end_preparation(store, user, pid, key, body: EndInput):
 
 
 @controlled
-def prepare(store, user, pid, key, body: PrepareInput | PBPrepareInput, *, settings=None):
+def prepare(store, user, pid, key, body: PrepareInput | PBPrepareInput | PBSevenSlotInput, *, settings=None):
     with store.tx() as c:
         project = store.lock_project(c, user, pid)
         eid = entity(user, pid, key)
@@ -253,7 +269,10 @@ def prepare(store, user, pid, key, body: PrepareInput | PBPrepareInput, *, setti
         if isinstance(body, PBPrepareInput):
             # Original P-B V1 only: do not invent a V2 migration or inherit the
             # optional SQLite 120s settlement policy by its model default.
-            contract = gate.PBTrialContract(**fields, path="P-B", expires_at=prepared_at + 300,
+            # Both are original V1 contracts with newly approved absolute expiry.
+            # Replaying an existing preparation cannot change its input/window.
+            window = 1200 if isinstance(body, PBSevenSlotInput) else 300
+            contract = gate.PBTrialContract(**fields, path="P-B", expires_at=prepared_at + window,
                 caps=gate.TrialCaps(), extraction_recipe=body.extraction_recipe,
                 extraction_request_key=fields["stage_keys"].cold + "_extract")
             from . import natural_specs

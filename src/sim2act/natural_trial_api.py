@@ -109,7 +109,7 @@ def mount(app, store, identity, settings=None):
     from . import natural_trial_preparation as preparation
 
     @app.post(base + "/preparation")
-    def prepare(pid: str, key: str, body: preparation.PBPrepareInput | preparation.PrepareInput, user=dependency):
+    def prepare(pid: str, key: str, body: preparation.PBSevenSlotInput | preparation.PBPrepareInput | preparation.PrepareInput, user=dependency):
         gate.require(re.fullmatch(gate.KEY, key) is not None)
         return preparation.prepare(store, user, pid, key, body, settings=settings)
 
@@ -184,6 +184,17 @@ def mount(app, store, identity, settings=None):
 
         contract = original_contract(store, user, pid, key)
         return resolve_trial_source(store, user, contract, approval_key).public_receipt
+
+    @app.get(base + "/approvals/{approval_key}/production-journal")
+    def production_journal(pid: str, key: str, approval_key: str, user=dependency):
+        # Independent original namespace; never seed a synthetic budget or turn
+        # a non-executable metadata receipt into source/account authority.
+        from .production_evidence import ACCOUNT_ID
+        from .production_trial_journal import read
+
+        contract = original_contract(store, user, pid, key)
+        gate.recover(store, user, contract, approval_key)
+        return read(store, user, contract, approval_key, ACCOUNT_ID).model_dump(mode="json")
 
     @app.post(base + "/admission")
     def admission(pid: str, key: str, body: AdmissionRequest, user=dependency):

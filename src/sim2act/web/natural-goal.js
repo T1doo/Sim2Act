@@ -455,7 +455,7 @@ function trialValid(r, key) {
   const c = r?.contract;
   if (r?.status !== "PREPARED_LIVE_BLOCKED" || !["P-A","P-B"].includes(r.path) || r.live_allowed !== false || r.new_runs !== 0 || r.new_slots !== 0 || r.actual_model_requests !== 0 || !/^[a-f0-9]{64}$/.test(r.review_token) || c?.trial_key !== key || c.project_id !== $("project-select").value || !Array.isArray(c.bindings) || c.bindings.length !== 2 || !Number.isFinite(c.expires_at) || typeof r.approved !== "boolean" || typeof r.revoked !== "boolean" || typeof r.expired !== "boolean") throw Error("未知准备回执");
   if (c.namespace === "natural-live-trial.v2" && (!Number.isFinite(c.prepared_at) || c.review_expires_at !== c.prepared_at + 300 || c.execution_expires_at !== c.prepared_at + 3600 || c.expires_at !== c.execution_expires_at || c.stage_handoff_seconds !== 900 || typeof r.review_expired !== "boolean")) throw Error("未知期限合同");
-  if(r.path==="P-B" && (c.path!=="P-B" || c.namespace!=="natural-live-trial.v1"
+  if(r.path==="P-B" && (c.path!=="P-B" || c.namespace!=="natural-live-trial.v1" || ![300,1200].includes(r.new_scope_window_seconds)
     || !c.extraction_recipe || c.extraction_recipe.version!=="natural-spec-recipe.v1"
     || !Array.isArray(c.extraction_recipe.steps) || !/^[A-Za-z0-9_-]{1,100}$/.test(c.extraction_request_key)))throw Error("未知 P-B 提取范围");
   return r;
@@ -500,14 +500,16 @@ function renderTrialConsent() {
   $("trial-new").disabled = !entry || !(["closed", "rejected"].includes(entry.state) || (entry.state === "known" && r?.approved && r.revoked));
   $("trial-end").disabled = !(entry?.state === "unapproved" || (entry?.state === "known" && r && !r.approved)) || !$("trial-end-ack").checked;
   $("trial-refresh").disabled = busy || unknown;
-  for(const id of ["trial-path","trial-pb-mode","trial-pb-prefix"])$(id).disabled=Boolean(entry);
+  for(const id of ["trial-path","trial-pb-mode","trial-pb-prefix","trial-pb-window"])$(id).disabled=Boolean(entry);
   if (entry) $("trial-status").textContent = entry.message;
 }
 function showTrialScope(r) {
   clearTrialBudget();
   const c = r.contract;
   if (!c) { $("trial-scope").textContent = `仅恢复同意元数据。批准：${r.approved}；撤回：${r.revoked}；过期：${r.expired}。材料不可读取时不展示旧私有范围；仍可明确撤回。LIVE 关闭。`; return; }
-  $("trial-path").value=r.path;renderTrialPBEditor();
+  $("trial-path").value=r.path;
+  if(r.path==="P-B")$("trial-pb-window").value=String(r.new_scope_window_seconds);
+  renderTrialPBEditor();
   if(r.path==="P-B")$("trial-pb-recipe").textContent=JSON.stringify(c.extraction_recipe,null,2);
   const fields = {title: "名称", goal: "目标", known: "已知", assumptions: "假设", unresolved: "未决项", constraints: "硬条件", acceptance_checks: "验收检查", resource_refs: "绑定材料"};
   const materials = c.bindings.map((b, i) => `${i === 0 ? "生成及 Source" : "未见输入 Cold"}：目标 ${b.card_id} v${b.goal_version}\n材料 ${b.resource_id}（TXT）\n${b.content}\n\n${Object.entries(fields).map(([field, label]) => `${label}：${Array.isArray(b.goal_snapshot.content[field]) ? b.goal_snapshot.content[field].join("\n") : b.goal_snapshot.content[field]}`).join("\n")}`).join("\n\n");
@@ -699,7 +701,7 @@ async function prepareTrial() {
   const choices = [$("trial-source").value, $("trial-cold").value].map(id => trialCards.find(c => c.id === id));
   if (choices.some(c => !c) || choices[0].id === choices[1].id) throw Error("请选择两张不同的完整目标卡");
   const request={bindings:choices.map(c=>({card_id:c.id,expected_version:c.version}))};
-  if($("trial-path").value==="P-B"){request.path="P-B";request.extraction_recipe=trialPBRecipe();}
+  if($("trial-path").value==="P-B"){request.path="P-B";request.extraction_recipe=trialPBRecipe();const window=$("trial-pb-window").value;if(window==="1200")request.scope_window="NEW_EXACT_SEVEN_SLOT_1200_SECONDS";else if(window!=="300")throw Error("请选择新范围的固定批准窗口");}
   else if($("trial-path").value!=="P-A")throw Error("请选择原有应用路径");
   const key = crypto.randomUUID(), entry = {key, base: `/api/projects/${ctx.project}/natural-trials/${key}`, state: "sending", operation: 1, message: "正在准备；不会新增 Run 或发送模型请求。"};
   const operation = entry.operation;

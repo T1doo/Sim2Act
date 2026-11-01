@@ -1,8 +1,8 @@
 """Explicit isolated PG CORE_MODEL0 controller. Default plan is read-only.
 
-Execution is separately confirmed, never run by tests/preflight. This is a probe,
-not an alternative product or permission to provision anything. No live phase is
-implemented here; its missing stage automation is reported, never mocked as PG.
+Execution is separately confirmed, never run by tests/preflight. The opt-in live
+phase uses the original API and strict production extraction bridge. No imports,
+plan or offline tests provision PG or call a model.
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ import queue
 import re
 import secrets
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -34,6 +35,7 @@ from sim2act.process_env import system_environment
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = Path(__file__).resolve()
+LIVE_SCRIPT = SCRIPT.with_name("natural_trial_live_phase.py")
 BASE = Path("/workspace/scratch")
 DIGEST = "sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3"
 IMAGE = "postgres@" + DIGEST
@@ -57,6 +59,22 @@ def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def redact_strings(value, secrets_to_hide):
+    if isinstance(value, str):
+        for secret in secrets_to_hide:
+            if secret:
+                value = value.replace(secret, "[REDACTED]")
+        return value
+    if isinstance(value, dict):
+        return {
+            redact_strings(k, secrets_to_hide): redact_strings(v, secrets_to_hide)
+            for k, v in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [redact_strings(v, secrets_to_hide) for v in value]
+    return value
+
+
 def checked_source(source):
     require(re.fullmatch("[a-f0-9]{40}", source or "") is not None, "SOURCE_SHA_REQUIRED")
     paths = [
@@ -65,6 +83,7 @@ def checked_source(source):
         "requirements.lock",
         "setup.py",
         str(SCRIPT.relative_to(ROOT)),
+        str(LIVE_SCRIPT.relative_to(ROOT)),
     ]
     probe = subprocess.run(
         ["git", "cat-file", "-e", source + "^{commit}"], cwd=ROOT, capture_output=True, timeout=5
@@ -78,7 +97,13 @@ def checked_source(source):
     )
     require(probe.returncode == 0, "FROZEN_SOURCE_CHANGED")
     tracked = subprocess.run(
-        ["git", "ls-files", "--error-unmatch", str(SCRIPT.relative_to(ROOT))],
+        [
+            "git",
+            "ls-files",
+            "--error-unmatch",
+            str(SCRIPT.relative_to(ROOT)),
+            str(LIVE_SCRIPT.relative_to(ROOT)),
+        ],
         cwd=ROOT,
         capture_output=True,
         timeout=5,
@@ -244,17 +269,27 @@ def finite_pb_recipe():
     )
 
 
-def plan(source, manifest=None):
+def plan(source, manifest=None, with_live=False, live_window=300):
+    require(
+        live_window in (300, 1200) and (with_live or live_window == 300),
+        "EXPLICIT_LIVE_WINDOW_OPTION_REQUIRED",
+    )
     facts = resources()
     return dict(
         version="sim2act.isolated-pg-core.v1",
         source_sha=source,
         controller_sha256=digest(SCRIPT),
+        live_controller_sha256=digest(LIVE_SCRIPT),
+        existing_model_token_ready=bool(
+            os.environ.get("SIM2ACT_INTERN_TOKEN") or os.environ.get("INTERN_API_TOKEN")
+        )
+        if with_live
+        else None,
         image=IMAGE,
         platform="linux/amd64",
-        mode="CORE_MODEL0",
-        model_requests=0,
-        max_seconds=CORE_SECONDS,
+        mode="CORE_THEN_BOUNDED_FREE_LIVE" if with_live else "CORE_MODEL0",
+        model_requests=7 if with_live else 0,
+        max_seconds=CORE_SECONDS + 1080 if with_live else CORE_SECONDS,
         cleanup_reserve_seconds=CLEANUP_SECONDS,
         dependency_manifest_verified=manifest_check(manifest),
         local_dependencies=dependencies(),
@@ -271,14 +306,15 @@ def plan(source, manifest=None):
         no_trust=True,
         no_force_cleanup=True,
         unknown_preserved=True,
+        live_new_scope_window_seconds=live_window if with_live else None,
         optional_live=dict(
-            implemented=False,
+            implemented=True,
             max_requests=7,
             generate=3,
             source=2,
             cold=2,
             max_seconds=1080,
-            reason="normal exact stage scheduling/extraction controller not closed; NOT_RUN",
+            reason="original API stages and strict production extraction bridge implemented; no real PG/model execution evidence",
         ),
     )
 
@@ -340,7 +376,7 @@ def run(argv, *, timeout=10, input_text=None, collect_stderr=False):
 class OwnedDesktop:
     """Bounded original protocol; actual exit/dual EOF, no terminate/kill fallback."""
 
-    def __init__(self, command, *, backend=CONFIGURED):
+    def __init__(self, command, *, backend=CONFIGURED, environment=None):
         self.backend = backend
         self.started = time.monotonic()
         self.events = queue.Queue(maxsize=64)
@@ -350,7 +386,7 @@ class OwnedDesktop:
         self.process = subprocess.Popen(
             command,
             cwd=ROOT,
-            env=system_environment(),
+            env=system_environment() if environment is None else environment,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -745,11 +781,11 @@ def password_rejected(error, port, user):
     return re.fullmatch(expression, str(error)) is not None
 
 
-def execute(source, manifest, expected_hash):
+def execute(source, manifest, expected_hash, with_live=False, live_window=300):
     """No effects before all exact source/dependency/resource/confirmation gates."""
     global DEADLINE
     checked_source(source)
-    value = plan(source, manifest)
+    value = plan(source, manifest, with_live, live_window)
     require(value["dependency_manifest_verified"], "DEPENDENCY_NOT_VERIFIED")
     require(
         value["preconditions"]["disk_ready"] and value["preconditions"]["memory_ready"],
@@ -762,11 +798,14 @@ def execute(source, manifest, expected_hash):
         "LOCAL_DEPENDENCIES_UNCONFIRMED",
     )
     require(expected_hash == plan_hash(value), "EXACT_PLAN_CONFIRMATION_REQUIRED")
+    require(not with_live or value["existing_model_token_ready"], "EXISTING_MODEL_TOKEN_MISSING")
     started = time.monotonic()
     DEADLINE = started + CORE_SECONDS - CLEANUP_SECONDS
     root = None
     root_identity = None
     prior_state = None
+    stop = threading.Event()
+    previous_signals = {}
     network = None
     container = None
     pg = None
@@ -778,7 +817,8 @@ def execute(source, manifest, expected_hash):
     )
 
     def checkpoint():
-        require(time.monotonic() < started + CORE_SECONDS - CLEANUP_SECONDS, "CORE_DEADLINE")
+        require(not stop.is_set(), "USER_STOP_REQUESTED")
+        require(time.monotonic() < DEADLINE, "PROBE_ACTIVE_DEADLINE")
 
     def root_current():
         require(root is not None and root_identity is not None, "PRIVATE_ROOT_UNOWNED")
@@ -791,6 +831,12 @@ def execute(source, manifest, expected_hash):
             "PRIVATE_ROOT_CHANGED",
         )
 
+    def public_state():
+        values = [*passwords, bearer]
+        if with_live:
+            values += [os.environ.get("SIM2ACT_INTERN_TOKEN"), os.environ.get("INTERN_API_TOKEN")]
+        return redact_strings(state, [v for v in values if v])
+
     def record():
         nonlocal prior_state
         if root is None or root_identity is None:
@@ -798,7 +844,7 @@ def execute(source, manifest, expected_hash):
         root_current()
         destination = root / "public-state.json"
         if prior_state is None:
-            write_private(destination, json.dumps(state, indent=2) + "\n")
+            write_private(destination, json.dumps(public_state(), indent=2) + "\n")
         else:
             require(
                 not destination.is_symlink()
@@ -808,12 +854,16 @@ def execute(source, manifest, expected_hash):
                 "PUBLIC_STATE_CHANGED",
             )
             temporary = root / "public-state.next"
-            write_private(temporary, json.dumps(state, indent=2) + "\n")
+            write_private(temporary, json.dumps(public_state(), indent=2) + "\n")
             root_current()
             os.replace(temporary, destination)
         prior_state = destination.read_bytes()
 
     try:
+        if threading.current_thread() is threading.main_thread():
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                previous_signals[sig] = signal.getsignal(sig)
+                signal.signal(sig, lambda *_: stop.set())
         # First mutating action: only reached following separate concrete confirmation.
         nonce = secrets.token_hex(16)
         candidate = ordinary(BASE / ("sim2act-pg-probe-" + nonce))
@@ -1097,6 +1147,112 @@ def execute(source, manifest, expected_hash):
         )
         state.update(status="CORE_PASSED_CLEANUP_PENDING", core=result)
         record()
+        if with_live:
+            DEADLINE = min(
+                started + CORE_SECONDS + 1080 - CLEANUP_SECONDS,
+                time.monotonic() + 1080 - CLEANUP_SECONDS,
+            )
+            text = (root / "app.env").read_text().splitlines()
+            text = [
+                line
+                for line in text
+                if not line.startswith(("SIM2ACT_MODEL_MODE=", "SIM2ACT_LIVE_ENABLED="))
+            ]
+            text += [
+                "SIM2ACT_MODEL_MODE=live",
+                "SIM2ACT_LIVE_ENABLED=true",
+                "SIM2ACT_MODEL=intern-s2",
+                "SIM2ACT_RPM=1",
+                "SIM2ACT_GOAL_PLANNER_PROVIDER=intern-s2",
+                "SIM2ACT_APPLICATION_GENERATION_ACTIVATION_ENABLED=true",
+                "SIM2ACT_MAX_REQUESTS=4",
+                "SIM2ACT_MAX_TOOLS=4",
+                "SIM2ACT_MAX_REPAIRS=1",
+                "SIM2ACT_MAX_TOTAL_TOKENS=64000",
+                "SIM2ACT_MAX_OUTPUT_TOKENS=1024",
+                "SIM2ACT_RUN_SECONDS=300",
+                "SIM2ACT_NATURAL_ACTIVATION_ENABLED=false",
+                "SIM2ACT_NATURAL_ACTIVATION_LIVE_ID=",
+                "SIM2ACT_APPLICATION_GENERATION_LIVE_ID=",
+            ]
+            write_private(root / "live.env", "\n".join(text) + "\n")
+            from sim2act.config import Settings
+            from sim2act.launch_configuration import import_config
+
+            import_config(root / "live.env")
+            settings = Settings.from_env()
+            phase_spec = importlib.util.spec_from_file_location(
+                "sim2act_bounded_live_phase", LIVE_SCRIPT
+            )
+            phase = importlib.util.module_from_spec(phase_spec)
+            phase_spec.loader.exec_module(phase)
+            environment = system_environment()
+            for key in ("SIM2ACT_INTERN_TOKEN", "INTERN_API_TOKEN"):
+                if os.environ.get(key):
+                    environment[key] = os.environ[key]
+
+            def service(selection=None):
+                command = [
+                    sys.executable,
+                    "-u",
+                    "-m",
+                    "sim2act.desktop_service",
+                    "--supervise",
+                    "--control-stdin",
+                    "--config",
+                    str(root / "live.env"),
+                ]
+                if selection is not None:
+                    command += ["--spec-selection", str(selection)]
+                return OwnedDesktop(command, environment=environment)
+
+            def live_record(value):
+                state["live"] = value
+                state["model_requests"] = value.get("model_requests")
+                record()
+
+            preparer = service()
+            try:
+                ready = preparer.event("DESKTOP_SERVICE_READY")
+                with phase.new_client(ready["url"], bearer, checkpoint=checkpoint) as client:
+                    contract, selected, live_state = phase.prepare(
+                        client, finite_pb_recipe(), live_record, live_window
+                    )
+                    selected_file = phase.save_selection(root, selected)
+            finally:
+                preparer.close()
+            selected_worker = service(selected_file)
+            try:
+                ready = selected_worker.event("DESKTOP_SERVICE_READY")
+                with (
+                    phase.new_client(ready["url"], bearer) as client,
+                    phase.new_client(ready["url"], bearer) as cleanup_client,
+                ):
+                    live_result = phase.run_stages(
+                        client,
+                        contract,
+                        selected,
+                        live_state,
+                        lambda choice, rid, body: phase.bounded_extract(
+                            settings,
+                            bearer,
+                            choice,
+                            rid,
+                            body,
+                            stop=stop,
+                            absolute_deadline=DEADLINE,
+                        ),
+                        record=live_record,
+                        stop=stop,
+                        checkpoint=checkpoint,
+                        cleanup_client=cleanup_client,
+                    )
+            finally:
+                selected_worker.close()
+            state.update(
+                live_result=live_result, model_requests=live_result["actual_model_requests"]
+            )
+            record()
         safe = True
     except Exception as error:
         state.update(
@@ -1122,10 +1278,12 @@ def execute(source, manifest, expected_hash):
         record()
         raise ProbeError("PROBE_FAILED_PRIVATE_STATE_RETAINED") from None
     finally:
+        for sig, handler in previous_signals.items():
+            signal.signal(sig, handler)
         if pg is not None:
             pg.close()
         if safe and container is not None:
-            DEADLINE = started + CORE_SECONDS
+            DEADLINE = started + CORE_SECONDS + (1080 if with_live else 0)
             # No implicit SIGKILL: normal PostgreSQL fast shutdown, exact owned IDs.
             try:
                 info = json.loads(run([*DOCKER, "inspect", container]))[0]
@@ -1169,7 +1327,10 @@ def execute(source, manifest, expected_hash):
                 )
                 run([*DOCKER, "network", "rm", network])
                 root_current()
-                for name in ["bootstrap.env", "migration.env", "app.env", "application-bearer"]:
+                names = ["bootstrap.env", "migration.env", "app.env", "application-bearer"]
+                if with_live:
+                    names += ["live.env", "live-selection.json"]
+                for name in names:
                     path = root / name
                     require(
                         not path.is_symlink() and path.is_file() and path.stat().st_nlink == 1,
@@ -1177,7 +1338,7 @@ def execute(source, manifest, expected_hash):
                     )
                     path.unlink()
                 state.update(
-                    status="CORE_MODEL0_COMPLETE",
+                    status="CORE_AND_LIVE_COMPLETE" if with_live else "CORE_MODEL0_COMPLETE",
                     cleanup="normal app STOP/dualEOF + pg_ctl fast + nonforce exact container/network remove; private credentials removed",
                     image_cache="retained; no image removal authority",
                 )
@@ -1186,8 +1347,11 @@ def execute(source, manifest, expected_hash):
                 state.update(status="CLEANUP_UNKNOWN_RETAINED")
                 record()
                 raise ProbeError("CLEANUP_UNKNOWN_RETAINED") from None
-    require(state["status"] == "CORE_MODEL0_COMPLETE", "CLEANUP_NOT_CONFIRMED")
-    return state
+    require(
+        state["status"] == ("CORE_AND_LIVE_COMPLETE" if with_live else "CORE_MODEL0_COMPLETE"),
+        "CLEANUP_NOT_CONFIRMED",
+    )
+    return public_state()
 
 
 def main():
@@ -1195,15 +1359,33 @@ def main():
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument(
+        "--with-live",
+        action="store_true",
+        help="Separate exact-plan existing-free Intern phase; never implied by core",
+    )
+    parser.add_argument(
+        "--live-window",
+        type=int,
+        choices=[300, 1200],
+        default=300,
+        help="Explicit NEW original P-B scope window; never changes existing approval",
+    )
     parser.add_argument("--confirmed-plan-sha256")
     args = parser.parse_args()
     try:
         if args.execute:
             # This checksum is an exact-scope tripwire, not permission by itself.
-            value = execute(args.source_sha, args.manifest, args.confirmed_plan_sha256)
+            value = execute(
+                args.source_sha,
+                args.manifest,
+                args.confirmed_plan_sha256,
+                args.with_live,
+                args.live_window,
+            )
         else:
             checked_source(args.source_sha)
-            value = plan(args.source_sha, args.manifest)
+            value = plan(args.source_sha, args.manifest, args.with_live, args.live_window)
             value["plan_sha256"] = plan_hash(value)
             value["execution_performed"] = False
         print(json.dumps(value, indent=2))

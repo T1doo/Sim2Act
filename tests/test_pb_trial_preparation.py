@@ -131,3 +131,40 @@ def test_pb_invalid_scope_never_creates_preparation(prepared_data, fault):  # no
         assert result.status_code in {403, 409, 422}, result.text
     with store.tx() as c:
         assert before == list(c.execute(select(delivery_graph_requests)).mappings())
+
+
+def test_new_seven_slot_window_is_explicit_never_extends_old_key(prepared_data):  # noqa: F811
+    data, choices = prepared_data
+    client = data[2]
+    base = f"/api/projects/{data[4]}/natural-trials/"
+    short = dict(choices, path="P-B", extraction_recipe=recipe("ordered"))
+    old = client.post(base + "old-window/preparation", json=short)
+    assert old.status_code == 200, old.text
+    long = dict(short, scope_window="NEW_EXACT_SEVEN_SLOT_1200_SECONDS")
+    assert client.post(base + "old-window/preparation", json=long).status_code == 409
+    assert client.get(base + "old-window/preparation").json() == old.json()
+    start = time.time()
+    made = client.post(base + "new-seven-window/preparation", json=long)
+    assert made.status_code == 200, made.text
+    value = made.json()
+    contract = gate.PBTrialContract.model_validate(value["contract"])
+    assert value["new_scope_window_seconds"] == 1200 and not value["approved"]
+    assert start + 1200 <= contract.expires_at <= time.time() + 1200
+    assert contract.caps == gate.TrialCaps()
+    assert client.post(base + "new-seven-window/preparation", json=short).status_code == 409
+    assert (
+        client.post(
+            base + "new-seven-window/consent",
+            json=dict(review_token=value["review_token"], confirm_exact_scope=True),
+        ).status_code
+        == 200
+    )
+    recovered = client.get(base + "new-seven-window/preparation").json()
+    assert recovered["contract"] == value["contract"] and recovered["approved"]
+    assert recovered["new_scope_window_seconds"] == 1200
+    assert (
+        client.post(
+            base + "bad-window/preparation", json=dict(short, scope_window="UNLIMITED")
+        ).status_code
+        == 422
+    )

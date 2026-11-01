@@ -71,8 +71,9 @@ async function boot(hash = "") {
   if (["lost-preparation", "lost-cold"].includes(originalScenario)) fault = "preparation";
   if(originalScenario.startsWith("pb-")) {
     $("trial-path").value="P-B";$("trial-path").dispatchEvent(new w.Event("change"));
-    $("trial-pb-mode").value=originalScenario.slice(3);$("trial-pb-mode").dispatchEvent(new w.Event("change"));
+    $("trial-pb-mode").value=originalScenario==="pb-seven"?"parallel":originalScenario.slice(3);$("trial-pb-mode").dispatchEvent(new w.Event("change"));
     $("trial-pb-prefix").value="reviewed";$("trial-pb-prefix").dispatchEvent(new w.Event("input"));
+    if(originalScenario==="pb-seven")$("trial-pb-window").value="1200";
     check(visible($("trial-pb-editor")),"P-B graph editor visible by explicit selection");
   }
   await click("trial-prepare");
@@ -90,8 +91,10 @@ async function boot(hash = "") {
   if(originalScenario.startsWith("pb-")) {
     const request=requests.find(r=>r.method==="POST"&&r.path.endsWith("/preparation"));
     check(request.body.path==="P-B" && request.body.extraction_recipe.steps[0].step_id==="reviewed_read","normal UI produces typed P-B graph without handwritten contract or credentials");
-    check($("trial-path").disabled && $("trial-pb-mode").disabled && $("trial-pb-prefix").disabled,"prepared graph controls cannot change under an old consent");
+    check($("trial-path").disabled && $("trial-pb-mode").disabled && $("trial-pb-prefix").disabled && $("trial-pb-window").disabled,"prepared graph controls cannot change under an old consent");
+    if(originalScenario==="pb-seven")check(request.body.scope_window==="NEW_EXACT_SEVEN_SLOT_1200_SECONDS","long scope is an explicit new preparation request");
     await boot(hash);await click("trial-recover");
+    if(originalScenario==="pb-seven")check($("trial-pb-window").value==="1200" && $("trial-pb-window").disabled,"cold recovery restores frozen long window without extending it");
     check($("trial-path").value==="P-B" && $("trial-path").disabled && $("trial-scope").textContent.includes("P-B 精确准备"),"cold page restores original P-B path and locks original intent");
     check($("trial-scope").textContent.includes("reviewed_read") && $("trial-scope").textContent.includes("原 P-B 提取键"),"full frozen recipe and original extraction key visible for consent");
   }
