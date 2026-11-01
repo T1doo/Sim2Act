@@ -78,6 +78,39 @@ function Set-FormValue($Window,[string]$Name,[string]$Value){
     $control=Form-Control $Window $Name ([Windows.Automation.ControlType]::Edit)
     ([Windows.Automation.ValuePattern]$control.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)).SetValue($Value)
 }
+function Save-WindowUia($Window,[string]$FileName){
+    Budget
+    # Evidence only: actual own-window visible names/types/pattern identifiers.
+    # Never query edit values, document text or another window.
+    $snapshot=@();$all=$Window.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition)
+    foreach($control in $all){
+        if($snapshot.Count -ge 100){break}
+        if($null -eq $control){continue}
+        try {
+            $state=$control.Current
+            if($state.IsOffscreen){continue}
+            $name=$state.Name
+            if($name -is [string] -and $name.Length -gt 160){$name=$name.Substring(0,160)}
+            $supported=@();$patternError=$null
+            try{$supported=@($control.GetSupportedPatterns()|ForEach-Object {$_.ProgrammaticName})}catch{$patternError=$_.Exception.GetType().FullName}
+            $snapshot+=@{name=$name;type=$state.ControlType.ProgrammaticName;enabled=$state.IsEnabled;patterns=$supported;pattern_error=$patternError}
+        }catch{$snapshot+=@{element_error=$_.Exception.GetType().FullName}}
+    }
+    @{source_commit=$report.source_commit;test_commit=$report.test_commit;elapsed_seconds=$clock.Elapsed.TotalSeconds;pid=$desktopProcess.Id;phase=$FileName;visible_controls_may_be_truncated=($snapshot.Count -ge 100);uia_element_count=$all.Count;controls=$snapshot}|
+        ConvertTo-Json -Depth 8|Set-Content (Join-Path $payload $FileName) -Encoding UTF8
+}
+function Confirm-ResourcePage($Window){
+    Save-WindowUia $Window 'resource-after-navigation-uia.json'
+    try {
+        $caption=Find-Control $Window '让材料、能力与连接各就其位，授权范围始终清晰。' $null
+        $report['resource_page_confirmed']=@{caption=$caption.Current.Name;type=$caption.Current.ControlType.ProgrammaticName;elapsed_seconds=$clock.Elapsed.TotalSeconds}
+        Save-WindowUia $Window 'resource-confirmed-uia.json';Save-Report
+    }catch{
+        $originalError=$_
+        try{Save-WindowUia $Window 'resource-page-unconfirmed-uia.json'}catch{$report['resource_uia_snapshot_error']=$_.Exception.GetType().FullName;Save-Report}
+        throw $originalError
+    }
+}
 function Open-Summary($Window,[string]$Prefix){
     # InvokePattern navigation queues page work. Retry only discovery while the
     # real page/AX tree becomes visible; invoke a found summary exactly once.
@@ -177,8 +210,11 @@ function Save-Material($Window){
         if(-not$selected){Start-Sleep -Milliseconds 150}
     }while(-not$selected -and [DateTime]::UtcNow -lt $until)
     if(-not$selected){throw 'UI project selection not confirmed; no material submit.'}
+    $report['ui_phase']='resource_navigation_requested';Save-Report
     Invoke-Control (Find-Control $Window '资源' ([Windows.Automation.ControlType]::Button))
+    Confirm-ResourcePage $Window
     [void](Open-Summary $Window '添加材料')
+    $report['ui_phase']='resource_form_opened';Save-Report
     Set-FormValue $Window '名称' 'native-window.csv'
     $format=Form-Control $Window '类型' ([Windows.Automation.ControlType]::ComboBox)
     $desktopProcess.Refresh()
