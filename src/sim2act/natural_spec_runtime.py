@@ -2613,6 +2613,11 @@ class _ColdGraphRead:
             if _revoke(self) is False:return
         was_active = self.active
         self.active = False
+        _owned_lookup = "sim2act:pin-owned-cleanup-const.v1"
+        try:
+            owned_cleanup = _owned_lookup(self) if _owned_lookup is not None else None
+        except BaseException:
+            return  # Already revoked: cleanup allocation must not mask primary.
         vars(self).pop('_source_owned_binding',None)
         vars(self).pop('_generate_owned_binding',None)
         vars(self).pop('_source_fact_bindings',None)
@@ -2626,7 +2631,8 @@ class _ColdGraphRead:
             from ._cold_settlement_owned import _NativeModels
             if type(owner) is _NativeModels and owner.graph is self:
                 owner.close()
-        frontier = getattr(self, '_accounted_frontier', None)
+        frontier = (owned_cleanup[0] if owned_cleanup is not None
+            else getattr(self, '_accounted_frontier', None))
         if frontier is not None:
             from ._cold_accounted_native import _Frontier
             # A substituted foreign frontier is not ours to revoke. The C
@@ -2643,10 +2649,22 @@ class _ColdGraphRead:
         if was_active is not False and frontier is not None:
             from ._cold_accounted_native import _Frontier
             from .cold_accounted import _OwnedPrewriteMode
+            links = owned_cleanup[1] if owned_cleanup is not None else None
+            if owned_cleanup is not None and links is None:
+                return  # No original cleanup identity: never follow a fallback backlink.
+            mode = frontier.mode if type(frontier) is _Frontier else None
+            # Original C-minted identities, not a pair of mutable backlinks,
+            # decide which mode/scope/candidate may be torn down.
+            if links is not None:
+                mode_fields = vars(mode) if type(mode) is _OwnedPrewriteMode else None
+                if (type(mode_fields) is not dict
+                        or not all(type(key) is str for key in mode_fields)
+                        or mode is not links[0] or mode_fields.get('scope') is not links[1]
+                        or mode_fields.get('_native') is not links[2]):
+                    return
             if (type(frontier) is _Frontier and frontier.graph is self
-                    and type(frontier.mode) is _OwnedPrewriteMode
-                    and frontier.mode.graph is self):
-                frontier.mode.close()
+                    and type(mode) is _OwnedPrewriteMode and mode.graph is self):
+                mode.close()
 
 
 for _version_method in ('__init__','content_version','export_version','_content_matches',
@@ -6070,7 +6088,7 @@ _source_owned_code.register(4,globals(),('_cold_graph_row_storage','_cold_graph_
         (vars(_raw_read_builtins),('type','vars','all','any','dict','str','list','tuple','set','bool','len','getattr','object','isinstance')),
         (vars(hashlib),('sha256',)),
         (vars(_graph_accounted_versions),('versions','rt')),
-        (vars(_graph_versions),('native','_MODULE','_NAMES','_ENTRIES','AVAILABLE','JOURNAL','VERSION','REVOKE','LOOKUP','_SHA','_REGISTERED','source','_SOURCE_CHECK','DomainError','object','type','tuple','vars','bool','getattr','bytes','all','hasattr','dict')),
+        (vars(_graph_versions),('native','_MODULE','_NAMES','_ENTRIES','AVAILABLE','JOURNAL','VERSION','REVOKE','LOOKUP','OWNED','_SHA','_REGISTERED','source','_SOURCE_CHECK','DomainError','object','type','tuple','vars','bool','getattr','bytes','all','hasattr','dict')),
         (vars(_release_apps_code),('_ColdCandidatePrefix','_ColdGraphOriginFacts')),
         (vars(_release_fact_code),('_RELEASE_OWNED_CHECK','_release_owned_code','_ColdReleasePrefix','_ColdReleaseFacts','select','internal_releases','fingerprint','copy','DomainError')),
         (vars(_generation_fact_code),('_generation_owned','_GenerationFactsReader','_ColdGenerationRawSeed',

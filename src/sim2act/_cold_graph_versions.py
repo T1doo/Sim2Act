@@ -18,7 +18,7 @@ except ImportError:
 
 _MODULE = native
 _NAMES = ('PinJournal','PinVersion','register_pin_code','pin_create','pin_publish',
-    'pin_current','pin_matches','pin_close','pin_registered','pin_revoke','pin_read_scope')
+    'pin_current','pin_matches','pin_close','pin_registered','pin_revoke','pin_read_scope','pin_owned_frontier')
 _ENTRIES = (() if native is None or not all(hasattr(native,n) for n in _NAMES)
     else tuple((n,getattr(native,n)) for n in _NAMES))
 AVAILABLE = bool(_ENTRIES) and native.SOURCE_SHA256 == hashlib.sha256(
@@ -27,6 +27,7 @@ JOURNAL = None if not AVAILABLE else native.PinJournal
 VERSION = None if not AVAILABLE else native.PinVersion
 REVOKE = None if not AVAILABLE else native.pin_revoke
 LOOKUP = None if not AVAILABLE else native.pin_registered
+OWNED = None if not AVAILABLE else native.pin_owned_frontier
 _SHA = hashlib.sha256
 _REGISTERED = False
 
@@ -128,7 +129,8 @@ def seal_entries(function):
     lookups during failure handling. Source code witnesses capture this code.
     """
     markers={'sim2act:pin-revoke-const.v1':REVOKE,
-        'sim2act:pin-lookup-const.v1':LOOKUP}
+        'sim2act:pin-lookup-const.v1':LOOKUP,
+        'sim2act:pin-owned-cleanup-const.v1':OWNED}
     constants=function.__code__.co_consts
     function.__code__=function.__code__.replace(co_consts=tuple(
         markers.get(value,value) if type(value) is str else value for value in constants))

@@ -785,7 +785,16 @@ class _NativeCandidate:
 
     def release(self):
         _pin_revoke = "sim2act:pin-revoke-const.v1"
-        frontier = getattr(self, 'frontier', None)
+        _owned_lookup = "sim2act:pin-owned-cleanup-const.v1"
+        if _owned_lookup is not None:
+            try:
+                frontier, links = _owned_lookup(self.graph)
+            except BaseException:
+                return  # Original Graph teardown already revoked its issuer.
+            if links is None or links[2] is not self:
+                frontier = None
+        else:
+            frontier = getattr(self, 'frontier', None)
         if type(frontier) is _Frontier:
             if _pin_revoke is not None:_pin_revoke(frontier)
             vars(frontier).pop('_structure_state', None)

@@ -457,6 +457,51 @@ def test_cross_graph_frontier_swap_cannot_skip_other_mutable_inputs(sql_facts):
         s.mode.assert_current()
 
 
+@pytest.mark.parametrize('damage', ['frontier-backlink', 'mode-backlink', 'both'])
+def test_cross_graph_cleanup_does_not_trust_rebound_backlinks(sql_facts, damage):
+    f = sql_facts
+    with f.store.tx() as c, native_segment(f, c) as s:
+        frontier = s.graph._accounted_frontier
+        issued = tuple(s.mode.scope._issued)
+        roles = dict.fromkeys(('source', 'generate', 'platform', 'trial', 'per_use'))
+        with pytest.raises(DomainError), runtime._cold_graph_read(
+                f.worker, c, {'unowned-other-graph': {}}, roles, 'pre') as other:
+            other._accounted_frontier = frontier
+            try:
+                if damage in ('frontier-backlink', 'both'):
+                    frontier.graph = other
+                if damage in ('mode-backlink', 'both'):
+                    s.mode.graph = other
+                other.invalidate()
+                assert other.active is False
+            finally:
+                frontier.graph = s.graph
+                s.mode.graph = s.graph
+        assert tuple(s.mode.scope._issued) == issued and s.mode.active
+        s.mode.assert_current()
+
+
+@pytest.mark.parametrize('damage', ['frontier', 'graph', 'both'])
+def test_candidate_release_uses_original_child_not_borrowed_fields(sql_facts, damage):
+    f = sql_facts
+    with f.store.tx() as c, native_segment(f, c) as other:
+        issued = tuple(other.mode.scope._issued)
+        with pytest.raises(DomainError), native_segment(f, c) as owner:
+            child = owner.candidate.frontier
+            try:
+                if damage in ('frontier', 'both'):
+                    owner.candidate.frontier = other.candidate.frontier
+                if damage in ('graph', 'both'):
+                    owner.candidate.graph = other.graph
+                owner.graph.invalidate()
+                assert owner.graph.active is False
+            finally:
+                owner.candidate.frontier = child
+                owner.candidate.graph = owner.graph
+        assert tuple(other.mode.scope._issued) == issued and other.mode.active
+        other.mode.assert_current()
+
+
 @pytest.mark.parametrize('damage', ['version', 'fence', 'lease'])
 def test_native_original_run_context_rejects_separate_current_scalar_damage(sql_facts, damage):
     import time

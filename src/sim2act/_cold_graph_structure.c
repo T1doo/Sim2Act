@@ -249,14 +249,17 @@ static PyObject *same_classes(PyObject *self, PyObject *args) {
  * The journal owns only its current version; retained old versions are data,
  * and cannot become current again. No permission is stored here. */
 typedef struct {PyObject_HEAD PyObject *raw,*key,*scope,*sequence,*journal;} PinVersion;
-typedef struct {PyObject_HEAD PyObject *scope,*version,*frontier;size_t sequence;int closed;PyObject*weakrefs;} PinJournal;
+typedef struct {PyObject_HEAD PyObject *scope,*version,*frontier,*cleanup;size_t sequence;int closed;PyObject*weakrefs;} PinJournal;
 static PyTypeObject pin_version_type,pin_journal_type;
 static PyObject *pin_create_code,*pin_publish_code,*pin_constructors,*pin_publishers,*pin_issued,*pin_graph_class,*pin_frontier_class,*pin_source_verifier;
 static int pin_version_traverse(PinVersion*v,visitproc visit,void*arg){Py_VISIT(v->raw);Py_VISIT(v->key);Py_VISIT(v->scope);Py_VISIT(v->sequence);Py_VISIT(v->journal);return 0;}
 static int pin_version_clear(PinVersion*v){Py_CLEAR(v->raw);Py_CLEAR(v->key);Py_CLEAR(v->scope);Py_CLEAR(v->sequence);Py_CLEAR(v->journal);return 0;}
 static void pin_version_free(PinVersion*v){PyObject_GC_UnTrack(v);pin_version_clear(v);Py_TYPE(v)->tp_free((PyObject*)v);}
-static int pin_journal_traverse(PinJournal*j,visitproc visit,void*arg){Py_VISIT(j->scope);Py_VISIT(j->version);Py_VISIT(j->frontier);return 0;}
-static int pin_journal_clear(PinJournal*j){j->closed=1;Py_CLEAR(j->scope);Py_CLEAR(j->version);Py_CLEAR(j->frontier);return 0;}
+static int pin_journal_traverse(PinJournal*j,visitproc visit,void*arg){Py_VISIT(j->scope);Py_VISIT(j->version);Py_VISIT(j->frontier);Py_VISIT(j->cleanup);return 0;}
+static int pin_journal_clear(PinJournal*j){j->closed=1;Py_CLEAR(j->scope);Py_CLEAR(j->version);Py_CLEAR(j->frontier);Py_CLEAR(j->cleanup);return 0;}
+/* Revocation must retain original cleanup identity until the original Python
+ * teardown runs. It is not a live scope or permission. GC still clears all. */
+static void pin_journal_revoke(PinJournal*j){j->closed=1;Py_CLEAR(j->scope);Py_CLEAR(j->version);}
 static void pin_journal_free(PinJournal*j){PyObject_GC_UnTrack(j);if(j->weakrefs)PyObject_ClearWeakRefs((PyObject*)j);pin_journal_clear(j);Py_TYPE(j)->tp_free((PyObject*)j);}
 #define PIN_GET(name) static PyObject*pin_get_##name(PinVersion*v,void*unused){(void)unused;if(!v->name){PyErr_SetString(PyExc_ValueError,"Closed version storage");return NULL;}return Py_NewRef(v->name);}
 PIN_GET(raw) PIN_GET(key) PIN_GET(sequence)
@@ -403,7 +406,7 @@ static PyObject*pin_registered(PyObject*self,PyObject*subject){(void)self;return
 static PyObject*pin_create(PyObject*self,PyObject*scope){
  (void)self;if(!pin_scope(scope)||!pin_callsite(pin_create_code,pin_constructors,PyTuple_GET_ITEM(scope,0),NULL,NULL))return pin_error();
  PinJournal*j=PyObject_GC_New(PinJournal,&pin_journal_type);if(!j)return NULL;
- j->scope=Py_NewRef(scope);j->version=NULL;j->frontier=NULL;j->sequence=0;j->closed=0;j->weakrefs=NULL;PyObject_GC_Track(j);
+ j->scope=Py_NewRef(scope);j->version=NULL;j->frontier=NULL;j->cleanup=NULL;j->sequence=0;j->closed=0;j->weakrefs=NULL;PyObject_GC_Track(j);
  PyObject*subject=PyTuple_GET_ITEM(scope,0),*key=PyLong_FromVoidPtr(subject),*callback=NULL,*owner=NULL,*weak=NULL,*entry=NULL;
  if(!key)goto bad_create;
  if(PyDict_Contains(pin_issued,key)!=0){if(!PyErr_Occurred())pin_error();goto bad_create;}
@@ -411,6 +414,16 @@ static PyObject*pin_create(PyObject*self,PyObject*scope){
  owner=PyWeakref_NewRef(subject,callback);weak=PyWeakref_NewRef((PyObject*)j,NULL);
  if(!owner||!weak)goto bad_create;entry=PyTuple_Pack(2,owner,weak);if(!entry||PyDict_SetItem(pin_issued,key,entry)<0)goto bad_create;
  if(subject!=PyTuple_GET_ITEM(scope,1)){
+  PyObject*fields=pin_fields(subject);if(!fields)goto bad_create;
+  PyObject*mode=PyDict_GetItemString(fields,"mode");Py_XINCREF(mode);Py_DECREF(fields);
+  if(!mode){pin_error();goto bad_create;}
+  fields=pin_fields(mode);if(!fields){Py_DECREF(mode);goto bad_create;}
+  PyObject*owner_scope=PyDict_GetItemString(fields,"scope"),*candidate=PyDict_GetItemString(fields,"_native");
+  if(!owner_scope||!candidate||PyDict_GetItemString(fields,"graph")!=PyTuple_GET_ITEM(scope,1)){
+   Py_DECREF(mode);Py_DECREF(fields);pin_error();goto bad_create;}
+  Py_INCREF(owner_scope);Py_INCREF(candidate);
+  j->cleanup=PyTuple_Pack(3,mode,owner_scope,candidate);
+  Py_DECREF(owner_scope);Py_DECREF(candidate);Py_DECREF(mode);Py_DECREF(fields);if(!j->cleanup)goto bad_create;
   PyObject*parent=pin_lookup(PyTuple_GET_ITEM(scope,1));
   if(!parent||Py_TYPE(parent)!=&pin_journal_type){Py_XDECREF(parent);if(!PyErr_Occurred())pin_error();goto bad_create;}
   PinJournal*parent_journal=(PinJournal*)parent;
@@ -492,6 +505,24 @@ static void pin_inactive_plain(PyObject*subject){
  if(plain&&(!active||PyBool_Check(active)))if(PyDict_SetItemString(fields,"active",Py_False)<0)PyErr_Clear();
  Py_DECREF(fields);
 }
+static PyObject*pin_owned_frontier(PyObject*self,PyObject*subject){
+ (void)self;PyObject*j=pin_lookup_raw(subject);
+ if(!j){PyErr_Clear();return PyTuple_Pack(2,Py_None,Py_None);}
+ PyObject*child=Py_NewRef(Py_None),*links=Py_NewRef(Py_None);
+ if(j!=Py_None&&(PyObject*)Py_TYPE(subject)==pin_graph_class){
+  PinJournal*parent=(PinJournal*)j;
+  if(parent->frontier){
+   PyObject*actual=PyWeakref_GetObject(parent->frontier);
+   if(actual!=Py_None){
+    Py_SETREF(child,Py_NewRef(actual));PyObject*cj=pin_lookup_raw(child);
+    if(cj&&cj!=Py_None&&((PinJournal*)cj)->cleanup)
+     Py_SETREF(links,Py_NewRef(((PinJournal*)cj)->cleanup));
+    Py_XDECREF(cj);PyErr_Clear();
+   }
+  }
+ }
+ Py_DECREF(j);PyObject*result=PyTuple_Pack(2,child,links);Py_DECREF(child);Py_DECREF(links);return result;
+}
 static PyObject*pin_revoke(PyObject*self,PyObject*subject){
  (void)self;PyObject*j=pin_lookup_raw(subject);
  if(!j){PyErr_Clear();pin_inactive_plain(subject);Py_RETURN_FALSE;}
@@ -500,10 +531,10 @@ static PyObject*pin_revoke(PyObject*self,PyObject*subject){
  if(journal->frontier){
   PyObject*child=PyWeakref_GetObject(journal->frontier);Py_INCREF(child);
   if(child!=Py_None){PyObject*cj=pin_lookup_raw(child);
-   if(cj&&cj!=Py_None)pin_journal_clear((PinJournal*)cj);Py_XDECREF(cj);PyErr_Clear();}
+   if(cj&&cj!=Py_None)pin_journal_revoke((PinJournal*)cj);Py_XDECREF(cj);PyErr_Clear();}
   Py_DECREF(child);
  }
- pin_journal_clear(journal);Py_DECREF(j);
+ pin_journal_revoke(journal);Py_DECREF(j);
  int safe=pin_code_current();if(PyErr_Occurred()){PyErr_Clear();safe=0;}
  PyObject*fields=PyObject_GenericGetDict(subject,NULL);
  if(!fields){PyErr_Clear();Py_RETURN_FALSE;}
@@ -526,6 +557,7 @@ static PyMethodDef methods[]={
  {"pin_current",pin_current,METH_VARARGS,"Require the same current scoped version."},
  {"pin_matches",pin_matches,METH_VARARGS,"Full byte comparison, never a hash verdict."},
  {"pin_revoke",pin_revoke,METH_O,"Idempotently revoke the original issuer with no Python callback."},
+ {"pin_owned_frontier",pin_owned_frontier,METH_O,"Original cleanup child and links, never mutable backlinks or authority."},
  {"pin_close",pin_close,METH_O,"Revoke the journal, retaining immutable old data only."},{"same_classes",same_classes,METH_VARARGS,"Fresh complete class namespace and MRO identity comparison without callbacks."},{"snapshot",snapshot,METH_VARARGS,"Bounded independent complete structure for one qualified scope."},{"matches_fast",matches_fast,METH_VARARGS,"Fresh complete structure and alias comparison in the same scope."},{NULL,NULL,0,NULL}};
 static struct PyModuleDef module={PyModuleDef_HEAD_INIT,"_cold_graph_structure",NULL,-1,methods};
 PyMODINIT_FUNC PyInit__cold_graph_structure(void){

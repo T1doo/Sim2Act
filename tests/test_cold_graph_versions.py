@@ -48,6 +48,31 @@ def test_expected_export_is_same_version_and_fresh_projection_remains_live(sql_f
         with pytest.raises(DomainError):graph.export_version(version)
 
 
+def test_cleanup_allocation_failure_keeps_primary_and_original_issuer_revoked(sql_facts):
+    monitor = sys.monitoring
+    slot = next(i for i in (3, 5, 4) if monitor.get_tool(i) is None)
+    code = rt._ColdGraphRead.invalidate.__code__
+    calls = []
+    def allocating(code, offset, callee, arg0):
+        if callee is versions.OWNED:
+            calls.append('lookup')
+            raise MemoryError('synthetic cleanup allocation failure')
+    monitor.use_tool_id(slot, 'Failure before original cleanup lookup allocation')
+    try:
+        monitor.register_callback(slot, monitor.events.CALL, allocating)
+        monitor.set_local_events(slot, code, monitor.events.CALL)
+        with pytest.raises(DomainError) as caught, graph_scope(sql_facts) as (graph, limits):
+            graph.inputs['mutated-root'] = True
+            graph.check(sql_facts.store, graph.connection)
+        assert calls and graph.active is False
+        assert caught.value.code == 'VERSION_CONFLICT'
+        with pytest.raises(DomainError):graph.content_version()
+    finally:
+        monitor.set_local_events(slot, code, 0)
+        monitor.register_callback(slot, monitor.events.CALL, None)
+        monitor.free_tool_id(slot)
+
+
 @pytest.mark.parametrize('damage',['delete-journal','none-journal','old-key','capability-false'])
 def test_issued_version_cannot_downgrade_or_rebind(sql_facts,monkeypatch,damage):
     f=sql_facts

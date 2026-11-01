@@ -98,6 +98,13 @@ def test_original_thirty_large_goal_or_safe_budget_refusal(env,tmp_path,monkeypa
         while tb:
             if tb.tb_frame.f_code is original_flow.__code__:frame=tb.tb_frame
             tb=tb.tb_next
+    finally:
+        # Always retain actual intervals, including an unclassified failure
+        # in this diagnostic's own assertions. No business decision uses it.
+        (tmp_path/'ordinary-thirty-observed.json').write_text(json.dumps(dict(
+            classification='RAW_REAL_CLOCK_ORDINARY30_OBSERVATIONS_NOT_GOAL_VERDICT',
+            source_commit=source, ordinary_caps=changes,
+            records=[r for store in opened for r in store._local_model_snapshot_records]),indent=2)+'\n')
     assert len(changes)==1 and changes[0]['caps_exact_type'] is True
     assert changes[0]['caps']['lease_seconds']==30
     assert not {'settlement_seconds','settlement_protocol'} & changes[0]['caps'].keys()
@@ -124,15 +131,19 @@ def test_original_thirty_large_goal_or_safe_budget_refusal(env,tmp_path,monkeypa
     assert 'settlement_seconds' not in changes[0]['caps']
     assert len(opened)==1
     records=list(opened[0]._local_model_snapshot_records)
-    assert len(records)==1 and records[0]['outcome']=='ROLLED_BACK'
-    assert 27<records[0]['seconds']<120
+    assert 1<=len(records)<=2 and records[-1]['outcome']=='ROLLED_BACK'
+    assert all(r['outcome']=='COMMITTED' for r in records[:-1])
+    assert 27<records[-1]['seconds']<120
     # The original controller has returned and its stores/worker have closed.
     # These are negative-case reads, not a first-success readback claim.
     db=tmp_path/'fixture.db'
     with closing(sqlite3.connect('file:'+str(db)+'?mode=ro',uri=True)) as c:
         c.row_factory=sqlite3.Row
         run=dict(c.execute('SELECT * FROM runs WHERE id=?',(cold,)).fetchone())
-        attempt=dict(c.execute('SELECT * FROM attempts WHERE run_id=?',(cold,)).fetchone())
+        all_cold_attempts=[dict(r) for r in c.execute('SELECT * FROM attempts WHERE run_id=?',(cold,))]
+        target=[r for r in all_cold_attempts if r['status'] in ('RECEIVED','REJECTED_KNOWN')]
+        assert len(target)==1 and len(all_cold_attempts)==len(records)
+        attempt=target[0]
         operation_id=json.loads(attempt['parameters'])['natural_spec']['operation_id']
         operation=dict(c.execute('SELECT * FROM operations WHERE id=? AND run_id=?',(operation_id,cold)).fetchone())
         internal=dict(c.execute('SELECT a.* FROM internal_app_runs a JOIN internal_run_bindings b ON b.app_run_id=a.id WHERE b.run_id=?',(cold,)).fetchone())
@@ -145,14 +156,22 @@ def test_original_thirty_large_goal_or_safe_budget_refusal(env,tmp_path,monkeypa
     assert run['status']!='SUCCEEDED' and run['created_at']+300>time.time()
     assert binding.contract.expires_at>time.time()
     failures=[json.loads(row) for row in (tmp_path/'failure-observations.jsonl').read_text().splitlines()]
-    usage=validate_negative_state(run, attempt, operation, internal, typed, event_rows, failures)
-    assert total==6 and len((tmp_path/'mock-exchanges.jsonl').read_text().splitlines())==6
+    # A prior Cold may already be VERIFIED. Its settled event must not be
+    # mistaken for this failed attempt's settlement, nor silently discarded.
+    selected_events=[r for r in event_rows if r['kind'] not in (
+        'NS_RECEIVED','NS_REJECTED','NS_SETTLED','NS_SETTLEMENT_LEASE_RESERVED')
+        or r['data'].get('attempt_id')==attempt['id']]
+    usage=validate_negative_state(run, attempt, operation, internal, typed, selected_events, failures)
+    expected_requests=5+len(records)
+    assert total==expected_requests and len((tmp_path/'mock-exchanges.jsonl').read_text().splitlines())==expected_requests
     result={'classification':'ORIGINAL_TRIALCAPS_30_REAL_CLOCK_SQLITE_FIXED_MOCK_NEGATIVE_NOT_LIVE',
         'candidate_source':source,'source_files':checked,'status':'PASS_NEGATIVE_EXPECTED_NO_COMMIT',
         'contract_input_change_only':changes,'old_caps_not_upgraded':True,'run_id':cold,'run_status':run['status'],
         'expired_lease_wall':run['lease_until'],'run_and_trial_deadlines_still_future':True,
         'received_response_preserved':True,'known_usage':usage,'response_fingerprint_matches_received':True,'attempt_status':attempt['status'],'operation_status':operation['status'],
-        'typed_results':typed,'settled_or_verified_or_extended_lease_events':settled,'records':records,
-        'fixed_mock_requests':6,'real_model_requests':0,'automatic_replay':False,
+        'typed_results':typed,'all_cold_settled_or_verified_or_extended_lease_events':settled,'records':records,
+        'failed_cold_ordinal':len(records),'prior_cold_attempts':[
+            dict(id=r['id'],status=r['status']) for r in all_cold_attempts if r['id']!=attempt['id']],
+        'fixed_mock_requests':expected_requests,'real_model_requests':0,'automatic_replay':False,
         'original_success_assertion_failure':{'file':str(last.filename),'line':last.lineno,'message':str(caught)}}
     (tmp_path/'ordinary-thirty-result.json').write_text(json.dumps(result,indent=2)+'\n')
