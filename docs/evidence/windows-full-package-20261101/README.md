@@ -92,3 +92,17 @@ Windows本机正式传输helper是否恢复由唯一协调任务另行核实；�
 ### 父级明确扩充后的单次执行
 
 父级按既有免费CI授权将本批总上限从480扩为587秒，仅增加107秒；407秒既有实际耗时不清零。余180秒仅执行已独审冻结`b85f1c24860a867362fbc97f6fe3dbb6928a815f`脚本和原042完整包的单次材料保存／原生下载／完整bytes／正常关闭首开流程。标准公共Windows2025，无付费runner或fallback，不增加token/Runtime/系统安全/显示/网络设置，也不使用用户电脑。失败停，不自动第二次；运行后关闭触发入口并按实际job时间和退出回执记账。此段只记录授权，结果待该次真实终态。
+
+### 扩充后的单次真实终态：失败，入口已关闭
+
+实际验收提交`600d1dfc80463a4bc0fc7811f8be7d9f25023239`，[run41331675042](https://github.com/T1doo/Sim2Act/actions/runs/41331675042)，job124922922114；17:28:59–17:29:36 UTC，37秒，FAILED_NOT_ACCEPTED。已核公共仓库private=false、标准windows-2025、contents只读；无付费runner／fallback、新权限／凭据／安装／系统setter，0模型。脚本逐字节等于已独审b85，原042完整包仍为cc177eeb摘要，没有把新候选替换进冻结运行。
+
+真实阶段到达：原EXE READY、公开合成登录、创建并选中项目、点击资源导航。随后`Open-Summary`抛`Actual summary unavailable: 添加材料`。该方法只查一次Button筛选的AX树，没有等待导航处理完。故障后300ms截图实际可见资源页和“添加材料”；这证明按钮在截图时存在，但不能凭此区分当次查询的异步延时与UIA name/control-type差异，根因尚未完整闭合。材料POST、下载点击、导出、第二次启动和材料重开均NOT_RUN，不能称通过或认定用户材料保存功能已坏。
+
+异常路径仅CloseMainWindow正常关闭自己的PID7908，进程退出确认；原日志同worker的STOPPED clean/worker_stopped/data_preserved均true，DESKTOP_EXIT receipt_verified/ready_seen均true、child_returncode/exitcode均0。不是硬超时、强杀或外部访问拒绝。此失败路径没有另存文件系统残锁清单，退出协议与候选旧成功无锁重开证明分开记录。
+
+完整artifact13093477744，72109字节，SHA256`6f0889bad5689ed939214b624c2a24557c80dbf5deb7287603536419cd170505`；正式工具文件身份`file_00000000bcbc81f5beb8d8b70d5892bc`。原PNG和artifact只在本地及既有授权CI制品中，不新增公开图片分享；仓库保全report／desktop.log／完整job.log／run／hash及精确frozen-probe.ps1，见`material-export-attempt-1/`。
+
+账目更新为407+37=444/587秒，算术余143秒；父级仅授权一次，本次已消费，余额不是第二次运行许可。`native-material-once`入口已改为显式`if: false`，不自动追加。原42完整装配、独立后台CSV两次保存／首次同源重开和旧原生窗口登录关闭重开的通过仍保留，不能覆盖本次材料／导出未验。Release仍未创建。
+
+允许的离线修复已完成：summary发现改为最多8秒只读等待，找到后只执行一次原展开动作；仍查真实visible/enabled控件、不改页面／权限／HTTP写入口，未知路径拒绝。若仍未找到，最多记录100条自有窗口可见控件的Name/type/enabled，不读Edit值、不取其他窗口。该候选未再执行Windows验证；计划分别记录原b85冻结hash与新候选hash。无新的视觉改版、模型消费或大型Cold测量，也没有新安全setter要求。后续必要验证需先读该冻结失败及AX诊断边界，不能原样自动重跑或把候选修复冒称已验。

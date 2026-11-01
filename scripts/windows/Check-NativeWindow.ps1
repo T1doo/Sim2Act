@@ -79,22 +79,42 @@ function Set-FormValue($Window,[string]$Name,[string]$Value){
     ([Windows.Automation.ValuePattern]$control.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)).SetValue($Value)
 }
 function Open-Summary($Window,[string]$Prefix){
-    $buttons=$Window.FindAll([Windows.Automation.TreeScope]::Descendants,
-        [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::Button))
-    foreach($control in $buttons){
-        if($null -eq $control){continue}
-        $accessibleName=$control.Current.Name
-        if($accessibleName -is [string] -and $accessibleName.StartsWith($Prefix,[StringComparison]::Ordinal) -and $control.Current.IsEnabled -and -not$control.Current.IsOffscreen){
-            $pattern=$null
-            if($control.TryGetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern,[ref]$pattern)){
-                $expand=[Windows.Automation.ExpandCollapsePattern]$pattern
-                if($expand.Current.ExpandCollapseState -eq [Windows.Automation.ExpandCollapseState]::Collapsed){$expand.Expand()}
-                elseif($expand.Current.ExpandCollapseState -ne [Windows.Automation.ExpandCollapseState]::Expanded){throw 'Summary cannot expand using ordinary UIA.'}
-            }else{Invoke-Control $control}
-            return $control
+    # InvokePattern navigation queues page work. Retry only discovery while the
+    # real page/AX tree becomes visible; invoke a found summary exactly once.
+    $until=[DateTime]::UtcNow.AddSeconds(8)
+    do {
+        Budget
+        $buttons=$Window.FindAll([Windows.Automation.TreeScope]::Descendants,
+            [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::Button))
+        foreach($control in $buttons){
+            if($null -eq $control){continue}
+            $accessibleName=$control.Current.Name
+            if($accessibleName -is [string] -and $accessibleName.StartsWith($Prefix,[StringComparison]::Ordinal) -and $control.Current.IsEnabled -and -not$control.Current.IsOffscreen){
+                $pattern=$null
+                if($control.TryGetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern,[ref]$pattern)){
+                    $expand=[Windows.Automation.ExpandCollapsePattern]$pattern
+                    if($expand.Current.ExpandCollapseState -eq [Windows.Automation.ExpandCollapseState]::Collapsed){$expand.Expand()}
+                    elseif($expand.Current.ExpandCollapseState -ne [Windows.Automation.ExpandCollapseState]::Expanded){throw 'Summary cannot expand using ordinary UIA.'}
+                }else{Invoke-Control $control}
+                return $control
+            }
         }
-    }
-    throw "Actual summary unavailable: $Prefix"
+        Start-Sleep -Milliseconds 150
+    } while([DateTime]::UtcNow -lt $until)
+    # Bounded own-window names/types only, never edit values or other windows.
+    # This distinguishes a delayed tree from a provider name/type mismatch.
+    try {
+        $snapshot=@();$all=$Window.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition)
+        foreach($control in $all){
+            if($snapshot.Count -ge 100){break}
+            if($null -eq $control -or $control.Current.IsOffscreen){continue}
+            $name=$control.Current.Name
+            if($name -is [string] -and $name.Length -gt 160){$name=$name.Substring(0,160)}
+            $snapshot+=@{name=$name;type=$control.Current.ControlType.ProgrammaticName;enabled=$control.Current.IsEnabled}
+        }
+        $report['summary_search_failure']=@{prefix=$Prefix;visible_controls=$snapshot};Save-Report
+    }catch{$report['summary_snapshot_error']=$_.Exception.GetType().FullName;Save-Report}
+    throw "Actual summary unavailable after bounded page/AX discovery: $Prefix"
 }
 function Submit-Control($Window,[string]$Name,$Summary){
     $summaryId=$Summary.GetRuntimeId() -join ':'
