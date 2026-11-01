@@ -1,4 +1,4 @@
-Sim2Act Windows 本地 CSV 工程预览
+Sim2Act Windows 本地 CSV 工程预览（仅供内部审查，尚非完整R0）
 
 完整便携包包含独立 WinForms/WebView2 窗口、私有 Python3.12.10 和四枚原生扩展。原窗口中创建项目、保存合成 CSV、下载原文件、正常关闭并重开后回读已通过 Windows Server2025 实测；同包后台固定 CSV 计算及结果版本30/v1、15/v2另有独立验收。
 
@@ -23,3 +23,5 @@ B,20,8
 - 实际窗口保存/原生导出/重开：https://github.com/T1doo/Sim2Act/actions/runs/41332996015
 
 包大小19,745,959字节；SHA256：`cc177eeb8815194a4f1e973e146ce7dd95c2949350745a296c4d6a9bfcd38027`。
+
+当前用户要求完整成品，本材料不满足原R0全部条件，不能以此预览替代最终交付；发布资格细项见R0-RELEASE-QUALIFICATION.json。

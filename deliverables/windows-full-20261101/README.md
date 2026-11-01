@@ -22,3 +22,11 @@
 原042完整包又在[run41332996015](https://github.com/T1doo/Sim2Act/actions/runs/41332996015)通过真实UI创建项目、保存CSV、点击原下载按钮、原生宿主完成状态及34字节逐字节核对，正常关／首开同材料ID／内容与原导出不变，两轮退出回执完整。WindowsServer2025、已有WebView2、合成SQLite、0模型。本次UI材料流程与此前同包后台CSV30/v1、15/v2分开，不能扩签UI应用运行、Win11、live、PG或大Cold。
 
 同版本发布材料已准备：`RELEASE-NOTES.md`、`WINDOWS-ACCEPTANCE.json`、`SHA256SUMS`及`release-assets.json`。ZIP仍原19,745,959字节/cc177eeb摘要；建议仅作为准确范围的工程预览pre-release。当前未创建或更新GitHub Release；既有旧草稿保留，GitHub连接器无Release写入／资产上传工具，旧原始API网络拒绝路线未重试，未用CI扩大contents权限替代。发布清单记录的是拟动作，不是发布成功回执。
+
+## 完整成品发布资格：不满足原R0
+
+此包是完整的本地合成SQLite profile，不能把“完整包”解读为完整R0。正式P-A/P-B普通桌面入口尚未闭合；包内无psycopg或manage.py，不能只给PG连接就称正式桌面已接通。组件已有生成／依赖修改／权限／恢复实现，并非全未实现；当前原窗材料与后台CSV的通过也真实保留。完整同版两路径、跨任务AT门、目标Win11/正式PG及R0组合验收仍缺。
+
+父级已通过正常GitHub网页观察登录、Releases页和Draft按钮，尚未上传或发布；这不证明旧API/Library认证恢复。当前真正的发布hold是成品资格不足，不是免费模型许可或单纯连接器工具缺口。既有Intern token仅核布尔非空，没有输出值；未选择正式PG和试验身份配置，也没有新增凭据／安全权限。详见`R0-RELEASE-QUALIFICATION.json`和`LICENSE-INVENTORY.json`。项目自身未声明许可，第三方通知及原文存在性已列清，未擅自选择许可或作法律结论。
+
+用户不希望中间候选充当交付，因此当前建议仅保留内部审查材料，不把工程预览发布为完整成品。建议tag/文案都是拟稿；旧草稿保留，新Release与资产上传尚未执行。CI仍487/900，第二次条件验证未消耗，入口关闭；无新的模型或Windows调用。
