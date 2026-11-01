@@ -104,7 +104,7 @@ try {
     $report['session']=[Diagnostics.Process]::GetCurrentProcess().SessionId
     $report['user_interactive']=[Environment]::UserInteractive
     $report['screen']=@{width=[Windows.Forms.Screen]::PrimaryScreen.Bounds.Width;height=[Windows.Forms.Screen]::PrimaryScreen.Bounds.Height}
-    if(-not$report.user_interactive -or $report.session -eq 0 -or $report.screen.width -lt 1060 -or $report.screen.height -lt 700){throw 'Existing interactive Windows desktop unavailable; no session/display setter.'}
+    if(-not$report.user_interactive -or $report.session -eq 0 -or $report.screen.width -lt 1024 -or $report.screen.height -lt 700){throw 'Existing interactive Windows desktop unavailable; no session/display setter.'}
     # Read the same installed stable-runtime registry/path boundary as the original host.
     # Missing runtime stops before EXE launch; no installer, environment override or modal fallback.
     $runtimeFound=$null

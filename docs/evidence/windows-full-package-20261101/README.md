@@ -42,3 +42,9 @@ Windows本机正式传输helper是否恢复由唯一协调任务另行核实；�
 完整包 `deliverables/windows-full-20261101/Sim2Act-win64-042ab21c4fa9.zip` 19,745,959字节，SHA256 `cc177eeb8815194a4f1e973e146ce7dd95c2949350745a296c4d6a9bfcd38027`。1779个清单成员及whole-zip、wheel/source/native一致性已独立复核，未含DB、私有env/私钥或托管token模式。此时原EXE尚未执行，状态严格为ASSEMBLY_AND_BACKEND_ONLY，不是整体交付。
 
 本批累计115+151=266秒，余214秒。按用户新增独立窗口与截图要求，下一次仅对这份精确原包做普通窗口/登录/关闭重开与自身像素检查，job硬上限180秒；即使用满累计446秒也小于480秒。仅用已有交互桌面/稳定WebView2；缺失或拒绝则停止，不安装Runtime、修改sandbox/ACL/会话/显示设置、不启Edge浏览器/CDP，也不使用用户电脑。新的测试提交不改变已冻结包身份。结果须追加真实终态，不预置通过。
+
+### 原生窗口第一次准备失败与修正
+
+测试提交 `f45e6d99ca67a67e0a6d36b04f3063498296e32a`，[run41328741556](https://github.com/T1doo/Sim2Act/actions/runs/41328741556)，job124914138434，16:54:59–16:55:18 UTC，19秒。实际session2、UserInteractive=true，屏幕1024×768；脚本1060最小宽门过严，于启动EXE之前拒绝，starts=[]。这不是窗口或业务失败，Runtime尚未核查；原报告/完整job日志/638字节artifact已保存在`window-attempt-1/`。
+
+产品原最小窗口为1024×680，仅将测试屏宽门1060改1024，不改显示设置或产品。整窗GetWindowRect仍必须完全在VirtualScreen内，UIA登录、真实像素、同源重开和完整退出要求均保留，实际溢出仍拒。独审无mustfix。累计266+19=285秒，余195；修正源仅必要单次验证，job180秒硬上限，累计最多465<480。不得将本轮准备失败改写为窗口通过，不安装Runtime/修改sandbox/ACL或使用用户电脑。
