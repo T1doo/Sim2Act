@@ -143,7 +143,7 @@ def same(proof):
         return None
     try:
         capsule = structure._NATIVE_SNAPSHOT(proof.inputs, *structure._ARGS, scope,
-            r._SOURCE_VIEW_TYPE, r._SOURCE_OWNER_TYPE)
+            r._SOURCE_VIEW_TYPE, r._SOURCE_OWNER_TYPE, proof.inputs)
         if capsule is structure._UNSUPPORTED:
             return None
         # Independent current walk closes calibration ABA. No hash-only result.

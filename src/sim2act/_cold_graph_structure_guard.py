@@ -28,7 +28,7 @@ except ImportError:
 _NATIVE = native
 _NATIVE_ENTRIES = (() if native is None else
     tuple((name, getattr(native, name, None)) for name in ('snapshot', 'matches_fast', 'UNSUPPORTED', 'same_classes',
-        'register_structure_config', 'qualify_metadata')))
+        'register_structure_config', 'qualify_metadata', 'read_structure_counts')))
 _NATIVE_SNAPSHOT = None if native is None else getattr(native, 'snapshot', None)
 _NATIVE_MATCH = None if native is None else getattr(native, 'matches_fast', None)
 _NATIVE_CLASSES = None if native is None else getattr(native, 'same_classes', None)
@@ -270,7 +270,8 @@ def select(graph):
     if not graph._content_matches():
         return False
     values = graph.input_bytes(_snapshot_values=True)
-    capsule = _NATIVE_SNAPSHOT(values, *_ARGS, scope, r._SOURCE_VIEW_TYPE, r._SOURCE_OWNER_TYPE)
+    capsule = _NATIVE_SNAPSHOT(values, *_ARGS, scope, r._SOURCE_VIEW_TYPE, r._SOURCE_OWNER_TYPE,
+        values['inputs'])
     if not graph._content_matches():
         return False
     if capsule is _UNSUPPORTED:
@@ -349,7 +350,8 @@ def select_frontier(frontier):
     if not frontier._content_matches():
         return False
     values = _frontier_values(frontier, graph)
-    capsule = _NATIVE_SNAPSHOT(values, *_ARGS, scope, r._SOURCE_VIEW_TYPE, r._SOURCE_OWNER_TYPE)
+    capsule = _NATIVE_SNAPSHOT(values, *_ARGS, scope, r._SOURCE_VIEW_TYPE, r._SOURCE_OWNER_TYPE,
+        values['inputs'])
     if not frontier._content_matches():
         return False
     if capsule is _UNSUPPORTED:
