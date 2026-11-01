@@ -1,19 +1,21 @@
 # Isolated PG verification: current executable core proposal, NOT EXECUTED
 
-Current product/controller source: `2c4fd44d299da8abec7ab1bc73592a7841c98319`. The independent
-runtime preservation commit is `680ad814d2484830d4d17a871e60bb2702be7d51`.
-The original runtime is untouched; a separate exact31-package locked runtime
-now resolves the ten recorded differences. Optional live stage orchestration is
-implemented and offline-tested, not PG/live executed. No PG/network/container,
-role/credential or real model operation was performed. No execution approval is
-requested while the original manifest condition below remains false. CI487/900.
+Current source: `be5f76d934791bb7375fbc9d108a131589c9a75b`. This supersedes the2c4fd44 candidate:
+its1200-second product preparation option was withdrawn for lack of original
+product authority. Original P-B preparation/API/UI are byte-identical to the
+pre-extension baseline; current original300s scope, lease30, Run300 remain.
+Runtime31 lock entries are aligned separately; the original runtime and four
+native modules are preserved. The original production journal and bounded phase
+controller are implemented; only Generate-only is currently executable through
+the future specifically confirmed PG scope. No actual PG, role/credential,
+container/bridge or real model operation was performed. CI487/900 unchanged.
 
 ## Read-only observations and blocking conditions
 
-- Latest read-only frozen plans observe2,977,771,520 free disk bytes (>=2GiB)
-  and10,836,254,720/10,845,716,480 available-or-reclaimable memory bytes (>=4GiB).
-  These are observations, not reserved resources; immediate pre-effect recheck
-  remains required. No limits, ownership or cache policy changes.
+- Latest frozen read-only observations:2,394,136,576 /2,394,132,480 free disk
+  bytes (core/Generate), >=2GiB;10,836,033,536 /10,835,771,392 available-or-inactive
+  memory bytes, >=4GiB. This is not reserved capacity and must be rechecked before
+  any effect. No new build/large test is needed to establish current plan facts.
 - Existing managed Docker server28.4.0 is readable. Pinned image is not cached;
   no existing PG connection or postgres executable is assumed.
 - Sole image remains
@@ -42,11 +44,11 @@ boolean only. Existing token is never printed or written to PG/Docker/config.
 operation is read-only (including a no-DB child Python import-origin check):
 
 ```text
-/workspace/scratch/sim2act-pg-locked-runtime-20261101/venv/bin/python scripts/diagnostics/isolated_pg_probe.py --source-sha 2c4fd44d299da8abec7ab1bc73592a7841c98319
+/workspace/scratch/sim2act-pg-locked-runtime-20261101/venv/bin/python scripts/diagnostics/isolated_pg_probe.py --source-sha be5f76d934791bb7375fbc9d108a131589c9a75b
 ```
 
 Observed machine plan hash:
-`012e06d1d9e247baf4d9e72f4b4e8e03644012b3e2648fb8b56bd89468576261`.
+`2774c9c9d4f01a0a1aa9283a67a5c886813666774b5844b954ae055f49f54f9a`.
 It is a **NOT_READY observation**, not execution permission. Resource numbers are
 excluded from the checksum, but thresholds/code/versions/import binding/native
 recipe/image/source/phase/operations are bound; execution rechecks resources.
@@ -137,48 +139,71 @@ Read-only preflight is separate (bounded Git checks and a10s import child).
 Timeout of a mutating CLI/Docker command does not kill or retry it: retain its
 owned handle/PID and report UNKNOWN, keep private scope/evidence.
 
-Optional existing-free-Intern orchestration is now implemented in
-`scripts/diagnostics/natural_trial_live_phase.py`, explicitly selected by
-`--with-live --live-window 1200`. Core remains default MODEL0. New20-minute scope
-is an explicitly selected **new P-B original V1 contract** and new exact consent;
-existing300-second contracts/keys cannot be changed or renewed. Default GUI/API
-preparation remains300 seconds. Lease30, each Run300, seven slots and original
-3/2/2 caps stay unchanged. At1RPM the entire seven-slot path cannot fit300 seconds;
-the controller rejects incompatible remaining windows rather than extending one.
+Optional stage implementation is in `scripts/diagnostics/natural_trial_live_phase.py`.
+The supported future execution selection is `--with-live --live-stages generate`
+(default Generate-only). It retains the original300-second P-B prepared and
+exact-consented contract; no window field/API/UI extension remains. Existing
+expiry/fingerprints/keys are never renewed or changed. Lease30 and Run300 stay.
 
-Optional phase ceiling1080s (handoff90 and cleanup90 included); combined core+live
-maximum1740s from first effect, not a fresh unlimited clock. Each original Run
-also expires within300 seconds and every request checks original absolute trial
-expiry, stop and outer deadline. Generate<=3, Source<=2, Cold<=2, total<=7 calls,
-output<=1024/call and7168 total; stage envelope<=64000, total<=192000 under original
-production journal enforcement. No automatic provider retry or paid fallback.
-The existing fixed endpoint/model/free authorization remains unchanged.
+`natural_spec` Generate **requires3 calls without repair**: bound resource.read,
+actual spec.check_candidate, then final candidate. The ordinary non-spec two-call
+path is not applicable. Fixed original source: goal_applications.py1445,
+1752–1769. Strict same-trial P-B Source needs2 model nodes and the finite selected
+Cold recipe needs1. Six causal reservations require at least300 seconds between
+first and last at1RPM, before any model/compute/preparation time. The original
+scope expires strictly300 seconds after preparation. Therefore current complete
+P-B path cannot fit; worker heartbeat cannot extend the separate trial expiry,
+and a second trial cannot inherit the first trial's exact source/journal identity.
+The prior two-call interpretation was caught by independent review and never
+executed; MAX_REQUESTS3 now preserves the real checker. Repair remains0.
 
-Preparer uses normal project/material/Goal/preparation/consent APIs, closes its
-unselected API/Worker cleanly, then starts the original production-selected
-Worker. Generate original-key recovery is validated before observing it. Actual
-generated Source graph must contain exactly two model nodes; otherwise stop
-before Source, never synthesize a second call. Source and Cold original-key
-recoveries verify exact request/principal/project/app/instance/release before
-registering a cancellable Run. Stage review/consent precedes observation.
-Production journal is read through a newly authenticated **read-only original
-namespace** endpoint; absent/unknown records stop, never seed a synthetic budget.
-Source extraction is the original strict `pa_trial_dispatch.extract_pb` bridge,
-not generic extraction. It reauthenticates original bearer/account selection,
-uses the same PG role/schema/endpoint and tighter session SQL waits only. Owned
-thread observation, SQL and pre-commit guards stop late writes on cancellation
-or expiry; unknown worker/thread handles are retained, no kill or forced cleanup.
+`--live-stages all` is read-only-inspectable but **refused before any nonce,
+container, role, credential or model effect**, even with an otherwise valid plan.
+The module also refuses an original300s full pipeline before its first model Run.
+Full Source/extraction/Cold routines retain original per-stage authority/journal,
+strict extraction and cancellation/expiry guards for protocol coverage, but are
+not enabled as an end-to-end product under this preparation contract. No hash,
+fixture time, synthetic metadata or longer outer probe clock makes it executable.
 
-Cancel withdraws the original trial, revalidates an established original key
-mapping before fresh Run/version cancel, and retains unknown accepted identities
-without guessing or re-POST. Success is only technical saved result; semantic
-acceptance NOT_RUN and owner acceptance PENDING remain explicit.
+Generate-only ceiling480s includes90 handoff/90 cleanup; combined core+Generate
+maximum1140s from first effect, not a renewed clock. The contract's original300
+seconds is stricter and checked before every request; original Run300 includes
+queue/model/tools, max3 calls, <=1024 output/call. Original production caps remain
+3/2/2, total7, output7168, envelope64000 per stage/192000 total. The narrower probe
+observes Generate<=3/Source<=2/Cold<=1; it never borrows slots, repairs or retries.
+Only existing fixed free Intern/model/account is usable, no paid fallback.
 
-The current opt-in read-only plan SHA256 is
-`d8606359abc85800ecab20cbb3d5dd9416dfd6ac0d44c06c79662696f7e19f19`.
-It too is NOT_READY because the exact original image manifest is absent. Both
-machine plans and all code hashes are frozen in the new evidence directory.
-These are no execution permissions or actual PG/live results.
+Preparer follows original project/material/Goal/preparation/consent API and clean
+STOP, then starts original selected Worker. Every accepted Run is matched through
+original-key recovery before it is observed/cancellable; Source/Cold additionally
+bind full exact request/principal/project/app/instance/release. Cancellation first
+withdraws original trial, then rechecks established original identity/current
+version, never guessing a lost2xx Run or replaying its POST. Generated candidate is
+saved/confirmed through original API, then withdrawal **and original terminal
+observation must be confirmed** before successful teardown. Withdrawal unknown:
+retain saved candidate/known usage/private PG state/UNKNOWN, no automatic second
+withdrawal. Technical candidate saved is not natural goal complete.
+
+Production-journal metadata GET uses original paired namespace, authorization and
+approval recovery. Missing or unknown journal does not create/fall back to a
+synthetic ledger; false execution/source authority flags remain false. Private
+strict extraction (not invoked in Generate-only) uses original extract_pb,
+reauthentication, same PG role/schema/endpoint, tighter session SQL waits only,
+owned bounded observer thread and SQL/precommit stop guards. Unknown owned effects
+are retained, never force-killed/cleaned. Public output is a redacted copy.
+
+Frozen core plan2774c9c9d4f01a0a1aa9283a67a5c886813666774b5844b954ae055f49f54f9a;
+Generate-only plan1ce91a4e7a79d136a0643b4f3fff294dc965a09ea3130b90fef39c60d93e5eb8.
+Both execution_performed=false; all runtime/native/import/resource checks true,
+original manifest false. Actual token is only observed as present, never printed.
+Current evidence is `../original-pb-window-controller-20261101/`.
+
+The full-P-B blocker requires an explicit product contract decision, such as a
+separate versioned review/execution deadline design (P-A V2 is an existing distinct
+precedent, not automatic permission to apply it to P-B). No such product change is
+implemented/enabled here. This is separate from original pinned-image401 and the
+future concrete isolated-PG-role/credential execution confirmation. No fee consent
+is missing, and no unready execution request is made.
 
 ## Cleanup and unknown effects
 
