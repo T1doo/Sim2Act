@@ -1,6 +1,7 @@
-param([Parameter(Mandatory=$true)][string]$Package,[Parameter(Mandatory=$true)][string]$Output,[switch]$ExerciseMaterial)
+param([Parameter(Mandatory=$true)][string]$Package,[Parameter(Mandatory=$true)][string]$Output,[switch]$ExerciseMaterial,[switch]$ExerciseExport,[ValidateRange(40,110)][int]$WorkBudgetSeconds=40)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
+if($ExerciseExport -and -not$ExerciseMaterial){throw 'Export requires the actual UI-created material scenario.'}
 $probeRoot=[IO.Path]::GetFullPath($Output)
 if(Test-Path -LiteralPath $probeRoot){throw 'New probe output required; existing data preserved.'}
 [void][IO.Directory]::CreateDirectory($probeRoot)
@@ -9,7 +10,7 @@ $payload=Join-Path $probeRoot 'payload';[void][IO.Directory]::CreateDirectory($p
 $report=[ordered]@{source_commit='042ab21c4fa9c7e5ba70c4e2877fb7060d962422';test_commit=$env:GITHUB_SHA;status='STARTED';model_requests=0;browser_launched=$false;starts=@()}
 $desktopProcess=$null;$appRoot=$null;$clock=[Diagnostics.Stopwatch]::StartNew()
 function Save-Report { $report | ConvertTo-Json -Depth 12 | Set-Content (Join-Path $payload 'report.json') -Encoding UTF8 }
-function Budget { if($clock.Elapsed.TotalSeconds -gt $(if($ExerciseMaterial){40}else{115})){throw 'Finite ordinary window probe budget exhausted.'} }
+function Budget { if($clock.Elapsed.TotalSeconds -gt $(if($ExerciseMaterial){$WorkBudgetSeconds}else{115})){throw 'Finite ordinary window probe budget exhausted.'} }
 function Events([string]$Kind) {
     $log=Join-Path $appRoot 'desktop.log'
     if(-not(Test-Path -LiteralPath $log)){return}
@@ -174,6 +175,53 @@ function Save-Material($Window){
     if($null -eq $proof){throw $lastError}
     $report['ui_saved_material']=$proof;Save-Report
 }
+function Inspect-Export([string]$ExpectedName=''){
+    Budget
+    $directory=Join-Path $appRoot 'exports'
+    $files=@(Get-ChildItem -LiteralPath $directory -File)
+    if($files.Count -ne 1){throw 'Exactly one original native export required.'}
+    $file=$files[0]
+    if(($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+       $file.Name -cnotmatch '^[0-9]{8}-[0-9]{6}-[0-9a-f]{8}-sim2act-resource[.]csv$' -or
+       ($ExpectedName -and $file.Name -cne $ExpectedName)){throw 'Unexpected native export identity.'}
+    $actual=[IO.File]::ReadAllBytes($file.FullName)
+    $expected=[Text.Encoding]::UTF8.GetBytes("item,amount,quantity`nA,10,7`nB,20,8")
+    if($actual.Length -ne $expected.Length){throw 'Export length mismatch.'}
+    for($index=0;$index -lt $expected.Length;$index++){if($actual[$index] -ne $expected[$index]){throw 'Export bytes differ from exact saved CSV.'}}
+    return @{name=$file.Name;bytes=$actual.Length;sha256=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}
+}
+function Wait-RenderedFormControl($Window,[string]$Name,$Type){
+    # Persistence can precede the original page refresh. Wait for the actual
+    # rendered control, then reveal/focus it through ordinary UIA only.
+    $until=[DateTime]::UtcNow.AddSeconds(8)
+    $condition=[Windows.Automation.AndCondition]::new(
+        [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::NameProperty,$Name),
+        [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty,$Type))
+    do{
+        Budget
+        $control=$Window.FindFirst([Windows.Automation.TreeScope]::Descendants,$condition)
+        if($null -ne $control -and $control.Current.IsEnabled){return Form-Control $Window $Name $Type}
+        Start-Sleep -Milliseconds 150
+    }while([DateTime]::UtcNow -lt $until)
+    throw "Rendered form control not available after actual page refresh: $Name"
+}
+function Export-Material($Window){
+    Budget
+    if(@(Get-ChildItem -LiteralPath (Join-Path $appRoot 'exports') -File).Count -ne 0){throw 'Fresh scenario required; preexisting exports preserved.'}
+    $download=Wait-RenderedFormControl $Window '下载文件' ([Windows.Automation.ControlType]::Button)
+    [void](Find-Control $Window 'native-window.csv' $null)
+    $report['ui_export_requested']=$true;Save-Report
+    Invoke-Control $download
+    $until=[DateTime]::UtcNow.AddSeconds(12);$proof=$null;$lastError=$null
+    do{try{$proof=Inspect-Export;break}catch{$lastError=$_;Budget;Start-Sleep -Milliseconds 150}}while([DateTime]::UtcNow -lt $until)
+    if($null -eq $proof){throw $lastError}
+    $path=Join-Path (Join-Path $appRoot 'exports') $proof.name
+    $completion='导出完成：'+$path
+    [void](Find-Control $Window $completion $null)
+    $report['native_export']=$proof;$report['native_export_completion']=$completion
+    Copy-Item -LiteralPath $path -Destination (Join-Path $payload 'exported-material.csv')
+    Save-Report
+}
 function Login($Window) {
     $token=Find-Control $Window '本机访问令牌' ([Windows.Automation.ControlType]::Edit)
     ([Windows.Automation.ValuePattern]$token.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)).SetValue('public-synthetic-blank-workspace')
@@ -260,6 +308,7 @@ public static class NativeWindowProbe {
     $window=Start-Window;Login $window
     $first=$report.starts[0].ready
     if($ExerciseMaterial){Save-Material $window}
+    if($ExerciseExport){Export-Material $window}
     Capture 'window-first.png';Close-Window
     $window=Start-Window;Login $window
     $second=$report.starts[1].ready
@@ -268,10 +317,15 @@ public static class NativeWindowProbe {
         $proof=Check-Material
         if($proof.project_id -cne $report.ui_saved_material.project_id -or $proof.resource_id -cne $report.ui_saved_material.resource_id){throw 'Reopen changed UI-created record identity.'}
         Invoke-Control (Find-Control $window '资源' ([Windows.Automation.ControlType]::Button))
-        $report['ui_reopened_material']=$proof;Save-Report
+        $report['ui_reopened_material']=$proof
+        if($ExerciseExport){
+            [void](Find-Control $window 'native-window.csv' $null)
+            $report['reopened_native_export']=Inspect-Export $report.native_export.name
+        }
+        Save-Report
     }
     Capture 'window-reopen.png';Close-Window
-    $report.status=if($ExerciseMaterial){'PASS_NATIVE_UI_PROJECT_CSV_SAVE_CLOSE_REOPEN_ONLY'}else{'PASS_NATIVE_WINDOW_LOGIN_CLOSE_REOPEN_ONLY'}
+    $report.status=if($ExerciseExport){'PASS_NATIVE_UI_CSV_SAVE_EXPORT_CLOSE_REOPEN_ONLY'}elseif($ExerciseMaterial){'PASS_NATIVE_UI_PROJECT_CSV_SAVE_CLOSE_REOPEN_ONLY'}else{'PASS_NATIVE_WINDOW_LOGIN_CLOSE_REOPEN_ONLY'}
 } catch {
     $report.status='FAILED_NOT_ACCEPTED';$report['error_type']=$_.Exception.GetType().FullName;$report['error']=$_.Exception.Message
     throw

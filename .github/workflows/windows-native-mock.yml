@@ -27,9 +27,9 @@ jobs:
       github.event.repository.private == false &&
       github.ref == 'refs/heads/dev/cloud-g0-live-20261028' &&
       github.run_attempt == 1 &&
-      contains(github.event.head_commit.message, '[windows-native-material-once-20261101]')
+      contains(github.event.head_commit.message, '[windows-native-material-export-once-20261101]')
     runs-on: windows-2025
-    timeout-minutes: 1
+    timeout-minutes: 3
     defaults:
       run:
         shell: pwsh
@@ -50,9 +50,9 @@ jobs:
             /scripts/windows/Check-NativeWindow.ps1
             /deliverables/windows-full-20261101/Sim2Act-win64-042ab21c4fa9.zip
       - name: Existing native desktop only; no runtime installer, browser or security fallback
-        timeout-minutes: 1
+        timeout-minutes: 3
         run: |
-          ./scripts/windows/Check-NativeWindow.ps1 -Package ./deliverables/windows-full-20261101/Sim2Act-win64-042ab21c4fa9.zip -Output (Join-Path $env:RUNNER_TEMP 'sim2act-native-material-once') -ExerciseMaterial
+          ./scripts/windows/Check-NativeWindow.ps1 -Package ./deliverables/windows-full-20261101/Sim2Act-win64-042ab21c4fa9.zip -Output (Join-Path $env:RUNNER_TEMP 'sim2act-native-material-once') -ExerciseMaterial -ExerciseExport -WorkBudgetSeconds 90
       - name: Preserve actual own-window pixels and protocol logs
         if: ${{ always() && env.SIM2ACT_WINDOW_PAYLOAD != '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
