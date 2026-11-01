@@ -29,7 +29,8 @@ def test_actual_large_writer_cancel_reconciles_without_effect_or_replay(env, tmp
                 with sqlite3.connect('file:'+database+'?mode=ro', uri=True, timeout=.1) as c:
                     selected = c.execute("""SELECT r.id,r.version,a.instance_id FROM runs r
                         JOIN internal_run_bindings b ON b.run_id=r.id JOIN internal_app_runs a ON a.id=b.app_run_id
-                        WHERE r.status='RUNNING' AND json_extract(r.context,'$.natural_trial_run.stage')='cold'
+                        WHERE r.status='RUNNING' AND EXISTS(SELECT 1 FROM runs prior
+                          WHERE prior.status='SUCCEEDED' AND prior.created_at<r.created_at)
                         AND EXISTS(SELECT 1 FROM attempts x WHERE x.run_id=r.id AND x.status='RECEIVED')""").fetchone()
                 if selected is None:
                     continue

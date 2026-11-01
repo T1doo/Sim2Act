@@ -1500,6 +1500,39 @@ class Store:
             return Runtime.bind_claim(selected, row, owner_stop=_owner_stop)
         return row
 
+    def _sync_recovered_app(self, c, row, state, error):
+        """Error metadata for the exact accepted binding, never a result write."""
+        binding = c.execute(select(internal_run_bindings).where(
+            internal_run_bindings.c.run_id == row["id"])).mappings().first()
+        if binding is None:
+            return
+        saved = binding["snapshot"]
+        if (type(saved) is not dict or binding["fingerprint"] != row["fingerprint"]
+                or fingerprint(saved) != row["fingerprint"]
+                or saved.get("app_run_id") != binding["app_run_id"]
+                or saved.get("run_id") != row["id"]
+                or any(saved.get(k) != row[k] for k in ("principal_id", "project_id", "runtime_id"))
+                or row["request_key"] != "internal:"+binding["app_run_id"]):
+            raise DomainError("VERSION_CONFLICT", "Recovered application binding changed")
+        expected = dict(aid=binding["app_run_id"], iid=saved.get("instance_id"),
+                        release=saved.get("release_id"), request_fp=saved.get("request_fingerprint"))
+        accepted = c.execute(select(events.c.data).where(events.c.run_id == row["id"],
+            events.c.kind == "ACCEPTED")).scalars().all()
+        if len(accepted) != 1 or type(accepted[0]) is not dict or any(accepted[0].get(key) != value for key,value in (
+                ("app_run_id", expected["aid"]), ("instance_id", expected["iid"]),
+                ("release_id", expected["release"]), ("input_fingerprint", expected["request_fp"]))):
+            raise DomainError("VERSION_CONFLICT", "Recovered accepted application pointer changed")
+        changed = c.execute(update(internal_app_runs).where(
+            internal_app_runs.c.id == expected["aid"], internal_app_runs.c.principal_id == row["principal_id"],
+            internal_app_runs.c.instance_id == expected["iid"], internal_app_runs.c.release_id == expected["release"],
+            internal_app_runs.c.fingerprint == expected["request_fp"],
+            (internal_app_runs.c.output.is_(None) | (internal_app_runs.c.output == JSON.NULL)),
+            internal_app_runs.c.result_version.is_(None),
+            internal_app_runs.c.status.in_(["RUNNING", "QUEUED", row["status"]]))
+            .values(status=state, error=error))
+        if changed.rowcount != 1:
+            raise DomainError("VERSION_CONFLICT", "Recovered application result/state changed")
+
     def _claim_main(self, worker_id, lease_seconds, *, trial_binding=None):
         from .protocol_jobs import protocol_run_ids
         from .protocol_recovery import recover_expired_protocols
@@ -1534,6 +1567,7 @@ class Store:
                         continue
                     r = dict(r, context=dict(actual["context"]), cancel_intent=(
                         actual["cancel_intent"] or retired["intent"] == "cancel"),
+                        absolute_deadline=retired["deadline"],
                         status="PAUSE_REQUESTED" if retired["intent"] == "pause" else actual["status"])
                     del r["context"]["local_lease_control"]
                     self.event(c, r["id"], "LOCAL_LEASE_CONTROL_RETIRED", dict(
@@ -1565,16 +1599,26 @@ class Store:
                     else (
                         "CANCELLED"
                         if r["cancel_intent"]
+                        else "FAILED"
+                        if "absolute_deadline" in r and time.time() >= r["absolute_deadline"]
                         else "PAUSED"
                         if r["status"] == "PAUSE_REQUESTED"
                         else "QUEUED"
                     )
                 )
+                error = ({"code": "OUTCOME_UNKNOWN"} if pending or op else
+                    DomainError("BUDGET_EXHAUSTED", "Original absolute Run deadline ended").public()
+                    if state == "FAILED" else None)
+                if state == "FAILED":
+                    # Closing an expired control generation is not permission
+                    # to execute it again. Keep prior receipts/effects and only
+                    # synchronize the already accepted application's metadata.
+                    self._sync_recovered_app(c, actual, state, error)
                 c.execute(
                     update(runs)
                     .where(runs.c.id == r["id"])
                     .values(
-                        status=state, error={"code": "OUTCOME_UNKNOWN"} if pending or op else None,
+                        status=state, error=error,
                         **(dict(context=r["context"], cancel_intent=r["cancel_intent"], lease_until=0)
                            if "context" in r else {})
                     )

@@ -386,7 +386,7 @@ class Runtime:
                     require(changed.rowcount == 1, "Unknown durable commit outcome")
                     ctrl.execute("UPDATE leases SET acked_commit=? WHERE run_id=?", (key, row["id"]))
             ctrl.execute("UPDATE leases SET state='CLOSED' WHERE run_id=?", (row["id"],))
-            return dict(intent=value["intent"])
+            return dict(intent=value["intent"], deadline=value["deadline"])
 
     def session(self, row):
         entry = "sim2act:lease-entry.v1"

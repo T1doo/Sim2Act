@@ -11,10 +11,11 @@ from sim2act.errors import DomainError
 from test_foundation import enqueue
 
 
-def owner(env, *, seconds=30):
+def owner(env, *, seconds=30, run_seconds=None):
     store, settings = env[:2]
     from dataclasses import replace
-    settings = replace(settings, lease_seconds=seconds)
+    settings = replace(settings, lease_seconds=seconds,
+                       **({"run_seconds":run_seconds} if run_seconds is not None else {}))
     runtime = store._enable_authoritative_leases(settings, create=True)
     rid = enqueue(env, "actual-controlled-main")
     stop = threading.Event()
@@ -172,6 +173,44 @@ def test_saved_json_claim_shapes_fail_with_controlled_domain_error(env, damage):
             c.execute(update(events).where(events.c.run_id == row["id"], events.c.kind == "LOCAL_LEASE_CONTROL_CLAIM").values(data=value))
         with pytest.raises(DomainError):
             _counter_lease_context(c, actual)
+
+
+def test_absolute_deadline_recovery_terminates_instead_of_reclaiming_expired_work(env):
+    store, runtime, row, stop = owner(env, seconds=1, run_seconds=1)
+    with store.tx() as c:
+        store.guard(c, row["id"], row["fence"])
+        store.event(c, row["id"], "PRIOR_EFFECT_BEFORE_DEADLINE", {})
+    time.sleep(1.05)
+    assert store.claim("must-not-reexecute", 1) is None
+    actual = runtime.committed_run(row["id"])
+    assert actual["status"] == "FAILED" and actual["error"]["code"] == "BUDGET_EXHAUSTED"
+    assert actual["fence"] > row["fence"] and control.CONTEXT not in actual["context"]
+    assert store.claim("still-must-not-reexecute", 1) is None
+    with store.engine.connect() as c:
+        assert c.exec_driver_sql("SELECT count(*) FROM events WHERE kind='PRIOR_EFFECT_BEFORE_DEADLINE'").scalar_one() == 1
+
+
+@pytest.mark.parametrize("damage", ["input", "app-run-pointer"])
+def test_recovery_rejects_binding_mutation_with_unchanged_self_reported_hash(env, damage):
+    from test_persistent_app_runs import setup, enqueue as enqueue_app
+    from sqlalchemy import update
+    from sim2act.db import internal_run_bindings, internal_app_runs
+    store = env[0]
+    release, instance, *_ = setup(env)
+    accepted = enqueue_app(env, instance, release)
+    rid = accepted["run_id"]
+    with store.tx() as c:
+        row = dict(c.execute(select(runs).where(runs.c.id == rid)).mappings().one())
+        binding = c.execute(select(internal_run_bindings).where(internal_run_bindings.c.run_id == rid)).mappings().one()
+        snapshot = dict(binding["snapshot"])
+        if damage == "input": snapshot["input"] = {"column":"different"}
+        else: snapshot["app_run_id"] = "foreign-app-run"
+        c.execute(update(internal_run_bindings).where(internal_run_bindings.c.run_id == rid).values(snapshot=snapshot))
+        before = dict(c.execute(select(internal_app_runs).where(internal_app_runs.c.id == binding["app_run_id"])).mappings().one())
+        with pytest.raises(DomainError):
+            store._sync_recovered_app(c, row, "FAILED", {"code":"BUDGET_EXHAUSTED"})
+        after = dict(c.execute(select(internal_app_runs).where(internal_app_runs.c.id == binding["app_run_id"])).mappings().one())
+        assert before == after
 
 
 def test_actual_store_guard_fences_and_acknowledges_its_main_transaction(env):
