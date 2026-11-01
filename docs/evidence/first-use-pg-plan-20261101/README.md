@@ -68,3 +68,11 @@ Unchanged internal Windows package remains source c8fba531, not this new source:
 `43b39df326f521601c3c5bdcc7e0303e9a0ff06ef320466d561945fa30640d85`.
 It remains an internal assembled/static-checked input, not a newly accepted
 Windows/PG/R0 final product. This source slice does not relabel or publish it.
+
+## Later PG-plan revision
+
+PG-PLAN.md is now updated for product source2ea0ba0f, the recovered disk and the
+implemented model0 controller. The earlier resource-and-scope.json and its plan
+hash9f686c... remain historical observations of this directory's original audit;
+they are not current execution readiness. Current preflight records, exact false
+conditions and unexecuted controller scope are in ../pg-execution-preflight-20261101.
