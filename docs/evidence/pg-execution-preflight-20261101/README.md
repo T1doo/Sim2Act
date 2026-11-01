@@ -1,3 +1,8 @@
+> Historical d1 controller observation. Current runtime/controller and NOT_READY plans are in
+> `../locked-runtime-live-controller-20261101/README.md` and current `../first-use-pg-plan-20261101/PG-PLAN.md`.
+> The ten dependency differences and optional implementation gap described below have since been repaired;
+> original registry401 and real PG/live/Windows not-run boundaries remain. Original evidence below is preserved.
+
 # Current isolated PG execution packet: NOT READY, NOT EXECUTED
 
 Controller source: `d1f9b2b531acf039b092a9e5ee11541eb77299fa`.

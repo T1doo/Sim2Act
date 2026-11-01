@@ -1,19 +1,19 @@
 # Isolated PG verification: current executable core proposal, NOT EXECUTED
 
-This revision follows space cleanup and the P-B preparation UI. Product source
-is `2ea0ba0fa8e8cc9ea1b4a75e7f0b966bc0fcd291`; executable controller/helper source
-is `d1f9b2b531acf039b092a9e5ee11541eb77299fa` (same application bytes). The former
-160MiB observation and “PB GUI absent” description are historical, no longer the
-current prerequisites. No PG/network/container/image pull/role/credential/model
-operation was performed. No execution approval is being requested while the two
-current dependency conditions below are false. CI remains 487/900 seconds.
+Current product/controller source: `2c4fd44d299da8abec7ab1bc73592a7841c98319`. The independent
+runtime preservation commit is `680ad814d2484830d4d17a871e60bb2702be7d51`.
+The original runtime is untouched; a separate exact31-package locked runtime
+now resolves the ten recorded differences. Optional live stage orchestration is
+implemented and offline-tested, not PG/live executed. No PG/network/container,
+role/credential or real model operation was performed. No execution approval is
+requested while the original manifest condition below remains false. CI487/900.
 
 ## Read-only observations and blocking conditions
 
-- Current disk: 2,248,253,440 bytes available; >=2GiB PASS. Cgroup memory available
-  or inactive/reclaimable: 11,041,394,688 bytes; >=4GiB PASS. No limits, ownership,
-  cache settings or unknown processes were changed. Recheck immediately before
-  any future effect; these observations are not reserved resources.
+- Latest read-only frozen plans observe2,977,771,520 free disk bytes (>=2GiB)
+  and10,836,254,720/10,845,716,480 available-or-reclaimable memory bytes (>=4GiB).
+  These are observations, not reserved resources; immediate pre-effect recheck
+  remains required. No limits, ownership or cache policy changes.
 - Existing managed Docker server28.4.0 is readable. Pinned image is not cached;
   no existing PG connection or postgres executable is assumed.
 - Sole image remains
@@ -26,18 +26,15 @@ current dependency conditions below are false. CI remains 487/900 seconds.
   Exact original linux/amd64 descriptor, runtime UID/version and image licenses
   remain UNCONFIRMED. A successfully authorized original manifest is needed;
   a tag response, historical label or author-supplied PASS cannot satisfy it.
-- Current and child Python imports bind the current src (PASS). Four native
-  SOURCE_SHA256 witnesses match the complete original build input groups (PASS).
-  Full installed requirements.lock comparison FAILS: certifi2026.10.23 vs2026.7.22;
-  Starlette1.10.0 vs1.7.0; iniconfig2.3.1 vs2.3.0; pluggy1.7.0 vs1.6.0;
-  pytest9.2.0 vs9.0.2; ruff0.17.3 vs0.15.6; librt/mypy/mypy_extensions/pathspec
-  absent. This is not hidden by checking only six direct packages. No dependency
-  installation/downgrade/TLS edit was done. Use a separately aligned original
-  locked runtime, then re-freeze/check; do not weaken the dependency gate.
+- Current and fresh-child imports bind reviewed src. Four existing native
+  modules match complete build-input witnesses. Exact all31 installed lock
+  versions now PASS in the isolated runtime below. Original .venv was not
+  overwritten. Wheel name/version/hash/size, pip check, per-version old/new
+  differences and bounded duplicate-copy cleanup are preserved in
+  `../locked-runtime-live-controller-20261101/`; none of these resolves401.
 
-Raw official responses, local inventory and all booleans are in
-`../pg-execution-preflight-20261101/`. Existing model token is only observed as an
-injected boolean, never copied into core env/config/Docker or printed.
+Model-token presence is currently true for the opt-in read-only plan. This is a
+boolean only. Existing token is never printed or written to PG/Docker/config.
 
 ## Implemented controller and exact binding
 
@@ -45,11 +42,11 @@ injected boolean, never copied into core env/config/Docker or printed.
 operation is read-only (including a no-DB child Python import-origin check):
 
 ```text
-.venv/bin/python scripts/diagnostics/isolated_pg_probe.py --source-sha d1f9b2b531acf039b092a9e5ee11541eb77299fa
+/workspace/scratch/sim2act-pg-locked-runtime-20261101/venv/bin/python scripts/diagnostics/isolated_pg_probe.py --source-sha 2c4fd44d299da8abec7ab1bc73592a7841c98319
 ```
 
 Observed machine plan hash:
-`5752c6967b008e34e03da0fbfcae3568c4cbc3e9602bf69375753cae348a9688`.
+`012e06d1d9e247baf4d9e72f4b4e8e03644012b3e2648fb8b56bd89468576261`.
 It is a **NOT_READY observation**, not execution permission. Resource numbers are
 excluded from the checksum, but thresholds/code/versions/import binding/native
 recipe/image/source/phase/operations are bound; execution rechecks resources.
@@ -140,16 +137,48 @@ Read-only preflight is separate (bounded Git checks and a10s import child).
 Timeout of a mutating CLI/Docker command does not kill or retry it: retain its
 owned handle/PID and report UNKNOWN, keep private scope/evidence.
 
-Optional existing-free-Intern phase is **not implemented/executable by this
-controller**, therefore not part of a current confirmation request. Its upper
-bounds remain: Generate<=3 requests/<=300s per Run, Source<=2/<=300s, Cold<=2/<=300s,
-total<=7 actual calls, <=1024 output/request/<=7168 total, no retries/fallback;
-probe ceiling1080s including handoff90 and final cleanup90. Every stage is also
-bounded by the original approved absolute expiry (new P-B V1 is one300s window);
-the1080s outer ceiling cannot extend it. Seven slots are a maximum, not a promise
-to consume all under one-minute spacing or complete every stage in300s. Exact
-source/extraction/stage dispatch automation remains a genuine implementation gap.
-Existing intern-s2 free-use authorization is valid; no new fee consent is needed.
+Optional existing-free-Intern orchestration is now implemented in
+`scripts/diagnostics/natural_trial_live_phase.py`, explicitly selected by
+`--with-live --live-window 1200`. Core remains default MODEL0. New20-minute scope
+is an explicitly selected **new P-B original V1 contract** and new exact consent;
+existing300-second contracts/keys cannot be changed or renewed. Default GUI/API
+preparation remains300 seconds. Lease30, each Run300, seven slots and original
+3/2/2 caps stay unchanged. At1RPM the entire seven-slot path cannot fit300 seconds;
+the controller rejects incompatible remaining windows rather than extending one.
+
+Optional phase ceiling1080s (handoff90 and cleanup90 included); combined core+live
+maximum1740s from first effect, not a fresh unlimited clock. Each original Run
+also expires within300 seconds and every request checks original absolute trial
+expiry, stop and outer deadline. Generate<=3, Source<=2, Cold<=2, total<=7 calls,
+output<=1024/call and7168 total; stage envelope<=64000, total<=192000 under original
+production journal enforcement. No automatic provider retry or paid fallback.
+The existing fixed endpoint/model/free authorization remains unchanged.
+
+Preparer uses normal project/material/Goal/preparation/consent APIs, closes its
+unselected API/Worker cleanly, then starts the original production-selected
+Worker. Generate original-key recovery is validated before observing it. Actual
+generated Source graph must contain exactly two model nodes; otherwise stop
+before Source, never synthesize a second call. Source and Cold original-key
+recoveries verify exact request/principal/project/app/instance/release before
+registering a cancellable Run. Stage review/consent precedes observation.
+Production journal is read through a newly authenticated **read-only original
+namespace** endpoint; absent/unknown records stop, never seed a synthetic budget.
+Source extraction is the original strict `pa_trial_dispatch.extract_pb` bridge,
+not generic extraction. It reauthenticates original bearer/account selection,
+uses the same PG role/schema/endpoint and tighter session SQL waits only. Owned
+thread observation, SQL and pre-commit guards stop late writes on cancellation
+or expiry; unknown worker/thread handles are retained, no kill or forced cleanup.
+
+Cancel withdraws the original trial, revalidates an established original key
+mapping before fresh Run/version cancel, and retains unknown accepted identities
+without guessing or re-POST. Success is only technical saved result; semantic
+acceptance NOT_RUN and owner acceptance PENDING remain explicit.
+
+The current opt-in read-only plan SHA256 is
+`d8606359abc85800ecab20cbb3d5dd9416dfd6ac0d44c06c79662696f7e19f19`.
+It too is NOT_READY because the exact original image manifest is absent. Both
+machine plans and all code hashes are frozen in the new evidence directory.
+These are no execution permissions or actual PG/live results.
 
 ## Cleanup and unknown effects
 
@@ -168,4 +197,4 @@ Current controller is source-reviewed and tested against real TEST_ONLY SQLite
 API/Worker HTTP, plus pure gate/ownership/auth-diagnostic negatives. It has not
 provisioned or connected to PG, and does not claim Windows, live or Release
 acceptance. Await only a concrete ready-scope execution confirmation after the
-manifest and locked-runtime prerequisites are actually resolved.
+manifest prerequisite is resolved and a fresh exact ready plan is confirmed.
