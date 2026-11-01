@@ -4,6 +4,7 @@
 #include <Python.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 /* Independent bounded structure. Original mutable references are identity-only;
  * edges and scalar bits are owned. No content/permission verdict survives calls. */
 static PyObject *unsupported, *unsupported_error;
@@ -13,7 +14,17 @@ typedef struct {PyObject*row,*limits,*quoted,*readrow,*readlimits,*marker,*reduc
 typedef struct {PyObject*original;unsigned char kind;uint64_t bits;size_t count,*edges,pure_work,flat_work;uint64_t dictionary_version;int active,pure;} Node;
 typedef struct {Node*nodes;size_t count,capacity,work,bytes;Map map;PyObject*args,*scope,*stable_root;Encoder types;Map immutable;PyObject*immutable_held;size_t immutable_work,stable_dict_count;int counter_phase;} Tree;
 /* Diagnostics only, never read by qualification or matching decisions. */
-static uint64_t structure_counts[3][9];
+static uint64_t structure_counts[3][13];
+/* Temporary attribution counters only. They never feed a match, clock,
+ * deadline or routing predicate. The reported clock domain is explicit. */
+static uint64_t comparison_cpu_ns(void){
+#if defined(CLOCK_THREAD_CPUTIME_ID)
+ struct timespec value;
+ if(clock_gettime(CLOCK_THREAD_CPUTIME_ID,&value)==0)
+  return (uint64_t)value.tv_sec*UINT64_C(1000000000)+(uint64_t)value.tv_nsec;
+#endif
+ return (uint64_t)clock()*(UINT64_C(1000000000)/CLOCKS_PER_SEC);
+}
 static int counter_phase(PyObject *scope){
  PyObject*p=PyTuple_GET_ITEM(scope,4);
  if(!PyUnicode_CheckExact(p))return 2;
@@ -25,11 +36,12 @@ static PyObject*read_structure_counts(PyObject*self,PyObject*unused){
  (void)self;(void)unused;
  const char*phases[]={"pre","post","other"};
  const char*names[]={"capture_calls","complete_capsules","armed_dictionary_versions","match_calls",
-  "flat_dictionary_hits","changed_original_dictionary_tags","logical_immutable_edge_steps_skipped","signal_dictionary_deopts","dictionary_capture_candidates"};
+  "flat_dictionary_hits","changed_original_dictionary_tags","logical_immutable_edge_steps_skipped","signal_dictionary_deopts","dictionary_capture_candidates",
+  "buffer_allocate_cpu_ns","complete_walk_cpu_ns","cleanup_and_final_tags_cpu_ns","reducer_cpu_ns"};
  PyObject*result=PyDict_New();if(!result)return NULL;
  for(int p=0;p<3;p++){
   PyObject*row=PyDict_New();if(!row){Py_DECREF(result);return NULL;}
-  for(int i=0;i<9;i++){
+  for(int i=0;i<13;i++){
    PyObject*value=PyLong_FromUnsignedLongLong(structure_counts[p][i]);
    if(!value||PyDict_SetItemString(row,names[i],value)<0){Py_XDECREF(value);Py_DECREF(row);Py_DECREF(result);return NULL;}
    Py_DECREF(value);
@@ -287,7 +299,10 @@ static int compare_node(Compare*c,size_t id,PyObject*v,int depth){
   if(k=='p'){
    PyObject*module=PyObject_GetAttrString(v,"__module__"),*name=PyObject_GetAttrString(v,"__qualname__");if(module&&name)payload=PyTuple_Pack(2,module,name);Py_XDECREF(module);Py_XDECREF(name);if(!payload){result=-1;goto done;}seq=payload;
   }else if(k=='c'||k=='r'||k=='u'||k=='o'){
-   payload=PyObject_CallFunctionObjArgs(c->t->types.reduce,Py_None,v,NULL);if(!payload){result=-1;goto done;}
+   uint64_t reducer_started=comparison_cpu_ns();
+   payload=PyObject_CallFunctionObjArgs(c->t->types.reduce,Py_None,v,NULL);
+   structure_counts[c->t->counter_phase][12]+=comparison_cpu_ns()-reducer_started;
+   if(!payload){result=-1;goto done;}
    if(!PyTuple_CheckExact(payload)||PyTuple_GET_SIZE(payload)!=2||PyTuple_GET_ITEM(payload,0)!=c->t->types.marker||!PyTuple_CheckExact(PyTuple_GET_ITEM(payload,1))){PyErr_SetString(unsupported_error,"Cold graph reducer result");result=-1;goto done;}seq=payload;
   }
   size_t count=(size_t)(k=='l'?PyList_GET_SIZE(seq):PyTuple_GET_SIZE(seq));if(count!=n->count){result=0;goto done;}
@@ -302,10 +317,14 @@ static PyObject*matches_fast(PyObject*self,PyObject*args){
  PyFrameObject*frame=PyThreadState_GetFrame(PyThreadState_Get());int frames=0;while(frame){PyFrameObject*back=PyFrame_GetBack(frame);Py_DECREF(frame);frame=back;frames++;}
  if(Py_GetRecursionLimit()-frames<256)return Py_NewRef(unsupported);
  structure_counts[t->counter_phase][3]++;
+ uint64_t allocation_started=comparison_cpu_ns();
  Compare c={.t=t};c.actual=PyMem_Calloc(t->count?t->count:1,sizeof(PyObject*));c.assigned=PyMem_Calloc(t->count?t->count:1,sizeof(size_t));
  if(t->stable_dict_count)c.flat_ids=PyMem_Malloc(t->stable_dict_count*sizeof(size_t));
  if(!c.actual||!c.assigned||(t->stable_dict_count&&!c.flat_ids)){PyMem_Free(c.actual);PyMem_Free(c.assigned);PyMem_Free(c.flat_ids);return PyErr_NoMemory();}
- int result=compare_node(&c,0,v,0);PyObject*error=PyErr_GetRaisedException();for(size_t i=0;i<t->count;i++)if(c.actual[i]!=t->nodes[i].original)Py_XDECREF(c.actual[i]);
+ uint64_t walk_started=comparison_cpu_ns();structure_counts[t->counter_phase][9]+=walk_started-allocation_started;
+ int result=compare_node(&c,0,v,0);
+ uint64_t cleanup_started=comparison_cpu_ns();structure_counts[t->counter_phase][10]+=cleanup_started-walk_started;
+ PyObject*error=PyErr_GetRaisedException();for(size_t i=0;i<t->count;i++)if(c.actual[i]!=t->nodes[i].original)Py_XDECREF(c.actual[i]);
  /* A later reducer, signal or destructor can mutate an EARLIER indexed
   * dictionary. Revalidate every used version after all callback-capable
   * cleanup. This final bounded segment has no allocation or callbacks. */
@@ -314,6 +333,7 @@ static PyObject*matches_fast(PyObject*self,PyObject*args){
   if(dict_content_version(n->original)!=n->dictionary_version){structure_counts[t->counter_phase][5]++;result=0;break;}
  }
  PyMem_Free(c.actual);PyMem_Free(c.assigned);PyMem_Free(c.flat_ids);PyMem_Free(c.changed.entries);if(error)PyErr_SetRaisedException(error);
+ structure_counts[t->counter_phase][11]+=comparison_cpu_ns()-cleanup_started;
  if(result<0){if(PyErr_ExceptionMatches(unsupported_error)){PyErr_Clear();return Py_NewRef(unsupported);}return NULL;}return PyBool_FromLong(result);
 }
 static int same_namespace(PyTypeObject *kind, PyObject *items, size_t *work) {

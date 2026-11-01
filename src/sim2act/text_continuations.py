@@ -41,7 +41,7 @@ PREPARE, META, COMMIT, INDEX = ("text_software_" + s for s in ("prepare", "metad
 CANCEL, REVOKE = "text_software_cancel", "text_software_revoke"
 MAX = 64
 ANCHOR_HASH = "24f26f3621b8fc49a24fa3566484b568148d9317f2d279d79f264416b994193a"
-QUALIFICATION_HASH = "199c4fc6f7d9545798c12914ecbad25253740dacafdb99255cae28cee7ed23d2"
+QUALIFICATION_HASH = "cf17a59eb30170e0f23087595f6f742ed7f2db1a2ebf273020c42643bbf30bed"
 CHANGED = {"api.py", "app_jobs.py", "internal_api.py", "owner_acceptance.py", "app_owner_goals.py",
            "apps.py", "lifecycle.py", "text_logic_reuse.py", "text_continuations.py", "text_run_checks.py",
            "text_workflows.py"}  # Closed new family; old literal compiler/kernel stays byte-identical.
