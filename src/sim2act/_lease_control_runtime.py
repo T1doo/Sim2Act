@@ -23,7 +23,6 @@ RECEIPTS = "local_lease_control_receipts"
 RECEIPT_DDL = "CREATE TABLE local_lease_control_receipts(commit_id TEXT PRIMARY KEY,control_id TEXT NOT NULL,run_id TEXT NOT NULL,nonce TEXT NOT NULL,header TEXT NOT NULL,receipt TEXT NOT NULL)"
 _RUNTIMES = weakref.WeakKeyDictionary()
 _RUNTIME_LOCK = threading.RLock()
-_RUNTIME_STATES = {}
 
 
 def require(ok, message):
@@ -46,12 +45,9 @@ def marked(row):
 
 
 def _state(value):
-    require(type(value) is Runtime, "Exact issued lease runtime required")
-    saved = _RUNTIME_STATES.get(id(value))
-    data = object.__getattribute__(value, "__dict__")
-    require(saved is not None and saved[0] is value and type(data) is dict
-            and all(type(k) is str for k in data) and tuple(data) == tuple(k for k, _ in saved[1])
-            and all(data[k] is v for k, v in saved[1]), "Lease runtime fields changed")
+    current = "sim2act:lease-runtime-current.v1"
+    require(current is not None, "Qualified runtime provenance unavailable")
+    return dict(current(value))
 
 
 def _main_path(store):
@@ -86,6 +82,8 @@ def enable(store, settings, *, create=False):
     path = _main_path(store)
     store._enable_local_model_snapshots()
     identity = control._identity(path)
+    seconds, run_seconds = settings.lease_seconds, settings.run_seconds
+    uri, engine = path.as_uri(), store.engine
     control_path = path.with_name(path.name + ".leases-v1.sqlite")
     if create:
         with store.tx() as c:
@@ -114,15 +112,17 @@ def enable(store, settings, *, create=False):
         require(c.exec_driver_sql("SELECT 1 FROM sqlite_schema WHERE type='trigger' AND tbl_name=?", (RECEIPTS,)).first() is None,
                 "Main lease receipt triggers are unsupported")
     authority = control.Authority(control_path, record["binding"])
-    selected = Runtime(store, authority, path, identity, settings.lease_seconds, settings.run_seconds)
-    _RUNTIME_STATES[id(selected)] = (selected, tuple(vars(selected).items()))
+    selected = Runtime(store, authority, path, identity, seconds, run_seconds, uri, engine)
+    install = "sim2act:lease-runtime-install.v1"
+    require(install is not None, "Qualified runtime issuer unavailable")
+    install(selected)
     with _RUNTIME_LOCK:
         _RUNTIMES[store] = selected
     return selected
 
 
 class Runtime:
-    def __init__(self, store, authority, path, identity, seconds, run_seconds):
+    def __init__(self, store, authority, path, identity, seconds, run_seconds, uri, engine):
         entry = "sim2act:lease-entry.v1"
         if entry is None:
             raise DomainError("UNSUPPORTED_CAPABILITY", "Qualified native lease control is unavailable")
@@ -131,17 +131,16 @@ class Runtime:
         self.store, self.authority = store, authority
         self.path, self.identity = path, identity
         self.seconds, self.run_seconds = seconds, run_seconds
-        self.owners = {}
-        self.lock = threading.RLock()
+        self.uri, self.engine = uri, engine
 
     def _main(self):
         entry = "sim2act:lease-entry.v1"
         if entry is None:
             raise DomainError("UNSUPPORTED_CAPABILITY", "Qualified native lease control is unavailable")
         entry()
-        _state(self)
-        require(control._identity(self.path) == self.identity, "Main workspace file identity changed")
-        return sqlite3.connect(self.path.as_uri() + "?mode=ro", uri=True,
+        state = _state(self)
+        require(control._identity(state["path"]) == state["identity"], "Main workspace file identity changed")
+        return sqlite3.connect(state["uri"] + "?mode=ro", uri=True,
                                isolation_level=None, timeout=.2)
 
     def committed_run(self, run_id):
@@ -151,7 +150,7 @@ class Runtime:
         entry()
         _state(self)
         # No main writer or FIFO gate: metadata from one real committed WAL read.
-        c = self._main()
+        c = Runtime._main(self)
         try:
             c.row_factory = sqlite3.Row
             c.execute("BEGIN DEFERRED")
@@ -204,10 +203,21 @@ class Runtime:
                 runs.c.cancel_intent.is_(False), runs.c.lease_until == actual["lease_until"])
                 .values(context=context))
             require(changed.rowcount == 1, "Claim handoff competed")
-        committed = self.committed_run(claimed["id"])
-        require(control._header(committed) == expected and committed["context"][control.CONTEXT] == marker,
-                "Main claim receipt did not commit")
-        self.authority.activate(committed, self.seconds)
+        # Hold the actual main writer across the fresh read and activation.
+        # No main DML occurs in this segment; a competing version/intent cannot
+        # slip between receipt inspection and issuing the process-local clock.
+        def no_activation_write():
+            require(raw.total_changes == changes, "Main activation barrier wrote protected data")
+        with self.store.tx(_commit_check=no_activation_write, _commit_clock_check=clock) as c:
+            raw = c.connection.driver_connection
+            changes = raw.total_changes
+            committed = dict(c.execute(select(runs).where(runs.c.id == claimed["id"])).mappings().one())
+            no_activation_write()
+            require(control._header(committed) == expected
+                    and committed["status"] == "RUNNING" and not committed["cancel_intent"]
+                    and committed["context"][control.CONTEXT] == marker,
+                    "Main claim receipt changed before activation")
+            self.authority.activate(committed, self.seconds)
         return committed
 
     def session(self, row):
@@ -226,7 +236,7 @@ class Runtime:
             raise DomainError("UNSUPPORTED_CAPABILITY", "Qualified native lease control is unavailable")
         entry()
         _state(self)
-        return self.session(row).check()
+        return Runtime.session(self, row).check()
 
     def _receipt(self, c, commit_id):
         entry = "sim2act:lease-entry.v1"
@@ -260,7 +270,10 @@ class Runtime:
         require(self.store.owns_connection(c) and c.in_transaction()
                 and c.connection.driver_connection.in_transaction,
                 "Original main recovery transaction required")
-        receipt = self._receipt(c, commit_id)
+        # The caller may have inserted a receipt and then roll back. Only an
+        # independent WAL reader proves that this receipt really committed.
+        with self.engine.connect() as durable:
+            receipt = Runtime._receipt(self, durable, commit_id)
         require(receipt is not None, "No durable main receipt; commit outcome remains unknown")
         with self.authority.connection(write=True) as selected:
             value = self.authority.row(selected, receipt["header"][0])
@@ -285,6 +298,8 @@ def _seal_and_register():
     functions.extend(value for value in vars(Runtime).values() if type(value) is FunctionType)
     control.seal_functions(functions)
     control._register_control_code(sys.modules[__name__])
+    if control._CODE_AVAILABLE:
+        control._CODE_PACKET.native.register_lease_runtime(Runtime, enable)
 
 
 _seal_and_register()

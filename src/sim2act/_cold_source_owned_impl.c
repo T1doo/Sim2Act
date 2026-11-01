@@ -463,6 +463,110 @@ static PyObject*lease_actor_entry(PyObject*self,PyObject*unused){
  (void)self;(void)unused;PyObject*ok=verify_code_range(10,12);if(!ok)return NULL;
  int same=ok==Py_True;Py_DECREF(ok);if(!same){PyErr_SetString(PyExc_ValueError,"Lease control actor code or role changed");return NULL;}Py_RETURN_NONE;
 }
+/* Runtime provenance only. These records contain no lease/permission/PASS and
+ * are inaccessible to mutable Python module dictionaries. */
+static PyObject *lease_runtime_type,*lease_runtime_issue_code,*lease_runtime_issue_globals,*lease_runtime_records;
+static PyObject*lease_runtime_error(void){PyErr_SetString(PyExc_ValueError,"Lease runtime issuance or fields changed");return NULL;}
+static PyObject*lease_runtime_forget(PyObject*key,PyObject*weak){
+ if(lease_runtime_records){PyObject*e=PyDict_GetItemWithError(lease_runtime_records,key);
+  if(e&&PyTuple_CheckExact(e)&&PyTuple_GET_ITEM(e,0)==weak){if(PyDict_DelItem(lease_runtime_records,key)<0)return NULL;}
+  else if(PyErr_Occurred())return NULL;}
+ Py_RETURN_NONE;
+}
+static PyMethodDef lease_runtime_forget_def={"_lease_runtime_forget",lease_runtime_forget,METH_O,NULL};
+static int lease_actor_current(void){
+ PyObject*ok=verify_code_range(10,12);if(!ok)return 0;int same=ok==Py_True;Py_DECREF(ok);return same;
+}
+static PyObject*register_lease_runtime(PyObject*self,PyObject*args){
+ (void)self;PyObject*cls,*fn;
+ if(!PyArg_ParseTuple(args,"OO",&cls,&fn))return NULL;
+ PyObject*ok=verify_code_range(10,11);if(!ok)return NULL;int same=ok==Py_True;Py_DECREF(ok);
+ if(!same||lease_runtime_type||!PyType_Check(cls)||!PyFunction_Check(fn)
+   ||!(((PyTypeObject*)cls)->tp_flags&Py_TPFLAGS_HEAPTYPE))return lease_runtime_error();
+ PyObject*space=PyFunction_GetGlobals(fn);
+ if(!code_namespace(space)||PyDict_GetItemString(space,"Runtime")!=cls
+   ||PyDict_GetItemString(space,"enable")!=fn)return lease_runtime_error();
+ PyObject*records=PyDict_New();if(!records)return NULL;
+ lease_runtime_type=Py_NewRef(cls);lease_runtime_issue_code=Py_NewRef(PyFunction_GetCode(fn));
+ lease_runtime_issue_globals=Py_NewRef(space);lease_runtime_records=records;
+ Py_RETURN_NONE;
+}
+static PyObject*lease_dict_items(PyObject*dict){
+ if(!code_namespace(dict))return NULL;
+ PyObject*items=PyTuple_New(PyDict_GET_SIZE(dict));if(!items)return NULL;
+ Py_ssize_t pos=0,index=0;PyObject*k,*v;
+ while(PyDict_Next(dict,&pos,&k,&v)){PyObject*pair=PyTuple_Pack(2,k,v);if(!pair){Py_DECREF(items);return NULL;}PyTuple_SET_ITEM(items,index++,pair);}
+ return items;
+}
+static int lease_store_fields_current(PyObject*store,PyObject*fields){
+ PyObject*actor=source_code[11],*classes=actor?PyTuple_GET_ITEM(actor,1):NULL;
+ if(!classes||!PyTuple_CheckExact(classes)||PyTuple_GET_SIZE(classes)<1||!code_namespace(fields))return 0;
+ PyObject*cls=PyTuple_GET_ITEM(PyTuple_GET_ITEM(classes,0),0);
+ if(Py_TYPE(store)!=(PyTypeObject*)cls)return 0;
+ /* Never accept an instance shadow of a fixed actor method/descriptor. */
+ PyObject*declared=((PyTypeObject*)cls)->tp_dict,*key,*value;Py_ssize_t pos=0;
+ if(!code_namespace(declared))return 0;
+ while(PyDict_Next(declared,&pos,&key,&value)){
+  int contains=PyDict_Contains(fields,key);if(contains!=0)return 0;
+ }
+ return 1;
+}
+static PyObject*install_lease_runtime(PyObject*self,PyObject*runtime){
+ (void)self;if(!lease_actor_current()){if(PyErr_Occurred())return NULL;return lease_runtime_error();}
+ if(!lease_runtime_type||!lease_runtime_records||Py_TYPE(runtime)!=(PyTypeObject*)lease_runtime_type)return lease_runtime_error();
+ int gc=PyGC_Disable();PyObject*fields=NULL,*locals=NULL,*key=NULL,*callback=NULL,*weak=NULL,*items=NULL,*store_fields=NULL,*store_items=NULL,*entry=NULL;
+ PyFrameObject*frame=PyThreadState_GetFrame(PyThreadState_Get());int valid=0;
+ if(frame){PyCodeObject*code=PyFrame_GetCode(frame);PyObject*space=PyFrame_GetGlobals(frame);
+  if((PyObject*)code==lease_runtime_issue_code&&space==lease_runtime_issue_globals)locals=PyFrame_GetLocals(frame);
+  Py_DECREF(code);Py_DECREF(space);Py_DECREF(frame);}
+ if(!locals||!code_namespace(locals)||PyDict_GetItemString(locals,"selected")!=runtime)goto done;
+ fields=PyObject_GenericGetDict(runtime,NULL);
+ if(!fields||!code_namespace(fields)||PyDict_GET_SIZE(fields)!=8)goto done;
+ static const char*names[]={"store","authority","path","identity","seconds","run_seconds","uri","engine"};
+ for(int i=0;i<8;i++){PyObject*v=PyDict_GetItemString(fields,names[i]);if(!v||v!=PyDict_GetItemString(locals,names[i]))goto done;}
+ PyObject*store=PyDict_GetItemString(fields,"store"),*uri=PyDict_GetItemString(fields,"uri");
+ if(!PyUnicode_CheckExact(uri))goto done;
+ PyObject*actor=source_code[11],*classes=actor?PyTuple_GET_ITEM(actor,1):NULL;
+ if(!classes||!PyTuple_CheckExact(classes)||PyTuple_GET_SIZE(classes)<1)goto done;
+ PyObject*store_class=PyTuple_GET_ITEM(PyTuple_GET_ITEM(classes,0),0);
+ if(Py_TYPE(store)!=(PyTypeObject*)store_class)goto done;
+ store_fields=PyObject_GenericGetDict(store,NULL);if(!store_fields||!code_namespace(store_fields))goto done;
+ if(!lease_store_fields_current(store,store_fields))goto done;
+ static const char*store_names[]={"engine","sqlite","test_only","_sqlite_commit_boundary","_workspace_writer_gate","_local_model_snapshots"};
+ store_items=PyTuple_New(6);if(!store_items)goto done;
+ for(int i=0;i<6;i++){PyObject*k=PyUnicode_FromString(store_names[i]),*v=PyDict_GetItemString(store_fields,store_names[i]);
+  if(!k||!v){Py_XDECREF(k);goto done;}PyObject*pair=PyTuple_Pack(2,k,v);Py_DECREF(k);if(!pair)goto done;PyTuple_SET_ITEM(store_items,i,pair);}
+ if(PyDict_GetItemString(store_fields,"engine")!=PyDict_GetItemString(fields,"engine")
+   ||PyDict_GetItemString(store_fields,"sqlite")!=Py_True||PyDict_GetItemString(store_fields,"test_only")!=Py_True)goto done;
+ key=PyLong_FromVoidPtr(runtime);if(!key)goto done;
+ if(PyDict_GetItemWithError(lease_runtime_records,key)||PyErr_Occurred())goto done;
+ callback=PyCFunction_NewEx(&lease_runtime_forget_def,key,NULL);if(!callback)goto done;
+ weak=PyWeakref_NewRef(runtime,callback);if(!weak)goto done;
+ items=lease_dict_items(fields);if(!items)goto done;
+ entry=PyTuple_Pack(4,weak,items,store,store_items);if(!entry)goto done;
+ if(PyDict_SetItem(lease_runtime_records,key,entry)<0)goto done;valid=1;
+done:
+ Py_XDECREF(fields);Py_XDECREF(locals);Py_XDECREF(key);Py_XDECREF(callback);Py_XDECREF(weak);Py_XDECREF(items);Py_XDECREF(store_fields);Py_XDECREF(store_items);Py_XDECREF(entry);
+ if(gc)PyGC_Enable();if(!valid){if(PyErr_Occurred())return NULL;return lease_runtime_error();}Py_RETURN_NONE;
+}
+static PyObject*lease_runtime_current(PyObject*self,PyObject*runtime){
+ (void)self;if(!lease_actor_current()){if(PyErr_Occurred())return NULL;return lease_runtime_error();}
+ if(!lease_runtime_type||!lease_runtime_records||Py_TYPE(runtime)!=(PyTypeObject*)lease_runtime_type)return lease_runtime_error();
+ int gc=PyGC_Disable();PyObject*key=PyLong_FromVoidPtr(runtime),*fields=NULL,*store_fields=NULL,*result=NULL;
+ if(!key)goto done;PyObject*entry=PyDict_GetItemWithError(lease_runtime_records,key);
+ if(!entry||!PyTuple_CheckExact(entry)||PyTuple_GET_SIZE(entry)!=4||PyWeakref_GetObject(PyTuple_GET_ITEM(entry,0))!=runtime)goto done;
+ fields=PyObject_GenericGetDict(runtime,NULL);if(!fields||!code_items(fields,PyTuple_GET_ITEM(entry,1)))goto done;
+ PyObject*store=PyTuple_GET_ITEM(entry,2);
+ store_fields=PyObject_GenericGetDict(store,NULL);if(!store_fields||!code_namespace(store_fields))goto done;
+ if(!lease_store_fields_current(store,store_fields))goto done;
+ PyObject*expected=PyTuple_GET_ITEM(entry,3);
+ for(Py_ssize_t i=0;i<PyTuple_GET_SIZE(expected);i++){PyObject*pair=PyTuple_GET_ITEM(expected,i);
+  if(PyDict_GetItemWithError(store_fields,PyTuple_GET_ITEM(pair,0))!=PyTuple_GET_ITEM(pair,1))goto done;}
+ result=Py_NewRef(PyTuple_GET_ITEM(entry,1));
+done:
+ Py_XDECREF(key);Py_XDECREF(fields);Py_XDECREF(store_fields);if(gc)PyGC_Enable();
+ if(!result){if(PyErr_Occurred())return NULL;return lease_runtime_error();}return result;
+}
 static PyObject*contract_type(PyObject*self,PyObject*value){
  PyObject*model=contract_model(self,value);if(!model)return NULL;if(model!=Py_None)return model;Py_DECREF(model);return Py_NewRef((PyObject*)Py_TYPE(value));
 }
@@ -606,6 +710,9 @@ static PyMethodDef methods[]={
  {"contract_entry",contract_entry,METH_NOARGS,"Fresh fixed Python data-entry roles before any foreign dispatch."},
  {"lease_entry",lease_entry,METH_NOARGS,"Fresh independent lease-control code roles; never a lease or authority result."},
  {"lease_actor_entry",lease_actor_entry,METH_NOARGS,"Fresh lease-control and original Store actor code roles."},
+ {"register_lease_runtime",register_lease_runtime,METH_VARARGS,"One-time runtime issuer code, never authority."},
+ {"install_lease_runtime",install_lease_runtime,METH_O,"Record actual runtime provenance from its fixed provisioning frame."},
+ {"lease_runtime_current",lease_runtime_current,METH_O,"Fresh native runtime/Store identity, no lease or permission cache."},
  {"contract_type",contract_type,METH_O,"Explicit PB schema class or original exact type; no Python getattr or impersonation."},
  {"register_contract_binding",register_contract_binding,METH_VARARGS,"Register the original production Binding lifecycle once, never a grant."},
  {"install_contract_binding",install_contract_binding,METH_VARARGS,"Constructor-only complete PB owner/header publication."},

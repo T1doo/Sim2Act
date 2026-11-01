@@ -644,9 +644,13 @@ def seal_functions(functions):
     selected = _CODE_PACKET.native.lease_entry if _CODE_AVAILABLE else None
     actor = (_CODE_PACKET.native.lease_actor_entry
              if _CODE_AVAILABLE and hasattr(_CODE_PACKET.native, "lease_actor_entry") else None)
+    install = (getattr(_CODE_PACKET.native, "install_lease_runtime", None) if _CODE_AVAILABLE else None)
+    current = (getattr(_CODE_PACKET.native, "lease_runtime_current", None) if _CODE_AVAILABLE else None)
     def seal(code):
         return code.replace(co_consts=tuple(selected if type(value) is str and value == "sim2act:lease-entry.v1"
             else actor if type(value) is str and value == "sim2act:lease-actor-entry.v1"
+            else install if type(value) is str and value == "sim2act:lease-runtime-install.v1"
+            else current if type(value) is str and value == "sim2act:lease-runtime-current.v1"
             else seal(value) if type(value) is CodeType else value for value in code.co_consts))
     for function in functions:
         function.__code__ = seal(function.__code__)
@@ -689,9 +693,10 @@ def _register_control_code(runtime_module=None):
             (vars(os.path), ("abspath",)),
             (vars(threading), ("RLock",)),
             (vars(sys), ("_getframe",)),
-            (vars(_CODE_PACKET.native), ("lease_entry", "lease_actor_entry", "register_code")),
+            (vars(_CODE_PACKET.native), ("lease_entry", "lease_actor_entry", "register_code",
+                "register_lease_runtime", "install_lease_runtime", "lease_runtime_current")),
             (vars(runtime_module), ("ANCHOR", "RECEIPTS", "RECEIPT_DDL", "control", "DomainError",
-                "Runtime", "_RUNTIMES", "_RUNTIME_LOCK", "_RUNTIME_STATES", "json", "secrets", "sqlite3", "threading", "weakref", "Path",
+                "Runtime", "_RUNTIMES", "_RUNTIME_LOCK", "json", "secrets", "sqlite3", "threading", "weakref", "Path",
                 "type", "dict", "tuple", "list", "str", "int", "float", "bool", "len", "all", "any", "set", "vars", "getattr", "hasattr", "object", "id"))))
     _CONTROL_CODE_REGISTERED = True
 

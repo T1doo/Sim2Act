@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="5" skipped="0" tests="56" time="15.106" timestamp="2026-11-01T09:51:32.023047+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_lease_control_main_receipts" name="test_handoff_uses_actual_committed_main_marker_and_keeps_history_anchor" time="0.713" /><testcase classname="tests.test_lease_control_main_receipts" name="test_forged_main_claim_header_cannot_activate_a_control_owner" time="0.522" /><testcase classname="tests.test_lease_control_main_receipts" name="test_activation_rechecks_competing_version_after_marker_commit" time="0.347" /><testcase classname="tests.test_lease_control_main_receipts" name="test_uncommitted_main_receipt_cannot_acknowledge_control" time="0.521" /><testcase classname="tests.test_lease_control_main_receipts" name="test_runtime_identity_cannot_be_reissued_from_mutable_python_state" time="0.488" /><testcase classname="tests.test_lease_control_main_receipts" name="test_preissuance_method_shadow_is_rejected_without_foreign_call" time="0.312" /><testcase classname="tests.test_lease_control_main_receipts" name="test_runtime_rejects_store_type_disguise_before_foreign_dispatch" time="0.508" /><testcase classname="tests.test_lease_control_main_receipts" name="test_runtime_rejects_store_method_shadow_before_foreign_dispatch[tx]" time="0.346"><failure message="AttributeError: 'Store' object has no attribute 'tx'">env = (&lt;sim2act.db.Store object at 0x7f981706d280&gt;, Settings(database_url='sqlite:////workspace/scratch/lease-runtime-native...342d182b784fbd8a36dce8047c91b8', 'user_af037b43b1e84704ada0fdf5072e6f03', 'proj_9b2ed79e296f486fbe0da0889fb8f373', ...)
+role = 'tx'
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f9816f5f860&gt;
+
+    @pytest.mark.parametrize("role", ["tx", "guard", "owns_connection", "frozen_contract", "event"])
+    def test_runtime_rejects_store_method_shadow_before_foreign_dispatch(env, role, monkeypatch):
+        selected, _, bound = claim(env)
+        foreign_calls = []
+        def foreign(*args, **kwargs):
+            foreign_calls.append(True)
+            raise AssertionError("Foreign Store dispatched")
+        with monkeypatch.context() as patch:
+            patch.setattr(selected.store, role, foreign)
+            with pytest.raises(ValueError, match="Lease runtime issuance or fields changed"):
+                selected.bind_claim(bound)
+            assert foreign_calls == []
+        # patch restores a bound method on the instance; delete that shadow too.
+&gt;       delattr(selected.store, role)
+E       AttributeError: 'Store' object has no attribute 'tx'
+
+tests/test_lease_control_main_receipts.py:168: AttributeError</failure></testcase><testcase classname="tests.test_lease_control_main_receipts" name="test_runtime_rejects_store_method_shadow_before_foreign_dispatch[guard]" time="0.518"><failure message="AttributeError: 'Store' object has no attribute 'guard'">env = (&lt;sim2act.db.Store object at 0x7f9816de7c80&gt;, Settings(database_url='sqlite:////workspace/scratch/lease-runtime-native...4331f975ef44d0b28de557ee5b65f4', 'user_8635bce8172744f4b40929504103b8b5', 'proj_ba00dd58213a4116b032e58dff57bd19', ...)
+role = 'guard'
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f98168a4380&gt;
+
+    @pytest.mark.parametrize("role", ["tx", "guard", "owns_connection", "frozen_contract", "event"])
+    def test_runtime_rejects_store_method_shadow_before_foreign_dispatch(env, role, monkeypatch):
+        selected, _, bound = claim(env)
+        foreign_calls = []
+        def foreign(*args, **kwargs):
+            foreign_calls.append(True)
+            raise AssertionError("Foreign Store dispatched")
+        with monkeypatch.context() as patch:
+            patch.setattr(selected.store, role, foreign)
+            with pytest.raises(ValueError, match="Lease runtime issuance or fields changed"):
+                selected.bind_claim(bound)
+            assert foreign_calls == []
+        # patch restores a bound method on the instance; delete that shadow too.
+&gt;       delattr(selected.store, role)
+E       AttributeError: 'Store' object has no attribute 'guard'
+
+tests/test_lease_control_main_receipts.py:168: AttributeError</failure></testcase><testcase classname="tests.test_lease_control_main_receipts" name="test_runtime_rejects_store_method_shadow_before_foreign_dispatch[owns_connection]" time="0.573"><failure message="AttributeError: 'Store' object has no attribute 'owns_connection'">env = (&lt;sim2act.db.Store object at 0x7f981885ac90&gt;, Settings(database_url='sqlite:////workspace/scratch/lease-runtime-native...4cc83e03e94ef3b09b5b8f0f3cc1a5', 'user_873ba2060e0d4767bd853f53e25ca0d1', 'proj_16dda096557740479f97122c52ef3638', ...)
+role = 'owns_connection'
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f9816914d70&gt;
+
+    @pytest.mark.parametrize("role", ["tx", "guard", "owns_connection", "frozen_contract", "event"])
+    def test_runtime_rejects_store_method_shadow_before_foreign_dispatch(env, role, monkeypatch):
+        selected, _, bound = claim(env)
+        foreign_calls = []
+        def foreign(*args, **kwargs):
+            foreign_calls.append(True)
+            raise AssertionError("Foreign Store dispatched")
+        with monkeypatch.context() as patch:
+            patch.setattr(selected.store, role, foreign)
+            with pytest.raises(ValueError, match="Lease runtime issuance or fields changed"):
+                selected.bind_claim(bound)
+            assert foreign_calls == []
+        # patch restores a bound method on the instance; delete that shadow too.
+&gt;       delattr(selected.store, role)
+E       AttributeError: 'Store' object has no attribute 'owns_connection'
+
+tests/test_lease_control_main_receipts.py:168: AttributeError</failure></testcase><testcase classname="tests.test_lease_control_main_receipts" name="test_runtime_rejects_store_method_shadow_before_foreign_dispatch[frozen_contract]" time="0.354"><failure message="AttributeError: 'Store' object has no attribute 'frozen_contract'">env = (&lt;sim2act.db.Store object at 0x7f9819749ac0&gt;, Settings(database_url='sqlite:////workspace/scratch/lease-runtime-native...3496ef978f4655baf55250acd4ef82', 'user_4993aaa8707c4b46b46920e3bd7e5463', 'proj_b7be24966d154903aa5cbd6854318d80', ...)
+role = 'frozen_contract'
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f9816bd4380&gt;
+
+    @pytest.mark.parametrize("role", ["tx", "guard", "owns_connection", "frozen_contract", "event"])
+    def test_runtime_rejects_store_method_shadow_before_foreign_dispatch(env, role, monkeypatch):
+        selected, _, bound = claim(env)
+        foreign_calls = []
+        def foreign(*args, **kwargs):
+            foreign_calls.append(True)
+            raise AssertionError("Foreign Store dispatched")
+        with monkeypatch.context() as patch:
+            patch.setattr(selected.store, role, foreign)
+            with pytest.raises(ValueError, match="Lease runtime issuance or fields changed"):
+                selected.bind_claim(bound)
+            assert foreign_calls == []
+        # patch restores a bound method on the instance; delete that shadow too.
+&gt;       delattr(selected.store, role)
+E       AttributeError: 'Store' object has no attribute 'frozen_contract'
+
+tests/test_lease_control_main_receipts.py:168: AttributeError</failure></testcase><testcase classname="tests.test_lease_control_main_receipts" name="test_runtime_rejects_store_method_shadow_before_foreign_dispatch[event]" time="0.566"><failure message="AttributeError: 'Store' object has no attribute 'event'">env = (&lt;sim2act.db.Store object at 0x7f9816182240&gt;, Settings(database_url='sqlite:////workspace/scratch/lease-runtime-native...eb1c9016354ae899032e48b160411a', 'user_db7f923277c74155a36df9a2e9493506', 'proj_fea795327e0d4fecb89285b8d68b00c1', ...)
+role = 'event'
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f981692ff20&gt;
+
+    @pytest.mark.parametrize("role", ["tx", "guard", "owns_connection", "frozen_contract", "event"])
+    def test_runtime_rejects_store_method_shadow_before_foreign_dispatch(env, role, monkeypatch):
+        selected, _, bound = claim(env)
+        foreign_calls = []
+        def foreign(*args, **kwargs):
+            foreign_calls.append(True)
+            raise AssertionError("Foreign Store dispatched")
+        with monkeypatch.context() as patch:
+            patch.setattr(selected.store, role, foreign)
+            with pytest.raises(ValueError, match="Lease runtime issuance or fields changed"):
+                selected.bind_claim(bound)
+            assert foreign_calls == []
+        # patch restores a bound method on the instance; delete that shadow too.
+&gt;       delattr(selected.store, role)
+E       AttributeError: 'Store' object has no attribute 'event'
+
+tests/test_lease_control_main_receipts.py:168: AttributeError</failure></testcase><testcase classname="tests.test_lease_control_main_receipts" name="test_activation_rejects_same_connection_select_callback_write" time="0.381" /><testcase classname="tests.test_lease_control_main_receipts" name="test_new_process_ack_recovers_real_main_receipt_without_issuing_old_owner" time="0.867" /><testcase classname="tests.test_lease_control_native_entry" name="test_static_builtin_class_witness_refuses_without_native_crash" time="0.012" /><testcase classname="tests.test_lease_control_native_entry" name="test_native_entry_rejects_foreign_code_or_clock_before_call[time-module]" time="0.007" /><testcase classname="tests.test_lease_control_native_entry" name="test_native_entry_rejects_foreign_code_or_clock_before_call[wall-clock]" time="0.006" /><testcase classname="tests.test_lease_control_native_entry" name="test_native_entry_rejects_foreign_code_or_clock_before_call[mono-clock]" time="0.006" /><testcase classname="tests.test_lease_control_native_entry" name="test_native_entry_rejects_foreign_code_or_clock_before_call[connect]" time="0.007" /><testcase classname="tests.test_lease_control_native_entry" name="test_native_entry_rejects_foreign_code_or_clock_before_call[wrapper-code]" time="0.007" /><testcase classname="tests.test_lease_control_primitives" name="test_real_control_renewal_does_not_invalidate_business_wal_upgrade" time="0.012" /><testcase classname="tests.test_lease_control_primitives" name="test_committed_control_intent_rejects_old_renewal_and_commit[pause]" time="0.010" /><testcase classname="tests.test_lease_control_primitives" name="test_committed_control_intent_rejects_old_renewal_and_commit[cancel]" time="0.011" /><testcase classname="tests.test_lease_control_primitives" name="test_real_expiry_cannot_renew_or_reissue_process_clock" time="0.158" /><testcase classname="tests.test_lease_control_primitives" name="test_direct_or_mutated_session_is_not_an_issued_owner" time="0.008" /><testcase classname="tests.test_lease_control_primitives" name="test_missing_control_file_never_recreates_or_uses_legacy" time="0.006" /><testcase classname="tests.test_lease_control_primitives" name="test_business_commit_success_ack_failure_is_not_a_rollback" time="0.014" /><testcase classname="tests.test_lease_control_primitives" name="test_acknowledged_receipt_cannot_enter_commit_delegate_again" time="0.010" /><testcase classname="tests.test_lease_control_primitives" name="test_stop_callback_cannot_consume_last_lease_then_allow_commit" time="0.171" /><testcase classname="tests.test_lease_control_primitives" name="test_foreign_session_role_is_rejected_before_dispatch[lock]" time="0.008" /><testcase classname="tests.test_lease_control_primitives" name="test_foreign_session_role_is_rejected_before_dispatch[authority]" time="0.007" /><testcase classname="tests.test_lease_control_primitives" name="test_direct_remember_cannot_authorize_an_extended_session_clock" time="0.007" /><testcase classname="tests.test_foundation" name="test_sources_and_frozen_cases" time="0.001" /><testcase classname="tests.test_foundation" name="test_AT03_strict_json[{&quot;x&quot;:1,&quot;x&quot;:2}]" time="0.000" /><testcase classname="tests.test_foundation" name="test_AT03_strict_json[{&quot;x&quot;:NaN}]" time="0.000" /><testcase classname="tests.test_foundation" name="test_AT03_strict_json[{&quot;x&quot;:1e999}]" time="0.000" /><testcase classname="tests.test_foundation" name="test_AT03_strict_json[{&quot;x&quot;:]" time="0.000" /><testcase classname="tests.test_foundation" name="test_AT03_strict_json[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[0]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]" time="0.000" /><testcase classname="tests.test_foundation" name="test_AT03_logical_ids_only[../secret]" time="0.000" /><testcase classname="tests.test_foundation" name="test_AT03_logical_ids_only[C:\\Users\\private.txt]" time="0.000" /><testcase classname="tests.test_foundation" name="test_AT03_logical_ids_only[\\\\server\\share]" time="0.000" /><testcase classname="tests.test_foundation" name="test_AT03_logical_ids_only[file.txt:stream]" time="0.000" /><testcase classname="tests.test_foundation" name="test_AT03_logical_ids_only[/etc/passwd]" time="0.000" /><testcase classname="tests.test_foundation" name="test_AT03_logical_ids_only[res_../../.env]" time="0.000" /><testcase classname="tests.test_foundation" name="test_AT03_manifest_and_http_duplicates" time="0.486" /><testcase classname="tests.test_foundation" name="test_AT04_cross_principal_project_and_run" time="0.375" /><testcase classname="tests.test_foundation" name="test_AT05_persist_accept_reopen_and_worker" time="0.874" /><testcase classname="tests.test_foundation" name="test_idempotent_accept_and_conflict" time="0.817" /><testcase classname="tests.test_foundation" name="test_AT06_transaction_crash_recovery_and_fence" time="0.516" /><testcase classname="tests.test_foundation" name="test_recovered_claim_starts_lease_after_reconciliation" time="0.615" /><testcase classname="tests.test_foundation" name="test_AT08_revoke_expire_dispatch_and_cached_visibility[False]" time="0.611" /><testcase classname="tests.test_foundation" name="test_AT08_revoke_expire_dispatch_and_cached_visibility[True]" time="0.399" /><testcase classname="tests.test_foundation" name="test_command_version_and_no_new_dispatch" time="0.671" /><testcase classname="tests.test_foundation" name="test_aggregate_independent_decimal_oracle" time="0.596" /><testcase classname="tests.test_foundation" name="test_revoked_material_read_cannot_be_bypassed_by_aggregate_grant" time="0.437" /><testcase classname="tests.test_foundation" name="test_revoked_output_artifact_blocks_history_readback" time="0.847" /></testsuite></testsuites>
