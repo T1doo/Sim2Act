@@ -248,15 +248,30 @@ def test_actual_seven_slot_v2_worker_fixed_clock(env,monkeypatch,tmp_path):
     # Advance before the real unreserved quota wait. The original wait still
     # validates unknown slots, shared quota, cancellation and unchanged deadlines.
     original_wait=dispatch.wait_unreserved
-    def paced_wait(worker,run_id):
+    def paced_wait(worker,run_id,*,_heartbeat_state=None):
         assert worker in workers
         with store.tx() as conn:
             ledger=budget._ledger(conn,ledger_scope)
             prior=ledger['last_reserved_at']
-        if prior is not None:advance(max(at[0],prior+60))
+        if prior is not None:
+            target=max(at[0],prior+60)
+            if _heartbeat_state is not None and _heartbeat_state.get('generation_heartbeat'):
+                # Current generation owns a separate committed-heartbeat state.
+                # Advance in valid10s steps and call its original renewal, which
+                # publishes the real committed lease into that same state.
+                from sim2act.goal_applications import _renew_committed_lease
+                while at[0]<target:
+                    with clock_lock:
+                        at[0] = min(target, at[0] + 10)
+                    refresh(worker)
+                    with store.tx() as conn:
+                        job = conn.execute(select(runs).where(runs.c.id == run_id)).mappings().one()
+                    _renew_committed_lease(worker, job, _heartbeat_state)
+            else:
+                advance(target)
         refresh(worker)
         paced_waits.append(dict(run_id=run_id,at=at[0],last_reserved_at=prior))
-        return original_wait(worker,run_id)
+        return original_wait(worker,run_id,_heartbeat_state=_heartbeat_state)
     monkeypatch.setattr(dispatch,'wait_unreserved',paced_wait)
     original_admit=gate.admit
     def observe_admit(*args,**kwargs):

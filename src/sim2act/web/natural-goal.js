@@ -392,6 +392,7 @@ function trialHistoryChanged() {
   renderTrialConsent();
 }
 function clearTrialConsent() {
+  clearTrialStage();
   clearExistingTrialSelection();
   clearTrialBudget();
   trialGeneration++; trialCards = [];
@@ -487,6 +488,7 @@ async function exportTrialSelection() {
   entry.message="已导出原试运行选择，不含凭据。用同一配置先执行 Doctor，再明确启动；没有创建任务或外发请求。";renderTrialConsent();
 }
 function renderTrialConsent() {
+  renderTrialStageControls();
   const entry = trialEntry(), r = entry?.receipt, busy = entry?.state === "sending", unknown = ["unknown", "unapproved"].includes(entry?.state);
   if(trialBudgetSelection && (trialBudgetSelection.entry!==entry || trialBudgetSelection.receipt!==r || trialBudgetSelection.operation!==entry?.operation))clearTrialBudget();
   $("trial-budget-read").disabled=busy || unknown || !trialBudgetApproval(r) || !!trialBudgetRead?.current();
@@ -504,16 +506,17 @@ function renderTrialConsent() {
   if (entry) $("trial-status").textContent = entry.message;
 }
 function showTrialScope(r) {
+  clearTrialStage();
   clearTrialBudget();
   const c = r.contract;
   if (!c) { $("trial-scope").textContent = `仅恢复同意元数据。批准：${r.approved}；撤回：${r.revoked}；过期：${r.expired}。材料不可读取时不展示旧私有范围；仍可明确撤回。LIVE 关闭。`; return; }
   $("trial-path").value=r.path;renderTrialPBEditor();
-  if(r.path==="P-B")$("trial-pb-recipe").textContent=JSON.stringify(c.extraction_recipe,null,2);
+  if(r.path==="P-B")$("trial-pb-recipe").textContent=trialStageRecipeText(c.extraction_recipe);
   const fields = {title: "名称", goal: "目标", known: "已知", assumptions: "假设", unresolved: "未决项", constraints: "硬条件", acceptance_checks: "验收检查", resource_refs: "绑定材料"};
   const materials = c.bindings.map((b, i) => `${i === 0 ? "生成及 Source" : "未见输入 Cold"}：目标 ${b.card_id} v${b.goal_version}\n材料 ${b.resource_id}（TXT）\n${b.content}\n\n${Object.entries(fields).map(([field, label]) => `${label}：${Array.isArray(b.goal_snapshot.content[field]) ? b.goal_snapshot.content[field].join("\n") : b.goal_snapshot.content[field]}`).join("\n")}`).join("\n\n");
   const cap = c.caps;
   const deadlines = c.namespace === "natural-live-trial.v2" ? `V2 审阅截止 ${new Date(c.review_expires_at * 1000).toISOString()}；执行截止 ${new Date(c.execution_expires_at * 1000).toISOString()}。均从准备时冻结，恢复、批准、重放不续期。总时窗60分钟含5分钟审阅；每个后继阶段须在前序 Run 受理后15分钟内明确批准（含前序最多300秒、排队及人工交接）。每 Run 的300秒含额度等待、模型延迟和工具工作；人工迟到或剩余时间不足即拒绝。不是七槽完成保证。` : "V1 原单一期限保持，不迁移或续期。";
-  $("trial-scope").textContent = `${r.path} 精确准备与同意范围\n${deadlines}\n项目 ${c.project_id}\n身份 ${c.principal_id}\n运行身份 ${c.runtime_id}\n模型 ${c.model}\n端点 ${c.endpoint}\n流式 ${c.stream}\n额度主体 ${c.quota_subject}（执行时核对服务器账户来源）\n期限 ${new Date(c.expires_at * 1000).toISOString()}（不会因恢复延长）\n生成 ${cap.generate_requests} / Source ${cap.source_requests} / Cold ${cap.cold_requests}，共 ${cap.max_requests} 槽\n每请求输出 ≤${cap.max_output_tokens} tokens；总输出 ≤${cap.total_output_tokens}\n每请求 wire ≤${cap.max_wire_bytes} bytes；响应 ASCII ≤${cap.max_response_ascii_bytes} bytes\n每 Run 预留 ≤${cap.per_run_reserved}；总预留 ≤${cap.total_reserved}\n每 Run ≤${cap.run_seconds} 秒；普通 lease ${cap.lease_seconds} 秒${cap.settlement_protocol === "sqlite-exclusive-settlement.v1" ? `；单次结算预约 ≤${cap.settlement_seconds} 秒，受原总期限约束` : ""}；每分钟 ${cap.requests_per_minute} 请求；付费上限 ${cap.paid_cap}\n阶段键 ${Object.entries(c.stage_keys).map(([k,v]) => `${k}: ${v}`).join("；")}\n批准：${r.approved}；撤回：${r.revoked}；过期：${r.expired}\n\n${materials}${r.path==="P-B"?`\n\n原 P-B 提取键 ${c.extraction_request_key}\n预定提取图（实际 Source 完成后仍须来源审阅）\n${JSON.stringify(c.extraction_recipe,null,2)}`:""}\n\n此入口新增 Run / 槽 / 外发均为 0。本准备记录不代表任务已执行；运行结果和人工验收单独核对。`;
+  $("trial-scope").textContent = `${r.path} 精确准备与同意范围\n${deadlines}\n项目 ${c.project_id}\n身份 ${c.principal_id}\n运行身份 ${c.runtime_id}\n模型 ${c.model}\n端点 ${c.endpoint}\n流式 ${c.stream}\n额度主体 ${c.quota_subject}（执行时核对服务器账户来源）\n期限 ${new Date(c.expires_at * 1000).toISOString()}（不会因恢复延长）\n生成 ${cap.generate_requests} / Source ${cap.source_requests} / Cold ${cap.cold_requests}，共 ${cap.max_requests} 槽\n每请求输出 ≤${cap.max_output_tokens} tokens；总输出 ≤${cap.total_output_tokens}\n每请求 wire ≤${cap.max_wire_bytes} bytes；响应 ASCII ≤${cap.max_response_ascii_bytes} bytes\n每 Run 预留 ≤${cap.per_run_reserved}；总预留 ≤${cap.total_reserved}\n每 Run ≤${cap.run_seconds} 秒；普通 lease ${cap.lease_seconds} 秒${cap.settlement_protocol === "sqlite-exclusive-settlement.v1" ? `；单次结算预约 ≤${cap.settlement_seconds} 秒，受原总期限约束` : ""}；每分钟 ${cap.requests_per_minute} 请求；付费上限 ${cap.paid_cap}\n阶段键 ${Object.entries(c.stage_keys).map(([k,v]) => `${k}: ${v}`).join("；")}\n批准：${r.approved}；撤回：${r.revoked}；过期：${r.expired}\n\n${materials}${r.path==="P-B"?`\n\n原 P-B 提取键 ${c.extraction_request_key}\n预定提取图（实际 Source 完成后仍须来源审阅）\n${trialStageRecipeText(c.extraction_recipe)}`:""}\n\n此入口新增 Run / 槽 / 外发均为 0。本准备记录不代表任务已执行；运行结果和人工验收单独核对。`;
 }
 function trialBudgetApproval(receipt) {
   const approval=receipt?.approval,accepted=approval?.approval,key=accepted?.request?.request_key;
@@ -692,7 +695,7 @@ function trialPBRecipe() {
 }
 function renderTrialPBEditor() {
   $("trial-pb-editor").hidden=$("trial-path").value!=="P-B";
-  try{$("trial-pb-recipe").textContent=JSON.stringify(trialPBRecipe(),null,2);}catch(error){$("trial-pb-recipe").textContent=error.message;}
+  try{$("trial-pb-recipe").textContent=trialStageRecipeText(trialPBRecipe());}catch(error){$("trial-pb-recipe").textContent=error.message;}
 }
 async function prepareTrial() {
   const ctx = trialContext(); if (!ctx.identity || !ctx.project || trialEntry()) return;
@@ -790,3 +793,169 @@ $("trial-path").onchange=renderTrialPBEditor;
 $("trial-pb-mode").onchange=renderTrialPBEditor;
 $("trial-pb-prefix").oninput=renderTrialPBEditor;
 renderTrialPBEditor();
+
+// Original Source/Cold consent. Durable metadata is an intent, never authority.
+let trialStageSerial=0,trialStageView=null,trialStageBusy=false,trialStageIntent=null;
+const stageHash=v=>/^[a-f0-9]{64}$/.test(v||"");
+const stageKey=v=>/^[A-Za-z0-9_-]{1,100}$/.test(v||"");
+const stageRun=v=>/^run_[a-f0-9]{32}$/.test(v||"");
+function clearTrialStage(){
+  trialStageSerial++;trialStageView=null;trialStageBusy=false;trialStageIntent=null;
+  $("trial-stage-preview").replaceChildren();$("trial-stage-ack").checked=false;
+  $("trial-stage-key").value="";$("trial-stage-run").replaceChildren(new Option("先读取任务，再审阅实际绑定",""));
+  $("trial-stage-status").textContent="先读取并核查上方原试验范围；原确认键不会因关闭页面重新批准。";
+}
+function stageContext(){
+  const entry=trialEntry(),receipt=entry?.receipt,ctx=trialContext(),stage=$("trial-stage-kind").value;
+  return {ctx,entry,receipt,stage,approval:trialBudgetApproval(receipt),serial:trialStageSerial,operation:entry?.operation,workspace:workspaceSelectionGeneration};
+}
+function stageCurrent(v){return trialCurrent(v.ctx)&&v.serial===trialStageSerial&&v.workspace===workspaceSelectionGeneration&&v.entry===trialEntry()&&v.operation===v.entry?.operation&&v.receipt===v.entry?.receipt&&v.stage===$("trial-stage-kind").value;}
+function stageActive(v){return !!v.approval&&v.entry?.state==="known"&&!v.receipt.revoked&&!v.receipt.expired&&Date.now()<v.receipt.contract.expires_at*1000;}
+function renderTrialStageControls(){
+  const v=stageContext(),ready=!!v.approval&&v.entry?.state==="known",active=ready&&stageActive(v);
+  if(trialStageView&&!stageCurrent(trialStageView)){trialStageView=null;$("trial-stage-preview").replaceChildren();$("trial-stage-ack").checked=false;}
+  $("trial-stage-kind").disabled=trialStageBusy;$("trial-stage-run").disabled=trialStageBusy;$("trial-stage-key").disabled=trialStageBusy;
+  $("trial-stage-dismiss").disabled=trialStageBusy;$("trial-stage-dismiss").textContent=trialStageIntent?"关闭审阅，原确认键保留":"取消审阅，不批准";
+  $("trial-stage-list").disabled=!active||trialStageBusy;
+  $("trial-stage-review").disabled=!active||trialStageBusy||!stageRun($("trial-stage-run").value)||!!trialStageIntent;
+  const offered=trialStageView?.reviewed&&stageCurrent(trialStageView)&&trialStageView.rid===$("trial-stage-run").value;
+  const phaseExpired=offered&&Date.now()>=(trialStageView.authority.stage_approval_expires_at??v.receipt.contract.expires_at)*1000;
+  $("trial-stage-ack").disabled=!active||!offered||phaseExpired||trialStageBusy||!!trialStageIntent;
+  $("trial-stage-confirm").disabled=$("trial-stage-ack").disabled||!$("trial-stage-ack").checked;
+  $("trial-stage-recover").disabled=!ready||trialStageBusy;
+}
+async function stageStorage(v){return "sim2act.stage-intent.v1:"+await paHash([v.ctx.identity,v.ctx.project,v.entry.key,v.stage]);}
+function stageReadIntent(key,v){
+  const text=localStorage.getItem(key);if(text===null)return null;
+  const value=JSON.parse(text);
+  if(!value||Object.keys(value).sort().join()!==["version","project","trial","stage","approval","request_key","run_id","contract_fingerprint","authority_fingerprint"].sort().join()||value.version!==1||value.project!==v.ctx.project||value.trial!==v.entry.key||value.stage!==v.stage||value.approval!==v.approval||!stageKey(value.request_key)||!stageRun(value.run_id)||!stageHash(value.contract_fingerprint)||!stageHash(value.authority_fingerprint))throw Error("原阶段恢复记录损坏；停止提交，保留原确认键核查。");
+  return value;
+}
+async function stageLoadIntent(v){
+  const key=await stageStorage(v);if(!stageCurrent(v))return null;
+  const intent=stageReadIntent(key,v);trialStageIntent=intent;
+  if(intent){$("trial-stage-key").value=intent.request_key;$("trial-stage-status").textContent="已保留原阶段确认键。先只读恢复，不能重发批准或换一个任务。";}
+  renderTrialStageControls();return {key,intent};
+}
+async function listTrialStageRuns(){
+  const v=stageContext();if(!stageActive(v)||trialStageBusy)return;
+  trialStageBusy=true;renderTrialStageControls();
+  try{
+    await stageLoadIntent(v);if(!stageCurrent(v))return;
+    const items=await api(`/api/projects/${v.ctx.project}/runs?metadata_only=true`);
+    if(!stageCurrent(v))return;
+    if(!Array.isArray(items)||items.some(x=>!stageRun(x.id)||typeof x.status!=="string"))throw Error("任务目录回执不完整");
+    $("trial-stage-run").replaceChildren(new Option("请选择任务；是否属于原阶段由服务端完整复核",""),...items.map(x=>new Option(`${x.id.slice(0,16)}… · ${x.status}`,x.id)));
+    if(trialStageIntent&&items.some(x=>x.id===trialStageIntent.run_id))$("trial-stage-run").value=trialStageIntent.run_id;
+    $("trial-stage-status").textContent=trialStageIntent?"已有原阶段确认意图，请只读恢复。":items.length?"选择已受理任务后审阅；不兼容、未完成来源或错版本会被拒绝。":"本项目尚无已受理任务。此入口不会创建或启动任务。";
+  }catch(error){if(stageCurrent(v)){if(error.httpStatus===403)clearTrialConsent();$("trial-stage-preview").replaceChildren();$("trial-stage-status").textContent=`读取未通过：${error.message}。未批准、未运行；权限不足时已清除旧私有范围。`;}}
+  finally{if(stageCurrent(v)){trialStageBusy=false;renderTrialStageControls();}}
+}
+async function validateStageAuthority(value,v){
+  const a=value?.authority,c=v.receipt.contract,target=c.bindings[v.stage==="cold"?1:0];
+  const fields=["contract_fingerprint","stage","run_id","accepted_fingerprint","app_run_id","instance_id","instance_revision","runtime_id","app_id","candidate_fingerprint","recipe_fingerprint","release_id","release_fingerprint","generation_run_id","generation_candidate_fingerprint","target_goal_fingerprint","authorization_fingerprint",...(c.namespace==="natural-live-trial.v2"?["predecessor_run_id","predecessor_created_at","stage_approval_expires_at"]:[])];
+  if(!a||Object.keys(a).sort().join()!==fields.sort().join()||a.stage!==v.stage||!stageRun(a.run_id)||a.contract_fingerprint!==v.receipt.review_token||a.target_goal_fingerprint!==target.goal_fingerprint||!Number.isSafeInteger(a.instance_revision)||a.instance_revision<1||!["accepted_fingerprint","candidate_fingerprint","recipe_fingerprint","release_fingerprint","generation_candidate_fingerprint","authorization_fingerprint"].every(k=>stageHash(a[k]))||!["app_run_id","instance_id","runtime_id","app_id","release_id"].every(k=>typeof a[k]==="string"&&a[k].length>0)||!stageRun(a.generation_run_id)||!stageHash(value.authority_fingerprint)||await paHash(a)!==value.authority_fingerprint)throw Error("阶段回执与原试验、目标或完整指纹不符");
+  if(c.namespace==="natural-live-trial.v2"){
+    if(!stageRun(a.predecessor_run_id)||!Number.isFinite(a.predecessor_created_at)||a.stage_approval_expires_at!==Math.min(a.predecessor_created_at+c.stage_handoff_seconds,c.execution_expires_at)||(v.stage==="source"&&a.predecessor_run_id!==a.generation_run_id))throw Error("前序任务或阶段审批期限不符");
+  }else if("stage_approval_expires_at" in a||"predecessor_run_id" in a)throw Error("旧合同不能混用新阶段时限");
+  return a;
+}
+function trialStageRecipeText(recipe){
+  const labels={"resource.read":"读取指定材料","model.spec.all":"提取要求、条件、例外与未决项","model.spec.requirements":"提取要求","model.spec.qualifiers":"提取条件、例外与未决项","spec.merge":"合并结果","spec.verify_citations":"核验原文引用","artifact.save_text":"保存经校验结果"};
+  return recipe.steps.map((s,i)=>`${i+1}. ${labels[s.operator]||s.operator}（${s.step_id}）
+   前序：${s.depends_on.join("、")||"无"}
+   输入：${Object.entries(s.inputs).map(([k,p])=>`${k} ← ${p.source=== "step"?"步骤":"数据"} ${p.ref}.${p.field}`).join("；")}`).join("\n");
+}
+async function trialStageApplication(v,a){
+  const app=await api(`/api/apps/${encodeURIComponent(a.app_id)}`);
+  if(!stageCurrent(v))return null;
+  if(app.id!==a.app_id||app.fingerprint!==a.candidate_fingerprint||!Array.isArray(app.candidate?.spec_recipe?.steps)||await paHash(app.candidate.spec_recipe)!==a.recipe_fingerprint)throw Error("当前应用或完整配方与阶段审阅版本不符");
+  return {name:typeof app.name==="string"?app.name:"已保存应用",recipe:app.candidate.spec_recipe};
+}
+function showStageFacts(v,a,historical=false){
+  const c=v.receipt.contract,b=c.bindings[v.stage==="cold"?1:0],out=$("trial-stage-preview");out.replaceChildren();
+  const add=(title,text)=>{const h=document.createElement("h4"),p=document.createElement("pre");h.textContent=title;p.textContent=text;out.append(h,p);};
+  add(historical?"已保存的阶段确认（历史记录，不是新的执行许可）":"请核对这一次阶段操作",`${v.stage==="source"?"Source：验证生成应用的来源任务":"Cold：使用第二份材料执行已提取应用"}\n模型 ${c.model}；仅此任务 ${a.run_id}\n本阶段最多 ${v.stage==="source"?c.caps.source_requests:c.caps.cold_requests} 次；总试验仍最多 ${c.caps.max_requests} 次，不重新领额度。`);
+  const goal=b.goal_snapshot.content;
+  add("本阶段材料（完整原文）",b.content);
+  add("本阶段完整目标",Object.entries({名称:goal.title,目标:goal.goal,已知:goal.known,假设:goal.assumptions,约束:goal.constraints,验收检查:goal.acceptance_checks,未决项:goal.unresolved,绑定材料:goal.resource_refs}).map(([k,val])=>`${k}：${Array.isArray(val)?val.join("；"):val??""}`).join("\n"));
+  if(v.application)add("实际应用步骤",`${v.application.name}
+${trialStageRecipeText(v.application.recipe)}`);
+  add("实际绑定的应用与版本",`应用 ${a.app_id}\n实例 ${a.instance_id} · 修订 ${a.instance_revision}\nRelease ${a.release_id}\n生成来源任务 ${a.generation_run_id}${a.predecessor_run_id?`\n本阶段前序任务 ${a.predecessor_run_id}`:""}\n目标卡 ${b.card_id} · v${b.goal_version}\n材料 ${b.resource_id}`);
+  add("影响与截止",`仅保存此阶段精确同意；已启动的受控 Worker 可能随后执行。允许在本项目保存经校验结果，不新增权限、不自动提取或发布。\n本阶段审批截止 ${new Date((a.stage_approval_expires_at??c.expires_at)*1000).toLocaleString()}\n整个试验截止 ${new Date(c.expires_at*1000).toLocaleString()}；单 Run 最多 ${c.caps.run_seconds} 秒（含排队和额度等待）。恢复或重开均不续期。\n拒绝本次审阅不写批准；停止已批准后续阶段须明确撤回整个原试验。已消耗用量和未知结果保留。`);
+  const details=document.createElement("details"),summary=document.createElement("summary"),p=document.createElement("pre");summary.textContent="核查指纹与原始绑定";p.textContent=`原试验 ${a.contract_fingerprint}\n应用 ${a.candidate_fingerprint}\nRelease ${a.release_fingerprint}\n配方 ${a.recipe_fingerprint}\n材料 ${b.source_hash}\n目标 ${a.target_goal_fingerprint}\n当前授权 ${a.authorization_fingerprint}`;details.append(summary,p);out.append(details);
+}
+async function reviewTrialStage(){
+  let v=stageContext();if(!stageActive(v)||trialStageBusy||!stageRun($("trial-stage-run").value))return;
+  v={...v,rid:$("trial-stage-run").value};trialStageBusy=true;$("trial-stage-ack").checked=false;$("trial-stage-preview").replaceChildren();renderTrialStageControls();
+  try{
+    const saved=await stageLoadIntent(v);if(!stageCurrent(v))return;if(saved.intent)throw Error("此阶段已有原确认键，请只读恢复。");
+    const value=await api(`${v.entry.base}/stage-review`,"POST",{contract:v.receipt.contract,approval_key:v.approval,stage:v.stage,run_id:v.rid});
+    if(!stageCurrent(v)||v.rid!==$("trial-stage-run").value)return;
+    const authority=await validateStageAuthority(value,v);if(!stageCurrent(v))return;
+    if(value.live_allowed!==false||value.actual_model_requests!==0||authority.run_id!==v.rid)throw Error("未知阶段审阅回执");
+    const application=await trialStageApplication(v,authority);if(!stageCurrent(v))return;
+    trialStageView={...v,application,authority,authority_fingerprint:value.authority_fingerprint,reviewed:true};showStageFacts(trialStageView,authority);
+    $("trial-stage-status").textContent="服务端已复核真实来源、当前材料/目标与应用版本。请阅读范围，再明确确认；本次读取没有调用模型。";
+  }catch(error){if(stageCurrent(v)){if(error.httpStatus===403)clearTrialConsent();$("trial-stage-preview").replaceChildren();trialStageView=null;$("trial-stage-status").textContent=`审阅拒绝或未确认：${error.message}。未保存阶段同意；可取消审阅或只读恢复原键。`;}}
+  finally{if(stageCurrent(v)){trialStageBusy=false;renderTrialStageControls();}}
+}
+async function recoverTrialStage(){
+  const v=stageContext();if(!v.approval||trialStageBusy)return;
+  const typed=$("trial-stage-key").value.trim();trialStageBusy=true;$("trial-stage-ack").checked=false;$("trial-stage-preview").replaceChildren();renderTrialStageControls();
+  try{
+    const saved=await stageLoadIntent(v);if(!stageCurrent(v))return;
+    const intent=saved.intent,key=typed||intent?.request_key;
+    if(!stageKey(key)||intent&&key!==intent.request_key)throw Error("请读取已保留的原阶段确认键，不另换键。");
+    $("trial-stage-key").value=key;
+    const value=await api(`${v.entry.base}/approvals/${encodeURIComponent(v.approval)}/stages/${v.stage}/${encodeURIComponent(key)}`);
+    if(!stageCurrent(v)||$("trial-stage-key").value!==key)return;
+    const body=value?.request,a=await validateStageAuthority({authority:body?.authority,authority_fingerprint:value?.authority_fingerprint},v);
+    if(!stageCurrent(v))return;
+    if(value.status!=="HISTORICAL_STAGE_BINDING_LIVE_BLOCKED"||value.live_allowed!==false||value.dispatch_authorized!==false||value.new_model_requests!==0||body.approval_key!==v.approval||body.request_key!==key||body.expected_authority_fingerprint!==value.authority_fingerprint||body.consent!=="BIND_ONLY_THIS_ACCEPTED_STAGE_RUN_APP_RELEASE_AND_COMPLETE_GOAL_TO_ORIGINAL_TRIAL"||intent&&(intent.run_id!==a.run_id||intent.contract_fingerprint!==a.contract_fingerprint||intent.authority_fingerprint!==value.authority_fingerprint))throw Error("原阶段确认回执的身份或范围不符");
+    trialStageIntent=intent||{version:1,project:v.ctx.project,trial:v.entry.key,stage:v.stage,approval:v.approval,request_key:key,run_id:a.run_id,contract_fingerprint:a.contract_fingerprint,authority_fingerprint:value.authority_fingerprint};
+    localStorage.setItem(saved.key,JSON.stringify(trialStageIntent));showStageFacts(v,a,true);
+    $("trial-stage-status").textContent="已只读核对原阶段确认。历史记录不重发批准、不启动任务；当前执行仍受撤回、版本和原截止保护。";
+  }catch(error){if(stageCurrent(v)){if(error.httpStatus===403)clearTrialConsent();trialStageView=null;$("trial-stage-preview").replaceChildren();$("trial-stage-status").textContent=`原确认未恢复：${error.message}。保留原键，不能据此重新批准。`;}}
+  finally{if(stageCurrent(v)){trialStageBusy=false;renderTrialStageControls();}}
+}
+async function confirmTrialStage(){
+  const v=trialStageView;if(!v?.reviewed||!stageCurrent(v)||!stageActive(v)||!$("trial-stage-ack").checked||trialStageBusy)return;
+  if(!navigator.locks?.request)throw Error("浏览器未提供原键互斥保护，不能提交阶段批准。");
+  const storage=await stageStorage(v);if(!stageCurrent(v))return;
+  await navigator.locks.request(storage,{mode:"exclusive",ifAvailable:true},async lock=>{
+    if(!lock||!stageCurrent(v)||!stageActive(v)||!$("trial-stage-ack").checked)return;
+    const old=stageReadIntent(storage,v);if(old){trialStageIntent=old;$("trial-stage-key").value=old.request_key;$("trial-stage-status").textContent="已有原确认意图，只读取恢复，不重发。";renderTrialStageControls();return;}
+    trialStageBusy=true;renderTrialStageControls();let sent=false;
+    try{
+      const fresh=await api(`${v.entry.base}/stage-review`,"POST",{contract:v.receipt.contract,approval_key:v.approval,stage:v.stage,run_id:v.rid});
+      if(!stageCurrent(v))return;await validateStageAuthority(fresh,v);if(!stageCurrent(v))return;
+      if(fresh.live_allowed!==false||fresh.actual_model_requests!==0||fresh.authority_fingerprint!==v.authority_fingerprint||goalRunCanonical(fresh.authority)!==goalRunCanonical(v.authority))throw Error("范围或版本已变化；没有提交批准，请重新审阅。");
+      if(!stageActive(v)||!$("trial-stage-ack").checked||Date.now()>=(v.authority.stage_approval_expires_at??v.receipt.contract.expires_at)*1000)throw Error("阶段审批已过期或不再确认，未提交。");
+      const key=crypto.randomUUID(),intent={version:1,project:v.ctx.project,trial:v.entry.key,stage:v.stage,approval:v.approval,request_key:key,run_id:v.rid,contract_fingerprint:v.receipt.review_token,authority_fingerprint:v.authority_fingerprint};
+      // Only opaque IDs/fingerprints; save and re-read before the mutating request.
+      localStorage.setItem(storage,JSON.stringify(intent));if(localStorage.getItem(storage)!==JSON.stringify(intent))throw Error("原确认键未持久保存，不能提交。");
+      trialStageIntent=intent;$("trial-stage-key").value=key;$("trial-stage-ack").checked=false;renderTrialStageControls();sent=true;
+      const value=await api(`${v.entry.base}/stage-approval`,"POST",{contract:v.receipt.contract,approval:{authority:v.authority,expected_authority_fingerprint:v.authority_fingerprint,approval_key:v.approval,request_key:key,consent:"BIND_ONLY_THIS_ACCEPTED_STAGE_RUN_APP_RELEASE_AND_COMPLETE_GOAL_TO_ORIGINAL_TRIAL"}});
+      if(!stageCurrent(v))return;
+      if(value.status!=="EXACT_STAGE_BOUND_LIVE_BLOCKED"||value.live_allowed!==false||value.actual_model_requests!==0||value.formal_publication_enabled!==false||value.authority_fingerprint!==v.authority_fingerprint||goalRunCanonical(value.authority)!==goalRunCanonical(v.authority))throw Error("阶段确认回执未知");
+      trialStageView=null;$("trial-stage-preview").replaceChildren();$("trial-stage-status").textContent="阶段确认响应已收到。请只读恢复原确认，核对持久记录；不会自动运行下一阶段。已启动 Worker 可能执行此已批准任务。";
+    }catch(error){if(stageCurrent(v)){
+      trialStageView=null;$("trial-stage-ack").checked=false;$("trial-stage-preview").replaceChildren();
+      if(error.httpStatus===403){clearTrialConsent();$("trial-stage-status").textContent="当前权限不足，旧私有范围已清除。先读取原试验键；原阶段意图只保留恢复元数据。";}
+      else $("trial-stage-status").textContent=sent?`阶段确认拒绝或结果未知：${error.message}。原键已保留，只读恢复，不重发或换键。`:`本次没有提交阶段批准：${error.message}。请重新读取并审阅当前范围。`;
+    }}finally{if(stageCurrent(v)){trialStageBusy=false;renderTrialStageControls();}}
+  });
+}
+$("trial-stage-list").onclick=safe(listTrialStageRuns);$("trial-stage-review").onclick=safe(reviewTrialStage);
+$("trial-stage-recover").onclick=safe(recoverTrialStage);$("trial-stage-confirm").onclick=safe(confirmTrialStage);
+$("trial-stage-ack").onchange=renderTrialStageControls;
+$("trial-stage-dismiss").onclick=()=>{clearTrialStage();renderTrialStageControls();};
+$("trial-stage-kind").onchange=()=>{clearTrialStage();renderTrialStageControls();};
+$("trial-stage-run").onchange=()=>{trialStageSerial++;trialStageBusy=false;trialStageView=null;$("trial-stage-ack").checked=false;$("trial-stage-preview").replaceChildren();renderTrialStageControls();};
+$("trial-stage-key").oninput=()=>{trialStageSerial++;trialStageBusy=false;trialStageView=null;$("trial-stage-ack").checked=false;$("trial-stage-preview").replaceChildren();renderTrialStageControls();};
+$("trial-stage-withdraw-link").onclick=()=>{$("trial-withdraw-ack").focus();$("trial-withdraw-ack").scrollIntoView?.({block:"center"});};
+window.addEventListener("pagehide",clearTrialStage);
+
+window.addEventListener("storage",event=>{if(event.key?.startsWith("sim2act.stage-intent.v1:")){clearTrialStage();renderTrialStageControls();}});
+setInterval(renderTrialStageControls,1000);
