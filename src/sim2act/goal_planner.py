@@ -783,7 +783,7 @@ def process(worker, run, contract):
                 stopped.set()
 
     thread = threading.Thread(target=beat, daemon=True)
-    thread.start()
+    worker.start_owned_heartbeat(thread)
     try:
         check_policy(worker, contract)
         with worker.store.tx() as c:
@@ -1061,4 +1061,4 @@ def process(worker, run, contract):
         worker.finish(rid, fence, state, error=exc.public(), verify_goal_source=True)
     finally:
         stopped.set()
-        thread.join(2)
+        worker.finish_owned_heartbeat(thread)

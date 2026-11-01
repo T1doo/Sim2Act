@@ -1044,7 +1044,7 @@ def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
                         break
 
     thread = threading.Thread(target=beat, daemon=True)
-    thread.start()
+    worker.start_owned_heartbeat(thread)
     observed_contention = False
     try:
         while True:
@@ -1073,7 +1073,7 @@ def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
                     failure.clear()
                     failed.clear()
                     thread = threading.Thread(target=beat, daemon=True)
-                    thread.start()
+                    worker.start_owned_heartbeat(thread)
                     continue
                 logging.getLogger(__name__).info("heartbeat_failure_observed", extra=dict(
                     run_id=run["id"], fence=run["fence"]))
@@ -1103,7 +1103,7 @@ def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
                 run_id=run["id"], fence=run["fence"], error_type=type(settlement_error).__name__))
     finally:
         stopped.set()
-        thread.join(timeout=2)
+        worker.finish_owned_heartbeat(thread)
 
 
 def is_job(store, job):

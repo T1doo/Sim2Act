@@ -987,7 +987,7 @@ def process_job(worker, run):
                 stopped.set()
 
     thread = threading.Thread(target=beat, daemon=True)
-    thread.start()
+    worker.start_owned_heartbeat(thread)
     try:
         with store.tx() as c:
             job, current = verified_pending(store, c, run["principal_id"], rid)
@@ -1203,7 +1203,7 @@ def process_job(worker, run):
         fail_job(worker, run, exc)
     finally:
         stopped.set()
-        thread.join(timeout=2)
+        worker.finish_owned_heartbeat(thread)
 
 
 def command_job(store, user, rid, command, version):

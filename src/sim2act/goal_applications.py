@@ -1602,7 +1602,7 @@ def process(worker, run, contract):
                     heartbeat_state["failure"] = error
 
     thread = threading.Thread(target=beat, daemon=True)
-    thread.start()
+    worker.start_owned_heartbeat(thread)
     try:
         while True:
             _renew_committed_lease(worker, run, heartbeat_state)
@@ -1882,7 +1882,7 @@ def process(worker, run, contract):
         )
     finally:
         stopped.set()
-        thread.join(2)
+        worker.finish_owned_heartbeat(thread)
 
 
 def reject_unsettled(worker, c, run, contract, attempt, raw, failure, started):

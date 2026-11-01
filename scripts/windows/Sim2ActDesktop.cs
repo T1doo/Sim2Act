@@ -20,8 +20,14 @@ static class Program {
     [DllImport("shell32.dll", CharSet=CharSet.Unicode)] static extern int SetCurrentProcessExplicitAppUserModelID(string id);
     [STAThread] static int Main(string[] args) {
         try {
-            if(args.Length>1 || (args.Length==1 && args[0]!="--exact-read-live")) throw new Exception("未知启动参数");
-            bool exactReadLive=args.Length==1;
+            bool exactReadLive=false; string config=null,selection=null;
+            for(int i=0;i<args.Length;i++) {
+                if(args[i]=="--exact-read-live" && !exactReadLive) exactReadLive=true;
+                else if(args[i]=="--config" && config==null && i+1<args.Length) config=Paths.ExistingFile(args[++i]);
+                else if(args[i]=="--spec-selection" && selection==null && i+1<args.Length) selection=Paths.ExistingFile(args[++i]);
+                else throw new Exception("未知或重复启动参数");
+            }
+            if((exactReadLive && config!=null) || (selection!=null && config==null)) throw new Exception("正式配置与合成预览参数不能混用");
             string root = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
             Paths.Check(root);
             foreach (string name in new [] { "runtime\\python.exe", "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll", "WebView2Loader.dll" })
@@ -29,7 +35,7 @@ static class Program {
             string runtime = Paths.RuntimeFolder(); // Read only; never installs or starts Edge.
             Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
             SetCurrentProcessExplicitAppUserModelID("Sim2Act.Desktop");
-            using (Host host = new Host(root,runtime,exactReadLive)) { Application.Run(host); return host.ExitCode; }
+            using (Host host = new Host(root,runtime,exactReadLive,config,selection)) { Application.Run(host); return host.ExitCode; }
         } catch (Exception error) {
             MessageBox.Show("Sim2Act 无法启动：" + error.Message, "Sim2Act", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
@@ -38,6 +44,13 @@ static class Program {
 }
 
 static class Paths {
+    public static string ExistingFile(string path) {
+        string full=Path.GetFullPath(path);
+        if(full.IndexOf('"')>=0 || full.IndexOf('\n')>=0 || full.IndexOf('\r')>=0) throw new Exception("配置路径不合法");
+        FileInfo file=new FileInfo(full);
+        if(!file.Exists || (file.Attributes & FileAttributes.ReparsePoint)!=0 || file.Length>65536) throw new Exception("请选择已有普通私有配置文件");
+        Check(file.DirectoryName); return full;
+    }
     public static void Check(string path) {
         DirectoryInfo current = new DirectoryInfo(Path.GetFullPath(path));
         while (current != null) {
@@ -86,15 +99,20 @@ sealed class Host : Form {
     readonly Stopwatch clock = Stopwatch.StartNew();
     readonly object logGate = new object();
     Process child; FileStream claim; StreamWriter log;
-    string worker,origin,boundReadyUrl,expectedData,startupIssue; Dictionary<string,object> receipt;
+    string worker,origin,boundReadyUrl,expectedData,startupIssue,serviceSession; Dictionary<string,object> receipt;
+    int apiPid,workerPid;
     bool logFailureHandled,userStopRequested;
     bool initialized,stopping,stopSent,childStarted,stdoutEof,stderrEof,finished,closingAllowed,failed,timeoutShown;
     double startAt,stopAt,exitAt=-1,eofAt=-1;
     public int ExitCode = 1;
     readonly bool exactReadLive;
-    public Host(string root,string runtime,bool exactReadLive) {
+    readonly string configuredFile,selectionFile;
+    bool Configured {get {return configuredFile!=null;}}
+    string ProfileIdentityPath {get {return Path.Combine(root,"configured-webview-profile.identity.json");}}
+    public Host(string root,string runtime,bool exactReadLive,string configuredFile,string selectionFile) {
         this.root=root; this.runtime=runtime;
         this.exactReadLive=exactReadLive;
+        this.configuredFile=configuredFile;this.selectionFile=selectionFile;
         Text="Sim2Act 工作台"; StartPosition=FormStartPosition.CenterScreen; ShowInTaskbar=true;
         BackColor=ColorTranslator.FromHtml("#FAF9F5"); MinimumSize=new Size(1024,680);
         Rectangle work=Screen.PrimaryScreen.WorkingArea;
@@ -122,9 +140,11 @@ sealed class Host : Form {
     }
     async Task Start() {
         try {
-            string profile=Paths.Directory(root,"webview-profile"); Paths.Directory(root,"temp"); Paths.Directory(root,"exports");
             claim=new FileStream(Path.Combine(root,"desktop-running.lock"),FileMode.CreateNew,FileAccess.Write,FileShare.Read);
             byte[] claimBytes=Encoding.ASCII.GetBytes(Process.GetCurrentProcess().Id.ToString()); claim.Write(claimBytes,0,claimBytes.Length); claim.Flush();
+            string profile=Path.Combine(root,Configured?"configured-webview-profile":"webview-profile");
+            if(Configured) PrepareConfiguredProfile(profile);
+            profile=Paths.Directory(root,Configured?"configured-webview-profile":"webview-profile"); Paths.Directory(root,"temp"); Paths.Directory(root,"exports");
             log=new StreamWriter(Path.Combine(root,"desktop.log"),true,new UTF8Encoding(false));
             Write("HOST_START native WinForms WebView2; no browser fallback");
             // Stable WebView2 only, explicit existing runtime folder and owned profile.
@@ -147,12 +167,54 @@ sealed class Host : Form {
             StartBackend();
         } catch (Exception error) { if(finished || IsDisposed) return; failed=true; Write("HOST_START_FAILED "+error.GetType().Name); status.Text="启动失败："+error.Message; if(childStarted) Stop("启动失败，正在确认后台退出…"); if(!childStarted) { timer.Stop(); MessageBox.Show(this,"启动失败："+error.Message,"Sim2Act",MessageBoxButtons.OK,MessageBoxIcon.Error); FinishBeforeChild(); } }
     }
+    Dictionary<string,object> ProfileIdentity() {
+        FileInfo file=new FileInfo(ProfileIdentityPath);Paths.Check(file.DirectoryName);
+        if(!file.Exists || (file.Attributes & FileAttributes.ReparsePoint)!=0 || file.Length>4096) throw new Exception("桌面配置绑定记录无法确认；已保留原目录");
+        var value=new JavaScriptSerializer().DeserializeObject(File.ReadAllText(file.FullName,Encoding.UTF8)) as Dictionary<string,object>;
+        if(value==null || TextValue(value,"version")!="sim2act-configured-profile.v1") throw new Exception("桌面配置绑定记录损坏；已保留原目录");
+        string state=TextValue(value,"state");
+        if(!((state=="UNBOUND_NO_NAVIGATION" && value.Count==2) || (state=="BOUND" && value.Count==5))) throw new Exception("桌面配置绑定状态未知；已保留原目录");
+        return value;
+    }
+    void PrepareConfiguredProfile(string profile) {
+        Paths.Check(profile);
+        if(!File.Exists(ProfileIdentityPath)) {
+            if(System.IO.Directory.Exists(profile)) throw new Exception("已有正式浏览状态缺少绑定记录；不接管或清空原状态");
+            using(var stream=new FileStream(ProfileIdentityPath,FileMode.CreateNew,FileAccess.Write,FileShare.None)) {
+                byte[] value=Encoding.UTF8.GetBytes("{\"version\":\"sim2act-configured-profile.v1\",\"state\":\"UNBOUND_NO_NAVIGATION\"}");
+                stream.Write(value,0,value.Length);stream.Flush(true);
+            }
+        }
+        ProfileIdentity();
+    }
+    bool BindConfiguredProfile(string data,string binding,Uri address) {
+        try {
+            var record=ProfileIdentity();
+            string canonicalData=Path.GetFullPath(data).TrimEnd(Path.DirectorySeparatorChar).ToUpperInvariant();
+            string url=address.GetLeftPart(UriPartial.Authority);
+            if(TextValue(record,"state")=="BOUND") return TextValue(record,"binding")==binding
+                && TextValue(record,"data_dir")==canonicalData && TextValue(record,"origin")==url;
+            var bound=new Dictionary<string,object>{{"version","sim2act-configured-profile.v1"},{"state","BOUND"},
+                {"binding",binding},{"data_dir",canonicalData},{"origin",url}};
+            byte[] bytes=Encoding.UTF8.GetBytes(new JavaScriptSerializer().Serialize(bound));
+            // The exclusive host claim serializes this transition. Never clear
+            // localStorage or silently adopt a different database namespace.
+            using(var stream=new FileStream(ProfileIdentityPath,FileMode.Open,FileAccess.ReadWrite,FileShare.None)) {
+                stream.SetLength(0);stream.Write(bytes,0,bytes.Length);stream.Flush(true);
+            }
+            return true;
+        } catch(Exception) {return false;}
+    }
     void StartBackend() {
-        string data=Path.Combine(root,"workspace data"); Paths.Check(data);
-        expectedData=Path.GetFullPath(data).TrimEnd(Path.DirectorySeparatorChar);
+        string data=Path.Combine(root,"workspace data");
+        if(!Configured) {Paths.Check(data);expectedData=Path.GetFullPath(data).TrimEnd(Path.DirectorySeparatorChar);}
         ProcessStartInfo info=new ProcessStartInfo(Path.Combine(root,"runtime","python.exe"));
         info.Arguments="-I -B -u -m sim2act.cli synthetic-workspace --data-dir \""+data+"\" --control-stdin"+(System.IO.Directory.Exists(data)?"":" --new");
         if(exactReadLive) info.Arguments+=" --exact-read-live";
+        if(Configured) {
+            info.Arguments="-I -B -u -m sim2act.desktop_service --supervise --control-stdin --config \""+configuredFile+"\"";
+            if(selectionFile!=null) info.Arguments+=" --spec-selection \""+selectionFile+"\"";
+        }
         info.WorkingDirectory=root; info.UseShellExecute=false; info.CreateNoWindow=true;
         info.RedirectStandardInput=true; info.RedirectStandardOutput=true; info.RedirectStandardError=true;
         info.StandardOutputEncoding=Encoding.UTF8; info.StandardErrorEncoding=Encoding.UTF8;
@@ -208,6 +270,88 @@ sealed class Host : Form {
                 && records[1].TryGetValue("port",out port) && port is int && (int)port==address.Port;
         } catch(Exception) {return false;}
     }
+    bool ConfiguredIdentity(Dictionary<string,object> value,Uri address) {
+        try {
+            string data=TextValue(value,"data_dir");object api,work;
+            if(data==null || !Path.IsPathRooted(data) || !value.TryGetValue("api_pid",out api) || !(api is int)
+                || !value.TryGetValue("worker_pid",out work) || !(work is int)
+                || (int)api<=0 || (int)work<=0 || (int)api==(int)work || (int)api==child.Id || (int)work==child.Id) return false;
+            Paths.Check(data);
+            var records=new Dictionary<string,object>[2];
+            string[] names={"desktop-service-origin.json","desktop-service-claim.json"};
+            for(int i=0;i<2;i++) {
+                FileInfo file=new FileInfo(Path.Combine(data,names[i]));
+                if(!file.Exists || (file.Attributes & FileAttributes.ReparsePoint)!=0 || file.Length>8192) return false;
+                records[i]=new JavaScriptSerializer().DeserializeObject(File.ReadAllText(file.FullName,Encoding.UTF8)) as Dictionary<string,object>;
+                if(records[i]==null || TextValue(records[i],"protocol")!="sim2act.desktop-service.v1"
+                    || TextValue(records[i],"backend")!="CONFIGURED_POSTGRESQL") return false;
+            }
+            object port,controller;string binding=TextValue(records[0],"binding");
+            if(binding==null || !Regex.IsMatch(binding,"^[a-f0-9]{64}$")
+                || !String.Equals(TextValue(records[0],"data_dir"),data,StringComparison.OrdinalIgnoreCase)
+                || !records[0].TryGetValue("port",out port) || !(port is int) || (int)port!=address.Port
+                || TextValue(records[1],"session")!=serviceSession
+                || !records[1].TryGetValue("controller_pid",out controller) || !(controller is int) || (int)controller!=child.Id) return false;
+            object rows;var seen=new HashSet<string>();
+            if(!records[1].TryGetValue("children",out rows) || !(rows is object[]) || ((object[])rows).Length!=2) return false;
+            foreach(object row in (object[])rows) {
+                var item=row as Dictionary<string,object>;object pid;
+                if(item==null || !item.TryGetValue("pid",out pid) || !(pid is int)) return false;
+                string role=TextValue(item,"role");
+                if((role!="api" && role!="worker") || !seen.Add(role) || (int)pid!=(role=="api"?(int)api:(int)work)) return false;
+            }
+            if(!BindConfiguredProfile(data,binding,address)) {
+                startupIssue="当前数据库、目录或地址与桌面浏览状态绑定不一致；原请求、数据和浏览状态已保留。请使用独立应用目录。";
+                return false;
+            }
+            expectedData=data;apiPid=(int)api;workerPid=(int)work;return true;
+        } catch(Exception) {return false;}
+    }
+    bool ConfiguredStop(Dictionary<string,object> value) {
+        if(!True(value,"clean")) return false;
+        object number;
+        if(!value.TryGetValue("children_started",out number) || !(number is int)) return false;
+        if((int)number==0) return origin==null && !True(value,"ready_seen");
+        object raw;var roles=value.TryGetValue("roles",out raw)?raw as Dictionary<string,object>:null;
+        if((int)number<1 || (int)number>2 || roles==null || roles.Count!=(int)number || !True(value,"preflight_stopped")
+            || (origin!=null && ((int)number!=2 || !True(value,"ready_seen")))) return false;
+        foreach(string name in roles.Keys) {
+            if(name!="api" && name!="worker") return false;
+            object roleRaw;var role=roles.TryGetValue(name,out roleRaw)?roleRaw as Dictionary<string,object>:null;
+            object pid,code,receiptRaw;
+            if(role==null || !role.TryGetValue("pid",out pid) || !(pid is int)
+                || !role.TryGetValue("exitcode",out code) || !(code is int) || (int)code!=0
+                || !True(role,"stdout_eof") || !True(role,"stderr_eof") || !role.TryGetValue("receipt",out receiptRaw)) return false;
+            var childReceipt=receiptRaw as Dictionary<string,object>;object receiptPid;
+            if(childReceipt==null || !True(childReceipt,"clean") || TextValue(childReceipt,"event")!="ROLE_STOPPED"
+                || TextValue(childReceipt,"role")!=name || TextValue(childReceipt,"session")!=serviceSession
+                || TextValue(childReceipt,"protocol")!="sim2act.desktop-service.v1" || TextValue(childReceipt,"backend")!="CONFIGURED_POSTGRESQL"
+                || !childReceipt.TryGetValue("pid",out receiptPid) || !(receiptPid is int) || (int)receiptPid!=(int)pid
+                || (origin!=null && ((int)pid!=(name=="api"?apiPid:workerPid) || !True(childReceipt,"ready_seen")))) return false;
+        }
+        return true;
+    }
+    void ConfiguredLine(Dictionary<string,object> value) {
+        string session=TextValue(value,"session"),kind=TextValue(value,"event");
+        if(TextValue(value,"protocol")!="sim2act.desktop-service.v1" || TextValue(value,"backend")!="CONFIGURED_POSTGRESQL"
+            || session==null || !Regex.IsMatch(session,"^[a-f0-9]{32}$") || (serviceSession!=null && serviceSession!=session)) {
+            failed=true;Stop("受控后台协议或会话不匹配；保留运行记录。");return;
+        }
+        if(kind=="DESKTOP_SERVICE_STARTING" && serviceSession==null) {serviceSession=session;return;}
+        if(serviceSession==null) {failed=true;Stop("后台未提供本次启动身份。");return;}
+        if(kind=="DESKTOP_SERVICE_ERROR") {failed=true;Stop("配置、审批或后台生命周期未确认；保留数据和运行记录。");return;}
+        if(kind=="DESKTOP_SERVICE_STOPPED") {receipt=value;return;}
+        if(kind!="DESKTOP_SERVICE_READY") {failed=true;Stop("后台回执顺序异常。");return;}
+        string url=TextValue(value,"url"),id=TextValue(value,"worker_id");Uri address;
+        if(worker!=null || id==null || !Regex.IsMatch(id,"^worker_[0-9a-f]{32}$") || url==null
+            || !Regex.IsMatch(url,"^http://127\\.0\\.0\\.1:[1-9][0-9]{0,4}$") || !Uri.TryCreate(url,UriKind.Absolute,out address)
+            || address.Port>65535 || !ConfiguredIdentity(value,address)) {failed=true;Stop(startupIssue??"受控后台数据或进程身份不匹配。");return;}
+        worker=id;
+        if(stopping) return;
+        if(clock.Elapsed.TotalSeconds-startAt>=30) {failed=true;Stop("配置后台启动超时，正在确认退出…");return;}
+        boundReadyUrl=url;origin=address.GetLeftPart(UriPartial.Authority);
+        if(initialized) {view.CoreWebView2.Navigate(boundReadyUrl);status.Text="已连接 · 使用已配置账户登录 · 数据保留在原数据库";}
+    }
     void Line(BackendLine record) {
         string line=record.Text;
         const string prefix="Synthetic workspace stopped; existing data preserved: ";
@@ -220,6 +364,7 @@ sealed class Host : Form {
         Dictionary<string,object> value;
         try { value=new JavaScriptSerializer().DeserializeObject(line) as Dictionary<string,object>; } catch {return;}
         if(value==null) return;
+        if(Configured) {ConfiguredLine(value);return;}
         string kind=TextValue(value,"event"), id=TextValue(value,"worker_id");
         if(kind=="SYNTHETIC_WORKSPACE_STARTING" || kind=="SYNTHETIC_WORKSPACE_READY") {
             if(TextValue(value,"mode")!="SYNTHETIC_TEST_ONLY" || !True(value,"control_stdin") || id==null || !Regex.IsMatch(id,"^worker_[0-9a-f]{32}$")) return;
@@ -279,7 +424,8 @@ sealed class Host : Form {
         if(stopSent) return; stopSent=true; stopAt=clock.Elapsed.TotalSeconds; view.Enabled=false;
         try {
             if(!child.HasExited) {
-                if(worker!=null) {child.StandardInput.WriteLine(new JavaScriptSerializer().Serialize(new Dictionary<string,object>{{"command","stop"},{"worker_id",worker}})); child.StandardInput.Flush();}
+                if(Configured && serviceSession!=null) {child.StandardInput.WriteLine(new JavaScriptSerializer().Serialize(new Dictionary<string,object>{{"command","stop"},{"session",serviceSession}}));child.StandardInput.Flush();}
+                else if(!Configured && worker!=null) {child.StandardInput.WriteLine(new JavaScriptSerializer().Serialize(new Dictionary<string,object>{{"command","stop"},{"worker_id",worker}})); child.StandardInput.Flush();}
                 child.StandardInput.Close(); // EOF also stops before READY or when parent disappears.
             }
         } catch(Exception error) {Write("STOP_PIPE "+error.GetType().Name);}
@@ -314,7 +460,7 @@ sealed class Host : Form {
                 failed=true;
                 if(startupIssue==null) startupIssue="后台在工作台就绪前退出；请保留工程和 desktop.log。";
             }
-            bool clean=receipt!=null && True(receipt,"worker_stopped") && True(receipt,"clean") && True(receipt,"data_preserved");
+            bool clean=receipt!=null && (Configured?ConfiguredStop(receipt):(True(receipt,"worker_stopped") && True(receipt,"clean") && True(receipt,"data_preserved")));
             ExitCode=child.ExitCode==0 && clean && !failed ? 0 : 1;
             Write(new JavaScriptSerializer().Serialize(new Dictionary<string,object>{{"event","DESKTOP_EXIT"},{"child_returncode",child.ExitCode},{"receipt_verified",clean},{"ready_seen",origin!=null},{"exitcode",ExitCode}}));
             if(Volatile.Read(ref logFailed)!=0) ExitCode=1;

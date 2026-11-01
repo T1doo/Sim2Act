@@ -1491,7 +1491,7 @@ def process_job(worker, run):
                 stopped.set()
 
     thread = threading.Thread(target=beat, daemon=True)
-    thread.start()
+    worker.start_owned_heartbeat(thread)
     try:
         plan = prepare_dispatch(worker, run)
         if plan is not None:
@@ -1528,4 +1528,4 @@ def process_job(worker, run):
         fail_job(worker, run, exc)
     finally:
         stopped.set()
-        thread.join(timeout=2)
+        worker.finish_owned_heartbeat(thread)

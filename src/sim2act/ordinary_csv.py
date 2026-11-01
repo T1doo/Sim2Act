@@ -581,9 +581,9 @@ def process(worker, run, contract):
                 stop.set()
 
     thread = threading.Thread(target=heartbeat, daemon=True)
-    thread.start()
+    worker.start_owned_heartbeat(thread)
     try:
         _process(worker, run, contract)
     finally:
         stop.set()
-        thread.join(timeout=2)
+        worker.finish_owned_heartbeat(thread)

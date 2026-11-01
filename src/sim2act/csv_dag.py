@@ -784,7 +784,7 @@ def process_job(worker, run):
                 stopped.set()
 
     thread = threading.Thread(target=beat, daemon=True)
-    thread.start()
+    worker.start_owned_heartbeat(thread)
     try:
         while advance(worker, run):
             pass
@@ -817,7 +817,7 @@ def process_job(worker, run):
             transition(worker.store, c, job, state, exc.public())
     finally:
         stopped.set()
-        thread.join(timeout=2)
+        worker.finish_owned_heartbeat(thread)
 
 
 @graph.controlled

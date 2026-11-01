@@ -75,8 +75,45 @@ class Worker:
         self.protocol_clock = protocol_clock
         self.stop = threading.Event()
         self._settlement_lock = threading.Lock()
+        self._owned_heartbeat_lock = threading.Lock()
+        self._owned_heartbeats = set()
         self._project_cancel_scan = {}
         self._natural_cancel_scan = {}
+
+    def start_owned_heartbeat(self, thread):
+        """Register each real heartbeat handle before starting any dispatch branch."""
+        with self._owned_heartbeat_lock:
+            self._owned_heartbeats.add(thread)
+        try:
+            thread.start()
+        except BaseException:
+            with self._owned_heartbeat_lock:
+                self._owned_heartbeats.discard(thread)
+            raise
+
+    def finish_owned_heartbeat(self, thread, timeout=2):
+        # Preserve the old join budget. An unfinished sender stays registered
+        # for the service's final bounded drain instead of being declared gone.
+        thread.join(timeout=timeout)
+        if not thread.is_alive():
+            with self._owned_heartbeat_lock:
+                self._owned_heartbeats.discard(thread)
+
+    def drain_owned_heartbeats(self, timeout):
+        """Lifecycle only: wait actual handles, never infer stop from names/events.
+
+        No lease is extended, invalidated or authorized by this observation.
+        """
+        if type(timeout) not in (int, float) or not 0 <= timeout <= 10:
+            raise ValueError("Invalid heartbeat cleanup budget")
+        until = time.monotonic() + timeout
+        with self._owned_heartbeat_lock:
+            threads = tuple(self._owned_heartbeats)
+        for thread in threads:
+            thread.join(max(0, until - time.monotonic()))
+        with self._owned_heartbeat_lock:
+            self._owned_heartbeats.difference_update(t for t in threads if not t.is_alive())
+            return not self._owned_heartbeats
 
     def reserve(self, run_id, fence, context, *, request_tools=None, verify_goal_source=False,
                 planner_request=False, generation_request=False, natural_spec_request=None,
@@ -762,7 +799,7 @@ class Worker:
                 hb_committed["lease_until"] = renewed
 
         hb = threading.Thread(target=heartbeat, daemon=True)
-        hb.start()
+        self.start_owned_heartbeat(hb)
         try:
             while not self.stop.is_set():
                 renew_foreground()
@@ -988,7 +1025,7 @@ class Worker:
                 pass  # Stale worker cannot write any new state; recovery owns reconciliation.
         finally:
             hb_stop.set()
-            hb.join(timeout=2)
+            self.finish_owned_heartbeat(hb)
 
     def once(self):
         self.store.heartbeat(self.id)
