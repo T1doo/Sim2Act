@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="5.873" timestamp="2026-11-01T00:02:12.924944+00:00" hostname="ebba0266b3c5"><testcase classname="tests.test_cold_accounted_native" name="test_cross_graph_cleanup_does_not_trust_rebound_backlinks[both]" time="4.465"><failure message="assert (() == (&lt;sim2act.col...7fc1b7aff900&gt;)&#10;  &#10;  Right contains 2 more items, first extra item: &lt;sim2act.cold_accounted._Handle object at 0x7fc1b7aff8e0&gt;&#10;  Use -v to get more diff)">sql_facts = namespace(store=&lt;sim2act.db.Store object at 0x7fc1be188c50&gt;, settings=Settings(database_url='sqlite:////workspace/scra...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=&lt;sim2act.worker.Worker object at 0x7fc1b7fcacc0&gt;)
+damage = 'both'
+
+    @pytest.mark.parametrize('damage', ['frontier-backlink', 'mode-backlink', 'both'])
+    def test_cross_graph_cleanup_does_not_trust_rebound_backlinks(sql_facts, damage):
+        f = sql_facts
+        with f.store.tx() as c, native_segment(f, c) as s:
+            frontier = s.graph._accounted_frontier
+            issued = tuple(s.mode.scope._issued)
+            roles = dict.fromkeys(('source', 'generate', 'platform', 'trial', 'per_use'))
+            with pytest.raises(DomainError), runtime._cold_graph_read(
+                    f.worker, c, {'unowned-other-graph': {}}, roles, 'pre') as other:
+                other._accounted_frontier = frontier
+                try:
+                    if damage in ('frontier-backlink', 'both'):
+                        frontier.graph = other
+                    if damage in ('mode-backlink', 'both'):
+                        s.mode.graph = other
+                    other.invalidate()
+                    assert other.active is False
+                finally:
+                    frontier.graph = s.graph
+                    s.mode.graph = s.graph
+&gt;           assert tuple(s.mode.scope._issued) == issued and s.mode.active
+E           assert (() == (&lt;sim2act.col...7fc1b7aff900&gt;)
+E             
+E             Right contains 2 more items, first extra item: &lt;sim2act.cold_accounted._Handle object at 0x7fc1b7aff8e0&gt;
+E             Use -v to get more diff)
+
+tests/test_cold_accounted_native.py:480: AssertionError</failure></testcase></testsuite></testsuites>

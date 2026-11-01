@@ -49,3 +49,22 @@ def test_diagnostic_refuses_unrelated_error_or_any_goal_commit(damage):
     if damage=='result-version':app['result_version']=1
     if damage=='saved-output':app['output']='{"result":"saved"}'
     with pytest.raises(AssertionError):diagnostic.validate_negative_state(*state)
+
+
+@pytest.mark.parametrize('attempt',['current','earlier'])
+def test_ordinary_report_cannot_filter_away_any_extended_lease(attempt):
+    rows=[dict(kind='NS_RECEIVED',data={'attempt_id':'current'}),
+        dict(kind='NS_SETTLEMENT_LEASE_RESERVED',data={'attempt_id':attempt})]
+    with pytest.raises(AssertionError):diagnostic.selected_negative_events(rows,'current')
+
+
+def test_second_failure_selection_keeps_prior_history_separate():
+    rows=[dict(kind='NS_RECEIVED',data={'attempt_id':'earlier'}),
+        dict(kind='NS_SETTLED',data={'attempt_id':'earlier'}),
+        dict(kind='NS_RECEIVED',data={'attempt_id':'current'}),
+        dict(kind='NS_REJECTED',data={'attempt_id':'current'}),
+        dict(kind='SPEC_STEP_VERIFIED',data={'operation_id':'earlier-operation'})]
+    original=list(rows)
+    selected=diagnostic.selected_negative_events(rows,'current')
+    assert rows==original
+    assert selected==rows[2:]  # Source records/history are not rewritten.

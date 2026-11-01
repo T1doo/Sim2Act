@@ -1,0 +1,43 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______ test_cross_graph_cleanup_does_not_trust_rebound_backlinks[both] ________
+
+sql_facts = namespace(store=<sim2act.db.Store object at 0x7fc1be188c50>, settings=Settings(database_url='sqlite:////workspace/scra...be1328ab10cc848bbad2bdce42d42f51b91303', 'format': 'txt'}]}}), worker=<sim2act.worker.Worker object at 0x7fc1b7fcacc0>)
+damage = 'both'
+
+    @pytest.mark.parametrize('damage', ['frontier-backlink', 'mode-backlink', 'both'])
+    def test_cross_graph_cleanup_does_not_trust_rebound_backlinks(sql_facts, damage):
+        f = sql_facts
+        with f.store.tx() as c, native_segment(f, c) as s:
+            frontier = s.graph._accounted_frontier
+            issued = tuple(s.mode.scope._issued)
+            roles = dict.fromkeys(('source', 'generate', 'platform', 'trial', 'per_use'))
+            with pytest.raises(DomainError), runtime._cold_graph_read(
+                    f.worker, c, {'unowned-other-graph': {}}, roles, 'pre') as other:
+                other._accounted_frontier = frontier
+                try:
+                    if damage in ('frontier-backlink', 'both'):
+                        frontier.graph = other
+                    if damage in ('mode-backlink', 'both'):
+                        s.mode.graph = other
+                    other.invalidate()
+                    assert other.active is False
+                finally:
+                    frontier.graph = s.graph
+                    s.mode.graph = s.graph
+>           assert tuple(s.mode.scope._issued) == issued and s.mode.active
+E           assert (() == (<sim2act.col...7fc1b7aff900>)
+E             
+E             Right contains 2 more items, first extra item: <sim2act.cold_accounted._Handle object at 0x7fc1b7aff8e0>
+E             Use -v to get more diff)
+
+tests/test_cold_accounted_native.py:480: AssertionError
+=============================== warnings summary ===============================
+../../Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /workspace/Sim2Act/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cold_accounted_native.py::test_cross_graph_cleanup_does_not_trust_rebound_backlinks[both]
+1 failed, 1 warning in 5.87s

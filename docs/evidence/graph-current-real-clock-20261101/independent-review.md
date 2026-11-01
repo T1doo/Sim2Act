@@ -1,0 +1,7 @@
+# 独立只读审查范围
+
+`owned_pin_review`先复核原Graph版本与清理，发现双backlink可进入外国mode.close、Candidate.release仍沿可变frontier、查询分配失败先于撤销三处实缺陷。主writer完成C原身份、撤销先行及release身份匹配，真实旧反例失败／新反例通过；独审确认mustfix闭合。审查C融合getter实际patch时另发现Frontier.graph需在gate后复读，已加该行。其余模块exact type、原代码／角色见证、无分配后段、bootstrap失败清理、强引用及死弱child拒绝无新增阻断。内部monitor事件次数变化不是逐事件等价承诺。独审未运行大样本、未写代码，静态结论不签测试或性能。
+
+`evidence_review`逐核276原30及120原件、190源库存、同observer SHA、首开回读与WAL空文件边界；确认未混签。提出普通30全Run禁止扩展预约、失败attempt状态名及混合计数需收窄，已在辅助诊断另修并保留原件。指出SQL计时与Pythonexclusive重叠，派生表明确不相加。没有将120当原30下界或转正。
+
+此记录是主任务对实际独审消息的摘要，不是逐字签名；最终执行以各run元数据及原始输出为准。每项目最多3并行、唯一源码writer不变。

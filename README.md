@@ -1,5 +1,7 @@
 # Sim2Act
 
+> **默认Graph真实时钟源码：35eaa941（2026-11-01）**。已修跨Graph清理归属，并将新协议同次版本读取的重复资格核合为一次fresh C检查，完整动态门／五写／G1保留。匹配显式120两笔总计113.804/116.194降至87.406/94.006秒，保存与首次回读通过；原控制检查次数一致。189相关回归零失败／跳过；真实G1取消完整回滚，默认worker收敛CANCELLED。[原始对照、原30失败与全部边界](docs/evidence/graph-current-real-clock-20261101/README.md)。[新Linux限制候选](deliverables/limited-graph-current-20261101/README.md)实际安装CSV30/v1保存／重开通过；**原普通30仍在首次写前G0拒绝**，长锁、新Windows、正式PG／大型live未解决，非全产品完成。
+
 > **默认 Graph 完整版本协议源码：4d0b16f2（2026-10-31）**。Graph/Frontier按版本持有完整不可变V2期望，check、selector、fallback、export及G1 proof消费同版本，W5→G1仍原完整执行。相关172项零失败／零跳过；一次实际Cold五写、完整G1及SQL提交已验证，6次固定Mock、0real、文件SQLite、虚拟业务时钟，**不是原30秒性能验收**。[完整接线、失败对照、冻结版本和边界](docs/evidence/graph-version-lifecycle-20261031/README.md)。新源码未重新打包，以下2ad Linux候选保留；新Windows／正式PG／大型live及完整交付仍未验。
 
 > **当前更早截止修复候选：2ad32276（Linux x86_64／CPython3.12）**。[包身份及使用范围](deliverables/limited-text-candidate-deadline-20261031/README.md)。签120结算也受原更早state截止约束，原越界提交反例已实修；307／安装44项定向回归通过，范围重叠。匹配大型两笔保存／首次重开通过，但G0为31.09／30.96秒、writer45.45／49.60秒、total76.54／80.56秒，比基线更慢，**未解决原普通30秒目标**。[原失败、实际对照及未实现的最小完整架构](docs/evidence/cold-earliest-deadline-boundary-20261031/README.md)。本轮0新真实模型，未改main／Release、Windows／PG未验；不是全产品完成。

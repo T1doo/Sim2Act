@@ -50,6 +50,15 @@ def validate_negative_state(run, attempt, operation, internal, typed, event_rows
     return usage
 
 
+def selected_negative_events(event_rows, attempt_id):
+    # Ordinary caps never reserve any signed extended settlement interval,
+    # including for a previous successfully committed model in the same Run.
+    assert not any(r['kind']=='NS_SETTLEMENT_LEASE_RESERVED' for r in event_rows)
+    return [r for r in event_rows if r['kind'] not in (
+        'NS_RECEIVED','NS_REJECTED','NS_SETTLED')
+        or r['data'].get('attempt_id')==attempt_id]
+
+
 def test_original_thirty_large_goal_or_safe_budget_refusal(env,tmp_path,monkeypatch):
     source=os.environ['SIM2ACT_DIAGNOSTIC_SOURCE']
     from sim2act import natural_spec_runtime as runtime
@@ -158,18 +167,19 @@ def test_original_thirty_large_goal_or_safe_budget_refusal(env,tmp_path,monkeypa
     failures=[json.loads(row) for row in (tmp_path/'failure-observations.jsonl').read_text().splitlines()]
     # A prior Cold may already be VERIFIED. Its settled event must not be
     # mistaken for this failed attempt's settlement, nor silently discarded.
-    selected_events=[r for r in event_rows if r['kind'] not in (
-        'NS_RECEIVED','NS_REJECTED','NS_SETTLED','NS_SETTLEMENT_LEASE_RESERVED')
-        or r['data'].get('attempt_id')==attempt['id']]
+    selected_events=selected_negative_events(event_rows,attempt['id'])
     usage=validate_negative_state(run, attempt, operation, internal, typed, selected_events, failures)
     expected_requests=5+len(records)
     assert total==expected_requests and len((tmp_path/'mock-exchanges.jsonl').read_text().splitlines())==expected_requests
     result={'classification':'ORIGINAL_TRIALCAPS_30_REAL_CLOCK_SQLITE_FIXED_MOCK_NEGATIVE_NOT_LIVE',
-        'candidate_source':source,'source_files':checked,'status':'PASS_NEGATIVE_EXPECTED_NO_COMMIT',
+        'candidate_source':source,'source_files':checked,'status':'PASS_NEGATIVE_FAILED_ATTEMPT_NOT_COMMITTED',
         'contract_input_change_only':changes,'old_caps_not_upgraded':True,'run_id':cold,'run_status':run['status'],
         'expired_lease_wall':run['lease_until'],'run_and_trial_deadlines_still_future':True,
-        'received_response_preserved':True,'known_usage':usage,'response_fingerprint_matches_received':True,'attempt_status':attempt['status'],'operation_status':operation['status'],
-        'typed_results':typed,'all_cold_settled_or_verified_or_extended_lease_events':settled,'records':records,
+        'received_response_preserved':True,'known_usage':usage,'response_fingerprint_matches_received':True,'attempt_id':attempt['id'],'operation_id':operation['id'],
+        'attempt_status':attempt['status'],'operation_status':operation['status'],
+        'typed_results':typed,'all_run_NS_SETTLED_events':sum(r['kind']=='NS_SETTLED' for r in event_rows),
+        'all_run_extended_lease_reservations':0,
+        'selected_model_verified_events':sum(r['kind']=='SPEC_STEP_VERIFIED' and r['data'].get('operation_id')==operation_id for r in event_rows),'records':records,
         'failed_cold_ordinal':len(records),'prior_cold_attempts':[
             dict(id=r['id'],status=r['status']) for r in all_cold_attempts if r['id']!=attempt['id']],
         'fixed_mock_requests':expected_requests,'real_model_requests':0,'automatic_replay':False,
