@@ -56,7 +56,7 @@ async function boot(hash = "") {
     const result = await rpc(request);
     if(fault==="bad-stage"&&path.endsWith("/stage-approval")){fault="";const value=JSON.parse(result.text);value.authority.run_id="run_"+"e".repeat(32);result.text=JSON.stringify(value);}
     if(fault==="late-stage"&&path.endsWith("/stage-review")){fault="";held=true;await new Promise(resolve=>release=resolve);}
-    if (request.method === "POST" && path.endsWith("/" + fault)) { fault = ""; check(result.status === 200, "lost response follows actual server commit"); throw Error("controlled response loss after real HTTP commit"); }
+    if (request.method === "POST" && path.endsWith("/" + fault)) { fault = ""; check(result.status === 200, path.endsWith("/stage-approval") ? "lost response follows simulated typed stage acceptance" : "lost response follows actual root server commit"); throw Error("controlled response loss after accepted response"); }
     if (fault === "late-preparation" && request.method === "POST" && path.endsWith("/preparation")) { fault = ""; check(result.status === 200, "held second preparation actually committed"); held = true; await new Promise(resolve => release = resolve); }
     if (fault === "late" && request.method === "POST" && path.endsWith("/consent")) { fault = ""; check(result.status === 200, "held consent actually committed"); held = true; await new Promise(resolve => release = resolve); }
     return new Response(result.text, {status: result.status, headers: {"Content-Type": result.content_type || "application/json"}});
@@ -78,6 +78,10 @@ async function boot(hash = "") {
    check(posts("/stage-approval")===0,"late response did not approve");
  }else{
    await click("trial-stage-review");
+   if(info.scenario==="wrong-review"){
+     check($("trial-stage-preview").textContent===""&&!$("trial-stage-ack").checked&&posts("/stage-approval")===0,"foreign target with valid digest cannot be approved");
+     fs.writeFileSync(info.output,JSON.stringify({status:"PASS",checks,requests,loaded_source_sha256:hashes,stage_endpoints:"CONTROLLED_TYPED_WIRE_ONLY"},null,2));w.close();process.stdout.write(JSON.stringify({done:true})+"\n");process.exit(0);
+   }
    check($("trial-stage-preview").textContent.includes(info.sourceText),"complete actual fixture material shown as text");
    check(!$("trial-stage-preview").textContent.includes('"contract_fingerprint":'),"review is a readable workflow without JSON");
    check($("trial-stage-confirm").disabled,"no default consent");
@@ -96,7 +100,7 @@ async function boot(hash = "") {
    }else{
      if(info.scenario==="lost")fault="stage-approval";
      if(info.scenario==="bad")fault="bad-stage";
-     $("trial-stage-ack").checked=true;$("trial-stage-ack").dispatchEvent(new w.Event("change"));await click("trial-stage-confirm");
+     $("trial-stage-ack").checked=true;$("trial-stage-ack").dispatchEvent(new w.Event("change"));if(info.scenario==="double")await Promise.all([click("trial-stage-confirm"),click("trial-stage-confirm")]);else await click("trial-stage-confirm");
      const originalKey=$("trial-stage-key").value;
      check(originalKey&&posts("/stage-approval")===1,"one explicit approval with durable original key");
      check($("trial-stage-confirm").disabled&&!$("trial-stage-ack").checked,"no repeat approval after known or unknown response");

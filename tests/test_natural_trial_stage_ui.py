@@ -15,7 +15,10 @@ from sim2act.db import delivery_graph_requests, fingerprint, grants
 from sim2act.natural_trial_api import StageApprovalRequest, StageReviewRequest, original_contract
 
 
-@pytest.mark.parametrize("scenario", ["happy", "lost", "bad", "stale", "revoke", "late", "storage"])
+@pytest.mark.parametrize(
+    "scenario",
+    ["happy", "lost", "bad", "stale", "revoke", "late", "storage", "double", "wrong-review"],
+)
 def test_delivered_stage_controls_use_original_intent_without_model_authority(
     prepared_data,  # noqa: F811
     tmp_path,
@@ -96,7 +99,9 @@ def test_delivered_stage_controls_use_original_intent_without_model_authority(
                     release_fingerprint="c" * 64,
                     generation_run_id=ids["generate"],
                     generation_candidate_fingerprint="d" * 64,
-                    target_goal_fingerprint=c.bindings[stage == "cold"].goal_fingerprint,
+                    target_goal_fingerprint="e" * 64
+                    if scenario == "wrong-review"
+                    else c.bindings[stage == "cold"].goal_fingerprint,
                     authorization_fingerprint=c.authorization_fingerprint,
                     predecessor_run_id=ids["generate" if stage == "source" else "source"],
                     predecessor_created_at=c.prepared_at + 1,
