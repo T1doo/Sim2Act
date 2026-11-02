@@ -1,0 +1,36 @@
+'use strict';
+// Delivered HTML/controller and CSSOM, no browser, real geometry or new HTTP.
+const fs=require('node:fs'),assert=require('node:assert/strict'),{JSDOM,VirtualConsole}=require('jsdom');
+const errors=[],requests=[],checks=[],vc=new VirtualConsole();vc.on('jsdomError',error=>errors.push(error.message));
+const dom=new JSDOM(fs.readFileSync('src/sim2act/web/index.html','utf8'),{url:'https://usability.invalid/',runScripts:'outside-only',virtualConsole:vc}),w=dom.window,d=w.document;
+w.matchMedia=()=>({matches:false,addEventListener(){}});w.setInterval=()=>0;w.HTMLElement.prototype.scrollIntoView=function(){};
+w.fetch=async(path,options={})=>{requests.push({path,method:options.method||'GET'});return{ok:false,status:503,json:async()=>({error:{code:'CONTROLLED_OFFLINE'}})}};
+w.eval(fs.readFileSync(process.env.SIM2ACT_REVIEW_JS||'src/sim2act/web/app.js','utf8')+`\nwindow.usability={start(){token='synthetic-usability';identityConnectionGeneration++;},openLookup,openFrontendInspector,updateFrontendRun};`);
+const check=(value,name)=>{assert(value,name);checks.push(name);};
+const key=(target,value,composing=false)=>{const event=new w.KeyboardEvent('keydown',{key:value,bubbles:true,cancelable:true,isComposing:composing});target.dispatchEvent(event);return event;};
+(async()=>{try{
+ await new Promise(r=>setTimeout(r,0));const initial=requests.length,api=w.usability;api.start();
+ const projects=d.getElementById('project-select'),long='长中文项目名称，包含多个标点与完整版本说明。'.repeat(20);projects.replaceChildren(new w.Option('甲','p1',true,true),new w.Option('乙','p2'),new w.Option(long,'p3'));
+ d.getElementById('goal').value='保留本次草稿';api.openLookup(d.getElementById('frontend-lookup-open'));const dialog=d.querySelector('dialog'),query=dialog.querySelector('input'),items=[...dialog.querySelectorAll('.lookup-result')];
+ check(items.length===3&&items[2].textContent.includes(long),'long Chinese project name remains complete in local lookup');
+ query.focus();key(query,'ArrowUp');check(d.activeElement===items[2],'ArrowUp from lookup input selects the last result');
+ query.focus();key(query,'ArrowDown');check(d.activeElement===items[0],'ArrowDown from lookup input selects the first result');
+ key(items[0],'ArrowUp');check(d.activeElement===items[2],'ArrowUp wraps from first result to last');
+ key(items[2],'ArrowDown');check(d.activeElement===items[0],'ArrowDown wraps from last result to first');
+ query.focus();check(!key(query,'ArrowUp',true).defaultPrevented&&d.activeElement===query,'IME composition keeps arrow keys in the input');
+ const close=[...dialog.querySelectorAll('button')].find(b=>b.textContent==='关闭');close.focus();check(!key(close,'ArrowUp').defaultPrevented&&d.activeElement===close,'close button arrow key is not hijacked by result navigation');
+ query.value='不存在的完整检索词';query.dispatchEvent(new w.Event('input'));query.focus();check(!key(query,'ArrowDown').defaultPrevented&&d.activeElement===query&&!dialog.querySelector('.lookup-result'),'empty results leave keyboard focus in the query');
+ close.click();check(d.activeElement.id==='frontend-lookup-open'&&d.getElementById('goal').value==='保留本次草稿','closing lookup restores trigger focus and retains the existing draft');
+ const trigger=d.querySelector('[data-inspection-open=checks]');api.openFrontendInspector('checks',trigger);const panel=d.getElementById('frontend-inspector-content');
+ check(panel.getAttribute('aria-labelledby')==='frontend-tab-checks'&&panel.textContent.includes('尚无当前任务记录'),'empty inspection content retains its selected-tab accessible label');
+ api.updateFrontendRun({id:'run_usability',status:'PAUSED',version:1,result:{},events:[]},()=>true);api.openFrontendInspector('checks',trigger);
+ check(panel.tabIndex===0&&panel.role==='tabpanel','text-only inspection panel is in the normal tab sequence');panel.focus();check(d.activeElement===panel&&panel.getAttribute('aria-labelledby')==='frontend-tab-checks','inspection text can receive focus and retains its selected-tab accessible label');
+ const tab=d.getElementById('frontend-tab-checks');tab.focus();key(tab,'End');check(d.activeElement.id==='frontend-tab-versions'&&panel.tabIndex===0&&panel.getAttribute('aria-labelledby')==='frontend-tab-versions','tab navigation preserves focusable correctly labelled content');
+ const style=d.createElement('style');style.textContent=fs.readFileSync(process.env.SIM2ACT_REVIEW_CSS||'src/sim2act/web/app.css','utf8');d.head.append(style);
+ const coarse=[...style.sheet.cssRules].find(rule=>rule.conditionText?.includes('pointer:coarse'));assert(coarse,'coarse pointer media rule exists');const rules=[...coarse.cssRules],height=rules.find(rule=>rule.style.getPropertyPriority('min-height')==='important'&&rule.style.getPropertyValue('min-height')==='44px');
+ check(!!height&&d.getElementById('run-submit').matches(height.selectorText)&&d.getElementById('goal-card-save').matches(height.selectorText),'coarse touch minimum overrides ID-based primary button heights');
+ const checkbox=d.createElement('input'),radio=d.createElement('input');checkbox.type='checkbox';radio.type='radio';check(!checkbox.matches(height.selectorText)&&!radio.matches(height.selectorText),'touch height rule does not stretch checkbox or radio glyphs');
+ const label=d.createElement('label');label.append(checkbox,d.createTextNode(long));const labelRule=rules.find(rule=>rule.style.getPropertyValue('min-height')==='44px'&&rule.style.getPropertyValue('display')==='flex');check(!!labelRule&&label.matches(labelRule.selectorText)&&label.textContent===long,'long checkbox label supplies the touch target without losing its text');
+ check(requests.length===initial,'all usability review gestures issue zero new API requests');check(!errors.length,'delivered usability gestures produce no uncaught DOM errors');
+ console.log(JSON.stringify({status:'PASS',scope:'CONTROLLED_DOM_AND_CSSOM_NOT_REAL_TOUCH_PIXELS_OR_SCREEN_READER',checks,new_api_requests:0,ci_execution_seconds:0,model_requests:0,pg_operations:0,errors},null,2));
+ }finally{dom.window.close();}})().catch(error=>{console.error(error.stack);process.exitCode=1;});

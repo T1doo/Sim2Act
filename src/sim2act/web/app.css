@@ -1342,12 +1342,16 @@ html[data-motion=reduced] *,html[data-paused=true] * {
   }
 }
 @media(pointer:coarse) {
-  button,summary {
+  /* Touch size must also beat ID-based primary/compact control rules. */
+  button,summary,input:not([type=checkbox]):not([type=radio]),select {
+    min-height:44px!important;
+  }
+  label:has(>input:is([type=checkbox],[type=radio])) {
+    display:flex;
+    align-items:center;
     min-height:44px;
   }
-  input,select {
-    min-height:44px;
-  }
+  label>input:is([type=checkbox],[type=radio]) { flex-shrink:0; }
 }
 @media(prefers-reduced-motion:reduce) {
   *,*::before,*::after {

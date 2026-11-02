@@ -1944,9 +1944,10 @@ function openFrontendInspector(tab,trigger) {
 function renderFrontendInspector() {
   const host=$('frontend-inspector-content');host.replaceChildren();
   document.querySelectorAll('[data-inspection-tab]').forEach(b=>{const selected=b.dataset.inspectionTab===frontendInspectorTab;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;});
+  host.setAttribute('aria-labelledby','frontend-tab-'+frontendInspectorTab);
   const view=frontendInspectionView||frontendRunView;
   if(!view||!view.current()||view.identity!==token||view.project!==$('project-select').value) {host.append(frontendNode('p','尚无当前任务记录。选择任务后可查看对应来源、调用、验证和版本。'));return;}
-  const r=view.receipt;$('frontend-inspector-content').setAttribute('aria-labelledby','frontend-tab-'+frontendInspectorTab);$('frontend-inspector-title').textContent=`当前任务检查 · ${r.id}`;
+  const r=view.receipt;$('frontend-inspector-title').textContent=`当前任务检查 · ${r.id}`;
   const details=(label,value)=>{const box=frontendNode('details'),summary=frontendNode('summary',label),pre=frontendNode('pre',JSON.stringify(value,null,2));box.append(summary,pre);return box;};
   const pair=(label,value)=>{const dl=frontendNode('dl');dl.append(frontendNode('dt',label),frontendNode('dd',value==null?'尚无记录':String(value)));host.append(dl);};
   if(frontendInspectorTab==='sources') {
@@ -2091,7 +2092,7 @@ function frontendRefreshIdle() {
   const tabs=frontendNode('div',undefined,'inspection-tabs');tabs.role='tablist';tabs.setAttribute('aria-label','当前任务检查');
   for(const [key,name] of Object.entries(names)){const b=frontendButton(name,()=>{frontendInspectorTab=key;renderFrontendInspector();});b.dataset.inspectionTab=key;b.id='frontend-tab-'+key;b.role='tab';b.setAttribute('aria-controls','frontend-inspector-content');tabs.append(b);}
   tabs.addEventListener('keydown',e=>{const keys=Object.keys(names),index=keys.indexOf(frontendInspectorTab);let next;if(e.key==='ArrowRight')next=(index+1)%4;if(e.key==='ArrowLeft')next=(index+3)%4;if(e.key==='Home')next=0;if(e.key==='End')next=3;if(next!==undefined){e.preventDefault();frontendInspectorTab=keys[next];renderFrontendInspector();$('frontend-tab-'+keys[next]).focus();}});
-  const content=frontendNode('div',undefined,'inspection-content');content.id='frontend-inspector-content';content.role='tabpanel';inspector.append(ih,tabs,content);desk.append(inspector);
+  const content=frontendNode('div',undefined,'inspection-content');content.id='frontend-inspector-content';content.role='tabpanel';content.tabIndex=0;inspector.append(ih,tabs,content);desk.append(inspector);
   const paneNav=frontendNode('div',undefined,'narrow-pane-nav');paneNav.setAttribute('aria-label','任务区域');desk.dataset.pane='instruction';
   for(const [key,label] of [['instruction','指令'],['result','成果']])paneNav.append(frontendButton(label,()=>{closeFrontendInspector(false);desk.dataset.pane=key;}));
   desk.before(paneNav);
@@ -2155,7 +2156,13 @@ function openLookup(trigger){
     for(const row of $('materials').querySelectorAll('.resource-row')){const button=row.querySelector('button');if(button&&!button.disabled)add('材料 · '+row.querySelector('.resource-name').textContent,()=>{selectWorkspace('resources');selectResourceCategory('materials');button.click();});}
     if(!count)results.append(frontendNode('p','当前已读取目录中无匹配结果。请调整查询或关闭后刷新相应目录。'));
   }
-  query.addEventListener('input',render);dialog.addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp'].includes(e.key))return;const buttons=[...results.querySelectorAll('button')];if(!buttons.length)return;e.preventDefault();const i=buttons.indexOf(document.activeElement);buttons[(i+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length].focus();});render();show();
+  query.addEventListener('input',render);dialog.addEventListener('keydown',e=>{
+    if(e.isComposing||!['ArrowDown','ArrowUp'].includes(e.key))return;
+    const buttons=[...results.querySelectorAll('button')],i=buttons.indexOf(document.activeElement);
+    if(!buttons.length||(e.target!==query&&i<0))return;
+    e.preventDefault();const next=i<0?(e.key==='ArrowDown'?0:buttons.length-1):(i+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;
+    buttons[next].focus();
+  });render();show();
 }
 // Readable projections keep the complete original text available and never parse HTML.
 function frontendReadableDocument(text, format='md') {
