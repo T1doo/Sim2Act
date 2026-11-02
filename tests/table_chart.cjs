@@ -97,6 +97,7 @@ function syntheticShapeChecks(){
    holdRun=true;const heldTab=new Promise(resolve=>{holdReady=resolve;}),showTab=click(button(c));await heldTab;
    await click(w.document.querySelector('[data-tab="resources"]'));await click(w.document.querySelector('[data-tab="apps"]'));
    releaseHeld();releaseHeld=null;await showTab;check(!c.querySelector('svg'),'actual late200 after workspace ABA is isolated');
+   await click('internal-refresh');c=control();choose(c,'quote','end_line');check(!instanceButton(info.empty).disabled,'explicit current history read rebinds instance navigation after workspace change');
    await click(button(c));capture(c,info.outputs[0],'end_line');check(true,'new explicit click after returning to workspace remains usable');
    tamperRun=true;await click(button(c));check(!c.querySelector('svg')&&c.textContent.includes('VERSION_CONFLICT'),'controlled wrong typed fingerprint after actual HTTP refuses chart');
    tamperRelease=true;await click(button(c));check(!c.querySelector('svg')&&c.textContent.includes('绑定不一致'),'controlled wrong original Release after actual HTTP refuses chart');

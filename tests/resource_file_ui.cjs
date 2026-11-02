@@ -105,7 +105,8 @@ function clear(){ $('resource-file-clear').click(); }
       check(recovered.body.request_key===original.body.request_key&&JSON.stringify(recovered.body)===JSON.stringify(original.body),fault+' explicit recovery reuses exact original request');
       check(recovered.accepted.run_id===original.accepted.run_id&&recovered.accepted.cached===true,fault+' recovery returns same actual accepted Run');
       check(w.eval('engineering.run?.id')===original.accepted.run_id&&!w.eval('engineeringPending.has(engineering.instance.id)'),fault+' scoped detail confirms original accepted Run');
-      const cancel=[...$('internal-controls').querySelectorAll('button')].find(b=>b.textContent==='取消后台任务');check(!!cancel,'queued recovered Run has explicit cancel');cancel.click();cancel.click();await idle();
+      $('internal-stop-read').click();await idle();
+      const cancel=$('internal-stop-cancel');check(!!cancel&&!cancel.disabled,'queued recovered Run has explicit cancel after actual metadata read');cancel.click();cancel.click();await idle();
       const commands=posts().filter(r=>r.path===`/api/internal/instances/${instance}/runs/${original.accepted.run_id}/commands`);
       check(commands.length===1&&commands[0].body.command==='cancel'&&w.eval('engineering.run?.status')==='CANCELLED',fault+' double cancel sends one command and reads actual terminal state');
       cancelled.push(original.accepted.run_id);

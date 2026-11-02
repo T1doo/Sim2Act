@@ -304,7 +304,7 @@ async function refreshInternal(view=engineering) {
   $("internal-instances").replaceChildren(...instances.items.map(instance=>row(`${instance.id} · 版本 ${instance.revision} · 结果版本 ${instance.data_version}`,()=>{if(current()&&view.historyReady)return showInternalInstance(instance.id,view);},"打开 / 重开")));
   if(!releases.items.length)$("internal-releases").textContent="尚无内部 Release。先核查并查看精确快照。";
   if(!instances.items.length)$("internal-instances").textContent="尚无实例。内部 Release 已保存后可创建。";
-  view.historyReady=true;
+  view.historyReady=true;view.frontendHistoryWorkspace=workspace;
   engineeringStatus(view,"内部历史已读回；正式发布与部署仍关闭。");
   } catch(error){
     if(!current())return;
@@ -849,15 +849,18 @@ function renderManifestViews(manifest,result,chartContext=null){
     heading.textContent=definition.output_field;section.append(heading);group.append(section);
     const schema=manifest.output_schema?.properties?.[definition.output_field],value=result[definition.output_field];
     if(definition.component_ref==="text"&&schema?.type==="string"&&scalar(value,"string")){
-      message.className="manifest-text";message.textContent=value;section.append(message);continue;
+      message.className="manifest-text";message.textContent=value;section.append(message);
+      if(chartContext){const {view,record}=chartContext,instance=view.instance,selection=view.instanceGeneration,workspace=workspaceSelectionGeneration;
+        section.append(frontendTextCopy(value,()=>engineeringCurrent(view)&&view.instance===instance&&view.instanceGeneration===selection&&workspaceSelectionGeneration===workspace,`${definition.output_field} · 结果 v${record.version}`));}
+      continue;
     }
     if(definition.component_ref==="table"||definition.component_ref==="chart"){
       const shape=manifestTableShape(schema,value),columns=shape?.columns;
       if(shape){
         const scroll=document.createElement("div"),table=document.createElement("table"),caption=document.createElement("caption"),head=document.createElement("thead"),body=document.createElement("tbody"),headers=document.createElement("tr");
-        scroll.className="manifest-table-scroll";caption.textContent=`${definition.output_field} · ${value.length} 条`;table.append(caption,head,body);head.append(headers);
+        scroll.className="manifest-table-scroll";scroll.tabIndex=0;scroll.setAttribute("aria-label",`${definition.output_field} 原数据表，可局部横向滚动`);caption.textContent=`${definition.output_field} · ${value.length} 条`;table.append(caption,head,body);head.append(headers);
         for(const key of columns){const th=document.createElement("th");th.scope="col";th.textContent=key;headers.append(th);}
-        for(const entry of value){const tr=document.createElement("tr");for(const key of columns){const td=document.createElement("td");td.textContent=String(entry[key]);tr.append(td);}body.append(tr);}
+        for(const entry of value){const tr=document.createElement("tr");for(const key of columns){const td=document.createElement("td");td.textContent=String(entry[key]);if(typeof entry[key]==="number"||typeof entry[key]==="string"&&/^-?\d+(?:\.\d+)?$/.test(entry[key]))td.dataset.numeric="true";tr.append(td);}body.append(tr);}
         scroll.append(table);section.append(scroll);
         if(!value.length){message.textContent="暂无记录；无字面命中不代表语义不存在。";section.append(message);}
         const controls=tableChartControl(manifest,definition.output_field,result,chartContext);

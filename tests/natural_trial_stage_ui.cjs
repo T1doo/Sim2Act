@@ -64,6 +64,8 @@ async function boot(hash = "") {
   for (const script of [...w.document.querySelectorAll("script[src]")]) { const name = script.getAttribute("src").slice(1), text = await load("/" + name); hashes[name] = crypto.createHash("sha256").update(text).digest("hex"); const node = w.document.createElement("script"); node.textContent = text; w.document.body.append(node); }
   $("token").value = "synthetic-test-A"; await click("connect");
   await wait(() => $("login").hidden && $("project-select").value === info.project);
+  w.document.querySelector('.section-links a[href="#goal-cards-panel"]').click();
+  check(visible($("goal-cards-panel")), "explicit project navigation exposes stage review workspace");
   await click("trial-refresh"); $("trial-source").value = info.source; $("trial-cold").value = info.cold;
   check(visible($("trial-panel")), "preparation entry appears in actual project page");
 }
