@@ -2009,7 +2009,8 @@ function frontendResourceActions(actions, resource) {
 }
 function frontendPositionMenu(menu,trigger) {
   const width=document.documentElement.clientWidth||innerWidth,height=innerHeight,padding=8,anchor=trigger.getBoundingClientRect();
-  menu.style.position='fixed';menu.style.right='auto';menu.style.left='0px';menu.style.top='0px';menu.style.maxWidth=Math.max(0,width-padding*2)+'px';
+  menu.style.position='fixed';menu.style.right='auto';menu.style.left='0px';menu.style.top='0px';menu.style.maxWidth=Math.min(288,Math.max(0,width-padding*2))+'px';
+  menu.style.maxHeight='';
   const rect=menu.getBoundingClientRect(),below=Math.max(0,height-anchor.bottom-padding-4),above=Math.max(0,anchor.top-padding-4),flip=rect.height>below&&above>below;
   const room=flip?above:below;menu.style.maxHeight=Math.min(320,room)+'px';menu.style.overflowY='auto';
   const actualHeight=Math.min(rect.height,room),left=Math.max(padding,Math.min(anchor.right-rect.width,width-rect.width-padding));
@@ -2307,7 +2308,7 @@ function frontendRunCommand(command,receipt,current) {
       const status=frontendNode('p',`请求结果待核实：${error.detail||error.message}。已有成果保留；不会自动重发。`);status.role='status';
       const read=frontendButton('查询当前任务状态',safe(async()=>{if(current())await showRun(receipt.id);}));host.append(status,read);
     }
-  }));return button;
+  }),'run-state-command');return button;
 }
 // Reflect the supported explicit CSV column selectors; selection itself does not run.
 document.addEventListener('change',event=>{

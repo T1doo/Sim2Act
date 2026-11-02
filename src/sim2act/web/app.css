@@ -1219,10 +1219,34 @@ html[data-motion=reduced] *,html[data-paused=true] * {
   .grid {
     grid-template-columns:minmax(0,1fr);
   }
-}
-@media(max-width:1000px) {
+  /* Reuse the existing pane switch before the result can fall below 560px. */
   #projects>#task-workbench.zone-active {
-    grid-template-columns:minmax(280px,34%) 8px minmax(0,1fr);
+    display:block;
+    overflow:auto;
+  }
+  #task-list-panel,#task-result-panel {
+    height:auto;
+    overflow:visible;
+  }
+  .workspace-divider { display:none; }
+  .narrow-pane-nav {
+    display:flex;
+    gap:8px;
+    border-bottom:1px solid var(--line);
+    padding:4px 0 8px;
+  }
+  #task-workbench[data-pane=result]>#task-list-panel,#task-workbench[data-pane=instruction]>#task-result-panel {
+    display:none;
+  }
+  #task-workbench[data-inspecting=true]>#task-list-panel,#task-workbench[data-inspecting=true]>#task-result-panel {
+    display:none;
+  }
+  .workbench-inspector {
+    position:static;
+    width:100%;
+    border:0;
+    height:auto;
+    min-height:160px;
   }
 }
 @media(max-width:768px) {
@@ -1291,28 +1315,6 @@ html[data-motion=reduced] *,html[data-paused=true] * {
     padding:16px 8px;
     height:auto;
     overflow:visible;
-  }
-  .workspace-divider {
-    display:none;
-  }
-  .narrow-pane-nav {
-    display:flex;
-    gap:8px;
-    border-bottom:1px solid var(--line);
-    padding:4px 0 8px;
-  }
-  #task-workbench[data-pane=result]>#task-list-panel,#task-workbench[data-pane=instruction]>#task-result-panel {
-    display:none;
-  }
-  #task-workbench[data-inspecting=true]>#task-list-panel,#task-workbench[data-inspecting=true]>#task-result-panel {
-    display:none;
-  }
-  .workbench-inspector {
-    position:static;
-    width:100%;
-    border:0;
-    height:auto;
-    min-height:160px;
   }
   #goal-card-form,.grid,.goal-card-layout,#internal-layout {
     grid-template-columns:minmax(0,1fr);
@@ -1463,4 +1465,5 @@ html[data-motion=reduced] button:active { transform:none; }
 [data-nav=collapsed] #workspace-nav button[data-tab] svg { display:block; }
 [data-nav=collapsed] #workspace-nav .nav-text { position:absolute; width:1px; height:1px; clip-path:inset(50%); overflow:hidden; }
 [data-nav=collapsed] #workspace-nav button:is(:hover,:focus-visible) .nav-text { clip-path:none; width:auto; height:auto; overflow:visible; left:0; top:100%; padding:4px 8px; z-index:30; pointer-events:none; background:var(--surface); border:1px solid var(--control); color:var(--ink); }
-.row-menu-popup { max-width:calc(100vw - 16px); max-height:calc(100dvh - 16px); overflow-y:auto; }
+.row-menu-popup { min-width:min(160px,calc(100vw - 16px)); max-width:min(288px,calc(100vw - 16px)); max-height:calc(100dvh - 16px); overflow-y:auto; }
+button.run-state-command { width:calc(6em + 24px); min-width:0; }

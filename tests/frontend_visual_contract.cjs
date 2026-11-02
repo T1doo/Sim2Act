@@ -1,0 +1,33 @@
+'use strict';
+// Source/CSSOM media-rule projection and controlled geometry; never rendered pixels.
+const fs=require('node:fs'),assert=require('node:assert/strict'),{JSDOM,VirtualConsole}=require('jsdom');
+const js=fs.readFileSync(process.env.SIM2ACT_VISUAL_JS||'src/sim2act/web/app.js','utf8'),css=fs.readFileSync(process.env.SIM2ACT_VISUAL_CSS||'src/sim2act/web/app.css','utf8');
+const checks=[],errors=[],requests=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));const dom=new JSDOM(fs.readFileSync('src/sim2act/web/index.html','utf8'),{url:'https://visual-contract.invalid/',runScripts:'outside-only',virtualConsole:vc}),w=dom.window,d=w.document;
+w.matchMedia=()=>({matches:false,addEventListener(){}});w.setInterval=()=>0;w.HTMLElement.prototype.scrollIntoView=function(){};let release;
+w.fetch=async(path,options={})=>{requests.push({path,method:options.method||'GET'});if(options.method==='POST')await new Promise(r=>release=r);return{ok:false,status:503,json:async()=>({error:{code:'CONTROLLED_OFFLINE'}})}};
+w.eval(js+`\nwindow.visualContract={frontendPositionMenu,frontendRunCommand};`);const api=w.visualContract,check=(value,name)=>{assert(value,name);checks.push(name);};
+const original=d.createElement('style');original.textContent=css;d.head.append(original);const sheet=original.sheet;original.remove();
+function activeMedia(condition,width){if(/pointer|prefers|forced/.test(condition))return false;return [...condition.matchAll(/(min|max)-(width|height):\s*(\d+)px/g)].every(([,kind,axis,number])=>kind==='min'?(axis==='width'?width:900)>=+number:(axis==='width'?width:900)<=+number);}
+function projectRules(width){const chunks=[];for(const rule of sheet.cssRules){if(rule.type===4){if(activeMedia(rule.conditionText,width))chunks.push(...[...rule.cssRules].map(r=>r.cssText));}else chunks.push(rule.cssText);}const style=d.createElement('style');style.textContent=chunks.join('\n');d.head.append(style);return style;}
+(async()=>{try{
+ await new Promise(r=>setTimeout(r,0));const initial=requests.length,desk=d.getElementById('task-workbench'),left=d.getElementById('task-list-panel'),right=d.getElementById('task-result-panel');
+ for(const width of [1100,1024,900,769,768,320]){const style=projectRules(width);desk.dataset.pane='instruction';delete desk.dataset.inspecting;
+  check(w.getComputedStyle(desk).display==='block'&&w.getComputedStyle(d.querySelector('.narrow-pane-nav')).display==='flex'&&w.getComputedStyle(d.querySelector('.workspace-divider')).display==='none',width+'px source media rules select a single workbench pane');
+  check(w.getComputedStyle(right).display==='none'&&w.getComputedStyle(left).display!=='none',width+'px instruction pane retains the original input');
+  desk.dataset.pane='result';check(w.getComputedStyle(left).display==='none'&&w.getComputedStyle(right).display!=='none',width+'px result pane returns to existing content');
+  desk.dataset.inspecting='true';check(w.getComputedStyle(left).display==='none'&&w.getComputedStyle(right).display==='none',width+'px inspection yields one dedicated pane');style.remove();}
+ delete desk.dataset.inspecting;const wide=projectRules(1101);check(w.getComputedStyle(desk).display==='grid'&&w.getComputedStyle(d.querySelector('.narrow-pane-nav')).display==='none','1101px preserves the approved adjustable side-by-side layout');
+ const nav=parseFloat(w.getComputedStyle(d.documentElement).getPropertyValue('--nav')),main=w.getComputedStyle(d.querySelector('body>main')),available=1101-nav-parseFloat(main.paddingLeft)-parseFloat(main.paddingRight)-420-8;
+ check(available>=560,'1101px source arithmetic retains at least 560px result width with maximum 420px instruction');
+ const menu=d.createElement('span'),trigger=d.createElement('button');menu.className='row-menu-popup';d.body.append(trigger,menu);menu.getBoundingClientRect=()=>({width:160,height:100});trigger.getBoundingClientRect=()=>({left:20,right:100,top:40,bottom:72});
+ for(const width of [1200,320,200,120]){Object.defineProperty(w,'innerWidth',{configurable:true,value:width});api.frontendPositionMenu(menu,trigger);check(parseFloat(menu.style.maxWidth)===Math.min(288,width-16),width+'px command menu uses the document cap and viewport inset');}
+ check(parseFloat(w.getComputedStyle(menu).minWidth)===104&&w.getComputedStyle(menu).maxWidth!=='none','menu minimum also yields to an exceptionally narrow viewport');
+ Object.defineProperty(w,'innerWidth',{configurable:true,value:1024});Object.defineProperty(w,'innerHeight',{configurable:true,value:150});let anchor={left:20,right:180,top:20,bottom:108};trigger.getBoundingClientRect=()=>anchor;
+ menu.getBoundingClientRect=()=>({width:160,height:Math.min(200,parseFloat(menu.style.maxHeight)||Infinity)});api.frontendPositionMenu(menu,trigger);check(parseFloat(menu.style.maxHeight)===30,'short viewport first limits the same menu to available space');
+ Object.defineProperty(w,'innerHeight',{configurable:true,value:768});anchor={left:20,right:180,top:700,bottom:732};api.frontendPositionMenu(menu,trigger);check(menu.dataset.direction==='above'&&parseFloat(menu.style.top)+Math.min(200,parseFloat(menu.style.maxHeight))<=760,'reopening after resize measures without the stale height cap and stays within bounds');menu.remove();trigger.remove();
+ const host=d.getElementById('commands'),button=api.frontendRunCommand('cancel',{id:'run_visual_fixture',version:7},()=>true);host.replaceChildren(button);const before=w.getComputedStyle(button).width;
+ check(button.classList.contains('run-state-command')&&before!=='auto','finite Run command reserves its longest state label before click');button.click();check(button.textContent==='正在请求停止'&&w.getComputedStyle(button).width===before&&parseFloat(w.getComputedStyle(button).minWidth)===0,'busy cancellation keeps its reserved width without a new minimum');
+ release();await new Promise(r=>setTimeout(r,0));await new Promise(r=>setTimeout(r,0));check(button.textContent==='结果待核实'&&w.getComputedStyle(button).width===before,'unknown cancellation keeps the same reserved width and original state handling');wide.remove();
+ check(requests.length===initial+1&&requests.at(-1).method==='POST','visual gestures send zero requests except one explicit controlled cancel');check(errors.length===0,'visual source checks have no uncaught DOM errors');
+ console.log(JSON.stringify({status:'PASS',scope:'CSSOM_PROJECTED_MEDIA_AND_CONTROLLED_DOM_GEOMETRY_NOT_RENDERED_VIEWPORTS',checks,readonly_gesture_requests:0,explicit_controlled_cancel_requests:1,model_requests:0,pg_operations:0,ci_execution_seconds:0,errors},null,2));
+ }finally{dom.window.close();}})().catch(e=>{console.error(e.stack);process.exitCode=1;});
