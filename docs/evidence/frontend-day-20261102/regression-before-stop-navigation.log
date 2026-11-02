@@ -1,0 +1,74 @@
+..........F
+=================================== FAILURES ===================================
+_________________ test_local_csv_file_actual_http[run-receipt] _________________
+
+env = (<sim2act.db.Store object at 0x7faf86f6ec90>, Settings(database_url='sqlite:////tmp/pytest-of-agent/pytest-2/test_loca...547504cdcb4893a4a70af40ce6304e', 'user_f94f1aa3aa9b458ba1bf90a916d06db6', 'proj_fc191b5575f94433a4980488a081863f', ...)
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-2/test_local_csv_file_actual_htt1')
+case = 'run-receipt'
+
+    @pytest.mark.parametrize("case", ["business", "run-receipt", "guards", "lost-save", "read-after-save", "manual", "save-ABA", "uncertain-response", "read-ABA"])
+    def test_local_csv_file_actual_http(env, tmp_path, case):
+        store, settings, _, owner, other_owner, project, _ = env
+        if not shutil.which("node") or subprocess.run(
+            ["node", "-e", "require.resolve('jsdom')"], capture_output=True, timeout=10
+        ).returncode:
+            pytest.skip("Developer Node/jsdom required")
+        other = store.project(owner, "Other owned project")
+        store.project(other_owner, "Other identity project")
+        fixture = "city,amount,quantity\r\n杭州,1.25,4\r\n成都,19,5\r\n"
+        fixture_bytes = fixture.encode("utf-8")
+        (tmp_path / "真实 合成.csv").write_bytes(fixture_bytes)
+        web = Path("src/sim2act/web")
+        with store.tx() as c:
+            before = {
+                t.name: len(c.execute(select(t)).all())
+                for t in (resources, grants, principals, internal_app_runs, internal_instance_data)
+            }
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        (tmp_path / "info.json").write_text(
+            json.dumps({"base": f"http://127.0.0.1:{port}", "project": project,
+                        "other": other, "case": case,
+                        "web_hashes": {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                                       for p in web.iterdir() if p.is_file()}})
+        )
+        app = create_app(store, settings)
+    
+        @app.post("/test-only-worker")
+        def work():
+            class NoProvider:
+                def complete(self, *_args, **_kwargs):
+                    raise AssertionError("No model allowed")
+    
+                request = complete
+    
+            assert Worker(store, settings, NoProvider()).once()
+            return {"test_only": True}
+    
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 10
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(.01)
+            outcome = subprocess.run(
+                ["node", "tests/resource_file_ui.cjs", str(tmp_path)],
+                capture_output=True, text=True, timeout=90,
+            )
+            (tmp_path / "driver.log").write_text(outcome.stdout + outcome.stderr)
+>           assert outcome.returncode == 0, outcome.stdout + outcome.stderr
+E           AssertionError: AssertionError [ERR_ASSERTION]: queued recovered Run has explicit cancel
+E                 at check (/workspace/Sim2Act/tests/resource_file_ui.cjs:6:25)
+E                 at /workspace/Sim2Act/tests/resource_file_ui.cjs:108:109
+E             
+E           assert 1 == 0
+E            +  where 1 = CompletedProcess(args=['node', 'tests/resource_file_ui.cjs', '/tmp/pytest-of-agent/pytest-2/test_local_csv_file_actual... (/workspace/Sim2Act/tests/resource_file_ui.cjs:6:25)\n    at /workspace/Sim2Act/tests/resource_file_ui.cjs:108:109\n').returncode
+
+tests/test_resource_file_ui.py:84: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_resource_file_ui.py::test_local_csv_file_actual_http[run-receipt]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 10 passed, 1 warning in 22.67s
