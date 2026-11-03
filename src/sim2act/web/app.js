@@ -136,7 +136,11 @@ function selectProjectSection(id, focus=false) {
   sections.forEach(section=>{section.classList.add("project-zone");section.classList.toggle("zone-active",section.id===id);});
   links.forEach(link=>{const selected=link.hash===`#${id}`;if(selected)link.setAttribute("aria-current","location");else link.removeAttribute("aria-current");});
   if(id==="project-tools")$(id).open=true;
-  if(focus){const heading=$(id).querySelector("h2,h3,summary");if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});}}
+  if(focus){
+    let target=$(id);
+    if(id==='task-workbench')target=$(target.dataset.inspecting==='true'?'frontend-inspector':target.dataset.pane==='result'?'task-result-panel':'task-list-panel')||target;
+    const heading=target.querySelector("h2,h3,summary");if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});}
+  }
 }
 (function projectSections(){
   const links=[...document.querySelectorAll(".section-links a")];
@@ -2095,7 +2099,7 @@ function frontendRefreshIdle() {
   tabs.addEventListener('keydown',e=>{const keys=Object.keys(names),index=keys.indexOf(frontendInspectorTab);let next;if(e.key==='ArrowRight')next=(index+1)%4;if(e.key==='ArrowLeft')next=(index+3)%4;if(e.key==='Home')next=0;if(e.key==='End')next=3;if(next!==undefined){e.preventDefault();frontendInspectorTab=keys[next];renderFrontendInspector();$('frontend-tab-'+keys[next]).focus();}});
   const content=frontendNode('div',undefined,'inspection-content');content.id='frontend-inspector-content';content.role='tabpanel';content.tabIndex=0;inspector.append(ih,tabs,content);desk.append(inspector);
   const paneNav=frontendNode('div',undefined,'narrow-pane-nav');paneNav.setAttribute('aria-label','任务区域');desk.dataset.pane='instruction';
-  for(const [key,label] of [['instruction','指令'],['result','成果']])paneNav.append(frontendButton(label,()=>{closeFrontendInspector(false);desk.dataset.pane=key;}));
+  for(const [key,label] of [['instruction','指令'],['result','成果']])paneNav.append(frontendButton(label,()=>{closeFrontendInspector(false);desk.dataset.pane=key;selectProjectSection('task-workbench',true);}));
   desk.before(paneNav);
   const materialToolbar=frontendNode('div',undefined,'material-toolbar'),searchLabel=frontendNode('label','查询当前材料'),query=frontendNode('input');query.id='frontend-material-query';query.type='search';query.addEventListener('input',applyFrontendMaterialFilter);searchLabel.append(query);
   const count=frontendNode('span');count.id='frontend-material-count';const empty=frontendNode('p');empty.id='frontend-material-empty';empty.hidden=true;empty.role='status';
