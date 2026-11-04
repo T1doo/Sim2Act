@@ -19,6 +19,9 @@ const naturalUseFamily=a=>{
 const applicationUseCurrent=v=>!!v && applicationUse===v && v.identity===token && v.project===$("project-select").value && v.generation===applicationUseGeneration;
 const applicationUseKey=v=>JSON.stringify([v.identity,v.project,v.id]);
 function clearApplicationUse(clearList=false){
+ if($("frontend-use-title"))$("frontend-use-title").textContent="应用运行";
+ if($("frontend-application-layout"))$("frontend-application-layout").dataset.directoryOpen="false";
+ if($("frontend-use-directory-toggle")){$("frontend-use-directory-toggle").textContent="切换应用";$("frontend-use-directory-toggle").setAttribute("aria-expanded","false");}
  $("use-engineering-recovery")?.remove();
  if(typeof clearCsvMaterialAccess==="function")clearCsvMaterialAccess(applicationUse);
  if(typeof clearCsvGoalRevision==="function")clearCsvGoalRevision(applicationUse);
@@ -230,6 +233,8 @@ function openApplicationMaterialAccess(appId){
  renderCsvMaterialAccess(v);
 }
 function clearApplicationUseData(v){
+ if($("frontend-use-title"))$("frontend-use-title").textContent="应用运行";
+ if($("frontend-use-scope"))$("frontend-use-scope").open=true;
  if(typeof clearCsvMaterialAccess==="function")clearCsvMaterialAccess(v);
  if(typeof clearCsvGoalRevision==="function")clearCsvGoalRevision(v);
  v.instance=null;
@@ -351,6 +356,7 @@ async function readApplicationUse(v,expectedPending=null){
   }
   $("use-column").replaceChildren(...(materialProvenance?[new Option(revision.input.column,revision.input.column)]:app.input_guidance.columns.filter(c=>c.numeric&&(!revision||c.name===revision.input.column)).map(c=>new Option(c.name,c.name))));
   if([...$("use-column").options].some(o=>o.value===(pending?.state==="unknown"?pending.body.input.column:previous)))$("use-column").value=pending?.state==="unknown"?pending.body.input.column:previous;
+  if($("frontend-use-title"))$("frontend-use-title").textContent=app.name;
   $("use-info").textContent=`${app.name} · 未发布内部版本 · 固定材料 ${material} · 只读CSV求和；仅数值列可变，0模型请求，目标语义验收未执行。`;
   delete $("use-info").dataset.readState;
   if(materialProvenance)$("use-info").textContent+=` 当前材料 SHA-256 ${materialHash}；原 Goal 来源 ${materialProvenance.original_goal_resources.join("、")}。`;

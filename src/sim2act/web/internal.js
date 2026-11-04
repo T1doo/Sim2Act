@@ -3,6 +3,14 @@
 let engineering = null, engineeringGeneration = 0;
 const engineeringPending = new Map();
 const engineeringPendingScopes = new WeakMap();
+// Keep version setup available without pushing the selected instance below it.
+// Move the existing subtree so its guards, inputs and listeners retain identity.
+const internalVersionTools=document.createElement("details");
+internalVersionTools.id="internal-version-tools";internalVersionTools.open=true;
+const internalVersionSummary=document.createElement("summary");
+internalVersionSummary.textContent="版本与实例 · 核查、创建和切换";
+$("internal-version-pane").before(internalVersionTools);
+internalVersionTools.append(internalVersionSummary,$("internal-version-pane"));
 function engineeringPendingInScope(identity,project,id){
   const pending=engineeringPending.get(id),scope=pending&&engineeringPendingScopes.get(pending);
   return scope?.identity===identity&&scope.project===project?pending:null;
@@ -195,6 +203,7 @@ function offerInternalRunReread(view,instance,run,connection,workspace) {
   $("internal-controls").append(button);
 }
 function clearInternal() {
+  internalVersionTools.open=true;
   clearInternalStopControl(engineering);
   $("internal-use-recovery")?.remove();
   clearInternalRunReread();
@@ -336,6 +345,7 @@ async function showInternalInstance(id,view=engineering) {
     const resultManifests=(view.agent||view.literal)?await internalResultManifests(instance,view,current):null;
     if(!current())return;
     view.instance=instance;if(view.spec)specRecoveryRefresh(view,instance);renderSwitch(view);$("internal-instance-title").textContent=`内部实例 ${id}`;
+    internalVersionTools.open=false;
     $("internal-instance-info").textContent=`Release ${instance.release_id} · revision ${instance.revision} · 独立结果版本 ${instance.data_version} · 正式部署关闭`;
     $("internal-column-label").hidden=view.agent||view.literal||view.workflow||view.spec;$("internal-column").required=!(view.agent||view.literal||view.workflow||view.spec);$("internal-term-label").hidden=!(view.agent||view.literal);$("internal-term").required=view.agent||view.literal;$("internal-term").disabled=!(view.agent||view.literal);refreshTextTerm($("internal-term"));
     $("internal-column").replaceChildren(...Array.from($("app-column").options).map(o=>{const option=new Option(o.textContent,o.value);option.disabled=o.disabled;return option;}));
@@ -493,7 +503,7 @@ async function showInternalRun(id,view=engineering,instance=view?.instance,accep
     if(run.instance_id!==instance.id||run.id!==id)throw Error("运行绑定与实例不符");
     if(expectedReceipt && run.content_access!==false && (run.namespace!=="INTERNAL_APPRUN" || run.id!==id || run.app_run_id!==expectedReceipt.app_run_id || run.release_id!==expectedReceipt.release_id))throw Error("运行接受回执与原实例或版本不符；原请求键保留，请恢复原回执。");
     renderRegisteredExtraction(view,instance,run);
-    view.run=run;installInternalStopControl(view,instance,id);$("internal-run-status").textContent=`${run.status} · 取消意图 ${run.cancel_intent ? "已保留" : "无"} · ${run.result ? JSON.stringify(run.result) : run.error?.code || "等待后台状态"}`;
+    view.run=run;installInternalStopControl(view,instance,id);$("internal-run-status").textContent=`${run.status} · 取消意图 ${run.cancel_intent ? "已保留" : "无"} · ${run.result ? "已记录结果，完整数据见下方成果与回执" : run.error?.code || "等待后台状态"}`;
     $("internal-run-detail").textContent=JSON.stringify(run,null,2);
     const commands=["QUEUED","RUNNING"].includes(run.status)?["pause","cancel"]:["PAUSED","WAITING_RESOURCE"].includes(run.status)&&!run.cancel_intent?(run.content_access===false?["cancel"]:["resume","cancel"]):["PAUSE_REQUESTED","RECONCILING"].includes(run.status)?["cancel"]:[];
     // Cancellation has one independent entry, including while detail is busy.
@@ -876,7 +886,20 @@ function renderManifestViews(manifest,result,chartContext=null){
 function internalResult(record,view,manifest) {
   if(view.spec)return specResult(record,view);
   if(view.workflow)return textWorkflowResult(record,view);
-  if(!view.agent&&!view.literal)return row(`结果 v${record.version} · ${record.release_id} · ${JSON.stringify(record.data.result)}`);
+  if(!view.agent&&!view.literal){
+    const value=record.data.result,node=document.createElement("article");node.className="saved-csv-result";
+    node.dataset.resultVersion=record.version;node.dataset.releaseId=record.release_id;
+    const title=document.createElement("h4");title.textContent=`已保存成果 · v${record.version}`;node.append(title);
+    if(value&&typeof value.sum==="string"&&typeof value.column==="string"&&Number.isSafeInteger(value.count)){
+      const facts=document.createElement("dl");facts.className="saved-result-facts";
+      for(const [label,text] of [["求和列",value.column],["合计",value.sum],["记录数",String(value.count)]]){
+        const term=document.createElement("dt"),description=document.createElement("dd");term.textContent=label;description.textContent=text;facts.append(term,description);
+      }
+      node.append(facts);
+    }
+    const raw=document.createElement("details"),label=document.createElement("summary"),binding=document.createElement("p"),json=document.createElement("pre");
+    label.textContent="来源版本与完整结果";binding.textContent=`Release ${record.release_id}`;json.textContent=JSON.stringify(value,null,2);raw.append(label,binding,json);node.append(raw);return node;
+  }
   const value=record.data.result,node=document.createElement("article");node.className="agent-result";
   const title=document.createElement("p");title.textContent=`历史结果 v${record.version} · ${record.release_id} · ${view.literal ? "确定性文本工具" : "离线 Replay"} · 字面检查 PASS · 语义 ${value.semantic_status}`;
   const scope=document.createElement("p");scope.textContent=`检索词：${value.term} · 材料 ${value.resource_id} · revision ${value.revision} · hash ${value.source_hash}`;

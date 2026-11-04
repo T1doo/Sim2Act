@@ -1060,6 +1060,14 @@ def create_app(store=None, settings=None):
     def index():
         return FileResponse(web / "index.html")
 
+    @app.get("/brand-icon.png", include_in_schema=False)
+    def brand_icon():
+        return FileResponse(web / "sim2act-icon-128.png", media_type="image/png")
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon():
+        return FileResponse(web / "sim2act-icon.ico", media_type="image/x-icon")
+
     @app.get("/natural-goal.js")
     def natural_goal_script():
         return FileResponse(web / "natural-goal.js", media_type="text/javascript")

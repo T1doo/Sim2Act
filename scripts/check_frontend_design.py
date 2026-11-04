@@ -3,7 +3,7 @@ import json
 import re
 from pathlib import Path
 
-css = Path('src/sim2act/web/app.css').read_text()
+css = Path('src/sim2act/web/app.css').read_text(encoding='utf-8')
 base, dark = [dict(re.findall(r'--([\w-]+):\s*(#[0-9a-fA-F]{3,6})\s*;', block))
               for block in (re.search(r':root\s*\{([^}]+)', css)[1],
                             re.search(r':root\[data-theme=dark\]\s*\{([^}]+)', css)[1])]
