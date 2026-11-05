@@ -33,3 +33,15 @@ def test_original_parameter_validation_and_old_capture_verdict_are_preserved():
     new=_derive(raw,True,True,_generation=True,_generation_protocol=PROTOCOL)
     assert old.response_verdict=='UNKNOWN_OR_REJECTED'
     assert new.response_verdict=='VALID_PROTOCOL'
+
+
+def test_v5_known_invalid_candidate_is_diagnostic_input_not_valid_candidate():
+    raw=reply('check_candidate',{'candidate':'not a candidate object'})
+    with pytest.raises(DomainError):parse(raw,'natural-checked-candidate4096.v4')
+    message,calls=parse(raw,'natural-checked-candidate4096.v5')
+    assert calls[0]['args']=={'candidate':'not a candidate object'}
+    assert message['tool_calls'][0]['function']['arguments']==raw['choices'][0]['message']['tool_calls'][0]['function']['arguments']
+    with pytest.raises(DomainError):parse(reply('check_candidate',{'other':'wrong envelope'}),'natural-checked-candidate4096.v5')
+    old=_derive(json.dumps(raw).encode(),True,True,_generation=True,_generation_protocol='natural-checked-candidate4096.v4')
+    new=_derive(json.dumps(raw).encode(),True,True,_generation=True,_generation_protocol='natural-checked-candidate4096.v5')
+    assert old.response_verdict=='UNKNOWN_OR_REJECTED' and new.response_verdict=='VALID_PROTOCOL'

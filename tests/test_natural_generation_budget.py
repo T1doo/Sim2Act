@@ -84,7 +84,8 @@ def test_explicit_prepare_is_recoverable_and_cannot_reuse_other_scope_consent(pr
     assert client.post(base+'/consent',json=consent(receipt)).status_code==200
 
 
-def test_core_reserves_same_4096_wire_without_changing_application_runtime(env,monkeypatch):
+@pytest.mark.parametrize('bad_candidate,final_invalid',[(False,False),(True,False),(True,True)])
+def test_core_reserves_same_4096_wire_without_changing_application_runtime(env,monkeypatch,bad_candidate,final_invalid):
     from fastapi.testclient import TestClient
     from sqlalchemy import select
     from test_natural_spec_apps import setup,generation_transport
@@ -98,24 +99,37 @@ def test_core_reserves_same_4096_wire_without_changing_application_runtime(env,m
     client.headers['Authorization']='Bearer synthetic-test-A'
     response=client.post(f"/api/projects/{pid}/goal-cards/{card['id']}/application-runs",json=dict(expected_version=card['version'],expected_fingerprint=card['fingerprint'],request_key='natural-generation',family='natural_spec'))
     assert response.status_code==202,response.text
-    sent,base_transport=generation_transport(data)
+    sent,base_transport=generation_transport(data,repair=bad_candidate)
     import httpx
     def respond_to_wire_names(request):
         raw=base_transport.handle_request(request).json()
         from sim2act.natural_wire_tools import ALIASES
         inverse={v:k for k,v in ALIASES.items()}
         for call in raw['choices'][0]['message'].get('tool_calls',[]):
+            if bad_candidate and call['function']['name']=='spec.check_candidate':
+                call['function']['arguments']=json.dumps({'candidate':'not a valid candidate object'})
             call['function']['name']=inverse[call['function']['name']]
+        if final_invalid and len(sent)==3:raw['choices'][0]['message']['content']=json.dumps('still not a valid candidate')
         return httpx.Response(200,json=raw)
     transport=httpx.MockTransport(respond_to_wire_names)
     assert Worker(store,settings,goal_planner_transport=transport).once()
     run=client.get('/api/runs/'+response.json()['run_id']).json()
+    if final_invalid:
+        assert run['status']=='FAILED' and run['result'] is None,run
+        assert len(sent)==3
+        client.close();return
     assert run['status']=='PARTIAL',run
     assert [v['max_tokens'] for v in sent]==[1024,4096,4096]
     prompt=json.loads(sent[0]['messages'][1]['content'])
     assert prompt['generation_budget']['candidate_output_tokens']==4096
     assert prompt['generation_budget']['max_output_tokens']==1024
     assert run['contract']['snapshot']['application_generation']['app_limits']['max_output_tokens']==1024
+    if bad_candidate:
+        assert run['result']['app_created'] is False
+        from sim2act.db import operations
+        with store.tx() as c:
+            receipt=c.execute(select(operations.c.receipt).where(operations.c.run_id==run['id'],operations.c.tool_ref=='spec.check_candidate')).scalar_one()
+            assert receipt['data']['status']=='FAIL' and receipt['data']['project_writes']==0
     with store.tx() as c:
         rows=c.execute(select(attempts.c.reserved_tokens,attempts.c.parameters).where(attempts.c.run_id==run['id'])).all()
         assert sorted(v[1]['max_tokens'] for v in rows)==[1024,4096,4096]

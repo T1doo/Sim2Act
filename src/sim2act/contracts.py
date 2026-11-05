@@ -246,7 +246,7 @@ class ApplicationGenerationPolicy(Strict):
     repair_limit: Literal[1]
     live_request_allowance: Literal[0]
     response_archive_policy: Literal["protected-json32768.v1"] | None = None
-    output_protocol: Literal["compact-candidate-json.v1", "compact-candidate-json4096.v1", "compact-candidate-json4096.v2", "compact-candidate-json4096.v3", "compact-candidate-json4096.v4", "compact-candidate-json4096.v5", "compact-candidate-json4096.v6", "natural-checked-candidate.v1", "natural-checked-candidate4096.v1", "natural-checked-candidate4096.v2", "natural-checked-candidate4096.v3", "natural-checked-candidate4096.v4"] | None = None
+    output_protocol: Literal["compact-candidate-json.v1", "compact-candidate-json4096.v1", "compact-candidate-json4096.v2", "compact-candidate-json4096.v3", "compact-candidate-json4096.v4", "compact-candidate-json4096.v5", "compact-candidate-json4096.v6", "natural-checked-candidate.v1", "natural-checked-candidate4096.v1", "natural-checked-candidate4096.v2", "natural-checked-candidate4096.v3", "natural-checked-candidate4096.v4", "natural-checked-candidate4096.v5"] | None = None
     activation: ApplicationGenerationActivation | None = None
     app_limits: Limits | None = None
 

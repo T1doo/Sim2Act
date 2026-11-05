@@ -16,11 +16,18 @@ def tools(values):
     return result
 
 
-def parse(raw):
+def diagnostic_envelope(args):
+    # A known checker may report invalid input; this never validates a candidate.
+    if not isinstance(args,dict) or set(args)!={'candidate'}:
+        raise DomainError('INVALID_INPUT','Closed candidate check envelope required')
+
+
+def parse(raw,protocol=PROTOCOL):
     from .model import parse_response
     from .tools import validate_call
     from .pa_spec_apps import check_envelope
-    message,calls=parse_response(raw,{'read':lambda args:validate_call('resource.read',args),'check_candidate':check_envelope})
+    checker=diagnostic_envelope if protocol=='natural-checked-candidate4096.v5' else check_envelope
+    message,calls=parse_response(raw,{'read':lambda args:validate_call('resource.read',args),'check_candidate':checker})
     canonical=[]
     for call in calls:canonical.append(canonical_call(call))
     # Preserve the actual assistant reply in history and subsequent messages.

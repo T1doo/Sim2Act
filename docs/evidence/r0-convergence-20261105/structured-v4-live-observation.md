@@ -1,0 +1,11 @@
+# 657418c2结构化输出实测
+
+桌面运行包SHA256为4aafabea0c0f58e3c0266dcf0b1ed57d8f6d06185637bd7d5e5cfa0e83cd8a9b，包内原资格函数通过。新P-A明示4096范围使用v4生成，未改旧任务。
+
+首读取响应成功2173 tokens；候选响应3809 tokens，其中输出481，reasoning_content长度0，参数1630字符，finish_reason=tool_calls。已解决本轮推理占满4096的现象，但未产生有效候选。
+
+原check_envelope发现参数根为dict且只有candidate键，但candidate值为str，而非dict；字符串内部也不是有效JSON。不能直接解码、补造字段或视为已接受。任务保持WAITING_RESOURCE/OUTCOME_UNKNOWN，两个会话exit0/PG停止。原响应不重发、不改写。证据structured-v4-output-shape.json、structured-v4-envelope-diagnosis.json、structured-v4-inner-candidate.json。
+
+下一可验证改进点：当前传输解析把完整已收到、已知检查工具的错误输入当UNKNOWN，尚未进入原checker的FAIL反馈。原check_report本身支持对无效candidate返回INVALID_MANIFEST/FAIL且不写业务结果；原三请求流程支持最后一次修正。需要新的明确协议将已知checker的形状错误转成失败检查反馈，仍要求最终完整Goal/source/recipe/sample通过严格编译，未知名称、坏JSON、绑定读取错误继续拒绝。必须保留旧v4捕获判定，不在旧任务上回填或重试。
+
+本轮实测未触发应用确认、版本或实例运行。下一步围绕同一实际闭环改进，未签UI-ready/R0-ready。
