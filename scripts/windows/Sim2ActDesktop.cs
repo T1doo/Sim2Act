@@ -286,7 +286,16 @@ sealed class Host : Form {
             for(int i=0;i<2;i++) {
                 FileInfo file=new FileInfo(Path.Combine(data,names[i]));
                 if(!file.Exists || (file.Attributes & FileAttributes.ReparsePoint)!=0 || file.Length>8192) return false;
-                records[i]=new JavaScriptSerializer().DeserializeObject(File.ReadAllText(file.FullName,Encoding.UTF8)) as Dictionary<string,object>;
+                // The supervisor retains a writable claim handle. Default
+                // FileShare.Read conflicts with that handle on Windows.
+                string recordText;
+                using(var stream=new FileStream(file.FullName,FileMode.Open,FileAccess.Read,FileShare.ReadWrite))
+                using(var reader=new StreamReader(stream,Encoding.UTF8)) {
+                    char[] text=new char[8193];int count=reader.ReadBlock(text,0,text.Length);
+                    if(count>8192) return false;
+                    recordText=new string(text,0,count);
+                }
+                records[i]=new JavaScriptSerializer().DeserializeObject(recordText) as Dictionary<string,object>;
                 if(records[i]==null || TextValue(records[i],"protocol")!="sim2act.desktop-service.v1"
                     || TextValue(records[i],"backend")!="CONFIGURED_POSTGRESQL") return false;
             }
