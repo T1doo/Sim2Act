@@ -194,7 +194,7 @@ def configured_supervisor(settings, selected, preflight, *, port, input_stream, 
     def command(role, session, chosen_port):
         args = [sys.executable, "-u", "-m", "sim2act.desktop_service",
             "--role", role, "--session", session, "--port", str(chosen_port)]
-        if role == "worker" and selected:
+        if selected:
             for key in ("user", "project", "trial", "approval", "account"):
                 args.extend(["--spec-production-" + key, selected[key]])
         return args
@@ -290,8 +290,8 @@ def main():
         parser.error("Private role/session/port required")
     selected = [getattr(args, "spec_production_" + key)
         for key in ("user", "project", "trial", "approval", "account")]
-    if any(selected) and (args.role != "worker" or not all(selected)):
-        parser.error("Only a complete original worker selection is supported")
+    if any(selected) and not all(selected):
+        parser.error("Only a complete original production selection is supported")
     try:
         settings = Settings.from_env()  # Production role has no SQLite/test flag.
         from .db import Store
@@ -315,7 +315,8 @@ def main():
                 from .api import create_app
                 store = Store(settings.database_url)
                 try:
-                    return create_app(store, settings), store.engine.dispose
+                    selection=dict(zip(("user","project","trial","approval","account"),selected)) if any(selected) else None
+                    return create_app(store, settings, production_selection=selection), store.engine.dispose
                 except BaseException:
                     store.engine.dispose()
                     raise

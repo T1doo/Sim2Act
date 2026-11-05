@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="2" time="4.112" timestamp="2026-11-05T19:49:36.461293+08:00" hostname="LAPTOP-USISIS19"><testcase classname="tests.test_natural_generation_readiness" name="test_no_launcher_selection_is_blocked_and_other_principal_denied" time="2.382" /><testcase classname="tests.test_natural_generation_readiness" name="test_projection_requires_original_checker_and_exact_goal" time="1.368"><failure message="KeyError: 'snapshot'">env = (&lt;sim2act.db.Store object at 0x000002270AF50920&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...4ba86cbb81497c93e2f1ef74bf6631', 'user_1207252a4f5b49daa1a66caf891c924b', 'proj_e4fb602bccca42b488d00f01dbce2b54', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000002270BB72210&gt;
+
+    def test_projection_requires_original_checker_and_exact_goal(env,monkeypatch):
+        data,_=configured(env,monkeypatch)
+        store,settings,client,user,pid,_,card=data
+        selection=dict(user=user,project=pid,trial='t',approval='a',account='intern-ai-configured-account')
+        first=SimpleNamespace(card_id=card['id'],goal_version=card['version'],goal_fingerprint=card['fingerprint'],goal_snapshot=SimpleNamespace(model_dump=lambda:card['snapshot']))
+        contract=SimpleNamespace(bindings=[first],stage_keys=SimpleNamespace(generate='original-generation-key'),expires_at=1234.,model_dump=lambda:{'trial':'original'})
+        # Synthetic projection only: the real launch checker remains a mandatory
+        # dependency and is separately tested by the production/launch suites.
+        with patch('sim2act.launch_configuration.check_selection') as checked,patch('sim2act.natural_trial_api.original_contract',return_value=contract),patch('sim2act.natural_trial_api.existing_worker_selection',return_value={'worker_selection':selection,'approval_fingerprint':'f'*64}):
+&gt;           value=read(store,settings,selection,user,pid,card['id'])
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_natural_generation_readiness.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.local\windows-build-20261105\production-readiness-test-source\sim2act\natural_generation_readiness.py:25: in read
+    'snapshot':first.goal_snapshot.model_dump(),'generation_request_key':contract.stage_keys.generate,
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+&gt;   first=SimpleNamespace(card_id=card['id'],goal_version=card['version'],goal_fingerprint=card['fingerprint'],goal_snapshot=SimpleNamespace(model_dump=lambda:card['snapshot']))
+                                                                                                                                                               ^^^^^^^^^^^^^^^^
+E   KeyError: 'snapshot'
+
+tests\test_natural_generation_readiness.py:30: KeyError</failure></testcase></testsuite></testsuites>

@@ -115,6 +115,7 @@ async function goalApplicationAction(entry,operation){
 }
 $("goal-application-start").onclick=async()=>{
   const card=activeGoalCard,key=goalApplicationKey();if(!card||goalApplications.has(key)||goalCardLoading||goalCardSaving)return;
+  let productionReadiness=null;
   if($("goal-application-family").value==="natural_spec"){
     if(naturalGenerationReads.has(key))return;
     const connection=identityConnectionGeneration,selection=goalSelectionGeneration,workspace=workspaceSelectionGeneration,app=appSelectionGeneration,edit=goalApplicationDraftGeneration;
@@ -123,9 +124,18 @@ $("goal-application-start").onclick=async()=>{
     try{
       const caps=await api("/api/capabilities");if(!gate.current())return;
       const availability=caps?.natural_spec_generation;
-      const allowed=availability?.version==="natural-spec-generation-availability.v1"&&availability.availability==="OFFLINE_TEST_ONLY"&&availability.provider==="intern-s2"&&availability.live_request_allowance===0&&caps.connection?.mode==="MOCK";
+      let allowed=availability?.version==="natural-spec-generation-availability.v1"&&availability.availability==="OFFLINE_TEST_ONLY"&&availability.provider==="intern-s2"&&availability.live_request_allowance===0&&caps.connection?.mode==="MOCK";
+      if(!allowed&&caps.connection?.mode==="LIVE"){
+        const pid=$("project-select").value,value=await api(`/api/projects/${pid}/goal-cards/${card.id}/natural-generation-readiness`);if(!gate.current())return;
+        if(value?.version!=="natural-generation-readiness.v1"||value.project_id!==pid||value.card_id!==card.id||value.new_runs!==0||value.new_approvals!==0||value.actual_model_requests!==0)throw Error("VERSION_CONFLICT");
+        if(value.availability==="SELECTED_APPROVED_SCOPE"){
+          if(value.expected_version!==card.version||value.expected_fingerprint!==card.fingerprint||goalRunCanonical(value.snapshot)!==goalRunCanonical(card.snapshot)||!/^[A-Za-z0-9_-]{1,100}$/.test(value.generation_request_key)||!Number.isFinite(value.expires_at)||Date.now()>=value.expires_at*1000||!/^[a-f0-9]{64}$/.test(value.contract_fingerprint)||!/^[a-f0-9]{64}$/.test(value.approval_fingerprint))throw Error("VERSION_CONFLICT");
+          productionReadiness=value;allowed=true;
+        }
+      }
       gate.message=allowed?"仅离线测试配置可用；实际发送仍须原 MockTransport 校验。真实模型预算0，下一步仅本次明确生成。":"已停止：没有可用的自然生成批准/受限离线配置。当前自然家族没有 LIVE 批准路径；未提交生成任务或模型请求。";
       naturalGenerationAvailability.set(key,gate);
+      if(productionReadiness)gate.message="已核对桌面启动选择、原试验批准和本目标版本；本次使用原生成键，Worker仍逐项复核原权限与预算。";
       const guide=naturalFirstGuide;if(naturalFirstGuideCurrent(guide)&&guide.stage==="generate")guide.gateMessage=gate.message;
       if(!allowed)return;
     }catch(error){if(gate.current()){gate.message=`读取生成条件失败：${error.message}。未提交生成任务或模型请求。`;naturalGenerationAvailability.set(key,gate);if(naturalFirstGuideCurrent(naturalFirstGuide))naturalFirstGuide.gateMessage=gate.message;}return;}
@@ -133,6 +143,7 @@ $("goal-application-start").onclick=async()=>{
     if(!gate.current()||goalApplications.has(key))return;
   }
   const entry={key,project:$("project-select").value,card:card.id,snapshot:structuredClone(card.snapshot),connection:identityConnectionGeneration,selection:goalSelectionGeneration,body:{expected_version:card.version,expected_fingerprint:card.fingerprint,request_key:crypto.randomUUID()},busy:false,result:null,confirmBody:null,message:"正在接受冻结目标…"};
+  if(productionReadiness)entry.body.request_key=productionReadiness.generation_request_key;
   const choice=goalProviderChoices.get(key)?.find(value=>value.activation.approval_id===$("goal-provider-select").value);
   if($("goal-provider-select").value&&!choice)return;
   if(goalSpecFamily($("goal-application-family").value)){if(choice)return;entry.body.family=$("goal-application-family").value;}

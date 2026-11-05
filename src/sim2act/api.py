@@ -167,11 +167,13 @@ class PreviewInput(Strict):
     request_key: str = Field(min_length=1, max_length=100)
 
 
-def create_app(store=None, settings=None):
+def create_app(store=None, settings=None, *, production_selection=None):
     s = settings or Settings.from_env()
     db = store or Store(s.database_url)
     platform_limits = Limits(**{key: getattr(s, key) for key in Limits.model_fields})
     app = FastAPI(title="Sim2Act F1", docs_url=None, redoc_url=None)
+    # Only the launcher supplies this snapshot; HTTP never selects a Worker.
+    selected_production = dict(production_selection) if production_selection is not None else None
 
     @app.middleware("http")
     async def security(request: Request, call_next):
@@ -591,6 +593,11 @@ def create_app(store=None, settings=None):
         return {**acceptance(db, user, rid), "generation_policy": selected}
 
     from . import generation_approvals as generation_provider
+
+    @app.get("/api/projects/{pid}/goal-cards/{cid}/natural-generation-readiness")
+    def natural_generation_readiness(pid: str, cid: str, user=user_dependency):
+        from .natural_generation_readiness import read
+        return read(db, s, selected_production, user, pid, cid)
 
     @app.get("/api/projects/{pid}/goal-cards/{cid}/application-provider-scopes")
     def generation_provider_options(pid: str, cid: str, user=user_dependency):
