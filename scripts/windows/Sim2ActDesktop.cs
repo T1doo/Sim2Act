@@ -9,6 +9,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
@@ -109,6 +110,8 @@ sealed class Host : Form {
     public int ExitCode = 1;
     readonly bool exactReadLive;
     readonly string configuredFile,selectionFile,managedFile;
+    readonly string managedSnapshot;
+    bool localLoginAttempted;
     bool Configured {get {return configuredFile!=null || managedFile!=null;}}
     string ProfileIdentityPath {get {return Path.Combine(root,"configured-webview-profile.identity.json");}}
     public Host(string root,string runtime,bool exactReadLive,string configuredFile,string selectionFile,string managedFile) {
@@ -116,6 +119,7 @@ sealed class Host : Form {
         this.exactReadLive=exactReadLive;
         this.configuredFile=configuredFile;this.selectionFile=selectionFile;
         this.managedFile=managedFile;
+        managedSnapshot=managedFile==null?null:File.ReadAllText(Paths.ExistingFile(managedFile),Encoding.UTF8);
         Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         Text="Sim2Act 工作台"; StartPosition=FormStartPosition.CenterScreen; ShowInTaskbar=true;
         BackColor=ColorTranslator.FromHtml("#FAF9F5"); MinimumSize=new Size(1024,680);
@@ -166,10 +170,48 @@ sealed class Host : Form {
             view.CoreWebView2.NewWindowRequested += delegate(object sender,CoreWebView2NewWindowRequestedEventArgs args) { args.Handled=true; };
             view.CoreWebView2.PermissionRequested += delegate(object sender,CoreWebView2PermissionRequestedEventArgs args) { args.State=CoreWebView2PermissionState.Deny; };
             view.CoreWebView2.DownloadStarting += Download;
+            view.CoreWebView2.NavigationCompleted += async delegate(object sender,CoreWebView2NavigationCompletedEventArgs args) {
+                if(!args.IsSuccess || managedFile==null || localLoginAttempted || stopping || origin==null || boundReadyUrl==null) return;
+                if(view.CoreWebView2.Source!=boundReadyUrl+"/" && view.CoreWebView2.Source!=boundReadyUrl) return;
+                localLoginAttempted=true;
+                try {
+                    string localToken=ReadLocalUiToken();
+                    if(stopping || (view.CoreWebView2.Source!=boundReadyUrl+"/" && view.CoreWebView2.Source!=boundReadyUrl)) return;
+                    string literal=new JavaScriptSerializer().Serialize(localToken);
+                    await view.CoreWebView2.ExecuteScriptAsync("(()=>{const t=document.getElementById('token'),b=document.getElementById('connect');if(!t||!b)throw Error('LOGIN_CONTROLS_MISSING');t.value="+literal+";b.click();})()");
+                    localToken=null;literal=null;
+                } catch(Exception error) {
+                    Write("LOCAL_LOGIN_FAILED "+error.GetType().Name);
+                    status.Text="本机账户连接未完成；请检查本机配置，原数据已保留。";
+                }
+            };
             initialized=true;
             if (stopping) { FinishBeforeChild(); return; }
             StartBackend();
         } catch (Exception error) { if(finished || IsDisposed) return; failed=true; Write("HOST_START_FAILED "+error.GetType().Name); status.Text="启动失败："+error.Message; if(childStarted) Stop("启动失败，正在确认后台退出…"); if(!childStarted) { timer.Stop(); MessageBox.Show(this,"启动失败："+error.Message,"Sim2Act",MessageBoxButtons.OK,MessageBoxIcon.Error); FinishBeforeChild(); } }
+    }
+    string ReadLocalUiToken() {
+        string selected=File.ReadAllText(Paths.ExistingFile(managedFile),Encoding.UTF8);
+        if(selected!=managedSnapshot) throw new Exception("Local installation changed");
+        var config=new JavaScriptSerializer().DeserializeObject(selected) as Dictionary<string,object>;
+        if(config==null || TextValue(config,"format")!="sim2act.local-installation.v1"
+            || !String.Equals(TextValue(config,"workspace"),expectedData,StringComparison.OrdinalIgnoreCase)) throw new Exception("Local installation binding differs");
+        string credentialPath=Paths.ExistingFile(TextValue(config,"credentials"));
+        string encoded=File.ReadAllText(credentialPath,Encoding.ASCII).Trim();
+        if(encoded.Length<2 || encoded.Length>131072 || encoded.Length%2!=0 || !Regex.IsMatch(encoded,"^[0-9a-fA-F]+$")) throw new Exception("Local credential unavailable");
+        byte[] encrypted=new byte[encoded.Length/2],plain=null;
+        try {
+            for(int i=0;i<encrypted.Length;i++) encrypted[i]=Convert.ToByte(encoded.Substring(i*2,2),16);
+            plain=ProtectedData.Unprotect(encrypted,null,DataProtectionScope.CurrentUser);
+            var credentials=new JavaScriptSerializer().DeserializeObject(Encoding.Unicode.GetString(plain)) as Dictionary<string,object>;
+            string token=credentials==null?null:TextValue(credentials,"ui_token");
+            if(credentials==null || !String.Equals(TextValue(credentials,"data_dir"),TextValue(config,"data"),StringComparison.OrdinalIgnoreCase)
+                || token==null || !Regex.IsMatch(token,"^[a-f0-9]{64}$")) throw new Exception("Local account binding differs");
+            return token;
+        } finally {
+            Array.Clear(encrypted,0,encrypted.Length);
+            if(plain!=null) Array.Clear(plain,0,plain.Length);
+        }
     }
     Dictionary<string,object> ProfileIdentity() {
         FileInfo file=new FileInfo(ProfileIdentityPath);Paths.Check(file.DirectoryName);
