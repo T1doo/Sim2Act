@@ -1,0 +1,95 @@
+{
+  "version": "natural-spec-recipe.v1",
+  "steps": [
+    {
+      "step_id": "read_text",
+      "operator": "resource.read",
+      "depends_on": [],
+      "inputs": {
+        "resource_id": {
+          "source": "data",
+          "ref": "source",
+          "field": "resource_id"
+        }
+      }
+    },
+    {
+      "step_id": "spec_all",
+      "operator": "model.spec.all",
+      "depends_on": [
+        "read_text"
+      ],
+      "inputs": {
+        "resource_id": {
+          "source": "step",
+          "ref": "read_text",
+          "field": "resource_id"
+        },
+        "content": {
+          "source": "step",
+          "ref": "read_text",
+          "field": "content"
+        },
+        "hash": {
+          "source": "step",
+          "ref": "read_text",
+          "field": "hash"
+        },
+        "format": {
+          "source": "step",
+          "ref": "read_text",
+          "field": "format"
+        }
+      }
+    },
+    {
+      "step_id": "verify_cites",
+      "operator": "spec.verify_citations",
+      "depends_on": [
+        "read_text",
+        "spec_all"
+      ],
+      "inputs": {
+        "resource_id": {
+          "source": "step",
+          "ref": "read_text",
+          "field": "resource_id"
+        },
+        "content": {
+          "source": "step",
+          "ref": "read_text",
+          "field": "content"
+        },
+        "hash": {
+          "source": "step",
+          "ref": "read_text",
+          "field": "hash"
+        },
+        "format": {
+          "source": "step",
+          "ref": "read_text",
+          "field": "format"
+        },
+        "items": {
+          "source": "step",
+          "ref": "spec_all",
+          "field": "items"
+        }
+      }
+    },
+    {
+      "step_id": "save_list",
+      "operator": "artifact.save_text",
+      "depends_on": [
+        "verify_cites"
+      ],
+      "inputs": {
+        "text": {
+          "source": "step",
+          "ref": "verify_cites",
+          "field": "text"
+        }
+      }
+    }
+  ]
+}
