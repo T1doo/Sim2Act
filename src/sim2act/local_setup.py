@@ -81,7 +81,12 @@ def initialize(runtime,data_root,model_token='',*,consent=False):
             admin.execute('REVOKE ALL ON DATABASE sim2act_local FROM PUBLIC')
             admin.execute('GRANT CONNECT ON DATABASE sim2act_local TO sim2act_app')
         store=Store(url('sim2act_migrator',credentials['migration_password']))
-        store.initialize('default-intern-account');store.engine.dispose();store=None
+        quota_subject='default-intern-account'
+        if model_token:
+            from .production_evidence import ACCOUNT_ID
+            from .production_trial_admission import canonical_quota_subject
+            quota_subject=canonical_quota_subject(ACCOUNT_ID)
+        store.initialize(quota_subject);store.engine.dispose();store=None
         with connect('sim2act_migrator',credentials['migration_password'],'sim2act_local') as owner:
             owner.execute('REVOKE CREATE ON SCHEMA public FROM PUBLIC')
             owner.execute('GRANT USAGE ON SCHEMA public TO sim2act_app')
@@ -97,6 +102,7 @@ def initialize(runtime,data_root,model_token='',*,consent=False):
         'credentials':str(credential_file),'workspace':str(root/'workspace'),
         'model_key':str(key_file) if model_token else None,'live':bool(model_token),
         'generation_enabled':bool(model_token),'generation_run_selection':bool(model_token)}
+    if model_token:selection['production_account']=ACCOUNT_ID
     target=root/'local-installation.json'
     with target.open('x',encoding='utf-8') as stream:json.dump(selection,stream);stream.flush();os.fsync(stream.fileno())
     return target

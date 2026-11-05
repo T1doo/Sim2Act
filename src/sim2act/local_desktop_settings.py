@@ -21,10 +21,17 @@ def local_settings(path):
             return result
         value=json.loads(ordinary(path).read_text(encoding='utf-8-sig'),object_pairs_hook=unique)
         required={'format','runtime','data','credentials','workspace','model_key','live'}
-        optional={'generation_enabled','generation_approval','generation_run_selection'}
+        optional={'generation_enabled','generation_approval','generation_run_selection','production_account'}
         if not required.issubset(value) or set(value)-required-optional or value['format']!='sim2act.local-installation.v1' or type(value['live']) is not bool:
             raise ValueError
         generation=value.get('generation_enabled',False)
+        production_account=value.get('production_account')
+        quota_subject='default-intern-account'
+        if production_account is not None:
+            from .production_evidence import ACCOUNT_ID
+            from .production_trial_admission import canonical_quota_subject
+            if production_account!=ACCOUNT_ID or not value['live'] or generation is not True:raise ValueError
+            quota_subject=canonical_quota_subject(ACCOUNT_ID)
         approval=value.get('generation_approval','')
         run_selection=value.get('generation_run_selection',False)
         if type(run_selection) is not bool or (run_selection and not generation):raise ValueError
@@ -52,7 +59,7 @@ def local_settings(path):
             'SIM2ACT_MODEL':'intern-s2',
             'SIM2ACT_INTERN_TOKEN':token,
             'INTERN_API_TOKEN':'',
-            'SIM2ACT_QUOTA_SUBJECT':'default-intern-account',
+            'SIM2ACT_QUOTA_SUBJECT':quota_subject,
             'SIM2ACT_GOAL_PLANNER_PROVIDER':'intern-s2' if value['live'] else 'disabled',
             'SIM2ACT_NATURAL_ACTIVATION_ENABLED':'false',
             'SIM2ACT_NATURAL_ACTIVATION_LIVE_ID':'',

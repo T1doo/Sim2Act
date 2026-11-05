@@ -28,9 +28,17 @@ with tempfile.TemporaryDirectory() as folder:
         settings,_=local_settings(selected)
         assert settings.application_generation_live_id=='gaapproval_'+'c'*32
         checks.append('explicit well-formed approval selection preserved without minting permission')
-        for extra in ({'generation_enabled':'true'},{'generation_approval':'gaapproval_'+'c'*32},{'generation_enabled':True,'generation_approval':'anything'},{'unexpected':True}):
+        for extra in ({'generation_enabled':'true'},{'generation_approval':'gaapproval_'+'c'*32},{'generation_enabled':True,'generation_approval':'anything'},{'unexpected':True},{'production_account':'anything'},{'production_account':'intern-ai-configured-account'}):
             selected.write_text(json.dumps({**value,**extra}))
             try:local_settings(selected)
             except ProtocolError:checks.append('invalid selection rejected: '+','.join(extra))
             else:raise AssertionError('Invalid selection accepted')
+        from sim2act.production_trial_admission import canonical_quota_subject
+        configured={**value,'live':True,'model_key':str(root/'model-key'),'generation_enabled':True,'production_account':'intern-ai-configured-account'}
+        with patch('sim2act.local_desktop_settings.read_dpapi',side_effect=lambda path:'synthetic-model-token' if str(path)==configured['model_key'] else json.dumps({'data_dir':value['data'],'port':55432,'app_password':'synthetic'})):
+            selected.write_text(json.dumps(configured))
+            settings,_=local_settings(selected)
+            assert settings.quota_subject==canonical_quota_subject('intern-ai-configured-account')
+            assert not settings.application_generation_live_id
+            checks.append('explicit fixed production account selects canonical quota, creates no approval')
 print({'status':'PASS','checks':checks,'scope':'synthetic settings projection, not approval validity or P-A execution'})
