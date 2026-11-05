@@ -24,7 +24,7 @@ from .db import attempts, fingerprint, runs
 from .errors import DomainError
 from .text_continuations import ANCHOR_HASH
 
-PRODUCTION_QUALIFICATION_HASH = "63759888247e57565579cb57030fb9fa0dc2154b138a18c4c6fbb54944bd3625"
+PRODUCTION_QUALIFICATION_HASH = "c0c21aea830050ef6fc5828ea8165d5572df6908fc7ec0833365e8f109c56181"
 
 
 class AccountEvidence(Strict):
@@ -128,7 +128,7 @@ def _qualified():
         gate.require(set(proof) == {"version", "baseline", "review_candidate", "files"}
             and proof["version"] == "production-software-qualification.v3"
             and proof["baseline"] == "206153da27edb5353e7106ab52b6e5bcaad86627"
-            and proof["review_candidate"] == "99d0d564cb9ed1a98b17f87bf96cdb8a1c9e71d4")
+            and proof["review_candidate"] == "2a7294f74122e6760a4009ff3dae6d0585858891")
         # Read once: the literal proof below must describe these same bytes,
         # not an unrelated second directory scan or a replaceable callback.
         sources = {p.name: p.read_bytes()
@@ -155,7 +155,7 @@ def _qualified():
             and text_proof["version"] == "literal-software-qualification.v2"
             and text_proof["anchor_hash"] == ANCHOR_HASH and text_proof["sources"] == sorted(anchors)
             and text_proof["review_baseline"] == "653669fcf67965d3b3c8877336b3289746b5d00d"
-            and text_proof["review_candidate"] == "99d0d564cb9ed1a98b17f87bf96cdb8a1c9e71d4"
+            and text_proof["review_candidate"] == "2a7294f74122e6760a4009ff3dae6d0585858891"
             and text_proof["normalization"] == "sole-qualification-hash-literal-zero64.v1",
             "Literal software qualification scope changed")
         text_expected = {name: hashlib.sha256(data).hexdigest() for name, data in sources.items()
