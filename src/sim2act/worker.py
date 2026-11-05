@@ -140,6 +140,9 @@ class Worker:
                     created_at=_generation_heartbeat_state["run_created_at"]),
                     _generation_heartbeat_state)
         s = self.s
+        if generation_request:
+            from .goal_applications import generation_output_tokens
+            s = replace(s,max_output_tokens=generation_output_tokens(context['messages'],request_tools,s.max_output_tokens))
         if natural_spec_request is not None:
             from .natural_spec_runtime import reservation_settings
             if planner_request or generation_request:

@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="2" time="4.078" timestamp="2026-11-05T17:12:55.057182+08:00" hostname="LAPTOP-USISIS19"><testcase classname="tests.test_pa_output4096" name="test_explicit_v2_scope_uses_4096_only_for_candidate_and_keeps_runtime_caps" time="3.493"><failure message="assert (17664 &lt;= 32768 and 4096 &lt;= 1024)&#10; +  where 17664 = len(b'{&quot;model&quot;:&quot;intern-s2&quot;,&quot;messages&quot;:[{&quot;role&quot;:&quot;system&quot;,&quot;content&quot;:&quot;Produce a finite declarative literal-text application u...d the full frozen goal object. No further tools.&quot;}],&quot;tools&quot;:[],&quot;stream&quot;:false,&quot;max_tokens&quot;:4096,&quot;thinking_mode&quot;:false}')&#10; +    where b'{&quot;model&quot;:&quot;intern-s2&quot;,&quot;messages&quot;:[{&quot;role&quot;:&quot;system&quot;,&quot;content&quot;:&quot;Produce a finite declarative literal-text application u...d the full frozen goal object. No further tools.&quot;}],&quot;tools&quot;:[],&quot;stream&quot;:false,&quot;max_tokens&quot;:4096,&quot;thinking_mode&quot;:false}' = &lt;Request('POST', 'https://chat.intern-ai.org.cn/api/v1/chat/completions')&gt;.content">env = (&lt;sim2act.db.Store object at 0x0000018501138140&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...59449921dd45bd9bb3ec00887ccb22', 'user_fa17256a50514608828b93f30a9d2a6d', 'proj_fd9410da3def4246b773b548f70c0888', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x0000018502C7EFF0&gt;
+
+    def test_explicit_v2_scope_uses_4096_only_for_candidate_and_keeps_runtime_caps(env,monkeypatch):
+        data,clock=configured(env,monkeypatch)
+        old,body=prepared(data)
+        client=data[2];pid=data[4]
+        body={**body,'request_key':'scope4096','generation_request_key':'generation4096','output_profile':'pa-candidate-output4096.v1'}
+        response=client.post(f'/api/projects/{pid}/application-provider-scopes',json=body)
+        assert response.status_code==201,response.text
+        scope=response.json()
+        assert scope['scope']['version']=='pa-intern-generation-approval.v2'
+        assert scope['scope']['candidate_output_tokens']==4096
+        assert scope['scope']['limits']==old['scope']['limits']
+        response=client.post(f"/api/application-provider-scopes/{scope['approval_id']}/approve",json=dict(expected_scope_fingerprint=scope['scope_fingerprint'],consent=approval.CONSENT,budget_note='Synthetic explicitly selected output4096; no external requests',request_key='approve4096'))
+        assert response.status_code==200,response.text
+        grant=response.json();rid=accepted(data,grant['activation'],key='generation4096')
+        transport,sent=provider(data,clock)
+&gt;       assert Worker(data[0],data[1],goal_planner_transport=transport).once()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_pa_output4096.py:26: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.local\windows-build-20261105\generation4096-test-source\sim2act\worker.py:1054: in once
+    self.process(run)
+.local\windows-build-20261105\generation4096-test-source\sim2act\worker.py:703: in process
+    process(self, run, contract)
+.local\windows-build-20261105\generation4096-test-source\sim2act\goal_applications.py:1713: in process
+    raw = configured_provider(worker).request_serialized(wire, guard)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local\windows-build-20261105\generation4096-test-source\sim2act\model.py:203: in request_serialized
+    return self._request_serialized(body, wire_guard)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local\windows-build-20261105\generation4096-test-source\sim2act\model.py:244: in _request_serialized
+    return asyncio.run(self._deadline_request(
+asyncio\runners.py:195: in run
+    ???
+asyncio\runners.py:118: in run
+    ???
+asyncio\base_events.py:691: in run_until_complete
+    ???
+.local\windows-build-20261105\generation4096-test-source\sim2act\model.py:294: in _deadline_request
+    response = await client.send(request, stream=True)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\httpx\_client.py:1629: in send
+    response = await self._send_handling_auth(
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\httpx\_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\httpx\_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\httpx\_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\httpx\_transports\mock.py:34: in handle_async_request
+    response = self.handler(request)
+               ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+request = &lt;Request('POST', 'https://chat.intern-ai.org.cn/api/v1/chat/completions')&gt;
+
+    def handler(request):
+        payload = json.loads(request.content)
+        sent.append(payload)
+        initial = json.loads(payload["messages"][1]["content"])
+        assert payload["model"] == "intern-s2" and payload["stream"] is False
+&gt;       assert len(request.content) &lt;= 32768 and payload["max_tokens"] &lt;= 1024
+E       assert (17664 &lt;= 32768 and 4096 &lt;= 1024)
+E        +  where 17664 = len(b'{"model":"intern-s2","messages":[{"role":"system","content":"Produce a finite declarative literal-text application u...d the full frozen goal object. No further tools."}],"tools":[],"stream":false,"max_tokens":4096,"thinking_mode":false}')
+E        +    where b'{"model":"intern-s2","messages":[{"role":"system","content":"Produce a finite declarative literal-text application u...d the full frozen goal object. No further tools."}],"tools":[],"stream":false,"max_tokens":4096,"thinking_mode":false}' = &lt;Request('POST', 'https://chat.intern-ai.org.cn/api/v1/chat/completions')&gt;.content
+
+tests\test_pa_generation_provider.py:103: AssertionError</failure></testcase><testcase classname="tests.test_pa_output4096" name="test_ordinary_limits_cannot_borrow_generation_output4096" time="0.000" /></testsuite></testsuites>

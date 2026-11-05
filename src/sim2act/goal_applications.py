@@ -99,7 +99,9 @@ class GenerationRunInput(Strict):
     family: Literal["spec_checklist", "natural_spec"] | None = None
 
 
-def policy(provider, user, pid, body, activation=None, app_limits=None):
+def policy(provider, user, pid, body, activation=None, app_limits=None, output_tokens=1024):
+    if output_tokens != 1024 and (output_tokens != 4096 or activation is None or body.get('family')):
+        raise DomainError('PERMISSION_DENIED','Extended output requires an exact literal P-A scope')
     intent = fingerprint({"user": user, "project": pid, "input": body})
     return ApplicationGenerationPolicy(
         version=("goal-natural-spec-application.v1" if body.get("family") == "natural_spec" else "goal-spec-checklist-application.v1" if body.get("family") == "spec_checklist" else "goal-text-application.v1"),
@@ -110,7 +112,7 @@ def policy(provider, user, pid, body, activation=None, app_limits=None):
         repair_limit=1,
         live_request_allowance=0,
         response_archive_policy="protected-json32768.v1",
-        output_protocol="compact-candidate-json.v1" if not body.get("family") else None,
+        output_protocol=("compact-candidate-json4096.v1" if output_tokens==4096 else "compact-candidate-json.v1") if not body.get("family") else None,
         activation=activation,
         app_limits=app_limits,
     ).model_dump(exclude_none=True)
@@ -462,9 +464,20 @@ def _literal_initial_messages(saved_goal, server_ids, material, limits):
             "Begin with { and end with }. Use compact JSON without indentation, analysis, explanations, or code fences. "
             "The four top-level fields are manifest, actions, source_hash, and goal. "
             "Keep every required schema field and the complete frozen goal; compact formatting must not remove facts."
-            if server_ids.get("output_protocol") == "compact-candidate-json.v1" else "")},
+            if server_ids.get("output_protocol") in {"compact-candidate-json.v1","compact-candidate-json4096.v1"} else "")},
         {"role": "user", "content": json.dumps(value, ensure_ascii=False, separators=(",", ":"))},
     ]
+
+
+def generation_output_tokens(messages, tools, default):
+    if not tools and len(messages)>1:
+        try:
+            selected=json.loads(messages[1]['content']).get('server_ids',{})
+            if selected.get('output_protocol')=='compact-candidate-json4096.v1' and selected.get('activation'):
+                return 4096
+        except (ValueError,TypeError,KeyError,AttributeError):
+            pass
+    return default
 
 
 def body(messages, tools, max_output):
@@ -474,7 +487,7 @@ def body(messages, tools, max_output):
     if not tools and len(messages)>1:
         try:
             selected=json.loads(messages[1]["content"]).get("server_ids",{})
-            if selected.get("output_protocol")=="compact-candidate-json.v1":
+            if selected.get("output_protocol") in {"compact-candidate-json.v1","compact-candidate-json4096.v1"}:
                 extra["thinking_mode"]=False
         except (ValueError,TypeError,KeyError,AttributeError):
             pass
@@ -663,7 +676,7 @@ def _history_core(reader):
             not in reserved
             or not 1
             <= parameters["max_tokens"]
-            <= reader.frozen().limits.max_output_tokens
+            <= generation_output_tokens(messages,tools,reader.frozen().limits.max_output_tokens)
             or attempt["reserved_tokens"] != len(wire) + parameters["max_tokens"]
             or parameters.get("generation_wire") != hashlib.sha256(wire).hexdigest()
             or parameters.get("request_fingerprint")
@@ -1633,7 +1646,8 @@ def process(worker, run, contract):
                 check_sender(worker, c, current, messages, tools)
                 ctx["messages"] = messages
             _renew_committed_lease(worker, run, heartbeat_state)
-            wire = body(messages, tools, worker.s.max_output_tokens)
+            output_tokens = generation_output_tokens(messages,tools,worker.s.max_output_tokens)
+            wire = body(messages, tools, output_tokens)
             if len(wire) > 32768:
                 raise DomainError("BUDGET_EXHAUSTED", "Complete generation wire exceeds geometry")
             try:
@@ -1711,8 +1725,8 @@ def process(worker, run, contract):
                 usage = checked_usage(
                     raw,
                     contract.limits,
-                    worker.s.max_output_tokens,
-                    len(wire) + worker.s.max_output_tokens,
+                    output_tokens,
+                    len(wire) + output_tokens,
                 )
                 if raw["choices"][0]["message"].get("refusal"):
                     raise DomainError("MODEL_OUTPUT_INVALID", "Provider refused")

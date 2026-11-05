@@ -65,6 +65,10 @@ class Metadata(Strict):
     resource_id: str
 
 
+class Prepare4096Input(PrepareInput):
+    output_profile: Literal["pa-candidate-output4096.v1"]
+
+
 class Scope(Strict):
     version: Literal["pa-intern-generation-approval.v1"]
     metadata: Metadata
@@ -86,6 +90,12 @@ class ApproveInput(Strict):
     consent: Literal["APPROVE_ONLY_THIS_EXACT_P_A_GOAL_MATERIAL_AND_REQUEST_BUDGET"]
     budget_note: str = Field(min_length=1, max_length=500)
     request_key: str = Field(min_length=1, max_length=100)
+
+
+class Scope4096(Scope):
+    version: Literal["pa-intern-generation-approval.v2"]
+    request: Prepare4096Input
+    candidate_output_tokens: Literal[4096] = 4096
 
 
 class Approval(Strict):
@@ -120,6 +130,24 @@ class Sending(Strict):
     sent_at: float = Field(strict=True)
 
 
+class Charge4096(Charge):
+    output_profile: Literal["pa-candidate-output4096.v1"] = "pa-candidate-output4096.v1"
+    max_tokens: int = Field(strict=True, ge=1, le=4096)
+    envelope: int = Field(strict=True, ge=1, le=36864)
+
+
+class _ScopeReader:
+    @staticmethod
+    def model_validate(value):
+        return (Scope4096 if value.get('version')=='pa-intern-generation-approval.v2' else Scope).model_validate(value)
+
+
+class _ChargeReader:
+    @staticmethod
+    def model_validate(value):
+        return (Charge4096 if value.get('output_profile')=='pa-candidate-output4096.v1' else Charge).model_validate(value)
+
+
 class Settlement(Strict):
     charge_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
     status: Literal["RECEIVED", "FAILED"]
@@ -133,6 +161,7 @@ def _save(c, user, aid, kind, key, body):
 
 
 def _get(c, user, aid, kind, key, model):
+    model = _ScopeReader if model is Scope else _ChargeReader if model is Charge else model
     body, result = pair(c, user, aid, kind, key, model)
     require(fingerprint(body.model_dump()) == fingerprint(result))
     return body
@@ -213,7 +242,8 @@ def prepare(store, user, pid, body, settings):
         limits = Limits(**{k: min(getattr(settings, k), cap) for k, cap in CAPS.items()})
         require(limits.max_requests >= 2 and settings.model == "intern-s2"
             and settings.goal_planner_provider == "intern-s2")
-        scope = Scope(version=VERSION, metadata=meta, request=body,
+        scope_type = Scope4096 if isinstance(body,Prepare4096Input) else Scope
+        scope = scope_type(version="pa-intern-generation-approval.v2" if scope_type is Scope4096 else VERSION, metadata=meta, request=body,
             source=GoalCardRunSource(card_id=body.card_id, version=body.expected_version,
                 fingerprint=body.expected_fingerprint, snapshot=saved["snapshot"]),
             mode="OFFLINE_TEST" if store.test_only else "LIVE", model="intern-s2",
@@ -355,6 +385,8 @@ def validate_run(store, c, run, settings=None, *, active=False, transition=None)
         and all(v <= scope.limits.model_dump()[k] for k, v in contract.limits.model_dump().items())
         and math.isfinite(approval.approved_at) and math.isfinite(approval.deadline)
         and approval.deadline == approval.approved_at + scope.limits.run_seconds)
+    require((selected.output_protocol == 'compact-candidate-json4096.v1') == isinstance(scope,Scope4096),
+            'Generation output profile differs from exact approved scope')
     require(_keys(c, run["principal_id"], b.approval_id, META) == {"scope"}
         and _keys(c, run["principal_id"], b.approval_id, SCOPE) == {"scope"}
         and _keys(c, run["principal_id"], b.approval_id, APPROVE) == {"approve"}
@@ -362,6 +394,9 @@ def validate_run(store, c, run, settings=None, *, active=False, transition=None)
     charges, sent, settled = audit(store, c, run["principal_id"], b.approval_id, transition)
     require(all(r.run_id == run["id"] for r in charges))
     require(sum(r.envelope for r in charges) <= scope.limits.max_total_tokens)
+    require(all(isinstance(r,Charge4096)==isinstance(scope,Scope4096)
+        and r.max_tokens <= (4096 if isinstance(scope,Scope4096) else scope.limits.max_output_tokens)
+        for r in charges),'Stored output charges differ from approved version')
     for key in sent:
         marker = _get(c, run["principal_id"], b.approval_id, SEND, key, Sending)
         require(approval.approved_at <= marker.sent_at < approval.deadline,
@@ -459,7 +494,9 @@ def reserve_slot(worker, c, run, aid, envelope, wire_fp):
     require(actual is not None and actual["status"] == "STARTED")
     if envelope > WIRE_CAP + actual["max_tokens"] or sum(r.envelope for r in prior) + envelope > scope.limits.max_total_tokens:
         raise DomainError("BUDGET_EXHAUSTED")
-    charge = Charge(approval_id=scope.metadata.approval_id, run_id=run["id"], attempt_id=aid,
+    require(actual['max_tokens'] <= (4096 if isinstance(scope,Scope4096) else scope.limits.max_output_tokens))
+    charge_type = Charge4096 if isinstance(scope,Scope4096) else Charge
+    charge = charge_type(approval_id=scope.metadata.approval_id, run_id=run["id"], attempt_id=aid,
         index=len(prior), fence=run["fence"], envelope=envelope, wire_fingerprint=wire_fp,
         request_fingerprint=actual["request_fingerprint"], mode=actual["mode"], max_tokens=actual["max_tokens"])
     _save(c, run["principal_id"], charge.approval_id, CHARGE, aid, charge)

@@ -92,7 +92,7 @@ def accepted(data, activation, key="exact-generation"):
     return response.json()["run_id"]
 
 
-def provider(data, clock, *, repair=False, mutate=None):
+def provider(data, clock, *, repair=False, mutate=None, output_cap=1024):
     sent = []
 
     def handler(request):
@@ -100,7 +100,7 @@ def provider(data, clock, *, repair=False, mutate=None):
         sent.append(payload)
         initial = json.loads(payload["messages"][1]["content"])
         assert payload["model"] == "intern-s2" and payload["stream"] is False
-        assert len(request.content) <= 32768 and payload["max_tokens"] <= 1024
+        assert len(request.content) <= 32768 and payload["max_tokens"] <= output_cap
         if len(sent) == 1:
             assert "content" not in initial["source"], "actual material waits for the provider's tool request"
             raw = wire({"role": "assistant", "content": "", "tool_calls": [{"id": "chosen-read",

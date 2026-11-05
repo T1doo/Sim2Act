@@ -246,7 +246,7 @@ class ApplicationGenerationPolicy(Strict):
     repair_limit: Literal[1]
     live_request_allowance: Literal[0]
     response_archive_policy: Literal["protected-json32768.v1"] | None = None
-    output_protocol: Literal["compact-candidate-json.v1"] | None = None
+    output_protocol: Literal["compact-candidate-json.v1", "compact-candidate-json4096.v1"] | None = None
     activation: ApplicationGenerationActivation | None = None
     app_limits: Limits | None = None
 

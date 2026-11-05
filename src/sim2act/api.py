@@ -577,7 +577,8 @@ def create_app(store=None, settings=None):
         selected = policy(s.goal_planner_provider, user, pid,
             {"card_id": cid, **body.model_dump(exclude_none=True)},
             **({"activation": body.activation} if body.activation is not None else {}),
-            **({"app_limits": app_limits} if app_limits is not None else {}))
+            **({"app_limits": app_limits} if app_limits is not None else {}),
+            output_tokens=getattr(scope,"candidate_output_tokens",1024))
         limits = scope.limits if scope else platform_limits
         rid = db.submit(user, pid, "", [], body.request_key, policy={
             "limits": {**limits.model_dump(), "max_requests": min(3, s.max_requests, limits.max_requests),
@@ -596,7 +597,7 @@ def create_app(store=None, settings=None):
         return generation_provider.approved_options(db, user, pid, cid, s)
 
     @app.post("/api/projects/{pid}/application-provider-scopes", status_code=201)
-    def prepare_generation_provider(pid: str, body: generation_provider.PrepareInput, user=user_dependency):
+    def prepare_generation_provider(pid: str, body: generation_provider.PrepareInput | generation_provider.Prepare4096Input, user=user_dependency):
         return generation_provider.prepare(db, user, pid, body, s)
 
     @app.post("/api/application-provider-scopes/{aid}/approve")
