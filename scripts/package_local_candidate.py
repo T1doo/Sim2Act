@@ -69,8 +69,10 @@ def main():
     )
     parser.add_argument("--reuse-windows-native-wheel", type=Path,
                         help="Exact previously imported wheel; requires unchanged complete native inputs")
+    parser.add_argument("--reuse-windows-native-image", type=Path,
+                        help="Exact qualified Windows image; same native source/report/ABI checks as wheel reuse")
     args = parser.parse_args()
-    if args.python_preview and args.reuse_windows_native_wheel:
+    if sum(bool(x) for x in (args.python_preview,args.reuse_windows_native_wheel,args.reuse_windows_native_image))>1:
         parser.error("Choose pure preview or explicit unchanged-native Windows reassembly")
     if importlib.metadata.version("setuptools") != "82.0.1":
         parser.error("Existing setuptools==82.0.1 required; this command will not download it")
@@ -111,7 +113,7 @@ def main():
             **os.environ,
             "SOURCE_DATE_EPOCH": git("show", "-s", "--format=%ct", commit).decode().strip(),
         }
-        environment["SIM2ACT_BUILD_PYTHON_PREVIEW"] = "1" if args.python_preview or args.reuse_windows_native_wheel else "0"
+        environment["SIM2ACT_BUILD_PYTHON_PREVIEW"] = "1" if args.python_preview or args.reuse_windows_native_wheel or args.reuse_windows_native_image else "0"
         result = subprocess.run(
             [
                 sys.executable,
@@ -140,10 +142,11 @@ def main():
     wheel = wheels[0]
     wheel_data = wheel.read_bytes()
     reuse = None
-    if args.reuse_windows_native_wheel:
+    if args.reuse_windows_native_wheel or args.reuse_windows_native_image:
         name, wheel_data, reuse = wheel_tools.reuse_windows_native(wheel.name, wheel_data,
-            args.reuse_windows_native_wheel, contents["setup.py"],
-            ROOT / "docs/evidence/windows-full-package-20261101/attempt-2/report.json")
+            args.reuse_windows_native_wheel or args.reuse_windows_native_image, contents["setup.py"],
+            ROOT / "docs/evidence/windows-full-package-20261101/attempt-2/report.json",
+            native_image=bool(args.reuse_windows_native_image))
         # Preserve the source-only intermediate as an explicitly named input;
         # exactly one distributable application wheel enters the manifest.
         wheel.rename(output / (wheel.name + ".source-only-input"))

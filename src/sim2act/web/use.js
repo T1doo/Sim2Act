@@ -19,6 +19,7 @@ const naturalUseFamily=a=>{
 const applicationUseCurrent=v=>!!v && applicationUse===v && v.identity===token && v.project===$("project-select").value && v.generation===applicationUseGeneration;
 const applicationUseKey=v=>JSON.stringify([v.identity,v.project,v.id]);
 function clearApplicationUse(clearList=false){
+ if(typeof frontendSelectUseSection==='function')frontendSelectUseSection('use');
  if($("frontend-use-title"))$("frontend-use-title").textContent="应用运行";
  if($("frontend-application-layout"))$("frontend-application-layout").dataset.directoryOpen="false";
  if($("frontend-use-directory-toggle")){$("frontend-use-directory-toggle").textContent="切换应用";$("frontend-use-directory-toggle").setAttribute("aria-expanded","false");}
@@ -118,14 +119,23 @@ async function refreshApplicationUse(apps){
    name.textContent=app.name;meta.textContent=`${kind} · 内部未发布。${[...new Set(full.match(/UNKNOWN|NOT_RUN|PENDING/g)||[])].join(" / ")}`;
    title.textContent="适用范围与限制";copy.textContent=full;notes.append(title,copy);
    const signature=JSON.stringify([identity,connection,project,item.dataset.useFamily,item.dataset.appId,item.dataset.instanceId||null,app.name,full]);
-   const previous=[...$("use-list").children].find(old=>applicationUseDirectoryViews.get(old)===signature);
+   const previous=[...$("use-list").querySelectorAll('.application-directory-item')].find(old=>applicationUseDirectoryViews.get(old)===signature);
    notes.open=!!previous?.querySelector("details")?.open;
    applicationUseDirectoryViews.set(item,signature);
    item.classList.add("application-directory-item");original.remove();item.prepend(name,meta);item.append(notes);
    // The same original button/guarded closure stays attached. Opening remains
    // a fresh authorized read; the full original restrictions are expandable.
   }
-  $("use-list").replaceChildren(...(rows.length?rows:[row("暂无可使用的保存实例。可点击上方“从 Goal 创建自然应用”，逐步确认候选、内部版本和实例；此处不会自动创建或授权。") ]));renderNaturalFirstGuide();
+  const groups=new Map(),directory=[];
+  for(const item of rows){
+   const app=apps.find(a=>a.id===item.dataset.appId);
+   if(!app){directory.push(item);continue;}
+   let group=groups.get(app.id);
+   if(!group){group=document.createElement('section');group.className='application-directory-group';const title=document.createElement('h3');title.textContent=app.name;group.append(title);groups.set(app.id,group);directory.push(group);}
+   const management=group.querySelector('[data-use-family="CSV_MATERIAL_ACCESS"]');
+   if(item.dataset.useFamily!=='CSV_MATERIAL_ACCESS'&&management)management.before(item);else group.append(item);
+  }
+  $("use-list").replaceChildren(...(directory.length?directory:[row("暂无可使用的保存实例。可点击上方“从 Goal 创建自然应用”，逐步确认候选、内部版本和实例；此处不会自动创建或授权。") ]));renderNaturalFirstGuide();
  }
 }
 function savedDagUseLabel(version){
@@ -191,6 +201,9 @@ function applicationUseButtons(v){
  if(pendingLocked&&[...$("use-column").options].some(o=>o.value===pending.body.input.column))$("use-column").value=pending.body.input.column;
  $("use-submit").disabled=v.busy||!!v.reading||locked||!$("use-column").value;
  $("use-column").disabled=v.busy||!!v.reading||locked;
+ let inputContext=$("use-input-context");
+ if(!inputContext){inputContext=document.createElement('p');inputContext.id='use-input-context';inputContext.className='input-context-label';$("use-form").prepend(inputContext);}
+ inputContext.textContent=pending?.state==='sending'?'正在提交此配置':pending?.state==='unknown'?'原请求待核对':pending?.state==='accepted-read-error'?'原请求已接受 · 等待回读':'下一次运行配置';
  $("use-recover").hidden=!pending||!["unknown","accepted-read-error"].includes(pending.state);
  $("use-recover").disabled=v.busy||!!v.reading;
  $("use-recover").textContent=pending?.state==="unknown"?"恢复同一运行的接受回执":"重新读取已接受运行";
@@ -270,7 +283,10 @@ function renderApplicationAcceptance(v,release,run){
 }
 function csvRunDownloadValue(instanceId,run,records){
  const result=run?.result;
- const record=records?.find(r=>r.instance_id===instanceId&&r.run_id===run.app_run_id&&r.release_id===run.release_id&&r.version===run.result_version);
+ if(![instanceId,run?.id,run?.app_run_id,run?.release_id].every(value=>typeof value==='string'&&value.trim().length>0)||!Array.isArray(records))return null;
+ const matches=records.filter(r=>r&&r.instance_id===instanceId&&r.run_id===run.app_run_id&&r.release_id===run.release_id&&r.version===run.result_version);
+ if(matches.length!==1)return null;
+ const record=matches[0];
  if(run?.status!=="SUCCEEDED"||run.instance_id!==instanceId||!Number.isSafeInteger(run.result_version)||run.result_version<1||
   !result||typeof result.resource_id!=="string"||typeof result.column!=="string"||typeof result.sum!=="string"||!Number.isSafeInteger(result.count)||result.count<0||
   !record||!["resource_id","column","sum","count"].every(key=>record.data?.result?.[key]===result[key]))return null;
@@ -370,10 +386,13 @@ async function readApplicationUse(v,expectedPending=null){
   if(run){
    if(run.instance_id!==v.id)throw Error("VERSION_CONFLICT");
    const label=v.historical?"已选择的历史运行":"本次运行";
-   $("use-output").append(row(`${label} ${run.id} · ${run.status} · 结果版本 ${run.result_version??"尚无"}`));
+   const identity=row(`${label} · ${run.result?.column??'输入列未提供'} · 结果 v${run.result_version??'未提供'}`);
+   identity.classList.add('application-result-identity');identity.title=`${run.id} · ${run.status}`;$("use-output").append(identity);
+   $("use-output").append(row(`技术执行：${run.status==='SUCCEEDED'?'执行完成':run.status} · 目标验收：${frontendAcceptanceLabel(run.result?.goal_acceptance??run.goal_acceptance)} · 人工签收：${frontendAcceptanceLabel(run.owner_acceptance??run.result?.owner_acceptance)}`));
    if(run.status==="SUCCEEDED"&&run.result){
     const total=document.createElement("div"),label=document.createElement("span"),value=document.createElement("strong"),note=document.createElement("p");
-    total.className="row csv-result-total";label.textContent=`${run.result.column} 合计 `;value.textContent=run.result.sum;note.textContent=`共 ${run.result.count} 条。工具结果已核验；目标语义验收未执行。`;
+    total.className="row csv-result-total";label.textContent=`${run.result.column} 合计 `;value.textContent=run.result.sum;note.textContent=`${run.result.count} 条记录 · ${csvRunDownloadValue(v.id,run,instance.data)?'保存记录一致':'已保存，核对记录未提供'}`;
+    note.title='仅核对实例、运行、Release、结果版本及保存内容；不代表重新计算、合同验收或人工签收通过。';
     total.append(label,value,note);$("use-output").append(total);
     const download=csvRunDownloadControl(v,run);if(download)$("use-output").append(download);
    }
@@ -381,6 +400,7 @@ async function readApplicationUse(v,expectedPending=null){
   }else $("use-output").append(row("本页尚未选择或发起运行；下方仅为持久历史，不是本次新结果。"));
   $("use-history").replaceChildren(...instance.runs.map(r=>row(`${r.id.slice(0,18)} · ${r.status} · 结果版本 ${r.result_version??"无"}`,async()=>{
    if(!applicationUseCurrent(v)||v.busy)return;v.selected=r.id;v.historical=true;await readApplicationUse(v);
+   if(applicationUseCurrent(v)&&v.selected===r.id&&typeof frontendSelectUseSection==='function')frontendSelectUseSection('use',true);
   },"查看这次运行")),...instance.data.map(record=>row(`历史结果 v${record.version} · ${record.data.result.column} 合计 ${record.data.result.sum}，${record.data.result.count} 条 · ${record.release_id}`)));
   let runRelease=release;
   if(run&&run.release_id!==release.id){runRelease=await api(`/api/internal/releases/${run.release_id}`);if(!current())return;if(runRelease.snapshot.draft.id!==v.appId||runRelease.id!==run.release_id)throw Error("VERSION_CONFLICT");}

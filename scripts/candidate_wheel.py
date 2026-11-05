@@ -91,7 +91,7 @@ def verify_source(data, source, profile):
                 raise ValueError("App wheel source bytes mismatch: " + name)
 
 
-def reuse_windows_native(pure_filename, pure_data, native_path, setup_bytes, proof_path):
+def reuse_windows_native(pure_filename, pure_data, native_path, setup_bytes, proof_path, *, native_image=False):
     """Repackage current Python with exact unchanged, previously imported PE parts.
 
     No compiler or Windows execution occurs. The original reviewed build recipe,
@@ -107,7 +107,21 @@ def reuse_windows_native(pure_filename, pure_data, native_path, setup_bytes, pro
     if record(setup_bytes)["sha256"] != "0bbab56172ee0dab2cf8788eab50b0e9bca18f6286ac4337e3c353a50862dee0":
         raise ValueError("Original native build recipe changed; new compilation required")
     native_data = Path(native_path).read_bytes()
-    if record(native_data) != dict(bytes=1551930, sha256="bbefc8d561d35126164967e4018a9d58337c9fa5aa287469937787060fd959b3"):
+    original_record = record(native_data)
+    if native_image:
+        if original_record['sha256'] != 'cc177eeb8815194a4f1e973e146ce7dd95c2949350745a296c4d6a9bfcd38027':
+            raise ValueError('Original accepted Windows image changed')
+        # Normalize only the application members of this exact qualified image.
+        # No archive paths are extracted to disk; current Python always comes
+        # from the new source wheel below, never from this historical image.
+        normalized = io.BytesIO()
+        prefix = 'Sim2Act/runtime/Lib/site-packages/'
+        with zipfile.ZipFile(io.BytesIO(native_data)) as image, zipfile.ZipFile(normalized, 'w') as output:
+            for name in image.namelist():
+                if name.startswith(prefix + 'sim2act/') and not name.endswith('/'):
+                    output.writestr(name[len(prefix):], image.read(name))
+        native_data = normalized.getvalue()
+    elif original_record != dict(bytes=1551930, sha256="bbefc8d561d35126164967e4018a9d58337c9fa5aa287469937787060fd959b3"):
         raise ValueError("Original accepted Windows wheel changed")
     proof_raw = Path(proof_path).read_bytes()
     if record(proof_raw)["sha256"] != "406c97ca44922c05a10ae04a873e8f43336e2b2bff3b1dc0c29e61d807eb6b10":
@@ -117,7 +131,11 @@ def reuse_windows_native(pure_filename, pure_data, native_path, setup_bytes, pro
         raise ValueError("Original source identity changed")
     if wheel_profile(pure_filename, pure_data)["tags"] != ["py3-none-any"]:
         raise ValueError("Current exact pure Python input required before native reuse")
-    old_profile = wheel_profile(Path(native_path).name, native_data, target="windows")
+    if native_image:
+        with zipfile.ZipFile(io.BytesIO(native_data)) as image:
+            old_profile = {'native_artifacts': {name: record(image.read(name)) for name in image.namelist() if name.endswith('.pyd')}}
+    else:
+        old_profile = wheel_profile(Path(native_path).name, native_data, target="windows")
     if len(old_profile["native_artifacts"]) != len(MODULES):
         raise ValueError("Original complete Windows native inventory required")
     groups = NATIVE_SOURCE_GROUPS
@@ -164,5 +182,7 @@ def reuse_windows_native(pure_filename, pure_data, native_path, setup_bytes, pro
     result = output.getvalue()
     verify_source(result, source, wheel_profile(filename, result, target="windows"))
     return filename, result, dict(status="REUSED_UNCHANGED_NATIVE_NOT_CURRENT_WINDOWS_EXECUTED",
-        original_source=proof["source_commit"], original_wheel=record(native_data),
+        original_source=proof["source_commit"], original_input=original_record,
+        original_wheel=None if native_image else original_record,
+        original_input_kind='qualified-windows-image' if native_image else 'qualified-windows-wheel',
         original_actual_import_report=record(proof_raw), setup=record(setup_bytes), modules=reused)

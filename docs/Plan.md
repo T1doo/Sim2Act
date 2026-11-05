@@ -1,5 +1,38 @@
 # Sim2Act 动态总入口
 
+## 2026-11-05 用户最新决策：Windows 桌面应用优先
+
+本节是用户对《前端完善与 R0 收敛计划》的执行范围修订，优先于其中与本节冲突的执行安排。
+
+- 本轮目标是可独立启动并完成实际工作的 Windows 应用。暂停 Linux 的开发、打包与验收；保留已有跨平台代码和历史证据，不为此破坏底层实现。
+- 默认交付入口必须是 Windows 应用窗口（现有 C# / WebView2 宿主），不是外部浏览器 URL。浏览器仅作为内部调试工具，其测试不能代替宿主验收。
+- 复用现有 configured supervisor，由宿主整合 API / Worker 的启动、就绪、停止与异常反馈；普通用户不应手动打开终端启动服务。不删除权限、租约、批准或恢复检查来制造一键可用。
+- 将 Windows 同源构建与宿主验证提前，与前端主路径收敛共同推进：应用入口、图标、窗口、实际模型接入、明确的配置/登录、材料导入、任务与结果、导出、关闭重开及错误恢复须形成完整路径。
+- PostgreSQL 等必要条件应有明确的准备与诊断流程；存在缺项时在应用内准确说明。是否自动安装/迁移仍遵循用户授权，不隐式操作原有数据库。
+- 最新用户已提供书生密钥并授权模型测试。凭据仅保存在项目外的当前 Windows 用户 DPAPI 加密文件；报告不含密钥。历史“额度耗尽”不作为本轮禁止调用依据，原产品预算与精确任务批准继续保留。
+- UI-ready 必须包含 Windows 宿主中的主路径体验；R0-ready 仍需同版本正式环境与完整 AT 记录。仅网页截图、连通测试或一个能弹窗的 EXE 均不足以宣称完成。
+
+下一交付重点：核对当前宿主构建输入 → 生成同源 Windows 候选 → 原生窗口启动与生命周期 → 在应用内完成任务/导出/恢复 → 分别出具 UI-ready 和 R0-ready 结论。
+
+## 2026-11-05 当前收敛状态（保留以下历史记录）
+
+本地候选基于 `653669fcf67965d3b3c8877336b3289746b5d00d`，分支为
+`codex/ui-review-followup`，包含未提交前端改动，不能将其归为 main 已发布能力。
+执行依据为用户提供的《Sim2Act 前端完善与 R0 收敛计划》。UI-ready 与 R0-ready
+分别验收；历史 221 项检查及截图不代替当前版本完整组合验收。
+
+- 配置式 supervisor 已存在于 `src/sim2act/desktop_service.py`；Windows Host
+  `scripts/windows/Sim2ActDesktop.cs` 已有 Configured 分支。
+- `scripts/package_windows_portable.py` 已有 `--configured-runtime` 与 PostgreSQL
+  驱动装配逻辑；详见 [ConfiguredDesktop](ConfiguredDesktop.md)。旧 042 包的缺口
+  不能扩大为这些新源码尚未实现，但新同源包、正式 PG 和目标 Windows 联合验收仍未关闭。
+- `scripts/Test.ps1 -Suite R0` 仍明确拒绝；完整 AT 用例注册与同版本执行证据尚未完成。
+- FE-00 已核对上一轮四份源码哈希并保存源码快照；完整页面能力矩阵仍待完成。
+  FE-01 正在审查结果绑定，新增缺标识、重复记录及跨运行/实例/版本反例。
+- 下列早期阶段表、预算记录和失败属于各自历史范围，不表示当前全部实现现状，
+  也不构成追加模型调用、CI、数据库变更或发布授权。
+
+
 2026-10-07 subsequent NL UI/confirmation: exact117bb5db2d2161e6a6f346eecd289cd6f1fc11bc connects saved goal→strict planned-runs→validated exact plan→explicit confirmation→actual durable receipts/history. New valid plans stop WAITING_APPROVAL0Operations; defaultdisabled or selected-but-LIVE0 is honestly blocked. Targeted250unique249PASS1explicitPGroleSKIP68.34s, five actualHTTP/fullDOM paths42/8/8/7/8 checks and9loadedJS hashes, independentbackend14actual LIMITEDPASS and corrected UI staticPASS. Protected Chromium aborted due installed SUID configuration; JSDOM is not native/visual evidence. No newLIVE/full/PG/native/CI or R0/P-A/P-B acceptance. [Stage log](F2/NaturalGoalUILog.md) and [proposed two-hour real-model acceptance](F2/NaturalGoalLiveAcceptanceProposal.md), not authorized/executed.
 
 

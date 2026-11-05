@@ -231,11 +231,11 @@ function resourceMaterialRow(resource) {
   button.type = "button";
   button.textContent = "下载文件";
   button.onclick = safe(() => downloadResource(resource, context, button));
-  const description = document.createElement("div"), name = document.createElement("strong"), metadata = document.createElement("span"), actions = document.createElement("div");
-  description.className = "resource-description"; name.className = "resource-name"; metadata.className = "resource-metadata"; actions.className = "resource-actions";
-  name.textContent = resource.name; metadata.textContent = `${resource.format.toUpperCase()} · ${resource.hash.slice(0, 12)}`;
-  description.append(name, metadata); actions.append(viewButton, button); div.classList.add("resource-row"); div.replaceChildren(description, actions);
-  const formatMark=document.createElement("span");formatMark.className="resource-format-mark";formatMark.textContent=resource.format.toUpperCase();formatMark.setAttribute("aria-hidden","true");div.prepend(formatMark);
+  const description = document.createElement("div"), name = document.createElement("strong"), actions = document.createElement("div");
+  description.className = "resource-description"; name.className = "resource-name"; actions.className = "resource-actions";
+  name.textContent = resource.name;
+  description.append(name); actions.append(viewButton, button); div.classList.add("resource-row"); div.replaceChildren(description, actions);
+  const formatMark=document.createElement("span");formatMark.className="resource-format-mark";formatMark.textContent=resource.format.toUpperCase();div.prepend(formatMark);
   viewButton.setAttribute("aria-label", `查看材料 ${resource.name}`);
   frontendResourceActions(actions, resource);
   return div;
@@ -574,10 +574,11 @@ function renderInternalTaskResult(r,current) {
   if(result && typeof result.column==="string" && typeof result.sum==="string" && Number.isSafeInteger(result.count) && result.count>=0){
     const documentView=document.createElement("article");documentView.className="result-document";
     const heading=document.createElement("h3");heading.textContent=`${result.column}汇总`;
-    const table=document.createElement("table"),caption=document.createElement("caption");caption.textContent="本次保存的计算结果";table.append(caption);
-    const thead=document.createElement("thead"),head=document.createElement("tr");for(const name of ["数值列","合计","记录数"]){const th=document.createElement("th");th.scope="col";th.textContent=name;head.append(th);}thead.append(head);table.append(thead);
-    const tbody=document.createElement("tbody"),line=document.createElement("tr");[result.column,result.sum,String(result.count)].forEach((value,index)=>{const cell=document.createElement("td");cell.textContent=value;if(index)cell.dataset.numeric="true";line.append(cell);});tbody.append(line);table.append(tbody);
-    documentView.append(heading,table);$("result").append(documentView);
+    heading.textContent=`${result.column}合计`;
+    const value=frontendNode('strong',result.sum,'result-metric-value');
+    const count=frontendNode('p',`${result.count} 条记录`,'result-metric-count');
+    documentView.classList.add('result-metric');
+    documentView.append(heading,context,value,count);$("result").append(documentView);
   }
   else if(result)$("result").append(row(result.checklist?"已保存规范清单；请打开原应用运行读取此版本内容及人工验收状态。":"已保存结构化成果；请打开原应用运行查看完整内容。"));
   if([r.id,r.instance_id,r.app_run_id,r.release_id].every(value=>typeof value==="string" && value.length>0)){
@@ -1938,8 +1939,31 @@ function updateFrontendRun(receipt, current) {
     line.dataset.running=String(receipt.status==='RUNNING');
     const dot=frontendNode('span',undefined,'run-status-dot');dot.setAttribute('aria-hidden','true');line.prepend(dot);
   }
+  $('result').querySelector('.result-identity-summary')?.remove();
+  const summary=frontendNode('section',undefined,'result-identity-summary');
+  summary.setAttribute('aria-label','选中运行与验收状态');
+  const identity=frontendNode('p',`选中运行 · ${receipt.id ? receipt.id.slice(0,16) : '编号未提供'}`,'selected-run-identity');
+  identity.title=receipt.id || '';
+  const states=frontendNode('dl',undefined,'result-acceptance-summary');
+  for(const [label,value] of [['目标验收',receipt.result?.goal_acceptance??receipt.goal_acceptance],['人工签收',receipt.owner_acceptance??receipt.result?.owner_acceptance]]){
+    const group=frontendNode('div');group.append(frontendNode('dt',label),frontendNode('dd',frontendAcceptanceLabel(value)));states.append(group);
+  }
+  summary.append(states,identity);
+  const metric=$('result').querySelector('.result-metric');
+  if(metric)metric.after(summary);else if(line)line.after(summary);else $('result').prepend(summary);
   if(!$('frontend-inspector').hidden)renderFrontendInspector();
   frontendRefreshIdle();
+}
+// Only project receipt facts; execution success never implies acceptance.
+function frontendAcceptanceLabel(value) {
+  if(value==null || value==='')return '未提供';
+  if(typeof value!=='string')return '见验证详情';
+  return ({NOT_RUN:'未执行',PENDING:'待确认',UNKNOWN:'待核实',FAIL:'未通过',REJECTED:'未通过'})[value] || value;
+}
+function frontendSelectUseSection(key,focus=false) {
+  const tabs=[...document.querySelectorAll('[data-use-section]')];
+  if(!tabs.some(tab=>tab.dataset.useSection===key))return;
+  for(const tab of tabs){const selected=tab.dataset.useSection===key;tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;$(tab.getAttribute('aria-controls')).hidden=!selected;if(selected&&focus)tab.focus();}
 }
 function frontendReceiptCurrent(view=frontendRunView) {
   return !!view && view===frontendRunView && view.current() && view.identity===token && view.project===$('project-select').value;
@@ -1966,9 +1990,11 @@ function renderFrontendInspector() {
   host.setAttribute('aria-labelledby','frontend-tab-'+frontendInspectorTab);
   const view=frontendInspectionView||frontendRunView;
   if(!view||!view.current()||view.identity!==token||view.project!==$('project-select').value) {host.append(frontendNode('p','尚无当前任务记录。选择任务后可查看对应来源、调用、验证和版本。'));return;}
-  const r=view.receipt;$('frontend-inspector-title').textContent=`当前任务检查 · ${r.id}`;
+  const r=view.receipt;$('frontend-inspector-title').textContent=typeof r.result?.column==='string'?`${r.result.column}汇总 · 检查`:'任务成果 · 检查';
   const details=(label,value)=>{const box=frontendNode('details'),summary=frontendNode('summary',label),pre=frontendNode('pre',JSON.stringify(value,null,2));box.append(summary,pre);return box;};
   const pair=(label,value)=>{const dl=frontendNode('dl');dl.append(frontendNode('dt',label),frontendNode('dd',value==null?'尚无记录':String(value)));host.append(dl);};
+  host.append(frontendNode('p',`结果 v${r.result_version??'未提供'} · 运行 ${r.id?'…'+r.id.slice(-8):'未提供'}`,'inspection-identity'));
+  host.append(details('完整运行标识',{run_id:r.id,release_id:r.release_id,result_version:r.result_version}));
   if(frontendInspectorTab==='sources') {
     const sources=r.contract?.snapshot?.resources;
     pair('本次任务',r.id);
@@ -1986,7 +2012,7 @@ function renderFrontendInspector() {
     } else host.append(frontendNode('p','尚无已记录事件。未知状态不会显示假进度。'));
     if(r.error)host.append(frontendNode('p',`需要处理：${r.error.message||r.error.code||'原因待核实'}`));
   } else if(frontendInspectorTab==='checks') {
-    pair('技术执行',view.statusUnknown?'当前状态待核实；最后确认 '+r.status:r.status||'待核实');pair('目标验收',r.result?.goal_acceptance||r.goal_acceptance||'待核实');pair('人工签收',r.owner_acceptance||r.result?.owner_acceptance||'待核实');
+    pair('技术执行',view.statusUnknown?'当前状态待核实；最后确认 '+r.status:r.status||'待核实');pair('目标验收',frontendAcceptanceLabel(r.result?.goal_acceptance??r.goal_acceptance));pair('人工签收',frontendAcceptanceLabel(r.owner_acceptance??r.result?.owner_acceptance));
     host.append(frontendNode('p','技术通过、目标验收和人工签收是独立判断。完整检查仍由原核查和签收入口执行。'));
     if(r.result?.task_acceptance)host.append(details('检查依据',r.result.task_acceptance));
   } else {
@@ -2009,6 +2035,16 @@ function frontendResourceActions(actions, resource) {
   menu.id='frontend-resource-menu-'+(++frontendMenuSerial);menu.role='menu';menu.hidden=true;menu.frontendOwner=box;
   trigger.setAttribute('aria-label',`材料 ${resource.name} 的更多操作`);trigger.setAttribute('aria-haspopup','menu');trigger.setAttribute('aria-expanded','false');trigger.setAttribute('aria-controls',menu.id);
   download.role='menuitem';menu.append(download);box.append(trigger,menu);actions.append(box);
+  const resourceContext=resourceDownloadContext();
+  const detail=frontendButton('材料详情',()=>{
+    if(!resourceDownloadCurrent(resourceContext))return;
+    close(false);const {dialog,show}=frontendDialog('材料详情',trigger);
+    dialog.append(frontendNode('h3',resource.name));
+    for(const [label,value] of [['格式',resource.format],['材料标识',resource.id],['SHA-256',resource.hash]]){
+      const pair=frontendNode('dl');pair.append(frontendNode('dt',label),frontendNode('dd',value));dialog.append(pair);
+    }
+    show();
+  });detail.role='menuitem';menu.append(detail);
   const items=()=>[...menu.querySelectorAll('[role=menuitem]')].filter(item=>!item.disabled&&!item.hidden);
   function close(focus=false){menu.hidden=true;box.append(menu);trigger.setAttribute('aria-expanded','false');if(focus&&trigger.isConnected)trigger.focus({preventScroll:true});}
   function open(last=false){
@@ -2039,6 +2075,7 @@ function frontendPositionMenu(menu,trigger) {
 function applyFrontendMaterialFilter() {
   const host=$('materials'),query=$('frontend-material-query');if(!query)return;
   const q=query.value.trim().toLocaleLowerCase();const rows=[...host.querySelectorAll('.resource-row')];
+  if($('frontend-material-clear'))$('frontend-material-clear').hidden=!query.value;
   let count=0;for(const item of rows){const match=!q||item.textContent.toLocaleLowerCase().includes(q);item.hidden=!match;if(match)count++;}
   const note=$('frontend-material-empty');
   note.hidden=!q||count>0||host.querySelector('.resource-directory-status')!==null;
@@ -2119,10 +2156,13 @@ function frontendRefreshIdle() {
   document.addEventListener('pointerdown',event=>{if(inspectMenu.open&&!inspectMenu.contains(event.target))inspectMenu.open=false;},{passive:true});
   right.querySelector('.panel-heading').after(tools,copyStatus);
   const resultHeader=frontendNode('div',undefined,'result-region-header'),resultHeading=right.querySelector('.panel-heading');resultHeading.before(resultHeader);resultHeader.append(resultHeading,tools);
+  const inspectionShortcuts=frontendNode('nav',undefined,'result-inspection-shortcuts');inspectionShortcuts.setAttribute('aria-label','成果核查');
+  for(const [key,label] of Object.entries({sources:'来源详情',checks:'查看验证',versions:'版本记录'})){const button=inspectOptions.querySelector(`[data-inspection-open=${key}]`);button.textContent=label;inspectionShortcuts.append(button);}
+  $('result').after(inspectionShortcuts);inspectSummary.textContent='更多';
   const toolPaths={sources:'M6 10l4-4M7 4l2-2a3 3 0 014 4l-2 2M9 12l-2 2a3 3 0 01-4-4l2-2',calls:'M3 4h10M3 8h7M3 12h10',checks:'M3 8l3 3 7-7',versions:'M8 3a5 5 0 11-5 5M3 3v5h5M8 5v3l2 1'};
   tools.querySelectorAll('[data-inspection-open]').forEach(button=>{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),path=document.createElementNS(svg.namespaceURI,'path');svg.setAttribute('viewBox','0 0 16 16');svg.setAttribute('class','tool-icon');svg.setAttribute('aria-hidden','true');path.setAttribute('d',toolPaths[button.dataset.inspectionOpen]);svg.append(path);button.prepend(svg);});
   const inspector=frontendNode('aside',undefined,'workbench-inspector');inspector.id='frontend-inspector';inspector.hidden=true;inspector.setAttribute('aria-labelledby','frontend-inspector-title');
-  const ih=frontendNode('div',undefined,'panel-heading'),title=frontendNode('h2','当前任务检查');title.id='frontend-inspector-title';title.tabIndex=-1;ih.append(title,frontendButton('关闭',()=>closeFrontendInspector()));
+  const ih=frontendNode('div',undefined,'panel-heading'),title=frontendNode('h2','当前任务检查');title.id='frontend-inspector-title';title.tabIndex=-1;ih.append(title,frontendButton('返回成果',()=>closeFrontendInspector()));
   const tabs=frontendNode('div',undefined,'inspection-tabs');tabs.role='tablist';tabs.setAttribute('aria-label','当前任务检查');
   for(const [key,name] of Object.entries(names)){const b=frontendButton(name,()=>{frontendInspectorTab=key;renderFrontendInspector();});b.dataset.inspectionTab=key;b.id='frontend-tab-'+key;b.role='tab';b.setAttribute('aria-controls','frontend-inspector-content');tabs.append(b);}
   tabs.addEventListener('keydown',e=>{const keys=Object.keys(names),index=keys.indexOf(frontendInspectorTab);let next;if(e.key==='ArrowRight')next=(index+1)%4;if(e.key==='ArrowLeft')next=(index+3)%4;if(e.key==='Home')next=0;if(e.key==='End')next=3;if(next!==undefined){e.preventDefault();frontendInspectorTab=keys[next];renderFrontendInspector();$('frontend-tab-'+keys[next]).focus();}});
@@ -2133,7 +2173,8 @@ function frontendRefreshIdle() {
   desk.before(paneNav);
   const materialToolbar=frontendNode('div',undefined,'material-toolbar'),searchLabel=frontendNode('label','查询当前材料'),query=frontendNode('input');query.id='frontend-material-query';query.type='search';query.addEventListener('input',applyFrontendMaterialFilter);searchLabel.append(query);
   const count=frontendNode('span');count.id='frontend-material-count';const empty=frontendNode('p');empty.id='frontend-material-empty';empty.hidden=true;empty.role='status';
-  materialToolbar.append(searchLabel,frontendButton('清除查询',()=>{query.value='';applyFrontendMaterialFilter();query.focus();}));
+  const clearQuery=frontendButton('清除查询',()=>{query.value='';applyFrontendMaterialFilter();query.focus();});clearQuery.id='frontend-material-clear';clearQuery.hidden=true;
+  materialToolbar.append(searchLabel,clearQuery);
   for(const [view,label] of [['list','列表'],['grid','网格']]){const b=frontendButton(label,()=>{$('materials').dataset.view=view;materialToolbar.querySelectorAll('[data-material-view]').forEach(other=>other.setAttribute('aria-pressed',String(other===b)));});b.dataset.materialView=view;b.setAttribute('aria-pressed',String(view==='list'));materialToolbar.append(b);}
   materialToolbar.append(count);$('materials').before(materialToolbar,empty);$('materials').dataset.view='list';
   const materialSectionHeading=$('resource-materials').querySelector(':scope>h3'),materialSectionHeader=frontendNode('div',undefined,'material-section-header');materialSectionHeading.before(materialSectionHeader);materialSectionHeader.append(materialSectionHeading,$('resource-create'));
@@ -2155,6 +2196,17 @@ function frontendRefreshIdle() {
   const useInput=frontendNode('section'),useResult=frontendNode('section');useInput.setAttribute('aria-label','本次应用输入');useResult.setAttribute('aria-label','本次应用成果');
   $('use-form').before(useWorkbench);useWorkbench.append(useInput,useResult);
   useInput.append($('use-form'),$('use-recover'),$('use-refresh'));useResult.append(frontendNode('h3','运行结果'),$('use-output'));
+  const useTabs=frontendNode('div',undefined,'application-section-tabs');useTabs.role='tablist';useTabs.setAttribute('aria-label','应用使用与管理');useScope.after(useTabs);
+  const usePanels={};
+  for(const [key,label] of Object.entries({use:'使用',history:'历史',manage:'管理与验收'})){
+    const panel=frontendNode('section',undefined,'application-section-panel');panel.id='frontend-use-section-'+key;panel.role='tabpanel';panel.setAttribute('aria-labelledby','frontend-use-tab-'+key);usePanels[key]=panel;
+    const tab=frontendButton(label,()=>frontendSelectUseSection(key));tab.id='frontend-use-tab-'+key;tab.dataset.useSection=key;tab.role='tab';tab.setAttribute('aria-controls',panel.id);useTabs.append(tab);usePane.append(panel);
+  }
+  usePanels.use.append(useWorkbench);
+  usePanels.history.append($('use-history').previousElementSibling,$('use-history'));
+  usePanels.manage.append($('use-acceptance').previousElementSibling,$('use-acceptance'),$('use-provenance').closest('details'));
+  useTabs.addEventListener('keydown',event=>{const tabs=[...useTabs.children],index=tabs.indexOf(document.activeElement);if(index<0||!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:(index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;frontendSelectUseSection(tabs[next].dataset.useSection,true);});
+  frontendSelectUseSection('use');
   const edge=frontendNode('div',undefined,'idle-edge');edge.id='frontend-idle-edge';edge.setAttribute('aria-hidden','true');$('result').before(edge);
   const emptyContent=frontendNode('section',undefined,'result-empty');emptyContent.id='frontend-first-empty';
   emptyContent.append(frontendNode('h3','在这里查看任务成果'),frontendNode('p','从任务历史打开已有结果，或在左侧开始新任务。'));
@@ -2179,9 +2231,15 @@ function frontendRefreshIdle() {
   while($('task-create').nextElementSibling)history.append($('task-create').nextElementSibling);
   sidebar.insertBefore(history,$('health'));
   $('task-create').open=true;
-  left.querySelector('h2').textContent='配置任务';right.querySelector('h2').textContent='任务成果';$('projects-title').textContent='任务工作台';
+  left.querySelector('h2').textContent='配置新任务';right.querySelector('h2').textContent='任务成果';$('projects-title').textContent='任务工作台';
   panel.append(layout);
   const accountArea=frontendNode('div',undefined,'sidebar-account');accountArea.append($('identity-switch'),$('health'));sidebar.append(accountArea);
+  // Reparent the same controls on mobile; never duplicate identity or project forms.
+  const more=frontendNode('details',undefined,'mobile-global-more'),moreBody=frontendNode('div');more.id='mobile-global-more';more.append(frontendNode('summary','更多'),moreBody);toolbar.append(more);
+  const mobileControls=[$('frontend-preferences'),$('project-create'),accountArea,find,$('project-context').querySelector('.scope-note')].filter(Boolean).map(node=>{const anchor=document.createComment('desktop-control-position');node.before(anchor);return {node,anchor};});
+  const mobileMedia=typeof matchMedia==='function'?matchMedia('(max-width:768px)'):null;
+  const placeMobileControls=()=>{for(const {node,anchor} of mobileControls){if(mobileMedia?.matches)moreBody.append(node);else anchor.after(node);}if(!mobileMedia?.matches)more.open=false;};
+  mobileMedia?.addEventListener?.('change',placeMobileControls);placeMobileControls();
   $('run-materials').size=2;
   document.querySelectorAll('#workspace-nav [data-tab]').forEach(button=>button.addEventListener('click',()=>{
     const workspace=$(button.dataset.tab);workspace.getAnimations?.().filter(a=>a.id==='sim2act-local-visual').forEach(a=>a.cancel());
@@ -2479,7 +2537,7 @@ document.addEventListener('change',event=>{
   let note=select.parentElement.querySelector('.frontend-column-context');
   if(!note){note=frontendNode('p',undefined,'frontend-column-context');select.after(note);}
   note.textContent=`当前对象：列「${select.selectedOptions[0]?.textContent||select.value}」。仅更新本次输入；执行仍由原运行按钮确认。`;
-  if(!frontendFragmentDraft)$('frontend-object-context').textContent=note.textContent;
+  // Application input feedback belongs to its own selector, never to the project draft.
 });
 function frontendTextCopy(text,current,label) {
   const wrap=frontendNode('div',undefined,'result-tools'),status=frontendNode('span');status.role='status';status.setAttribute('aria-live','polite');let attempt=0;
