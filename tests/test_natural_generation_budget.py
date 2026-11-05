@@ -61,6 +61,10 @@ def test_wire_budget_requires_new_scope_and_candidate_stage(prepared_data):
     check=stage_tools(SimpleNamespace(**selected),1)
     assert [generation_output_tokens(messages,t,1024) for t in (read,check,[])]==[1024,4096,4096]
     _wire(extended,body(messages,check,4096),stage='generate')
+    structured=json.loads(body(messages,check,4096))
+    assert structured['thinking_mode'] is False
+    structured.pop('thinking_mode')
+    with pytest.raises(DomainError):_wire(extended,json.dumps(structured).encode(),stage='generate')
     with pytest.raises(DomainError):_wire(legacy,body(messages,check,4096),stage='generate')
     with pytest.raises(DomainError):_wire(extended,body(messages,read,4096),stage='generate')
     with pytest.raises(DomainError):policy('intern-s2',extended.principal_id,extended.project_id,{'family':'natural_spec'},output_tokens=4096)

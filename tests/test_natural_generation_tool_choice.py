@@ -47,6 +47,17 @@ def test_v2_required_mode_and_v1_named_mode_remain_distinct():
     assert 'tool_choice' not in json.loads(body(messages('natural-checked-candidate4096.v2'),[],4096))
 
 
+def test_v4_structure_stage_thinking_flag_does_not_change_v3_or_read_wire():
+    read=[{'type':'function','function':{'name':'read'}}]
+    check=[{'type':'function','function':{'name':'check_candidate'}}]
+    new=messages('natural-checked-candidate4096.v4');old=messages('natural-checked-candidate4096.v3')
+    assert 'thinking_mode' not in json.loads(body(new,read,1024))
+    assert json.loads(body(new,check,4096))['thinking_mode'] is False
+    assert json.loads(body(new,[],4096))['thinking_mode'] is False
+    assert 'thinking_mode' not in json.loads(body(old,check,4096))
+    assert 'thinking_mode' not in json.loads(body(old,[],4096))
+
+
 def test_old_natural_generation_remains_confirmable_after_new_default(env,monkeypatch):
     from test_natural_spec_apps import setup,generate
     from test_pa_spec_apps import confirm
