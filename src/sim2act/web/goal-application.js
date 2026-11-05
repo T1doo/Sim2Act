@@ -58,7 +58,7 @@ function renderGoalApplicationControls(){
   renderGenerationConsent();
   $("goal-application-proof").textContent=entry?.result ? JSON.stringify({run_id:entry.runId,version:entry.version,...entry.result,...(entry.sample ? {protected_sample_preview:entry.sample}: {})},null,2) : "";
   const availability=naturalGenerationAvailability.get(key);
-  $("goal-application-status").textContent=entry?.message||(availability?.current()?availability.message:null)||"使用已保存目标；未保存编辑不纳入生成。真实模型调用关闭，语义接受 NOT_RUN。";
+  $("goal-application-status").textContent=entry?.message||(availability?.current()?availability.message:null)||"生成使用已保存的目标版本。";
   renderNaturalFirstGuide();
 }
 function goalApplicationCurrent(entry){return goalApplicationKey()===entry.key&&entry.connection===identityConnectionGeneration&&entry.selection===goalSelectionGeneration;}
@@ -133,9 +133,9 @@ $("goal-application-start").onclick=async()=>{
           productionReadiness=value;allowed=true;
         }
       }
-      gate.message=allowed?"仅离线测试配置可用；实际发送仍须原 MockTransport 校验。真实模型预算0，下一步仅本次明确生成。":"已停止：没有可用的自然生成批准/受限离线配置。当前自然家族没有 LIVE 批准路径；未提交生成任务或模型请求。";
+      gate.message=allowed?"本次使用模拟模式。":"当前目标没有可用的生成授权，任务未提交。";
       naturalGenerationAvailability.set(key,gate);
-      if(productionReadiness)gate.message="已核对桌面启动选择、原试验批准和本目标版本；本次使用原生成键，Worker仍逐项复核原权限与预算。";
+      if(productionReadiness)gate.message="当前目标已获得生成授权。";
       const guide=naturalFirstGuide;if(naturalFirstGuideCurrent(guide)&&guide.stage==="generate")guide.gateMessage=gate.message;
       if(!allowed)return;
     }catch(error){if(gate.current()){gate.message=`读取生成条件失败：${error.message}。未提交生成任务或模型请求。`;naturalGenerationAvailability.set(key,gate);if(naturalFirstGuideCurrent(naturalFirstGuide))naturalFirstGuide.gateMessage=gate.message;}return;}

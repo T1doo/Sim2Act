@@ -133,7 +133,7 @@ function renderOrdinaryCorrection(host,state,view,ownerCurrent,key){
  const section=document.createElement('section');section.id='ordinary-correction';
  const current=()=>ownerCurrent()&&section.isConnected;
  const title=document.createElement('h4');title.textContent='根据原拒绝另行创建修正任务';section.append(title);
- section.append(row('先读取精确拒绝条目和材料，再另行确认创建一个新Run。原Goal、标准、声明和成果保留；拒绝理由不授予权限。仅Mock，真实模型额度0。'));
+ section.append(row('核对拒绝原因与材料后，可在模拟模式下确认创建新任务。原目标、验收标准和成果保留，材料权限仍需单独确认。'));
  const status=document.createElement('p');status.id='ordinary-correction-status';status.setAttribute('role','status');
  const proof=document.createElement('div');proof.id='ordinary-correction-preview';
  let preview=null,busy=false;

@@ -1818,7 +1818,7 @@ function renderNaturalFirstGuide() {
   else if(g.stage==="extract")message=`来源 Run ${g.sourceRun} · Release ${g.sourceRelease} · 成果 v${g.sourceVersion}。${g.extraction.saved?"P-B 草案已核对；点击打开后另行保存内部版本和实例。":naturalTaskRequests.has(g.extraction.scope)?"保存回执未确认；仅按原 key 读取，不能再次提交。":"准备或选择自己的新材料与 Goal，再预览来源与编辑图，明确确认提取。"} 不改变原应用、版本或成果，不自动运行或发布。`;
   else if(g.stage==="generate"){
     const entry=goalApplications.get(goalApplicationKey());
-    message=`第3–4步：Goal ${g.card.id} · v${g.card.version}。${g.gateMessage||"先点击生成读取当前条件；自然生成没有 LIVE 批准路径，仅支持既有离线测试适配。"} ${entry?.message||"尚未创建生成任务；核对候选后分别勾选材料读取与项目 JSON 保存授权。"}`;
+    message=`目标 v${g.card.version}。${entry?.message||g.gateMessage||"生成后查看草案，再分别确认读取材料和保存成果的权限。"}`;
   }else{
     const view=g.view;
     message=g.instance ? `第6步完成：应用 ${g.app} · Release ${g.release.id} · 实例 ${g.instance} 已保存。还没有运行此实例；返回目录后可为第二份材料单独准备 Goal、预览并确认运行。` : g.release ? `第6步：已保存精确内部版本 ${g.release.id}。点击该版本下的“创建独立实例”；不会自动创建或执行。` : view?.approval ? "第5步：核查下方精确内部快照与检查证据，另行勾选并确认保存内部 Release。" : "第5步：自然应用候选已保存。点击“核查并准备内部快照”，再明确确认保存内部版本；尚无实例。";
