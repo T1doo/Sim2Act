@@ -8,12 +8,24 @@ host also recognizes `local-installation.json` beside the EXE. It does not scan
 for dotenv files or silently replace malformed local configuration with a demo.
 External `--config`, managed-local, and synthetic live preview are exclusive.
 
+For combined payloads containing `postgresql/runtime-manifest.json`, an ordinary
+first launch now offers a native setup dialog when no local selection exists.
+It calls the original `sim2act.local_setup` module through private stdin, creates
+a new user-owned data directory, encrypts credentials with Windows user DPAPI,
+initializes separate migration/application roles, runs the original schema
+migration/readiness checks, and stops the database before opening the workbench.
+Existing directories are refused, not overwritten. The dialog can instead
+select an existing `local-installation.json`. Per-application launch selection
+is an atomic path-only link under LocalAppData, not a second credential copy.
+No service or autostart is registered. Native wizard interaction remains untested;
+the initializer module has passed a dedicated Windows PostgreSQL smoke test.
+
 The local selection contains the format `sim2act.local-installation.v1`, absolute
 `runtime`, `data`, `credentials`, `workspace`, and `model_key` paths plus a boolean
 `live`. Credentials are explicitly selected current-user Windows DPAPI files;
-the selection contains no password or model token. Provisioning and first-use UI
-are not yet bundled into a complete installer. This is a maintainer integration
-entry, not a claim of ordinary-user installation readiness.
+the selection contains no password or model token. A complete distributable
+installer, first-use UI acceptance, upgrades and redistribution review remain
+open. The maintainer integration entry is not itself installation acceptance.
 
 Optional `generation_enabled` enables the existing P-A approval-preparation API;
 it defaults to false. Optional `generation_approval` selects one existing

@@ -2,16 +2,17 @@
 
 Uses synthetic current-user DPAPI data; never opens a window or real credentials.
 """
-import json,subprocess
+import json,subprocess,sys
 from pathlib import Path
 
 root=Path(__file__).resolve().parents[1]
 source=(root/'scripts/windows/Sim2ActDesktop.cs').read_text(encoding='utf-8')
 method=source[source.index('    string ReadLocalUiToken()'):source.index('    Dictionary<string,object> ProfileIdentity()')]
 method=method.replace('    string ReadLocalUiToken()', '    public string ReadLocalUiToken()',1)
-paths=source[source.index('static class Paths {'):source.index('sealed class Host : Form {')]
+paths_start=source.index('static class Paths {')
+paths=source[paths_start:source.index('sealed class ',paths_start)]
 helper=next(line.strip() for line in source.splitlines() if line.strip().startswith('static string TextValue('))
-folder=root/'.local/windows-build-20261105/credential-checks'
+folder=Path(sys.argv[1]).resolve() if len(sys.argv)>1 else root/'.local/windows-build-20261105/credential-checks'
 folder.mkdir(exist_ok=False)
 harness=r'''
 class Reader {

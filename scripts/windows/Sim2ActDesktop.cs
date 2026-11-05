@@ -38,6 +38,14 @@ static class Program {
             string runtime = Paths.RuntimeFolder(); // Read only; never installs or starts Edge.
             Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
             SetCurrentProcessExplicitAppUserModelID("Sim2Act.Desktop");
+            if(args.Length==0 && managed==null && File.Exists(Path.Combine(root,"postgresql","runtime-manifest.json"))) {
+                string remembered=FirstUse.SelectionFile(root);
+                if(File.Exists(remembered)) managed=FirstUse.ReadSelection(root);
+                else using(var setup=new FirstUse(root)) {
+                    if(setup.ShowDialog()!=DialogResult.OK) return 0;
+                    managed=setup.Selection;
+                }
+            }
             using (Host host = new Host(root,runtime,exactReadLive,config,selection,managed)) { Application.Run(host); return host.ExitCode; }
         } catch (Exception error) {
             MessageBox.Show("Sim2Act 无法启动：" + error.Message, "Sim2Act", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -83,6 +91,108 @@ static class Paths {
             }
         }
         throw new Exception("未找到已有 Microsoft WebView2 Runtime；本程序不会安装运行时或回退到浏览器。");
+    }
+}
+
+sealed class FirstUse : Form {
+    readonly string root;
+    readonly TextBox directory=new TextBox(),key=new TextBox();
+    readonly Label feedback=new Label();
+    readonly Button create=new Button(),browse=new Button(),existing=new Button();
+    bool busy;
+    public string Selection {get;private set;}
+    public static string SelectionFile(string root) {
+        byte[] bytes=Encoding.UTF8.GetBytes(Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar).ToUpperInvariant());
+        string id;using(var sha=SHA256.Create()) id=BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-","").ToLowerInvariant();
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Sim2Act","Installations",id+".json");
+    }
+    public static string ReadSelection(string root) {
+        var value=new JavaScriptSerializer().DeserializeObject(File.ReadAllText(Paths.ExistingFile(SelectionFile(root)),Encoding.UTF8)) as Dictionary<string,object>;
+        if(value==null || value.Count!=2 || !value.ContainsKey("format") || !value.ContainsKey("selection")
+            || value["format"] as string!="sim2act.installation-link.v1" || !(value["selection"] is string)) throw new Exception("本机启动选择无法确认；请保留已有工作区。");
+        return Paths.ExistingFile((string)value["selection"]);
+    }
+    public FirstUse(string root) {
+        this.root=root;Text="欢迎使用 Sim2Act";StartPosition=FormStartPosition.CenterScreen;
+        Font=new Font("Microsoft YaHei UI",10);ClientSize=new Size(620,400);MinimumSize=new Size(600,420);
+        BackColor=ColorTranslator.FromHtml("#EEF4FB");AutoScaleMode=AutoScaleMode.Font;
+        Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+        var layout=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(24),ColumnCount=2,RowCount=8};
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        var title=new Label{Text="准备你的本机工作区",AutoSize=true,Font=new Font(Font.FontFamily,16,FontStyle.Bold),Margin=new Padding(0,0,0,16)};
+        layout.Controls.Add(title,0,0);layout.SetColumnSpan(title,2);
+        var note=new Label{Text="应用会准备自己的本地数据环境，无需另装数据库。\n不会注册开机启动；退出应用时停止自有后台。",AutoSize=true,Margin=new Padding(0,0,0,16)};
+        layout.Controls.Add(note,0,1);layout.SetColumnSpan(note,2);
+        layout.Controls.Add(new Label{Text="新工作区目录",AutoSize=true},0,2);
+        directory.Text=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Sim2Act","Workspace");directory.Dock=DockStyle.Fill;
+        browse.Text="选择位置";browse.AutoSize=true;browse.Click+=delegate {
+            using(var picker=new FolderBrowserDialog{Description="选择父目录，应用将在其中新建 Sim2Act-workspace"})
+                if(picker.ShowDialog(this)==DialogResult.OK) directory.Text=Path.Combine(picker.SelectedPath,"Sim2Act-workspace");
+        };
+        layout.Controls.Add(directory,0,3);layout.Controls.Add(browse,1,3);
+        layout.Controls.Add(new Label{Text="书生 API key",AutoSize=true,Margin=new Padding(0,16,0,4)},0,4);
+        key.UseSystemPasswordChar=true;key.Dock=DockStyle.Fill;layout.Controls.Add(key,0,5);layout.SetColumnSpan(key,2);
+        feedback.Text="密钥在本机加密保存。留空时仅使用本地工具，不启用智能生成。";feedback.AutoSize=true;feedback.MaximumSize=new Size(550,0);feedback.Margin=new Padding(0,12,0,12);layout.Controls.Add(feedback,0,6);layout.SetColumnSpan(feedback,2);
+        existing.Text="使用已有工作区";existing.AutoSize=true;existing.Click+=delegate {
+            using(var picker=new OpenFileDialog{Title="选择已有工作区配置",Filter="Sim2Act 配置|local-installation.json",CheckFileExists=true}) {
+                if(picker.ShowDialog(this)!=DialogResult.OK)return;
+                try { Remember(Paths.ExistingFile(picker.FileName));DialogResult=DialogResult.OK;Close(); }
+                catch(Exception) {feedback.Text="无法保存此工作区选择，原文件未修改。";}
+            }
+        };
+        create.Text="初始化并开始";create.AutoSize=true;create.BackColor=ColorTranslator.FromHtml("#2965AD");create.ForeColor=Color.White;
+        create.Click+=async delegate {await Initialize();};
+        layout.Controls.Add(existing,0,7);layout.Controls.Add(create,1,7);Controls.Add(layout);
+        FormClosing+=delegate(object sender,FormClosingEventArgs args){if(busy){args.Cancel=true;feedback.Text="正在初始化，请等待完成；不会删除已有数据。";}};
+    }
+    void Remember(string file) {
+        string text=File.ReadAllText(Paths.ExistingFile(file),Encoding.UTF8);
+        var value=new JavaScriptSerializer().DeserializeObject(text) as Dictionary<string,object>;
+        if(value==null || !value.ContainsKey("format") || (string)value["format"]!="sim2act.local-installation.v1") throw new Exception("Invalid selection");
+        string target=SelectionFile(root);Paths.Check(Path.GetDirectoryName(target));Directory.CreateDirectory(Path.GetDirectoryName(target));
+        string temporary=target+"."+Guid.NewGuid().ToString("N")+".pending";
+        using(var stream=new FileStream(temporary,FileMode.CreateNew,FileAccess.Write,FileShare.None)) {
+            string link=new JavaScriptSerializer().Serialize(new Dictionary<string,object>{{"format","sim2act.installation-link.v1"},{"selection",Path.GetFullPath(file)}});
+            byte[] bytes=Encoding.UTF8.GetBytes(link);stream.Write(bytes,0,bytes.Length);stream.Flush(true);
+        }
+        File.Move(temporary,target);Selection=Path.GetFullPath(file);
+    }
+    async Task Initialize() {
+        if(busy)return;
+        string data=directory.Text.Trim(),modelKey=key.Text.Trim();
+        try {
+            if(!Path.IsPathRooted(data) || modelKey.Length>8192)throw new Exception();
+            data=Path.GetFullPath(data);Paths.Check(data);
+            if(Directory.Exists(data) || File.Exists(data)){feedback.Text="这个目录已存在。请选择新目录，或使用已有工作区。";return;}
+            Directory.CreateDirectory(Path.GetDirectoryName(data));
+        } catch(Exception) {feedback.Text="请检查数据目录是否有效且可写。";return;}
+        busy=true;create.Enabled=browse.Enabled=existing.Enabled=directory.Enabled=key.Enabled=false;
+        feedback.Text="正在准备本机数据环境，请稍候…";
+        try {
+            string payload=new JavaScriptSerializer().Serialize(new Dictionary<string,object>{{"runtime",Path.Combine(root,"postgresql")},{"data_root",data},{"model_token",modelKey},{"consent",true}});
+            var asciiPayload=new StringBuilder();foreach(char character in payload) {
+                if(character>127) asciiPayload.Append("\\u").Append(((int)character).ToString("x4"));else asciiPayload.Append(character);
+            }
+            payload=asciiPayload.ToString();asciiPayload.Clear();
+            modelKey=null;key.Clear();
+            string response=await Task.Run(delegate {
+                var info=new ProcessStartInfo(Path.Combine(root,"runtime","python.exe"),"-I -B -u -m sim2act.local_setup");
+                info.WorkingDirectory=root;info.UseShellExecute=false;info.CreateNoWindow=true;
+                info.RedirectStandardInput=info.RedirectStandardOutput=info.RedirectStandardError=true;
+                info.StandardOutputEncoding=Encoding.UTF8;info.StandardErrorEncoding=Encoding.UTF8;
+                using(var process=new Process{StartInfo=info}) {
+                    process.Start();var output=process.StandardOutput.ReadToEndAsync();var errors=process.StandardError.ReadToEndAsync();
+                    process.StandardInput.WriteLine(payload);process.StandardInput.Close();process.WaitForExit();
+                    string text=output.GetAwaiter().GetResult();errors.GetAwaiter().GetResult();
+                    if(process.ExitCode!=0)throw new Exception("Setup unconfirmed");return text;
+                }
+            });
+            payload=null;
+            var result=new JavaScriptSerializer().DeserializeObject(response.Trim()) as Dictionary<string,object>;
+            if(result==null || !result.ContainsKey("status") || (string)result["status"]!="LOCAL_SETUP_READY")throw new Exception();
+            Remember((string)result["selection"]);busy=false;DialogResult=DialogResult.OK;Close();
+        } catch(Exception) {feedback.Text="初始化未完成。已保留所选目录与日志；请勿删除数据或重复覆盖。";}
+        finally {busy=false;create.Enabled=browse.Enabled=existing.Enabled=directory.Enabled=key.Enabled=true;}
     }
 }
 
