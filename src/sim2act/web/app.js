@@ -2388,6 +2388,13 @@ function openLookup(trigger){
 // Readable projections keep the complete original text available and never parse HTML.
 function frontendReadableDocument(text, format='md') {
   const article=frontendNode('article',undefined,'result-reading');
+  function inline(tag,value){
+    const node=frontendNode(tag);let start=0;
+    for(const match of value.matchAll(/\*\*([^*\n]+)\*\*/g)){
+      node.append(document.createTextNode(value.slice(start,match.index)),frontendNode('strong',match[1]));start=match.index+match[0].length;
+    }
+    node.append(document.createTextNode(value.slice(start)));return node;
+  }
   function table(headers,rows) {
     const scroll=frontendNode('div',undefined,'result-table-scroll');scroll.tabIndex=0;scroll.setAttribute('aria-label','成果表格，可在本区域横向滚动');
     const t=frontendNode('table'),head=frontendNode('thead'),tr=frontendNode('tr'),body=frontendNode('tbody');
@@ -2409,14 +2416,14 @@ function frontendReadableDocument(text, format='md') {
     const line=lines[i];
     if(/^\s*```/.test(line)){if(code){article.append(code);code=null;}else code=frontendNode('pre','');list=null;continue;}
     if(code){code.textContent+=line+'\n';continue;}
-    const heading=/^(#{1,4})\s+(.+)$/.exec(line);if(heading){article.append(frontendNode('h'+Math.min(4,heading[1].length+1),heading[2]));list=null;continue;}
+    const heading=/^(#{1,4})\s+(.+)$/.exec(line);if(heading){article.append(inline('h'+Math.min(4,heading[1].length+1),heading[2]));list=null;continue;}
     if(line.includes('|')&&/^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[i+1]||'')){
       const split=value=>value.trim().replace(/^\||\|$/g,'').split('|').map(v=>v.trim()),headers=split(line),rows=[];i++;
       while(i+1<lines.length&&lines[i+1].includes('|')&&lines[i+1].trim()){rows.push(split(lines[++i]));}
       if(rows.every(r=>r.length===headers.length))table(headers,rows);else article.append(frontendNode('pre',[line,lines[i-rows.length],...rows.map(r=>r.join(' | '))].join('\n')));list=null;continue;
     }
-    const bullet=/^\s*(?:[-*]|\d+\.)\s+(.+)$/.exec(line);if(bullet){if(!list){list=frontendNode('ul');article.append(list);}list.append(frontendNode('li',bullet[1]));continue;}
-    list=null;if(line.trim())article.append(frontendNode('p',line));
+    const bullet=/^\s*(?:[-*]|\d+\.)\s+(.+)$/.exec(line);if(bullet){if(!list){list=frontendNode('ul');article.append(list);}list.append(inline('li',bullet[1]));continue;}
+    list=null;if(line.trim())article.append(inline('p',line));
   }
   if(code)article.append(code);return article;
 }
