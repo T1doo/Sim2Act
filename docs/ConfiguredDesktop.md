@@ -36,6 +36,16 @@ activation values are cleared for this managed-local entry. External configured
 launch behavior is unchanged. This selection wiring does not prove the complete
 P-A/P-B product path.
 
+Managed local installations may explicitly enable `generation_run_selection`.
+Only new `pa-intern-generation-approval.v3` scopes prepared with
+`execution_selection: "approved-run"` use per-Run selection. The worker must
+still verify the complete active approval, principal/project/material/software
+binding, accepted generation key, original budget, deadline and revocation at
+each send. Enabling the mechanism is not an approval. Legacy v1/v2 scopes retain
+the original explicit startup approval-ID selection. New first-use installations
+with a model key enable preparation/selection mechanisms; every task still needs
+its own exact scope approval and explicit submission.
+
 For a newly prepared literal P-A scope, the explicitly authorized
 `output_profile: "pa-candidate-output4096.v1"` selects the v2 approval record.
 Its `candidate_output_tokens` is 4096; the existing `limits` continue to describe

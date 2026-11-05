@@ -26,6 +26,7 @@ class Settings:
     natural_activation_live_id: str = ""
     application_generation_activation_enabled: bool = False
     application_generation_live_id: str = ""
+    application_generation_run_selection: bool = False
 
     @classmethod
     def from_env(cls):
@@ -49,6 +50,7 @@ class Settings:
             natural_activation_live_id=os.environ.get("SIM2ACT_NATURAL_ACTIVATION_LIVE_ID", ""),
             application_generation_activation_enabled=os.environ.get("SIM2ACT_APPLICATION_GENERATION_ACTIVATION_ENABLED", "false").lower() == "true",
             application_generation_live_id=os.environ.get("SIM2ACT_APPLICATION_GENERATION_LIVE_ID", ""),
+            application_generation_run_selection=os.environ.get("SIM2ACT_APPLICATION_GENERATION_RUN_SELECTION", "false").lower()=="true",
             **{
                 k: int(os.environ.get("SIM2ACT_" + k.upper(), str(v)))
                 for k, v in {

@@ -21,11 +21,13 @@ def local_settings(path):
             return result
         value=json.loads(ordinary(path).read_text(encoding='utf-8-sig'),object_pairs_hook=unique)
         required={'format','runtime','data','credentials','workspace','model_key','live'}
-        optional={'generation_enabled','generation_approval'}
+        optional={'generation_enabled','generation_approval','generation_run_selection'}
         if not required.issubset(value) or set(value)-required-optional or value['format']!='sim2act.local-installation.v1' or type(value['live']) is not bool:
             raise ValueError
         generation=value.get('generation_enabled',False)
         approval=value.get('generation_approval','')
+        run_selection=value.get('generation_run_selection',False)
+        if type(run_selection) is not bool or (run_selection and not generation):raise ValueError
         if type(generation) is not bool or not isinstance(approval,str) or (approval and (not generation or not re.fullmatch(r'gaapproval_[a-f0-9]{32}',approval))):
             raise ValueError
         for key in ('runtime','data','credentials','workspace'):
@@ -56,6 +58,7 @@ def local_settings(path):
             'SIM2ACT_NATURAL_ACTIVATION_LIVE_ID':'',
             'SIM2ACT_APPLICATION_GENERATION_ACTIVATION_ENABLED':str(generation).lower(),
             'SIM2ACT_APPLICATION_GENERATION_LIVE_ID':approval,
+            'SIM2ACT_APPLICATION_GENERATION_RUN_SELECTION':str(run_selection).lower(),
         })
         return Settings.from_env(),database
     except Exception:

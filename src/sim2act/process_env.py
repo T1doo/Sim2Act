@@ -59,6 +59,7 @@ def application_environment(
             "SIM2ACT_NATURAL_ACTIVATION_LIVE_ID": settings.natural_activation_live_id,
             "SIM2ACT_APPLICATION_GENERATION_ACTIVATION_ENABLED": str(settings.application_generation_activation_enabled).lower(),
             "SIM2ACT_APPLICATION_GENERATION_LIVE_ID": settings.application_generation_live_id,
+            "SIM2ACT_APPLICATION_GENERATION_RUN_SELECTION": str(settings.application_generation_run_selection).lower(),
         }
     )
     for name in (

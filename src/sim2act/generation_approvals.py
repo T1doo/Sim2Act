@@ -69,6 +69,10 @@ class Prepare4096Input(PrepareInput):
     output_profile: Literal["pa-candidate-output4096.v1"]
 
 
+class PrepareInteractiveInput(Prepare4096Input):
+    execution_selection: Literal["approved-run"]
+
+
 class Scope(Strict):
     version: Literal["pa-intern-generation-approval.v1"]
     metadata: Metadata
@@ -96,6 +100,12 @@ class Scope4096(Scope):
     version: Literal["pa-intern-generation-approval.v2"]
     request: Prepare4096Input
     candidate_output_tokens: Literal[4096] = 4096
+
+
+class ScopeInteractive(Scope4096):
+    version: Literal["pa-intern-generation-approval.v3"]
+    request: PrepareInteractiveInput
+    execution_selection: Literal["approved-run"] = "approved-run"
 
 
 class Approval(Strict):
@@ -139,7 +149,15 @@ class Charge4096(Charge):
 class _ScopeReader:
     @staticmethod
     def model_validate(value):
-        return (Scope4096 if value.get('version')=='pa-intern-generation-approval.v2' else Scope).model_validate(value)
+        model={'pa-intern-generation-approval.v2':Scope4096,'pa-intern-generation-approval.v3':ScopeInteractive}.get(value.get('version'),Scope)
+        return model.model_validate(value)
+
+
+def selection_matches(scope,settings,approval_id):
+    """Selection only; callers must first validate the complete active approval."""
+    if isinstance(scope,ScopeInteractive):
+        return settings.application_generation_run_selection is True and scope.metadata.approval_id==approval_id
+    return settings.application_generation_live_id==approval_id
 
 
 class _ChargeReader:
@@ -219,6 +237,8 @@ def _enabled(settings):
 @controlled
 def prepare(store, user, pid, body, settings):
     _enabled(settings)
+    if isinstance(body,PrepareInteractiveInput) and not settings.application_generation_run_selection:
+        raise DomainError('RESOURCE_UNAVAILABLE','Approved-run selection is disabled')
     with store.tx() as c:
         project = store.lock_project(c, user, pid)
         from .db import goal_card_versions, goal_cards
@@ -242,8 +262,9 @@ def prepare(store, user, pid, body, settings):
         limits = Limits(**{k: min(getattr(settings, k), cap) for k, cap in CAPS.items()})
         require(limits.max_requests >= 2 and settings.model == "intern-s2"
             and settings.goal_planner_provider == "intern-s2")
-        scope_type = Scope4096 if isinstance(body,Prepare4096Input) else Scope
-        scope = scope_type(version="pa-intern-generation-approval.v2" if scope_type is Scope4096 else VERSION, metadata=meta, request=body,
+        scope_type = ScopeInteractive if isinstance(body,PrepareInteractiveInput) else Scope4096 if isinstance(body,Prepare4096Input) else Scope
+        version = 'pa-intern-generation-approval.v3' if scope_type is ScopeInteractive else 'pa-intern-generation-approval.v2' if scope_type is Scope4096 else VERSION
+        scope = scope_type(version=version, metadata=meta, request=body,
             source=GoalCardRunSource(card_id=body.card_id, version=body.expected_version,
                 fingerprint=body.expected_fingerprint, snapshot=saved["snapshot"]),
             mode="OFFLINE_TEST" if store.test_only else "LIVE", model="intern-s2",
@@ -291,6 +312,33 @@ def approve(store, user, aid, body, settings):
             approval_fingerprint=fingerprint(accepted.model_dump())).model_dump(),
             "deadline": accepted.deadline, "scope": scope.model_dump(),
             "formal_publication_enabled": False, "actual_model_requests": 0}
+
+
+@controlled
+def recover(store, user, pid, request_key, approval_request_key, settings):
+    """Read the original keyed scope/consent without renewing or creating either."""
+    _enabled(settings)
+    aid = "gaapproval_" + fingerprint({"user": user, "project": pid, "key": request_key})[:32]
+    with store.tx() as c:
+        meta = _meta(store, c, user, aid, content=True)
+        require(meta.project_id == pid)
+        scope = _get(c, user, aid, SCOPE, "scope", Scope)
+        require(scope.request.request_key == request_key and scope.software_fingerprint == implementation())
+        _current_source(store, c, user, scope)
+        require(not _keys(c, user, aid, REVOKE), "Approval has been revoked")
+        result = dict(approval_id=aid, scope=scope.model_dump(),
+            scope_fingerprint=fingerprint(scope.model_dump()), status="PREPARED",
+            actual_model_requests=0, formal_publication_enabled=False,
+            monetary_spending_cap="NOT_ESTABLISHED")
+        if approval_request_key is not None:
+            accepted = _get(c, user, aid, APPROVE, "approve", Approval)
+            require(accepted.request.request_key == approval_request_key
+                and accepted.scope_fingerprint == result["scope_fingerprint"])
+            result.update(status="APPROVED", deadline=accepted.deadline,
+                activation=ApplicationGenerationActivation(approval_id=aid,
+                    scope_fingerprint=accepted.scope_fingerprint,
+                    approval_fingerprint=fingerprint(accepted.model_dump())).model_dump())
+        return result
 
 
 @controlled

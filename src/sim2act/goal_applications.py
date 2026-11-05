@@ -1581,13 +1581,13 @@ def check_provider(worker, c, run, contract, attempt_id=None):
     if contract.application_generation.version in SPEC_GENERATIONS and activation is not None:
         raise DomainError("PERMISSION_DENIED", "Spec checklist generation is offline only")
     if activation is not None:
-        from .generation_approvals import validate_run
+        from .generation_approvals import validate_run, selection_matches
 
         scope, _, _, _, _ = validate_run(worker.store, c, run, worker.s, active=True, transition=attempt_id)
         if worker.goal_planner_transport is None:
             if (worker.store.test_only or scope.mode != "LIVE" or worker.s.mode != "live"
                 or not worker.s.live_enabled or not worker.s.token
-                or worker.s.application_generation_live_id != activation.approval_id):
+                or not selection_matches(scope,worker.s,activation.approval_id)):
                 raise DomainError("RESOURCE_UNAVAILABLE", "No exact P-A LIVE approval selected")
         elif (scope.mode != "OFFLINE_TEST" or not worker.store.test_only or worker.s.mode != "mock"
               or worker.s.live_enabled or not isinstance(worker.goal_planner_transport, httpx.MockTransport)):

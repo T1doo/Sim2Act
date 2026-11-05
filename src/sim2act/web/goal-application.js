@@ -28,6 +28,7 @@ const goalApplications=new Map();
 let goalApplicationDisplayed=null;
 let goalApplicationDraftGeneration=0;
 const goalProviderChoices=new Map();
+const generationConsents=new Map();
 const naturalGenerationReads=new Map(),naturalGenerationAvailability=new Map();
 let paBindingState=null;
 let goalProviderReadGeneration=0,paBindingSourceReadGeneration=0;
@@ -39,7 +40,7 @@ const goalApplicationKey=()=>activeGoalCard ? JSON.stringify([token,$("project-s
 function renderGoalApplicationControls(){
   const key=goalApplicationKey(),entry=goalApplications.get(key);
   const selection=JSON.stringify([identityConnectionGeneration,goalSelectionGeneration,key]);
-  if(selection!==goalApplicationDisplayed){goalApplicationDisplayed=selection;$("goal-provider-select").replaceChildren(new Option("未选择；默认真实请求预算0",""));$("goal-provider-proof").textContent="";$("goal-provider-status").textContent="未选择模型批准。";paBindingState=null;$("pa-binding-source").replaceChildren();$("pa-binding-proof").textContent="";$("pa-binding-ack").checked=false;$("goal-application-ack").checked=false;$("goal-application-write-ack").checked=false;if(entry)entry.result=null;}
+  if(selection!==goalApplicationDisplayed){$("goal-provider-approve-ack").checked=false;goalApplicationDisplayed=selection;$("goal-provider-select").replaceChildren(new Option("未选择；默认真实请求预算0",""));$("goal-provider-proof").textContent="";$("goal-provider-status").textContent="未选择模型批准。";paBindingState=null;$("pa-binding-source").replaceChildren();$("pa-binding-proof").textContent="";$("pa-binding-ack").checked=false;$("goal-application-ack").checked=false;$("goal-application-write-ack").checked=false;if(entry)entry.result=null;}
   $("goal-application-panel").hidden=!activeGoalCard;
   $("goal-application-start").disabled=!key||goalCardLoading||goalCardSaving||!!entry||naturalGenerationReads.has(key);
   $("goal-application-read").disabled=!entry||!!entry.busy;
@@ -54,6 +55,7 @@ function renderGoalApplicationControls(){
   $("goal-application-write-label").hidden=!specFamily;
   if(specFamily&&!$("goal-application-write-ack").checked)$("goal-application-confirm").disabled=true;
   renderPaBinding();
+  renderGenerationConsent();
   $("goal-application-proof").textContent=entry?.result ? JSON.stringify({run_id:entry.runId,version:entry.version,...entry.result,...(entry.sample ? {protected_sample_preview:entry.sample}: {})},null,2) : "";
   const availability=naturalGenerationAvailability.get(key);
   $("goal-application-status").textContent=entry?.message||(availability?.current()?availability.message:null)||"使用已保存目标；未保存编辑不纳入生成。真实模型调用关闭，语义接受 NOT_RUN。";
@@ -258,3 +260,84 @@ $("pa-binding-open").onclick=async()=>{
  await openGoalApplication(entry,saved,state.context.handoff);
 };
 renderGoalApplicationControls();
+
+// A consent intent is immutable. A lost POST is recovered only through keyed GET.
+function renderGenerationConsent(){
+ const key=goalApplicationKey(),state=generationConsents.get(key),blocked=!key||goalCardLoading||goalCardSaving||goalApplications.has(key)||goalSpecFamily($("goal-application-family").value);
+ $("goal-provider-prepare").disabled=blocked||!!state;
+ $("goal-provider-approve").disabled=blocked||!state?.prepared||!!state?.approveBody||state?.busy||!state?.context.current()||!$("goal-provider-approve-ack").checked;
+ $("goal-provider-recover").disabled=!state||state.busy||!state.context.current();
+ $("goal-provider-approve-ack").disabled=blocked||!state?.prepared||!!state?.approveBody||!!state?.busy;
+ $("goal-provider-consent-status").textContent=state?.message||"准备只读取范围，不调用模型；核对后再授权并开始生成。";
+}
+$("goal-provider-approve-ack").onchange=renderGenerationConsent;
+async function generationConsentAction(state,operation){
+ if(state.busy||!state.context.current())return;
+ state.busy=true;renderGenerationConsent();
+ try{await operation();}catch(error){if(state.context.current())state.message=`${error.message}；保留原请求，使用恢复按钮读取回执。`;}
+ finally{state.busy=false;if(state.context.current())renderGenerationConsent();}
+}
+async function showGenerationConsent(state,value){
+ const scope=value?.scope;
+ if(value.approval_id!==scope?.metadata?.approval_id||scope.metadata.project_id!==state.pid||scope.version!=="pa-intern-generation-approval.v3"||scope.execution_selection!=="approved-run"||goalRunCanonical(scope.request)!==goalRunCanonical(state.body)||scope.source.card_id!==state.card.id||scope.source.version!==state.card.version||scope.source.fingerprint!==state.card.fingerprint||goalRunCanonical(scope.source.snapshot)!==goalRunCanonical(state.card.snapshot)||await paHash(scope)!==value.scope_fingerprint)throw Error("VERSION_CONFLICT");
+ if(!state.context.current())return;
+ state.prepared=value;$("goal-provider-proof").textContent=JSON.stringify(value,null,2);
+ $("goal-provider-scope-key").value=state.body.request_key;
+ $("goal-provider-approval-key").value=state.approveBody?.request_key||"";
+ $("goal-provider-scope-key").value=state.body.request_key;
+ $("goal-provider-approval-key").value=state.approveBody?.request_key||"";
+ state.message=value.activation?"授权回执已恢复；请读取已有批准，明确选择后开始生成。":"范围已准备。请核对下方目标、材料与预算，再勾选并确认授权。";
+}
+$("goal-provider-prepare").onclick=()=>{
+ const key=goalApplicationKey();if(!key||generationConsents.has(key)||goalApplications.has(key)||goalSpecFamily($("goal-application-family").value)||goalCardLoading||goalCardSaving)return;
+ const card=structuredClone(activeGoalCard),state={context:paContext(),pid:$("project-select").value,card,body:{card_id:card.id,expected_version:card.version,expected_fingerprint:card.fingerprint,generation_request_key:crypto.randomUUID(),request_key:crypto.randomUUID(),output_profile:"pa-candidate-output4096.v1",execution_selection:"approved-run"},busy:false,prepared:null,approveBody:null};
+ generationConsents.set(key,state);$("goal-provider-approve-ack").checked=false;
+ $("goal-provider-scope-key").value=state.body.request_key;$("goal-provider-approval-key").value="";
+ $("goal-provider-scope-key").value=state.body.request_key;$("goal-provider-approval-key").value="";
+ return generationConsentAction(state,async()=>showGenerationConsent(state,await api(`/api/projects/${state.pid}/application-provider-scopes`,"POST",state.body)));
+};
+$("goal-provider-approve").onclick=()=>{
+ const state=generationConsents.get(goalApplicationKey());if(!state?.prepared||state.approveBody||state.busy||!state.context.current()||!$("goal-provider-approve-ack").checked)return;
+ state.approveBody={expected_scope_fingerprint:state.prepared.scope_fingerprint,consent:"APPROVE_ONLY_THIS_EXACT_P_A_GOAL_MATERIAL_AND_REQUEST_BUDGET",budget_note:"用户已核对完整范围，确认最多3次请求、64000 tokens总预算、4096候选输出、300秒；金额费用未封顶。",request_key:crypto.randomUUID()};
+ $("goal-provider-approval-key").value=state.approveBody.request_key;
+ $("goal-provider-approval-key").value=state.approveBody.request_key;
+ return generationConsentAction(state,async()=>{
+  await api(`/api/application-provider-scopes/${state.prepared.approval_id}/approve`,"POST",state.approveBody);
+  await recoverGenerationConsent(state);
+ });
+};
+async function recoverGenerationConsent(state){
+ const query=new URLSearchParams({request_key:state.body.request_key});if(state.approveBody)query.set("approval_request_key",state.approveBody.request_key);
+ await showGenerationConsent(state,await api(`/api/projects/${state.pid}/application-provider-scopes?${query}`));
+}
+$("goal-provider-recover").onclick=()=>{const state=generationConsents.get(goalApplicationKey());if(state)return generationConsentAction(state,()=>recoverGenerationConsent(state));};
+$("goal-provider-cold-read").onclick=async()=>{
+ const key=goalApplicationKey(),requestKey=$("goal-provider-scope-key").value.trim(),approvalKey=$("goal-provider-approval-key").value.trim();
+ if(!key||!requestKey||requestKey.length>100||approvalKey.length>100||goalApplications.has(key)||generationConsents.get(key)?.busy)return;
+ const context=paContext(),card=structuredClone(activeGoalCard),pid=$("project-select").value;
+ const query=new URLSearchParams({request_key:requestKey});if(approvalKey)query.set("approval_request_key",approvalKey);
+ $("goal-provider-approve-ack").checked=false;
+ try{
+  const value=await api(`/api/projects/${pid}/application-provider-scopes?${query}`);
+  if(!context.current())return;
+  if(value.scope?.request?.request_key!==requestKey||value.scope.request.execution_selection!=="approved-run"||!value.scope.request.generation_request_key||approvalKey&&!value.activation)throw Error("VERSION_CONFLICT");
+  const state={context,card,pid,body:structuredClone(value.scope.request),prepared:null,busy:false,approveBody:approvalKey?{request_key:approvalKey}:null};
+  await showGenerationConsent(state,value);if(!context.current())return;
+  generationConsents.set(key,state);renderGenerationConsent();
+ }catch(error){if(context.current())$("goal-provider-consent-status").textContent=`${error.message}；未创建或批准任务。`;}
+};
+$("goal-provider-cold-read").onclick=async()=>{
+ const key=goalApplicationKey(),requestKey=$("goal-provider-scope-key").value.trim(),approvalKey=$("goal-provider-approval-key").value.trim();
+ if(!key||!requestKey||requestKey.length>100||approvalKey.length>100||goalApplications.has(key)||generationConsents.get(key)?.busy)return;
+ const context=paContext(),card=structuredClone(activeGoalCard),pid=$("project-select").value;
+ const query=new URLSearchParams({request_key:requestKey});if(approvalKey)query.set("approval_request_key",approvalKey);
+ $("goal-provider-approve-ack").checked=false;
+ try{
+  const value=await api(`/api/projects/${pid}/application-provider-scopes?${query}`);
+  if(!context.current())return;
+  if(value.scope?.request?.request_key!==requestKey||value.scope.request.execution_selection!=="approved-run"||!value.scope.request.generation_request_key||approvalKey&&!value.activation)throw Error("VERSION_CONFLICT");
+  const state={context,card,pid,body:structuredClone(value.scope.request),prepared:null,busy:false,approveBody:approvalKey?{request_key:approvalKey}:null};
+  await showGenerationConsent(state,value);if(!context.current())return;
+  generationConsents.set(key,state);renderGenerationConsent();
+ }catch(error){if(context.current())$("goal-provider-consent-status").textContent=`${error.message}；未创建或批准任务。`;}
+};

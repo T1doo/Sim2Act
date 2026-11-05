@@ -597,8 +597,12 @@ def create_app(store=None, settings=None):
         return generation_provider.approved_options(db, user, pid, cid, s)
 
     @app.post("/api/projects/{pid}/application-provider-scopes", status_code=201)
-    def prepare_generation_provider(pid: str, body: generation_provider.PrepareInput | generation_provider.Prepare4096Input, user=user_dependency):
+    def prepare_generation_provider(pid: str, body: generation_provider.PrepareInput | generation_provider.Prepare4096Input | generation_provider.PrepareInteractiveInput, user=user_dependency):
         return generation_provider.prepare(db, user, pid, body, s)
+
+    @app.get("/api/projects/{pid}/application-provider-scopes")
+    def recover_generation_provider(pid: str, request_key: str, approval_request_key: str | None = None, user=user_dependency):
+        return generation_provider.recover(db, user, pid, request_key, approval_request_key, s)
 
     @app.post("/api/application-provider-scopes/{aid}/approve")
     def approve_generation_provider(aid: str, body: generation_provider.ApproveInput, user=user_dependency):

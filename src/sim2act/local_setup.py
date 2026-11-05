@@ -95,7 +95,8 @@ def initialize(runtime,data_root,model_token='',*,consent=False):
         if controller.identity is not None:controller.stop()
     selection={'format':'sim2act.local-installation.v1','runtime':str(runtime),'data':str(data),
         'credentials':str(credential_file),'workspace':str(root/'workspace'),
-        'model_key':str(key_file) if model_token else None,'live':bool(model_token)}
+        'model_key':str(key_file) if model_token else None,'live':bool(model_token),
+        'generation_enabled':bool(model_token),'generation_run_selection':bool(model_token)}
     target=root/'local-installation.json'
     with target.open('x',encoding='utf-8') as stream:json.dump(selection,stream);stream.flush();os.fsync(stream.fileno())
     return target
