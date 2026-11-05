@@ -27,4 +27,13 @@ diagnostic=candidate_diagnostic(error,message,'compact-candidate-json4096.v3')
 assert diagnostic['schema_errors'] and 'PRIVATE_SENTINEL' not in json.dumps(diagnostic)
 action_errors=candidate_diagnostic(error,{'content':json.dumps({'manifest':{},'actions':[{}]})},'compact-candidate-json4096.v3')
 assert all(set(item)=={'object','path','type'} for item in action_errors['schema_errors'])
+v4=json.loads(_literal_initial_messages(goal,{'output_protocol':'compact-candidate-json4096.v4'},material,{})[1]['content'])
+assert v4['manifest_schema']['properties']['validation_suite_ref']['const']=='source.literal_evidence.v1'
+assert v4['literal_contract']['declaration_rules']['action.postcheck_refs']==['source.literal_evidence.v1']
+assert v4['saved_goal']==goal and v4['source']['hash']==material['hash']
+try:
+    try:raise ValueError('Unknown independent check suite')
+    except ValueError as cause:raise DomainError('INVALID_MANIFEST','Draft manifest failed structural validation') from cause
+except DomainError as error:
+    assert candidate_diagnostic(error,message,'compact-candidate-json4096.v4')['constraint']=='Unknown independent check suite'
 print({'status':'PASS','checks':5,'initial_user_bytes_before':before,'initial_user_bytes_after':after,'saved_bytes_per_request':before-after,'scope':'schema annotations and frozen payload facts; not LIVE success'})
