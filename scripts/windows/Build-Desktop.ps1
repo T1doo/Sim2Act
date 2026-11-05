@@ -20,7 +20,7 @@ Assert-Ordinary $desktopRoot
 if (-not (Test-Path -LiteralPath (Join-Path $desktopRoot 'runtime\python.exe') -PathType Leaf)) { throw 'Existing assembled private Python runtime required.' }
 $portableFile = Join-Path $desktopRoot 'portable-manifest.json'
 $portable = Get-Content -LiteralPath $portableFile -Raw -Encoding UTF8 | ConvertFrom-Json
-if ($portable.format -cne 'sim2act-offline-windows-sqlite-preview.v1' -or $null -eq $portable.files -or $portable.product_commit -cne $SourceCommit) { throw 'Application source commit mismatch; do not attach the new host to an old app.' }
+if ($portable.format -cnotin @('sim2act-offline-windows-sqlite-preview.v1','sim2act-offline-windows-configured-build.v1') -or $null -eq $portable.files -or $portable.product_commit -cne $SourceCommit) { throw 'Application source commit mismatch; do not attach the new host to an old app.' }
 foreach ($entry in $portable.files.PSObject.Properties) {
     if (-not $entry.Name.StartsWith('runtime/',[StringComparison]::Ordinal)) { continue }
     if ($entry.Name -match '(^/|\\|:|(^|/)\.\.(/|$))') { throw 'Invalid runtime manifest path.' }
