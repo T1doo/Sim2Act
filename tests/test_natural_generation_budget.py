@@ -122,7 +122,7 @@ def test_core_reserves_same_4096_wire_without_changing_application_runtime(env,m
     assert [v['max_tokens'] for v in sent]==[1024,4096,4096]
     prompt=json.loads(sent[0]['messages'][1]['content'])
     assert prompt['generation_budget']['candidate_output_tokens']==4096
-    assert prompt['server_ids']['output_protocol']=='natural-checked-candidate4096.v6'
+    assert prompt['server_ids']['output_protocol']=='natural-checked-candidate4096.v7'
     assert 'operator_wiring' in prompt['codec']
     positions=[json.loads(m['content'])['actual_read_positions'] for m in sent[1]['messages'] if m['role']=='user' and 'actual_read_positions' in m['content']]
     from test_natural_spec_apps import SOURCE

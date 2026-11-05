@@ -58,6 +58,17 @@ def test_v4_structure_stage_thinking_flag_does_not_change_v3_or_read_wire():
     assert 'thinking_mode' not in json.loads(body(old,[],4096))
 
 
+@pytest.mark.parametrize('name',['read','check_candidate'])
+def test_v7_names_exact_stage_tool_and_preserves_v6_required_wire(name):
+    tools=[{'type':'function','function':{'name':name}}]
+    new=json.loads(body(messages('natural-checked-candidate4096.v7'),tools,1024 if name=='read' else 4096))
+    old=json.loads(body(messages('natural-checked-candidate4096.v6'),tools,1024 if name=='read' else 4096))
+    assert new['tool_choice']=={'type':'function','function':{'name':name}} and old['tool_choice']=='required'
+    assert 'thinking_mode' not in new
+    assert json.loads(body(messages('natural-checked-candidate4096.v7'),[],4096))['thinking_mode'] is False
+    assert generation_tool_choice(messages('natural-checked-candidate4096.v7'),[{'function':{'name':'unregistered'}}]) is None
+
+
 def test_old_natural_generation_remains_confirmable_after_new_default(env,monkeypatch):
     from test_natural_spec_apps import setup,generate
     from test_pa_spec_apps import confirm
