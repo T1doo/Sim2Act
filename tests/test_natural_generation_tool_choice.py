@@ -69,6 +69,11 @@ def test_v7_names_exact_stage_tool_and_preserves_v6_required_wire(name):
     assert generation_tool_choice(messages('natural-checked-candidate4096.v7'),[{'function':{'name':'unregistered'}}]) is None
 
 
+def test_v8_final_wire_forbids_tools_without_changing_v7():
+    assert json.loads(body(messages("natural-checked-candidate4096.v8"), [], 4096))["tool_choice"] == "none"
+    assert "tool_choice" not in json.loads(body(messages("natural-checked-candidate4096.v7"), [], 4096))
+
+
 def test_old_natural_generation_remains_confirmable_after_new_default(env,monkeypatch):
     from test_natural_spec_apps import setup,generate
     from test_pa_spec_apps import confirm

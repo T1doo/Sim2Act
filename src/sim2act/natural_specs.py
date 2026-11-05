@@ -795,23 +795,31 @@ def _initial_messages_from_facts(contract, material):
             ),
         ),
     ]
-    if contract.application_generation.output_protocol in {'natural-checked-candidate.v1','natural-checked-candidate4096.v1','natural-checked-candidate4096.v2','natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7'}:
+    if contract.application_generation.output_protocol in {'natural-checked-candidate.v1','natural-checked-candidate4096.v1','natural-checked-candidate4096.v2','natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'}:
         messages[0]['content']+=' Use the explicitly selected stage function. Encode its complete arguments as compact JSON without indentation or explanations. After checker feedback return only the complete candidate JSON, preserving all Goal fields and source facts. Never substitute prose for the required function call.'
-    if contract.application_generation.output_protocol in {'natural-checked-candidate4096.v1','natural-checked-candidate4096.v2','natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7'}:
+    if contract.application_generation.output_protocol in {'natural-checked-candidate4096.v1','natural-checked-candidate4096.v2','natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'}:
         messages[0]['content']+=' The read stage keeps its 1024-token cap; candidate checking and final candidate have a 4096-token output cap. Runtime app limits remain unchanged.'
         payload=json.loads(messages[1]['content'])
         payload['generation_budget']['candidate_output_tokens']=4096
         messages[1]['content']=json.dumps(payload,ensure_ascii=False,separators=(',',':'))
-    if contract.application_generation.output_protocol in {'natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7'}:
+    if contract.application_generation.output_protocol in {'natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'}:
         messages[0]['content']=messages[0]['content'].replace('resource.read','read').replace('spec.check_candidate','check_candidate')
         messages[0]['content']+=' Wire functions are read and check_candidate only. Recipe operator names remain the canonical codec names, including resource.read; do not use wire aliases as recipe operators.'
-    if contract.application_generation.output_protocol in {'natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7'}:
+    if contract.application_generation.output_protocol in {'natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'}:
         messages[0]['content']+=' The check_candidate argument candidate must be a JSON object with exactly recipe, sample_nodes, source_hash, goal. Never send a description, JSON string, or code fence. If the checker returns FAIL, use its actual diagnostic and the original facts to correct the full candidate in the one final response; do not claim success for invalid input.'
-    if contract.application_generation.output_protocol in {'natural-checked-candidate4096.v6','natural-checked-candidate4096.v7'}:
+    if contract.application_generation.output_protocol in {'natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'}:
         payload = json.loads(messages[1]['content'])
         payload['codec']['operator_wiring'] = wiring_contract()
         messages[1]['content'] = json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
         messages[0]['content'] += ' Use the exact operator_wiring input names and FieldSource objects; text, source_text, all_items and verified_items are not substitute ports. Source position indexes are reading aids only, never semantic labels or a checklist.'
+    if contract.application_generation.output_protocol == 'natural-checked-candidate4096.v8':
+        messages[0]["content"] += (
+            " Every item_id must be unique. A requirement or unclassified item must have targets=[]."
+            " Conditions, exceptions and open questions may point only to retained requirement IDs."
+            " Leave targets empty when the source does not establish a relation."
+            " The checker is offered only once. After its receipt, return the candidate JSON object"
+            " directly, including any correction, with no function call or call-shaped text."
+        )
     return messages
 
 

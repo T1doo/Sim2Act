@@ -26,7 +26,7 @@ def parse(raw,protocol=PROTOCOL):
     from .model import parse_response
     from .tools import validate_call
     from .pa_spec_apps import check_envelope
-    checker=diagnostic_envelope if protocol in {'natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7'} else check_envelope
+    checker=diagnostic_envelope if protocol in {'natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'} else check_envelope
     message,calls=parse_response(raw,{'read':lambda args:validate_call('resource.read',args),'check_candidate':checker})
     canonical=[]
     for call in calls:canonical.append(canonical_call(call))
