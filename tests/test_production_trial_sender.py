@@ -667,12 +667,16 @@ def child_main():
 
 
 def subprocess_call(payload, tmp_path, name):
+    import sim2act
+    source_root=str(Path(sim2act.__file__).resolve().parent.parent)
+    test_root=str(Path(__file__).resolve().parent)
     environment = {k: v for k, v in os.environ.items() if not k.startswith(("SIM2ACT_", "INTERN_"))}
-    environment["PYTHONPATH"] = str(Path(__file__).parent)
+    environment["PYTHONPATH"] = os.pathsep.join([source_root,test_root])
     command = [
         sys.executable,
         "-c",
-        "from test_production_trial_sender import child_main; child_main()",
+        "import sys; sys.path[:0] = " + repr([source_root,test_root])
+        + "; from test_production_trial_sender import child_main; child_main()",
     ]
     result = subprocess.run(
         command,
