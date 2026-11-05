@@ -385,7 +385,7 @@ def validate_run(store, c, run, settings=None, *, active=False, transition=None)
         and all(v <= scope.limits.model_dump()[k] for k, v in contract.limits.model_dump().items())
         and math.isfinite(approval.approved_at) and math.isfinite(approval.deadline)
         and approval.deadline == approval.approved_at + scope.limits.run_seconds)
-    require((selected.output_protocol in {'compact-candidate-json4096.v1','compact-candidate-json4096.v2','compact-candidate-json4096.v3','compact-candidate-json4096.v4'}) == isinstance(scope,Scope4096),
+    require((selected.output_protocol in {'compact-candidate-json4096.v1','compact-candidate-json4096.v2','compact-candidate-json4096.v3','compact-candidate-json4096.v4','compact-candidate-json4096.v5'}) == isinstance(scope,Scope4096),
             'Generation output profile differs from exact approved scope')
     require(_keys(c, run["principal_id"], b.approval_id, META) == {"scope"}
         and _keys(c, run["principal_id"], b.approval_id, SCOPE) == {"scope"}

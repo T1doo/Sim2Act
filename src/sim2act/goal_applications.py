@@ -112,7 +112,7 @@ def policy(provider, user, pid, body, activation=None, app_limits=None, output_t
         repair_limit=1,
         live_request_allowance=0,
         response_archive_policy="protected-json32768.v1",
-        output_protocol=("compact-candidate-json4096.v4" if output_tokens==4096 else "compact-candidate-json.v1") if not body.get("family") else None,
+        output_protocol=("compact-candidate-json4096.v5" if output_tokens==4096 else "compact-candidate-json.v1") if not body.get("family") else None,
         activation=activation,
         app_limits=app_limits,
     ).model_dump(exclude_none=True)
@@ -446,6 +446,24 @@ def _schema_without_titles(schema):
     return result
 
 
+def _shared_candidate_schema(action_schema,manifest_schema,goal,source_hash):
+    definitions={}
+    roots=[]
+    for original in (action_schema,manifest_schema):
+        schema=copy.deepcopy(original)
+        for name,value in schema.pop('$defs',{}).items():
+            if name in definitions and definitions[name]!=value:
+                raise DomainError('VERSION_CONFLICT','Conflicting candidate schema definitions')
+            definitions[name]=value
+        roots.append(schema)
+    return {'type':'object','additionalProperties':False,
+        'required':['manifest','actions','source_hash','goal'],
+        'properties':{'manifest':roots[1],'actions':{'type':'array','minItems':1,'maxItems':1,'items':roots[0]},
+            'source_hash':{'type':'string','const':source_hash},
+            'goal':{'type':'object','description':'Must equal the complete saved_goal.snapshot.content object exactly.'}},
+        '$defs':definitions}
+
+
 def _literal_initial_messages(saved_goal, server_ids, material, limits):
     """Original literal prompt over already authorized facts; grants no authority."""
     from .agent_apps import schemas
@@ -474,10 +492,10 @@ def _literal_initial_messages(saved_goal, server_ids, material, limits):
         "candidate_fields": ["manifest", "actions", "source_hash", "goal"],
         "semantic_acceptance": "NOT_RUN",
     }
-    if server_ids.get('output_protocol') in {'compact-candidate-json4096.v2','compact-candidate-json4096.v3','compact-candidate-json4096.v4'}:
+    if server_ids.get('output_protocol') in {'compact-candidate-json4096.v2','compact-candidate-json4096.v3','compact-candidate-json4096.v4','compact-candidate-json4096.v5'}:
         value['action_schema']=_schema_without_titles(value['action_schema'])
         value['manifest_schema']=_schema_without_titles(value['manifest_schema'])
-    if server_ids.get('output_protocol') in {'compact-candidate-json4096.v3','compact-candidate-json4096.v4'}:
+    if server_ids.get('output_protocol') in {'compact-candidate-json4096.v3','compact-candidate-json4096.v4','compact-candidate-json4096.v5'}:
         value['candidate_shape']={
             'manifest':'One complete AppManifest object conforming to manifest_schema.',
             'actions':'An array of complete ActionSpec definitions conforming to action_schema. These define executable actions, NOT executed workflow steps, tool receipts, status/input/output records, or references alone.',
@@ -485,7 +503,7 @@ def _literal_initial_messages(saved_goal, server_ids, material, limits):
             'source_hash':'The exact bound source hash.',
             'goal':'The complete saved_goal.snapshot.content object, unchanged.',
         }
-    if server_ids.get('output_protocol')=='compact-candidate-json4096.v4':
+    if server_ids.get('output_protocol') in {'compact-candidate-json4096.v4','compact-candidate-json4096.v5'}:
         from .agent_apps import CHECK
         # These facts already exist in saved_goal/source or the schema itself.
         # Avoid paying for duplicate copies in every request and repair.
@@ -510,13 +528,18 @@ def _literal_initial_messages(saved_goal, server_ids, material, limits):
             'limits':'Both action.limits and manifest.runtime_limits must equal literal_contract.limits.',
         }
         value['manifest_schema']['properties']['validation_suite_ref']['const']=CHECK
+    if server_ids.get('output_protocol')=='compact-candidate-json4096.v5':
+        value['candidate_schema']=_shared_candidate_schema(value.pop('action_schema'),value.pop('manifest_schema'),
+            saved_goal['snapshot']['content'],material['hash'])
+        value['candidate_shape']['manifest']='One complete AppManifest matching candidate_schema.properties.manifest.'
+        value['candidate_shape']['actions']='An array of complete ActionSpec definitions matching candidate_schema.properties.actions.items, never executed steps or receipts.'
     return [
         {"role": "system", "content": SYSTEM + (
             " Output protocol compact-candidate-json.v1: after the tool result, output ONLY the final JSON object. "
             "Begin with { and end with }. Use compact JSON without indentation, analysis, explanations, or code fences. "
             "The four top-level fields are manifest, actions, source_hash, and goal. "
             "Keep every required schema field and the complete frozen goal; compact formatting must not remove facts."
-            if server_ids.get("output_protocol") in {"compact-candidate-json.v1","compact-candidate-json4096.v1","compact-candidate-json4096.v2","compact-candidate-json4096.v3","compact-candidate-json4096.v4"} else "")},
+            if server_ids.get("output_protocol") in {"compact-candidate-json.v1","compact-candidate-json4096.v1","compact-candidate-json4096.v2","compact-candidate-json4096.v3","compact-candidate-json4096.v4","compact-candidate-json4096.v5"} else "")},
         {"role": "user", "content": json.dumps(value, ensure_ascii=False, separators=(",", ":"))},
     ]
 
@@ -525,7 +548,7 @@ def generation_output_tokens(messages, tools, default):
     if not tools and len(messages)>1:
         try:
             selected=json.loads(messages[1]['content']).get('server_ids',{})
-            if selected.get('output_protocol') in {'compact-candidate-json4096.v1','compact-candidate-json4096.v2','compact-candidate-json4096.v3','compact-candidate-json4096.v4'} and selected.get('activation'):
+            if selected.get('output_protocol') in {'compact-candidate-json4096.v1','compact-candidate-json4096.v2','compact-candidate-json4096.v3','compact-candidate-json4096.v4','compact-candidate-json4096.v5'} and selected.get('activation'):
                 return 4096
         except (ValueError,TypeError,KeyError,AttributeError):
             pass
@@ -539,7 +562,7 @@ def body(messages, tools, max_output):
     if not tools and len(messages)>1:
         try:
             selected=json.loads(messages[1]["content"]).get("server_ids",{})
-            if selected.get("output_protocol") in {"compact-candidate-json.v1","compact-candidate-json4096.v1","compact-candidate-json4096.v2","compact-candidate-json4096.v3","compact-candidate-json4096.v4"}:
+            if selected.get("output_protocol") in {"compact-candidate-json.v1","compact-candidate-json4096.v1","compact-candidate-json4096.v2","compact-candidate-json4096.v3","compact-candidate-json4096.v4","compact-candidate-json4096.v5"}:
                 extra["thinking_mode"]=False
         except (ValueError,TypeError,KeyError,AttributeError):
             pass
@@ -1662,8 +1685,8 @@ def _renew_committed_lease(worker, run, state, *, deadline=None):
 
 def candidate_diagnostic(error,message,protocol):
     diagnostic=error.public()
-    if protocol not in {'compact-candidate-json4096.v3','compact-candidate-json4096.v4'}:return diagnostic
-    if protocol=='compact-candidate-json4096.v4':
+    if protocol not in {'compact-candidate-json4096.v3','compact-candidate-json4096.v4','compact-candidate-json4096.v5'}:return diagnostic
+    if protocol in {'compact-candidate-json4096.v4','compact-candidate-json4096.v5'}:
         cause=error.__cause__
         if isinstance(cause,json.JSONDecodeError):
             diagnostic['json_error']={'message':cause.msg[:120],'position':cause.pos}

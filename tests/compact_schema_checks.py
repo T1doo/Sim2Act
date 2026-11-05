@@ -36,4 +36,13 @@ try:
     except ValueError as cause:raise DomainError('INVALID_MANIFEST','Draft manifest failed structural validation') from cause
 except DomainError as error:
     assert candidate_diagnostic(error,message,'compact-candidate-json4096.v4')['constraint']=='Unknown independent check suite'
+v5=json.loads(_literal_initial_messages(goal,{'output_protocol':'compact-candidate-json4096.v5'},material,{})[1]['content'])
+shared=v5['candidate_schema']
+assert shared['required']==['manifest','actions','source_hash','goal'] and shared['additionalProperties'] is False
+for key,schema in [('manifest',v4['manifest_schema']),('actions',v4['action_schema'])]:
+    selected=shared['properties'][key] if key=='manifest' else shared['properties'][key]['items']
+    assert selected=={k:v for k,v in schema.items() if k!='$defs'}
+    assert all(shared['$defs'][k]==v for k,v in schema.get('$defs',{}).items())
+assert v5['saved_goal']==v4['saved_goal'] and v5['literal_contract']==v4['literal_contract']
+print({'v4_bytes':len(json.dumps(v4,separators=(',',':')).encode()),'v5_bytes':len(json.dumps(v5,separators=(',',':')).encode())})
 print({'status':'PASS','checks':5,'initial_user_bytes_before':before,'initial_user_bytes_after':after,'saved_bytes_per_request':before-after,'scope':'schema annotations and frozen payload facts; not LIVE success'})
