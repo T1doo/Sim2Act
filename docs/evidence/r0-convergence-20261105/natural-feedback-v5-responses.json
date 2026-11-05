@@ -1,0 +1,132 @@
+{
+  "scope": "Read-only original three-response diagnosis; no model call or candidate repair",
+  "run_id": "run_f8655ea512e54b54849450a456217594",
+  "responses": [
+    {
+      "complete": true,
+      "response_verdict": "VALID_PROTOCOL",
+      "outcome": {
+        "outcome": "RECEIVED",
+        "response_sha256": "eae2266db299005fae647919e8838fe9cd348d1a68a9b3ce59e7236034a0e1a7",
+        "response_ascii_bytes": 6169,
+        "prompt_tokens": 3341,
+        "completion_tokens": 1394,
+        "total_tokens": 4735
+      },
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"recipe\": {\n    \"version\": \"natural-spec-recipe.v1\",\n    \"steps\": [\n      {\n        \"step_id\": \"read_source\",\n        \"operator\": \"resource.read\",\n        \"depends_on\": [],\n        \"inputs\": {\n          \"text\": {\n            \"source\": \"input\",\n            \"field\": \"text\"\n          }\n        }\n      },\n      {\n        \"step_id\": \"extract_all\",\n        \"operator\": \"model.spec.all\",\n        \"depends_on\": [\n          \"read_source\"\n        ],\n        \"inputs\": {\n          \"text\": {\n            \"source\": \"step\",\n            \"ref\": \"read_source\",\n            \"field\": \"text\"\n          }\n        }\n      },\n      {\n        \"step_id\": \"extract_requirements\",\n        \"operator\": \"model.spec.requirements\",\n        \"depends_on\": [\n          \"read_source\"\n        ],\n        \"inputs\": {\n          \"text\": {\n            \"source\": \"step\",\n            \"ref\": \"read_source\",\n            \"field\": \"text\"\n          }\n        }\n      },\n      {\n        \"step_id\": \"merge_evidence\",\n        \"operator\": \"spec.merge_evidence\",\n        \"depends_on\": [\n          \"extract_all\",\n          \"extract_requirements\"\n        ],\n        \"inputs\": {\n          \"all_items\": {\n            \"source\": \"step\",\n            \"ref\": \"extract_all\",\n            \"field\": \"items\"\n          },\n          \"requirement_items\": {\n            \"source\": \"step\",\n            \"ref\": \"extract_requirements\",\n            \"field\": \"items\"\n          }\n        }\n      },\n      {\n        \"step_id\": \"verify_citations\",\n        \"operator\": \"spec.verify_citations\",\n        \"depends_on\": [\n          \"merge_evidence\"\n        ],\n        \"inputs\": {\n          \"merged_items\": {\n            \"source\": \"step\",\n            \"ref\": \"merge_evidence\",\n            \"field\": \"items\"\n          },\n          \"source_text\": {\n            \"source\": \"step\",\n            \"ref\": \"read_source\",\n            \"field\": \"text\"\n          }\n        }\n      },\n      {\n        \"step_id\": \"save_list\",\n        \"operator\": \"artifact.save_text\",\n        \"depends_on\": [\n          \"verify_citations\"\n        ],\n        \"inputs\": {\n          \"verified_items\": {\n            \"source\": \"step\",\n            \"ref\": \"verify_citations\",\n            \"field\": \"items\"\n          }\n        }\n      }\n    ]\n  },\n  \"sample_nodes\": [\n    {\n      \"step_id\": \"extract_all\",\n      \"items\": [\n        {\n          \"item_id\": \"req1\",\n          \"kind\": \"requirement\",\n          \"summary\": \"必须在周五前提交报告\",\n          \"citations\": [\n            {\n              \"start\": 0,\n              \"end\": 30,\n              \"quote\": \"Submit the report before Friday.\"\n            }\n          ],\n          \"targets\": []\n        },\n        {\n          \"item_id\": \"cond1\",\n          \"kind\": \"condition\",\n          \"summary\": \"若主管批准则允许迟交报告\",\n          \"citations\": [\n            {\n              \"start\": 31,\n              \"end\": 71,\n              \"quote\": \"If the supervisor approves, a late report is allowed.\"\n            }\n          ],\n          \"targets\": [\n            \"req1\"\n          ]\n        },\n        {\n          \"item_id\": \"exc1\",\n          \"kind\": \"exception\",\n          \"summary\": \"迟交报告在主管批准时被允许\",\n          \"citations\": [\n            {\n              \"start\": 31,\n              \"end\": 71,\n              \"quote\": \"If the supervisor approves, a late report is allowed.\"\n            }\n          ],\n          \"targets\": [\n            \"req1\"\n          ]\n        },\n        {\n          \"item_id\": \"q1\",\n          \"kind\": \"open_question\",\n          \"summary\": \"档案所有者尚未决定\",\n          \"citations\": [\n            {\n              \"start\": 72,\n              \"end\": 103,\n              \"quote\": \"The archive owner remains undecided.\"\n            }\n          ],\n          \"targets\": []\n        }\n      ]\n    },\n    {\n      \"step_id\": \"extract_requirements\",\n      \"items\": [\n        {\n          \"item_id\": \"req1b\",\n          \"kind\": \"requirement\",\n          \"summary\": \"周五前提交报告\",\n          \"citations\": [\n            {\n              \"start\": 0,\n              \"end\": 30,\n              \"quote\": \"Submit the report before Friday.\"\n            }\n          ],\n          \"targets\": []\n        }\n      ]\n    }\n  ],\n  \"source_hash\": \"e5e119a5f0ca1669f41e220519f2979ceab7b960da36f500cface1c4f581b53e\",\n  \"goal\": {\n    \"title\": \"来源规范清单\",\n    \"goal\": \"提取要求、条件、例外与未决项，保留逐字引用；不得替用户决定未决项\",\n    \"known\": [],\n    \"assumptions\": [],\n    \"unresolved\": [\n      \"需人工确认语义完整性\"\n    ],\n    \"constraints\": [\n      \"只基于材料\",\n      \"保存核验后的清单\"\n    ],\n    \"acceptance_checks\": [\n      \"逐字引用正确\",\n      \"要求与例外关系待人工审阅\"\n    ],\n    \"resource_refs\": [\n      \"res_cc49f9b50c424ac8a8760ae7d4279808\"\n    ]\n  }\n}"
+      },
+      "usage": {
+        "prompt_tokens": 3341,
+        "completion_tokens": 1394,
+        "total_tokens": 4735
+      }
+    },
+    {
+      "complete": true,
+      "response_verdict": "VALID_PROTOCOL",
+      "outcome": {
+        "outcome": "RECEIVED",
+        "response_sha256": "d25981b58e91079b39014a5d5ca00b1aabafe24d8b7827443d4c8454515502f8",
+        "response_ascii_bytes": 748,
+        "prompt_tokens": 1918,
+        "completion_tokens": 109,
+        "total_tokens": 2027
+      },
+      "finish_reason": "tool_calls",
+      "message": {
+        "role": "assistant",
+        "content": "\n\n",
+        "reasoning_content": "We need follow instruction. Need first request only bound read. We have source resource_id res_cc49f9b50c424ac8a8760ae7d4279808. Need call read.\n",
+        "tool_calls": [
+          {
+            "id": "chatcmpl-tool-EcZBaQiXggDbUiYtB2DDf3",
+            "type": "function",
+            "function": {
+              "name": "read",
+              "arguments": "{\"resource_id\": \"res_cc49f9b50c424ac8a8760ae7d4279808\"}"
+            }
+          }
+        ]
+      },
+      "usage": {
+        "prompt_tokens": 1918,
+        "completion_tokens": 109,
+        "total_tokens": 2027
+      }
+    },
+    {
+      "complete": true,
+      "response_verdict": "VALID_PROTOCOL",
+      "outcome": {
+        "outcome": "RECEIVED",
+        "response_sha256": "f8e54d4c9cbcdf78c2e77e0fbd13dfc080de3dfede87042d4cf8f85a9e2e1e74",
+        "response_ascii_bytes": 4256,
+        "prompt_tokens": 3428,
+        "completion_tokens": 735,
+        "total_tokens": 4163
+      },
+      "finish_reason": "tool_calls",
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "chatcmpl-tool-UfLAn6yiUjnzmjfZgCgfLc",
+            "type": "function",
+            "function": {
+              "name": "check_candidate",
+              "arguments": "{\"candidate\": {\"recipe\": {\"version\": \"natural-spec-recipe.v1\", \"steps\": [{\"step_id\": \"read_source\", \"operator\": \"resource.read\", \"depends_on\": [], \"inputs\": {\"text\": {\"source\": \"input\", \"field\": \"text\"}}}, {\"step_id\": \"extract_all\", \"operator\": \"model.spec.all\", \"depends_on\": [\"read_source\"], \"inputs\": {\"text\": {\"source\": \"step\", \"ref\": \"read_source\", \"field\": \"text\"}}}, {\"step_id\": \"extract_requirements\", \"operator\": \"model.spec.requirements\", \"depends_on\": [\"read_source\"], \"inputs\": {\"text\": {\"source\": \"step\", \"ref\": \"read_source\", \"field\": \"text\"}}}, {\"step_id\": \"merge_evidence\", \"operator\": \"spec.merge_evidence\", \"depends_on\": [\"extract_all\", \"extract_requirements\"], \"inputs\": {\"all_items\": {\"source\": \"step\", \"ref\": \"extract_all\", \"field\": \"items\"}, \"requirement_items\": {\"source\": \"step\", \"ref\": \"extract_requirements\", \"field\": \"items\"}}}, {\"step_id\": \"verify_citations\", \"operator\": \"spec.verify_citations\", \"depends_on\": [\"merge_evidence\"], \"inputs\": {\"merged_items\": {\"source\": \"step\", \"ref\": \"merge_evidence\", \"field\": \"items\"}, \"source_text\": {\"source\": \"step\", \"ref\": \"read_source\", \"field\": \"text\"}}}, {\"step_id\": \"save清单\", \"operator\": \"artifact.save_text\", \"depends_on\": [\"verify_citations\"], \"inputs\": {\"verified_items\": {\"source\": \"step\", \"ref\": \"verify_citations\", \"field\": \"items\"}}}]}, \"sample_nodes\": [{\"step_id\": \"extract_all\", \"items\": [{\"item_id\": \"req1\", \"kind\": \"requirement\", \"summary\": \"必须在周五前提交报告\", \"citations\": [{\"start\": 0, \"end\": 30, \"quote\": \"Submit the report before Friday.\"}], \"targets\": []}, {\"item_id\": \"cond1\", \"kind\": \"condition\", \"summary\": \"若主管批准则允许迟交报告\", \"citations\": [{\"start\": 31, \"end\": 70, \"quote\": \"If the supervisor approves, a late report is allowed.\"}], \"targets\": [\"req1\"]}, {\"item_id\": \"exc1\", \"kind\": \"exception\", \"summary\": \"迟交报告在主管批准时被允许\", \"citations\": [{\"start\": 31, \"end\": 70, \"quote\": \"If the supervisor approves, a late report is allowed.\"}], \"targets\": [\"req1\"]}, {\"item_id\": \"q1\", \"kind\": \"open_question\", \"summary\": \"档案所有者尚未决定\", \"citations\": [{\"start\": 71, \"end\": 102, \"quote\": \"The archive owner remains undecided.\"}], \"targets\": []}]}, {\"step_id\": \"extract_requirements\", \"items\": [{\"item_id\": \"req1b\", \"kind\": \"requirement\", \"summary\": \"周五前提交报告\", \"citations\": [{\"start\": 0, \"end\": 30, \"quote\": \"Submit the report before Friday.\"}], \"targets\": []}]}], \"source_hash\": \"e5e119a5f0ca1669f41e220519f2979ceab7b960da36f500cface1c4f581b53e\", \"goal\": {\"title\": \"来源规范清单\", \"goal\": \"提取要求、条件、例外与未决项，保留逐字引用；不得替用户决定未决项\", \"known\": [], \"assumptions\": [], \"unresolved\": [\"需人工确认语义完整性\"], \"constraints\": [\"只基于材料\", \"保存核验后的清单\"], \"acceptance_checks\": [\"逐字引用正确\", \"要求与例外关系待人工审阅\"], \"resource_refs\": [\"res_cc49f9b50c424ac8a8760ae7d4279808\"]}}}"
+            }
+          }
+        ]
+      },
+      "usage": {
+        "prompt_tokens": 3428,
+        "completion_tokens": 735,
+        "total_tokens": 4163
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "id": "attempt_bf863e43f2f748029c4f438098060e4a",
+      "status": "RECEIVED",
+      "usage": {
+        "status": "known",
+        "tokens": {
+          "prompt_tokens": 1918,
+          "completion_tokens": 109,
+          "total_tokens": 2027
+        }
+      }
+    },
+    {
+      "id": "attempt_f7bef4b1611d4290b9bcc855c0480d3d",
+      "status": "RECEIVED",
+      "usage": {
+        "status": "known",
+        "tokens": {
+          "prompt_tokens": 3428,
+          "completion_tokens": 735,
+          "total_tokens": 4163
+        }
+      }
+    },
+    {
+      "id": "attempt_48d2a48b9f10410797aff8167d117f2b",
+      "status": "RECEIVED",
+      "usage": {
+        "status": "known",
+        "tokens": {
+          "prompt_tokens": 3341,
+          "completion_tokens": 1394,
+          "total_tokens": 4735
+        }
+      }
+    }
+  ],
+  "database_pid_file_present": false
+}

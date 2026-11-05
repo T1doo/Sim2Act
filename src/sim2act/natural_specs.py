@@ -731,6 +731,39 @@ def candidate_schema():
     )
 
 
+def wiring_contract():
+    """Canonical port names, not a candidate, chosen graph or source answer."""
+    def port(ref, field):
+        return dict(source="step", ref=ref, field=field)
+    source = {field: port("<read_step_id>", field) for field in schemas()["source"]["properties"]}
+    return dict(
+        symbols="Replace angle-bracket references with your own declared step_id; they are not literal IDs.",
+        read=dict(operator=READ, inputs=dict(resource_id=dict(source="data", ref="source", field="resource_id"))),
+        model=dict(operators=sorted(MODEL_KINDS), inputs=source,
+            optional_review_inputs=dict(prior_items=port("<earlier_model_step_id>", "items"),
+                prior_feedback=port("<earlier_model_step_id>", "feedback"))),
+        merge=dict(operator=MERGE, inputs=dict(first=port("<first_model_step_id>", "items"),
+            second=port("<second_model_step_id>", "items"))),
+        verify=dict(operator=VERIFY, inputs={**source, "items": port("<model_or_merge_step_id>", "items")}),
+        save=dict(operator=SAVE, inputs=dict(text=port("<verify_step_id>", "text"))),
+        dependencies="depends_on must equal exactly the unique ref values of source=step input ports; source=data adds no predecessor. Declare predecessors before consumers.",
+        graph_choice="Choose the smallest sufficient graph. model.spec.all covers every declared kind; two model nodes require additive merge.",
+        citation_offsets="Zero-based Unicode character offsets into the actual read content; start inclusive, end exclusive. quote must exactly equal content[start:end].",
+    )
+
+
+def source_line_index(content):
+    """Positions in the actual read text only; no categories, facts or relations."""
+    lines = []
+    offset = 0
+    for raw in content.splitlines(keepends=True):
+        quote = raw.rstrip("\r\n")
+        if quote:
+            lines.append(dict(start=offset, end=offset + len(quote), quote=quote))
+        offset += len(raw)
+    return dict(unit="unicode_codepoints", end="exclusive", content_length=len(content), lines=lines)
+
+
 def initial_messages(store, c, run):
     from .goal_applications import source
 
@@ -762,18 +795,23 @@ def _initial_messages_from_facts(contract, material):
             ),
         ),
     ]
-    if contract.application_generation.output_protocol in {'natural-checked-candidate.v1','natural-checked-candidate4096.v1','natural-checked-candidate4096.v2','natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5'}:
+    if contract.application_generation.output_protocol in {'natural-checked-candidate.v1','natural-checked-candidate4096.v1','natural-checked-candidate4096.v2','natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6'}:
         messages[0]['content']+=' Use the explicitly selected stage function. Encode its complete arguments as compact JSON without indentation or explanations. After checker feedback return only the complete candidate JSON, preserving all Goal fields and source facts. Never substitute prose for the required function call.'
-    if contract.application_generation.output_protocol in {'natural-checked-candidate4096.v1','natural-checked-candidate4096.v2','natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5'}:
+    if contract.application_generation.output_protocol in {'natural-checked-candidate4096.v1','natural-checked-candidate4096.v2','natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6'}:
         messages[0]['content']+=' The read stage keeps its 1024-token cap; candidate checking and final candidate have a 4096-token output cap. Runtime app limits remain unchanged.'
         payload=json.loads(messages[1]['content'])
         payload['generation_budget']['candidate_output_tokens']=4096
         messages[1]['content']=json.dumps(payload,ensure_ascii=False,separators=(',',':'))
-    if contract.application_generation.output_protocol in {'natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5'}:
+    if contract.application_generation.output_protocol in {'natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6'}:
         messages[0]['content']=messages[0]['content'].replace('resource.read','read').replace('spec.check_candidate','check_candidate')
         messages[0]['content']+=' Wire functions are read and check_candidate only. Recipe operator names remain the canonical codec names, including resource.read; do not use wire aliases as recipe operators.'
-    if contract.application_generation.output_protocol=='natural-checked-candidate4096.v5':
+    if contract.application_generation.output_protocol in {'natural-checked-candidate4096.v5','natural-checked-candidate4096.v6'}:
         messages[0]['content']+=' The check_candidate argument candidate must be a JSON object with exactly recipe, sample_nodes, source_hash, goal. Never send a description, JSON string, or code fence. If the checker returns FAIL, use its actual diagnostic and the original facts to correct the full candidate in the one final response; do not claim success for invalid input.'
+    if contract.application_generation.output_protocol == 'natural-checked-candidate4096.v6':
+        payload = json.loads(messages[1]['content'])
+        payload['codec']['operator_wiring'] = wiring_contract()
+        messages[1]['content'] = json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
+        messages[0]['content'] += ' Use the exact operator_wiring input names and FieldSource objects; text, source_text, all_items and verified_items are not substitute ports. Source position indexes are reading aids only, never semantic labels or a checklist.'
     return messages
 
 
