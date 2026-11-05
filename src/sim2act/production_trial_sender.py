@@ -93,6 +93,12 @@ def _wire(contract, wire, *, stage=None):
     body = strict_json(wire, contract.caps.max_wire_bytes)
     _require(type(body) is dict)
     fields = {"model", "messages", "tools", "stream", "max_tokens"}
+    if stage=='generate':
+        from .goal_applications import generation_tool_choice
+        choice=generation_tool_choice(body.get('messages',[]),body.get('tools',[]))
+        if choice is not None:
+            _require(body.get('tool_choice')==choice)
+            fields.add('tool_choice')
     version = None
     if stage in ("source", "cold"):
         messages = body.get("messages")

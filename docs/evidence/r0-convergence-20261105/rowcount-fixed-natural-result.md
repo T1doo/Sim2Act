@@ -1,0 +1,13 @@
+# be458799 正式生成观察
+
+冻结源码be4587994446b47f1d8c2814fa9e2c0e13553ab7；原桌面运行包SHA256为2ccba95b13eb6872b95e0c60f8955feaed0f6b18f1ca7d1006c79622c3554c9c。包内原production与literal资格函数通过。
+
+新正式范围完成准备、批准、带五字段选择的API/Worker重启、readiness核对和Generate接受。Run为run_ccbdb05d40134966ba784456a31f025d。行数修复后账本正常推进到revision6，跨过此前INSERT行数拒绝。
+
+实际Intern-S2两次响应：第一次工具读取成功，1911 tokens；第二次响应4276 tokens，其中输出1024，finish_reason=length，正文3660字符、reasoning_content为0字符，没有形成check_candidate工具调用。接收体完整保存，协议验证拒绝。当前任务WAITING_RESOURCE / OUTCOME_UNKNOWN，不能自动重发、重置预算或改绑旧scope。
+
+未知的含义为该响应未形成可接受的候选协议，不应简单推断网络没返回。只有字段长度与元数据写入诊断，未输出推理正文。下一步需审查新版本候选生成的紧凑表达/工具调用约束和授权预算，不能直接给旧七槽合同扩大上限。本轮没有确认或创建应用。
+
+两个测试会话均API/Worker exit0、专用PG停止；诊断只读账本，随后停止PG。记录见managed-natural-rowcount-qualified-check.json、rowcount-journal-diagnosis.json及rowcount-message-lengths.json。
+
+P-B原68525f0a源快照的cProfile单用例已结束，仍在原120秒结算期限失败。分析受插桩影响，仅作热点诊断；总调用约3.09亿，重复SQL执行约45万次，锁等待及来源证明复核成本突出。不能凭此删除校验、扩大期限或宣称已定位唯一根因。见pb-save-profile-summary.json及pb-save-profile.xml。

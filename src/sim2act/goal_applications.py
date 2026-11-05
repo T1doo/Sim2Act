@@ -112,7 +112,7 @@ def policy(provider, user, pid, body, activation=None, app_limits=None, output_t
         repair_limit=1,
         live_request_allowance=0,
         response_archive_policy="protected-json32768.v1",
-        output_protocol=("compact-candidate-json4096.v6" if output_tokens==4096 else "compact-candidate-json.v1") if not body.get("family") else None,
+        output_protocol=("compact-candidate-json4096.v6" if output_tokens==4096 else "compact-candidate-json.v1") if not body.get("family") else "natural-checked-candidate.v1" if body.get("family")=="natural_spec" else None,
         activation=activation,
         app_limits=app_limits,
     ).model_dump(exclude_none=True)
@@ -573,10 +573,25 @@ def generation_output_tokens(messages, tools, default):
     return default
 
 
+def generation_tool_choice(messages,tools):
+    """Only the frozen new natural protocol selects the existing stage tool."""
+    try:
+        selected=json.loads(messages[1]['content'])['server_ids']
+        if selected.get('version')!='goal-natural-spec-application.v1' or selected.get('output_protocol')!='natural-checked-candidate.v1':return None
+        if len(tools)!=1:return None
+        name=tools[0]['function']['name']
+        if name not in {'resource.read','spec.check_candidate'}:return None
+        return {'type':'function','function':{'name':name}}
+    except (ValueError,TypeError,KeyError,IndexError,AttributeError):
+        return None
+
+
 def body(messages, tools, max_output):
     # Infer only from the frozen initial message reconstructed from the contract.
     # Old contracts lack this discriminator and retain their exact old wire.
     extra = {}
+    choice=generation_tool_choice(messages,tools)
+    if choice is not None:extra['tool_choice']=choice
     if not tools and len(messages)>1:
         try:
             selected=json.loads(messages[1]["content"]).get("server_ids",{})
