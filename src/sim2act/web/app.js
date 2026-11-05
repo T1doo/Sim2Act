@@ -1810,7 +1810,7 @@ function renderNaturalFirstGuide() {
   const g=naturalFirstGuide;$("natural-first-start").disabled=!!g||!$("project-select").value;
   $("natural-first-guide").hidden=!g;if(!g)return;
   if(!naturalFirstGuideCurrent(g))return;
-  $("natural-first-title").textContent=g.mode==="PB"?"从成功成果保存可复用的 P-B 应用":"从 Goal 创建自然应用";
+  $("natural-first-title").textContent=g.mode==="PB"?"从成果创建应用":"从目标创建应用";
   const steps=g.mode==="PB"?["核对这份成功成果的 Run、版本与来源","准备或选择自己的新材料与 Goal","审阅来源、编辑图及精确绑定，另行确认提取","核查内部快照，另行确认保存版本","明确创建独立实例，返回目录","从目录选择新材料，预览并确认受限运行"]:["准备并保存新 TXT/MD 材料","保存只绑定本次材料的 Goal","读取可用性后明确生成，查看精确候选","分别确认候选与本项目 JSON 保存授权","核查内部快照，另行确认保存版本","明确创建独立实例，返回应用目录"];
   $("natural-first-guide").querySelector("ol").replaceChildren(...steps.map(text=>{const li=document.createElement("li");li.textContent=text;return li;}));
   let message;
@@ -2183,6 +2183,8 @@ function frontendRefreshIdle() {
   grantDetails.append(frontendNode('summary','授权管理 · 查看范围、到期时间与撤回操作'),frontendNode('p','以下为当前项目读回的授权记录。撤回会影响后续读取与执行，请按具体对象核对。'));
   grantHeading.before(grantDetails);grantDetails.append(grants);grantHeading.remove();
   const usePane=$('use-form').parentElement;usePane.id='frontend-use-reader';
+  $('natural-first-start').textContent='从目标创建应用';
+  $('local-records-new').textContent='新建记录应用';
   $('use-list').parentElement.parentElement.id='frontend-application-layout';
   const useHeading=frontendNode('h2','应用运行');useHeading.id='frontend-use-title';usePane.prepend(useHeading);
   const directoryToggle=frontendButton('切换应用',()=>{
@@ -2537,15 +2539,6 @@ function frontendRunCommand(command,receipt,current) {
     }
   }),'run-state-command');return button;
 }
-// Reflect the supported explicit CSV column selectors; selection itself does not run.
-document.addEventListener('change',event=>{
-  const select=event.target;
-  if(!['app-column','use-column','internal-column'].includes(select.id)||!select.value)return;
-  let note=select.parentElement.querySelector('.frontend-column-context');
-  if(!note){note=frontendNode('p',undefined,'frontend-column-context');select.after(note);}
-  note.textContent=`当前对象：列「${select.selectedOptions[0]?.textContent||select.value}」。仅更新本次输入；执行仍由原运行按钮确认。`;
-  // Application input feedback belongs to its own selector, never to the project draft.
-});
 function frontendTextCopy(text,current,label) {
   const wrap=frontendNode('div',undefined,'result-tools'),status=frontendNode('span');status.role='status';status.setAttribute('aria-live','polite');let attempt=0;
   const button=frontendButton('复制',async()=>{

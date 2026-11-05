@@ -7,11 +7,11 @@ function renderCsvReviewStart(v,release){
  $('use-csv-review-start')?.remove();
  const node=document.createElement('div');node.id='use-csv-review-start';
  const ack=document.createElement('input');ack.type='checkbox';ack.id='use-csv-review-optin';
- const label=document.createElement('label');label.append(ack,'为下一次新Run事前冻结本人适用范围声明：仅固定CSV所选列的结构化求和，不含MD报告。');
+ const label=document.createElement('label');label.append(ack,'确认本次适用范围：仅汇总当前材料所选列，不生成报告。');
  const preview=document.createElement('pre');preview.id='use-csv-review-scope';
  function changed(){ack.checked=false;v.csvReviewScope=csvReviewStartScope(v);preview.textContent=JSON.stringify({scope:'SUM_ONLY_WITHOUT_MD',release_id:release.id,release_fingerprint:release.fingerprint,instance_id:v.id,revision:v.instance?.revision,resource_id:v.app.candidate.manifest.data_bindings[0].resource_ref,source_hash:v.app.candidate.source_hash,column:$('use-column').value},null,2);}
  const column=$('use-column');if(v.csvReviewChange){column.removeEventListener('change',v.csvReviewChange);column.removeEventListener('input',v.csvReviewChange);}v.csvReviewChange=changed;changed();column.addEventListener('change',changed);column.addEventListener('input',changed);ack.onchange=()=>{if(v.csvReviewScope!==csvReviewStartScope(v))changed();};
- const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='查看本次声明的精确范围';details.append(summary,preview);
+ const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='适用范围详情';details.append(summary,preview);
  node.append(label,details);$('use-form').append(node);
 }
 function csvOwnerRedact(v){for(const id of ['use-output','use-provenance','use-column','use-history'])$(id).replaceChildren();$('use-csv-review-start')?.remove();v.instance=null;$('use-form').hidden=true;$('use-info').textContent='当前材料或版本不可核验；仅保留本人声明元数据及停止入口。';}
