@@ -5726,10 +5726,12 @@ def advance_model(worker, run, *, _heartbeat_state=None):
     from . import pa_spec_apps as spec
     from .app_jobs import lock_live
     from .db import new_id
+    from .model_settlement import checkpoint, postgres_writer_renewals
     from .pa_trial_dispatch import _journal_reads
 
     store = worker.store
-    with store.tx() as c, _journal_reads(worker, c):
+    with postgres_writer_renewals(worker, _heartbeat_state) as pg_renew, \
+            store.tx() as c, _journal_reads(worker, c):
         job = lock_live(store, c, run)
         require(
             job["context"].get("spec_family") == codec.VERSION,
@@ -5756,7 +5758,8 @@ def advance_model(worker, run, *, _heartbeat_state=None):
         require(index < len(candidate["actions"]))
         step, action = candidate["manifest"]["workflow"][index], candidate["actions"][index]
         if action["executor"]["ref"] not in codec.MODEL_KINDS:
-            return spec._advance_local(worker, c, run, job, binding, (outputs, proved))
+            return spec._advance_local(worker, c, run, job, binding, (outputs, proved),
+                **({"_pg_renew": pg_renew} if pg_renew is not None else {}))
         enabled(worker)
         spec.commit_guard(worker, c, run, binding)
         node_limits = effective(worker, c, job, binding, action, _scope_checked=True)
@@ -5959,8 +5962,8 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                     and run["resource_refs"] == [selected_binding.contract.bindings[1].resource_id]):
                 plan = candidate.prepare(worker, binding, graph_call, limits)
         control_epoch = None
-        from .model_settlement import checkpoint, renew_locked_postgres
-        with _model_settlement_writer(worker, job, meta["deadline"], _heartbeat_state,
+        with postgres_writer_renewals(worker, _heartbeat_state) as pg_renew, \
+                _model_settlement_writer(worker, job, meta["deadline"], _heartbeat_state,
                 attempt_id=aid, _original_run=run) as writer_epoch, \
                 store.local_model_settlement(worker, job, meta["deadline"]) as control_epoch, \
                 _model_writer_connection(worker, candidate, plan) as (c, owned_plan), _journal_reads(worker, c):
@@ -5971,7 +5974,8 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                 and time.time() < meta["deadline"],
                 "Run version/deadline competed during model node",
             )
-            renew_locked_postgres(worker, c, job, meta["deadline"])
+            if pg_renew is not None:
+                pg_renew(c, job, meta["deadline"])
             if owned_plan is not None:
                 require(_cold_model_eligible(worker, c, current), "Original PB Cold eligibility required")
                 from ._owned_g0_candidate import run as owned_prewrite
@@ -6099,7 +6103,7 @@ def advance_model(worker, run, *, _heartbeat_state=None):
             # The last event/receipt callback can change live authority or time.
             # Check authority before replaying any protected receipts/Attempts,
             # then re-read the full evidence before committing VERIFIED.
-            postgres_lease = renew_locked_postgres(worker, c, job, meta["deadline"])
+            postgres_lease = pg_renew(c, job, meta["deadline"]) if pg_renew is not None else None
             with _journal_reads(worker, c):
                 inputs = dict(call_run=run, current=dict(current), binding=current_binding,
                     platform=limits, node=node_limits, aid=aid, raw=raw, wire=wire, meta=meta,
@@ -6110,7 +6114,8 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                         from .pa_trial_dispatch import settle_verified
                         settle_verified(worker, c, fresh, aid, raw,
                             **({"_model_after": model_after} if model_after is not None else {}))
-                        postgres_lease = renew_locked_postgres(worker, c, job, meta["deadline"])
+                        if pg_renew is not None:
+                            postgres_lease = pg_renew(c, job, meta["deadline"])
                         spec.commit_guard(worker, c, run, final_binding,
                             **({"_model_after": model_after} if model_after is not None else {}))
             checkpoint(worker)

@@ -8,7 +8,7 @@ then shorten it after the transaction, without ever reviving an expired owner.
 import logging
 import math
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 
 from sqlalchemy import select, update
 
@@ -44,6 +44,33 @@ def renew_locked_postgres(worker, c, job, deadline):
     _require(changed.rowcount == 1 and not worker.stop.is_set() and time.time() < lease,
         "Original PostgreSQL settlement lease or owner changed")
     return lease
+
+
+@contextmanager
+def postgres_writer_renewals(worker, state):
+    """Serialize a locked writer against its heartbeat and publish only after commit."""
+    if worker.store.sqlite:
+        yield None
+        return
+    if state is None:
+        lock = nullcontext()
+    else:
+        with state["lock"]:
+            lock = state["renewal_lock"]
+    renewed = None
+
+    def renew(c, job, deadline):
+        nonlocal renewed
+        lease = renew_locked_postgres(worker, c, job, deadline)
+        renewed = (job, lease)
+        return lease
+
+    with lock:
+        yield renew
+        if state is not None and renewed is not None:
+            from .text_workflows import publish_sync_renewal
+            job, lease = renewed
+            publish_sync_renewal(worker, job, state, lease)
 
 
 @contextmanager

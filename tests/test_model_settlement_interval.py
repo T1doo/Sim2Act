@@ -30,22 +30,26 @@ def test_postgres_settlement_renews_a_locked_run_without_extending_the_node_dead
     row = select(runs.c.lease_until).where(runs.c.id == job["id"])
     with store.tx() as c:
         c.execute(insert(runs).values(**job))
-    with store.tx() as c:
+    state = dict(lock=threading.Lock(), renewal_lock=threading.Lock(), lease_until=1030.)
+    with settlement.postgres_writer_renewals(worker, state) as renew, store.tx() as c:
         assert c.execute(row.with_for_update()).scalar_one() == 1030.
-        assert settlement.renew_locked_postgres(worker, c, job, 1050.) == 1040.
+        assert renew(c, job, 1050.) == 1040.
+        assert state["renewal_lock"].locked() and state["lease_until"] == 1030.
         with store.engine.connect() as other:
             assert other.execute(row).scalar_one() == 1030.
             with pytest.raises(OperationalError) as blocked:
                 other.execute(row.with_for_update(nowait=True))
             assert blocked.value.orig.sqlstate == "55P03"
         clock[0] = 1035.
-        assert settlement.renew_locked_postgres(worker, c, job, 1050.) == 1050.
+        assert renew(c, job, 1050.) == 1050.
+    assert not state["renewal_lock"].locked() and state["lease_until"] == 1050.
     with store.tx() as c:
         assert c.execute(row).scalar_one() == 1050.
     with pytest.raises(DomainError, match="lease or owner changed"):
-        with store.tx() as c:
-            settlement.renew_locked_postgres(worker, c, job, 1060.)
-            settlement.renew_locked_postgres(worker, c, dict(job, version=2), 1060.)
+        with settlement.postgres_writer_renewals(worker, state) as renew, store.tx() as c:
+            renew(c, job, 1060.)
+            renew(c, dict(job, version=2), 1060.)
+    assert state["lease_until"] == 1050.
     with store.tx() as c:
         assert c.execute(row).scalar_one() == 1050.
     clock[0] = 1050.

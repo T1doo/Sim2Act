@@ -973,14 +973,15 @@ def process_job(worker, run, advance_fn=None, *, _heartbeat_state=None):
     state = _heartbeat_state or dict(lock=threading.Lock(),
         lease_until=run["lease_until"], deadline=None)
     state.setdefault("renewal_lock", threading.Lock())
-    atomic_metadata = worker.store.sqlite and state.get("sync_contention_recovery") is True
+    serialize_renewals = state.get("sync_contention_recovery") is True
+    atomic_metadata = worker.store.sqlite and serialize_renewals
 
     def beat():
         while not stopped.wait(worker.s.lease_seconds / 3):
             for attempt in range(3):
                 if stopped.is_set() or worker.stop.is_set():
                     return
-                with state["renewal_lock"] if atomic_metadata else nullcontext():
+                with state["renewal_lock"] if serialize_renewals else nullcontext():
                     with state["lock"]:
                         deadline = state["deadline"]
                         cutoff = min(state["lease_until"], deadline) if deadline is not None else None

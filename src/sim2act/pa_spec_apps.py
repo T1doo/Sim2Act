@@ -2145,7 +2145,7 @@ def advance(worker, run, *, _heartbeat_state=None):
 
 
 @controlled
-def _advance_local(worker, c, run, job, b=None, checked=None):
+def _advance_local(worker, c, run, job, b=None, checked=None, *, _pg_renew=None):
     """Internal same-transaction local dispatch, never persisted proof reuse."""
     from .app_jobs import load_binding, state_write, stop_state
     store = worker.store
@@ -2160,6 +2160,9 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
         raise DomainError("OUTCOME_UNKNOWN")
     outputs, proved = checked if checked is not None else receipts(store, c, job, b)
     plan, s, a = b["plan"], b["snapshot"], b["app_run"]
+    if _pg_renew is not None:
+        deadline = min(s["natural_spec_clock"]["deadline"], job["created_at"] + worker.s.run_seconds)
+        _pg_renew(c, job, deadline)
     steps = plan["definition"]["manifest"]["workflow"]
     require(len(proved) < len(steps), "Completed save cannot be dispatched again")
     step, action = steps[len(proved)], plan["definition"]["actions"][len(proved)]
@@ -2207,6 +2210,8 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
     from .pa_trial_dispatch import _journal_reads
     # SAVE writes invalidate the entry read segment. Reprove current authority
     # in a new read-only segment; no proof survives the artifact writes above.
+    if _pg_renew is not None:
+        _pg_renew(c, job, deadline)
     with _journal_reads(worker, c):
         live = commit_guard(worker, c, run, b, 1)
     if not saved:
@@ -2227,6 +2232,8 @@ def _advance_local(worker, c, run, job, b=None, checked=None):
     store.event(c, job["id"], "SPEC_STEP_VERIFIED", dict(step_id=step["step_id"], operation_id=oid, fence=live["fence"]))
     outputs[step["step_id"]] = value
     proved.append(receipt)
+    if _pg_renew is not None:
+        live["lease_until"] = _pg_renew(c, job, deadline)
     if saved:
         version = instance["data_version"] + 1
         output = output_for(plan, outputs)
@@ -2362,13 +2369,7 @@ def process_job(worker, run):
             if again:
                 # Existing lease guard at a transaction boundary prevents SQLite
                 # writer starvation; it cannot renew an expired lease or deadline.
-                if worker.store.sqlite:
-                    renew_sync(worker, current, heartbeat_state)
-                else:
-                    from .text_workflows import publish_sync_renewal
-                    renewed = worker.store.heartbeat(worker.id, current["id"], current["fence"], worker.s.lease_seconds,
-                        _expected_version=current["version"])
-                    publish_sync_renewal(worker, current, heartbeat_state, renewed)
+                renew_sync(worker, current, heartbeat_state)
             return again
         return process(worker, run, advance_fn=advance_and_renew, _heartbeat_state=heartbeat_state)
     return process(worker, run, advance_fn=advance)
