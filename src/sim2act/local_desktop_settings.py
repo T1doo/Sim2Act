@@ -1,6 +1,7 @@
 """Explicit private installation selection, without migration or credential discovery."""
 import json
 import os
+import re
 from pathlib import Path
 from urllib.parse import quote
 
@@ -19,7 +20,13 @@ def local_settings(path):
                 result[key]=value
             return result
         value=json.loads(ordinary(path).read_text(encoding='utf-8-sig'),object_pairs_hook=unique)
-        if set(value)!={'format','runtime','data','credentials','workspace','model_key','live'} or value['format']!='sim2act.local-installation.v1' or type(value['live']) is not bool:
+        required={'format','runtime','data','credentials','workspace','model_key','live'}
+        optional={'generation_enabled','generation_approval'}
+        if not required.issubset(value) or set(value)-required-optional or value['format']!='sim2act.local-installation.v1' or type(value['live']) is not bool:
+            raise ValueError
+        generation=value.get('generation_enabled',False)
+        approval=value.get('generation_approval','')
+        if type(generation) is not bool or not isinstance(approval,str) or (approval and (not generation or not re.fullmatch(r'gaapproval_[a-f0-9]{32}',approval))):
             raise ValueError
         for key in ('runtime','data','credentials','workspace'):
             if not isinstance(value[key],str) or not Path(value[key]).is_absolute():raise ValueError
@@ -45,6 +52,10 @@ def local_settings(path):
             'INTERN_API_TOKEN':'',
             'SIM2ACT_QUOTA_SUBJECT':'default-intern-account',
             'SIM2ACT_GOAL_PLANNER_PROVIDER':'intern-s2' if value['live'] else 'disabled',
+            'SIM2ACT_NATURAL_ACTIVATION_ENABLED':'false',
+            'SIM2ACT_NATURAL_ACTIVATION_LIVE_ID':'',
+            'SIM2ACT_APPLICATION_GENERATION_ACTIVATION_ENABLED':str(generation).lower(),
+            'SIM2ACT_APPLICATION_GENERATION_LIVE_ID':approval,
         })
         return Settings.from_env(),database
     except Exception:

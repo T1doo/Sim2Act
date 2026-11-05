@@ -15,6 +15,15 @@ the selection contains no password or model token. Provisioning and first-use UI
 are not yet bundled into a complete installer. This is a maintainer integration
 entry, not a claim of ordinary-user installation readiness.
 
+Optional `generation_enabled` enables the existing P-A approval-preparation API;
+it defaults to false. Optional `generation_approval` selects one existing
+`gaapproval_…` identity and requires that enabled flag. Neither field creates an
+approval, extends its deadline, changes budgets or bypasses the original source,
+software fingerprint and request-key checks. Unselected inherited natural/P-A
+activation values are cleared for this managed-local entry. External configured
+launch behavior is unchanged. This selection wiring does not prove the complete
+P-A/P-B product path.
+
 The supervisor starts only its owned private database before the original
 database preflight. API and Worker continue using the original application role,
 authorization and selected task gates. Shutdown waits for both roles and
