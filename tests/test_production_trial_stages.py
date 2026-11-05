@@ -15,7 +15,7 @@ import httpx
 import pytest
 import test_natural_spec_apps as apps
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, event, select, update
+from sqlalchemy import event, select, update
 from test_natural_live_admission import frozen
 from test_pa_trial_dispatch import enqueue_generation, first_response
 from test_spec_app_operations import snapshot
@@ -222,15 +222,6 @@ def test_actual_pa_three_two_two_reaches_existing_results_and_pending_owner(actu
                 assert body["sha256"] != body["canonical_sha256"]
         for stage, rid in (("generate", t["generation"]), ("source", t["source"]), ("cold", t["cold"])):
             bridge.journal_stage_accounted(data[0], c, data[3], binding.contract, binding.approval_key, rid, stage)
-        for stage in ("source", "cold"):
-            with c.begin_nested() as savepoint:
-                missing = next(row for row in actual if row["run_id"] == t[stage])
-                c.execute(delete(attempts).where(attempts.c.id == missing["id"]))
-                with pytest.raises(DomainError):
-                    bridge.journal_stage_accounted(
-                        data[0], c, data[3], binding.contract, binding.approval_key, t[stage], stage
-                    )
-                savepoint.rollback()
     write(t["out"] / "actual-pa-stages.json", dict(accounting=accounting.model_dump(mode="json"),
         gaps=gaps, actual_attempts=[dict(a) for a in actual], bodies=bodies, results=results,
         real_provider_calls=0, live_installed=False, semantic_acceptance="NOT_RUN"))
@@ -238,6 +229,69 @@ def test_actual_pa_three_two_two_reaches_existing_results_and_pending_owner(actu
 
 def test_fresh_actual_prefix_rejects_incomplete_mixed_or_changed_proof_without_writes(generated_prefix):
     _generation_proof_rejections(generated_prefix)
+
+
+@pytest.mark.parametrize("stage", ["source", "cold"])
+@pytest.mark.parametrize(("style", "expected"), [("single", 1), ("ordered", 2)])
+def test_runtime_accounting_requires_every_model_in_the_approved_recipe(env, monkeypatch, stage, style, expected):
+    from sim2act.db import internal_app_runs, internal_run_bindings
+
+    data = apps.setup(env)
+    store, _, _, user, project, _, _ = data
+    contract, approval = frozen(data)
+    contract = contract.model_copy(update={"quota_subject": admission.canonical_quota_subject("fixture-account")})
+    recipe = apps.recipe(style)
+    candidate = {"spec_recipe": recipe}
+    generation_id = "run_" + "a" * 32
+    stage_id = "run_" + "b" * 32
+    authority = gate.StageAuthority(
+        contract_fingerprint=fingerprint(contract.model_dump()), stage=stage,
+        run_id=stage_id, accepted_fingerprint="0" * 64, app_run_id="fixture-app-run",
+        instance_id="fixture-instance", instance_revision=1, runtime_id=contract.runtime_id,
+        app_id="fixture-app", candidate_fingerprint="1" * 64, recipe_fingerprint=fingerprint(recipe),
+        release_id="fixture-release", release_fingerprint="2" * 64, generation_run_id=generation_id,
+        generation_candidate_fingerprint=fingerprint(candidate), target_goal_fingerprint="3" * 64,
+        authorization_fingerprint="4" * 64,
+    )
+    phase = gate.StageApproveInput(
+        authority=authority, expected_authority_fingerprint=fingerprint(authority.model_dump()),
+        approval_key=approval.request_key, request_key="fixture-stage",
+        consent="BIND_ONLY_THIS_ACCEPTED_STAGE_RUN_APP_RELEASE_AND_COMPLETE_GOAL_TO_ORIGINAL_TRIAL",
+    )
+    # Exercise accounting's own stage binding and count checks. The outer
+    # artifact permission gate and the downstream ledger have separate tests.
+    monkeypatch.setattr("sim2act.pa_spec_apps.job_scope_gate", lambda *args: True)
+
+    class ReachedLedger(Exception):
+        pass
+
+    def read_ledger(*args):
+        raise ReachedLedger
+
+    monkeypatch.setattr(bridge, "_journal_state", read_ledger)
+    with store.tx() as c:
+        common = dict(principal_id=user, project_id=project, runtime_id=contract.runtime_id)
+        c.execute(runs.insert().values(id=generation_id, status="PARTIAL",
+            request_key=contract.stage_keys.generate, result={"candidate": candidate}, **common))
+        c.execute(runs.insert().values(id=stage_id, status="SUCCEEDED",
+            request_key="internal:" + authority.app_run_id, **common))
+        c.execute(internal_app_runs.insert().values(id=authority.app_run_id, principal_id=user,
+            instance_id=authority.instance_id, release_id=authority.release_id,
+            request_key=getattr(contract.stage_keys, stage), fingerprint="fixture", input={}, status="SUCCEEDED"))
+        c.execute(internal_run_bindings.insert().values(run_id=stage_id, app_run_id=authority.app_run_id,
+            snapshot={}, fingerprint="fixture"))
+        gate._save(c, user, gate.entity(contract), gate.PHASE, stage, phase)
+        for index in range(expected):
+            with pytest.raises(DomainError):
+                bridge.journal_stage_accounted(store, c, user, contract, approval.request_key, stage_id, stage)
+            c.execute(attempts.insert().values(id=f"fixture-attempt-{index}", run_id=stage_id,
+                parameters={"pa_trial_binding": {"version": bridge.JOURNAL_VERSION, "account_id": "fixture-account"}}))
+        with pytest.raises(ReachedLedger):
+            bridge.journal_stage_accounted(store, c, user, contract, approval.request_key, stage_id, stage)
+        c.execute(update(runs).where(runs.c.id == generation_id).values(
+            result={"candidate": {"spec_recipe": apps.recipe("ordered" if style == "single" else "single")}}))
+        with pytest.raises(DomainError):
+            bridge.journal_stage_accounted(store, c, user, contract, approval.request_key, stage_id, stage)
 
 
 def _generation_proof_rejections(t):
