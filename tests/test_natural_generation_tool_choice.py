@@ -38,6 +38,15 @@ def test_final_and_unknown_tools_do_not_gain_tool_selection():
     assert generation_tool_choice([],[]) is None
 
 
+def test_v2_required_mode_and_v1_named_mode_remain_distinct():
+    tools=[{'type':'function','function':{'name':'resource.read'}}]
+    old=json.loads(body(messages('natural-checked-candidate4096.v1'),tools,1024))
+    new=json.loads(body(messages('natural-checked-candidate4096.v2'),tools,1024))
+    assert old['tool_choice']=={'type':'function','function':{'name':'resource.read'}}
+    assert new['tool_choice']=='required' and new['tools']==old['tools']
+    assert 'tool_choice' not in json.loads(body(messages('natural-checked-candidate4096.v2'),[],4096))
+
+
 def test_old_natural_generation_remains_confirmable_after_new_default(env,monkeypatch):
     from test_natural_spec_apps import setup,generate
     from test_pa_spec_apps import confirm

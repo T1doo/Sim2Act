@@ -115,7 +115,7 @@ def policy(provider, user, pid, body, activation=None, app_limits=None, output_t
         repair_limit=1,
         live_request_allowance=0,
         response_archive_policy="protected-json32768.v1",
-        output_protocol=("compact-candidate-json4096.v6" if output_tokens==4096 else "compact-candidate-json.v1") if not body.get("family") else ("natural-checked-candidate4096.v1" if natural_extended else "natural-checked-candidate.v1") if body.get("family")=="natural_spec" else None,
+        output_protocol=("compact-candidate-json4096.v6" if output_tokens==4096 else "compact-candidate-json.v1") if not body.get("family") else ("natural-checked-candidate4096.v2" if natural_extended else "natural-checked-candidate.v1") if body.get("family")=="natural_spec" else None,
         activation=activation,
         app_limits=app_limits,
     ).model_dump(exclude_none=True)
@@ -569,7 +569,7 @@ def generation_output_tokens(messages, tools, default):
     if len(messages)>1:
         try:
             selected=json.loads(messages[1]['content']).get('server_ids',{})
-            if selected.get('output_protocol')=='natural-checked-candidate4096.v1' and selected.get('version')=='goal-natural-spec-application.v1' and (not tools or len(tools)==1 and tools[0].get('function',{}).get('name')=='spec.check_candidate'):return 4096
+            if selected.get('output_protocol') in {'natural-checked-candidate4096.v1','natural-checked-candidate4096.v2'} and selected.get('version')=='goal-natural-spec-application.v1' and (not tools or len(tools)==1 and tools[0].get('function',{}).get('name')=='spec.check_candidate'):return 4096
             if not tools and selected.get('output_protocol') in {'compact-candidate-json4096.v1','compact-candidate-json4096.v2','compact-candidate-json4096.v3','compact-candidate-json4096.v4','compact-candidate-json4096.v5','compact-candidate-json4096.v6'} and selected.get('activation'):
                 return 4096
         except (ValueError,TypeError,KeyError,AttributeError):
@@ -581,10 +581,11 @@ def generation_tool_choice(messages,tools):
     """Only the frozen new natural protocol selects the existing stage tool."""
     try:
         selected=json.loads(messages[1]['content'])['server_ids']
-        if selected.get('version')!='goal-natural-spec-application.v1' or selected.get('output_protocol') not in {'natural-checked-candidate.v1','natural-checked-candidate4096.v1'}:return None
+        if selected.get('version')!='goal-natural-spec-application.v1' or selected.get('output_protocol') not in {'natural-checked-candidate.v1','natural-checked-candidate4096.v1','natural-checked-candidate4096.v2'}:return None
         if len(tools)!=1:return None
         name=tools[0]['function']['name']
         if name not in {'resource.read','spec.check_candidate'}:return None
+        if selected['output_protocol']=='natural-checked-candidate4096.v2':return 'required'
         return {'type':'function','function':{'name':name}}
     except (ValueError,TypeError,KeyError,IndexError,AttributeError):
         return None
@@ -1611,7 +1612,7 @@ def check_provider(worker, c, run, contract, attempt_id=None):
     activation = contract.application_generation.activation
     from .pa_trial_dispatch import _production_binding, check_commit
     if contract.application_generation.version in SPEC_GENERATIONS and _production_binding(worker.pa_trial):
-        if contract.application_generation.output_protocol=='natural-checked-candidate4096.v1':
+        if contract.application_generation.output_protocol in {'natural-checked-candidate4096.v1','natural-checked-candidate4096.v2'}:
             from .natural_generation_budget import PROFILE
             if getattr(worker.pa_trial.contract,'generation_profile',None)!=PROFILE:raise DomainError('PERMISSION_DENIED','Candidate output profile not approved')
         if activation is not None or contract.mode != "live":
