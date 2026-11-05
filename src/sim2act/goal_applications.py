@@ -9,6 +9,7 @@ import json
 import threading
 import time
 from functools import lru_cache
+from dataclasses import replace
 from typing import Literal
 
 import httpx
@@ -1776,6 +1777,14 @@ def candidate_diagnostic(error,message,protocol):
     return diagnostic
 
 
+def _generation_provider(worker,output_tokens):
+    """Bind this request adapter to the same frozen budget as its wire/charge."""
+    provider=configured_provider(worker)
+    if output_tokens==provider.settings.max_output_tokens:return provider
+    if output_tokens!=4096:raise DomainError('PERMISSION_DENIED','Unknown generation output adapter')
+    return InternModel(replace(provider.settings,max_output_tokens=output_tokens),transport=provider.transport)
+
+
 def process(worker, run, contract):
     rid, fence = run["id"], run["fence"]
     stopped = threading.Event()
@@ -1878,11 +1887,11 @@ def process(worker, run, contract):
             try:
                 _renew_committed_lease(worker, run, heartbeat_state)
                 if getattr(worker, "pa_trial", None) is None:
-                    raw = configured_provider(worker).request_serialized(wire, guard)
+                    raw = _generation_provider(worker,output_tokens).request_serialized(wire, guard)
                 else:
                     from .pa_trial_dispatch import request_captured
                     raw = request_captured(worker, run, aid, wire, guard,
-                        configured_provider(worker), _heartbeat_state=heartbeat_state).parsed
+                        _generation_provider(worker,output_tokens), _heartbeat_state=heartbeat_state).parsed
                 original, raw_metadata = response_archive(raw)
                 if original is None:
                     raise DomainError(

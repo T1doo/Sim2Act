@@ -101,6 +101,18 @@ def _generation_network_watch(worker,state):
     return stopped,done,thread
 
 
+def _check_business_provider(provider,settings,original,item,wire,production):
+    from .natural_generation_budget import wire_output_limit
+    params=provider.settings
+    token=(settings.token if production else 'synthetic-offline-planner' if item.stage=='generate' else 'synthetic-offline-natural-spec')
+    _require(params.mode==('live' if production else 'mock')
+        and params.live_enabled is True and params.token==token
+        and params.model==original.model and params.quota_subject==original.quota_subject
+        and params.max_output_tokens==strict_json(wire,32768)['max_tokens']
+        and 0<params.max_output_tokens<=wire_output_limit(original,item.stage,strict_json(wire,32768)['tools'])
+        and 0<params.run_seconds<=original.caps.run_seconds)
+
+
 def _binding(worker):
     _require(type(worker) is Worker and type(worker.s) is Settings and type(worker.store) is Store)
     from .pa_trial_dispatch import _production_binding
@@ -613,16 +625,9 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
     _require(type(provider) is InternModel and provider.transport is transport)
     token = settings.token if production else "synthetic-offline-planner"
     if _business is not None:
-        from .natural_generation_budget import wire_output_limit
-        params = provider.settings
         token = (settings.token if production else
                  "synthetic-offline-planner" if item.stage == "generate" else "synthetic-offline-natural-spec")
-        _require(params.mode == ("live" if production else "mock")
-            and params.live_enabled is True and params.token == token
-            and params.model == original.model and params.quota_subject == original.quota_subject
-            and params.max_output_tokens == strict_json(wire, 32768)["max_tokens"]
-            and 0 < params.max_output_tokens <= wire_output_limit(original,item.stage,strict_json(wire,32768)['tools'])
-            and 0 < params.run_seconds <= original.caps.run_seconds)
+        _check_business_provider(provider,settings,original,item,wire,production)
 
     def guard(request):
         same_binding()
