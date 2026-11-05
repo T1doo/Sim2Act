@@ -561,6 +561,7 @@ def create_app(store=None, settings=None, *, production_selection=None):
 
         scope = None
         app_limits = None
+        natural_profile=None
         if body.family == "spec_checklist":
             if body.activation is not None or platform_limits.max_tools < 4:
                 raise DomainError("PERMISSION_DENIED", "Spec checklist uses an isolated offline four-tool app budget")
@@ -572,6 +573,13 @@ def create_app(store=None, settings=None, *, production_selection=None):
             app_limits = Limits(max_requests=min(2, platform_limits.max_requests), max_tools=4, max_repairs=0,
                 max_total_tokens=platform_limits.max_total_tokens, max_output_tokens=platform_limits.max_output_tokens,
                 run_seconds=min(300, platform_limits.run_seconds))
+            if selected_production is not None:
+                from .natural_generation_readiness import read
+                ready=read(db,s,selected_production,user,pid,cid)
+                if (ready['availability']!='SELECTED_APPROVED_SCOPE' or ready['expected_version']!=body.expected_version
+                        or ready['expected_fingerprint']!=body.expected_fingerprint or ready['generation_request_key']!=body.request_key):
+                    raise DomainError('PERMISSION_DENIED','Generation differs from approved launcher scope')
+                natural_profile=ready.get('generation_profile')
         if body.activation is not None:
             from .generation_approvals import submission
 
@@ -580,7 +588,7 @@ def create_app(store=None, settings=None, *, production_selection=None):
             {"card_id": cid, **body.model_dump(exclude_none=True)},
             **({"activation": body.activation} if body.activation is not None else {}),
             **({"app_limits": app_limits} if app_limits is not None else {}),
-            output_tokens=getattr(scope,"candidate_output_tokens",1024))
+            output_tokens=4096 if natural_profile=='pa-natural-output4096.v1' else getattr(scope,"candidate_output_tokens",1024),natural_profile=natural_profile)
         limits = scope.limits if scope else platform_limits
         rid = db.submit(user, pid, "", [], body.request_key, policy={
             "limits": {**limits.model_dump(), "max_requests": min(3, s.max_requests, limits.max_requests),

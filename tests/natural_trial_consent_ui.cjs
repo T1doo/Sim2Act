@@ -7,7 +7,7 @@ const rpc = body => new Promise(resolve => { const id = ++serial; pending.set(id
 const check = (v, name) => { assert(v, name); checks.push(name); };
 const wait = async predicate => { const end = Date.now() + 12000; while (!predicate()) { if (Date.now() > end) throw Error("bounded DOM wait expired"); await new Promise(r => setTimeout(r, 5)); } };
 function visible(e) { for (let n = e; n; n = n.parentElement) if (n.hidden || w.getComputedStyle(n).display === "none") return false; return !!e?.isConnected; }
-async function click(id) { const e = typeof id === "string" ? $(id) : id; check(visible(e) && !e.disabled, `visible enabled gesture ${e.id || e.textContent}`); const original = e.onclick; let work; e.onclick = function (event) { return work = original.call(this, event); }; e.click(); e.onclick = original; await work; }
+async function click(id) { const e = typeof id === "string" ? $(id) : id; check(visible(e) && !e.disabled, `visible enabled gesture ${e.id || e.textContent}`); const original = e.onclick; let work; if(typeof original==="function")e.onclick = function (event) { return work = original.call(this, event); }; e.click(); e.onclick = original; await work; }
 function tick(id) { check(visible($(id)) && !$(id).disabled, `checkbox ${id} visible`); $(id).checked = true; $(id).dispatchEvent(new w.Event("change", {bubbles: true})); }
 const posts = suffix => requests.filter(r => r.method === "POST" && r.path.endsWith(suffix)).length;
 async function restartPreparation(oldKey, pendingHistory = false) {
@@ -46,6 +46,7 @@ async function boot(hash = "") {
   const load = async path => { const r = await rpc({path, method: "GET"}); assert.equal(r.status, 200); loads.push({boot: boots, path, status: r.status, sha256: crypto.createHash("sha256").update(r.text).digest("hex")}); return r.text; };
   const html = await load("/"); hashes["index.html"] = crypto.createHash("sha256").update(html).digest("hex");
   dom = new JSDOM(html, {url: "http://offline.test/" + hash, runScripts: "dangerously", pretendToBeVisual: true}); w = dom.window; $ = id => w.document.getElementById(id);
+  w.matchMedia=()=>({matches:false,addEventListener(){},removeEventListener(){}});
   w.TextEncoder = TextEncoder; w.structuredClone = structuredClone; w.crypto.randomUUID = info.scenario === "unknown400" ? () => "seeded-key" : crypto.randomUUID; Object.defineProperty(w.crypto, "subtle", {value: crypto.webcrypto.subtle}); w.setInterval = () => 0;
   const css = await load("/app.css"); hashes["app.css"] = crypto.createHash("sha256").update(css).digest("hex"); const style = w.document.createElement("style"); style.textContent = css; w.document.head.append(style);
   w.fetch = async (path, options = {}) => {
@@ -59,6 +60,7 @@ async function boot(hash = "") {
   for (const script of [...w.document.querySelectorAll("script[src]")]) { const name = script.getAttribute("src").slice(1), text = await load("/" + name); hashes[name] = crypto.createHash("sha256").update(text).digest("hex"); const node = w.document.createElement("script"); node.textContent = text; w.document.body.append(node); }
   $("token").value = "synthetic-test-A"; await click("connect");
   await wait(() => $("login").hidden && $("project-select").value === info.project);
+  await click(w.document.querySelector('.section-links a[href="#goal-cards-panel"]'));
   await click("trial-refresh"); $("trial-source").value = info.source; $("trial-cold").value = info.cold;
   check(visible($("trial-panel")), "preparation entry appears in actual project page");
 }

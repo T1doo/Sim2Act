@@ -145,6 +145,7 @@ async function setup() {
   const html = await loadAsset("/");
   dom = new JSDOM(html, {url: base.href, runScripts: "dangerously", pretendToBeVisual: true});
   window = dom.window;
+  window.matchMedia=()=>({matches:false,addEventListener(){},removeEventListener(){}});
   $ = id => window.document.getElementById(id);
   page = {requests: 0, actions: new Set()};
   trackHandlers(page);
@@ -224,6 +225,7 @@ async function setup() {
   await edit("token", "synthetic-test-A");
   await click("connect");
   await wait(() => $("login").hidden && $("project-select").value === info.project, "exact synthetic fixture account/project connected");
+  await click(window.document.querySelector('.section-links a[href="#goal-cards-panel"]'));
   await idlePage();
 }
 

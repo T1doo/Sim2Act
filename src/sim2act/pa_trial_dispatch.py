@@ -1387,7 +1387,9 @@ def _journal_attempt_from_facts(b, wire, slot, actual, *, _guard=None):
     _bound: caller must retain its transaction and complete ledger validation.
     """
     params = actual['parameters']
-    gate.require(actual['request_model'] == b.contract.model and actual['mode'] == gate._trial_result(_binding_mode(b), _guard) and (actual['reserved_tokens'] == len(wire) + params['max_tokens']) and (params['max_tokens'] == gate._trial_result(strict_json(wire, 32768), _guard)['max_tokens']) and (params['max_tokens'] <= b.contract.caps.max_output_tokens) and (params.get('generation_wire') == slot.identity.wire_sha256 and params.get('generation_fence') == slot.identity.fence if slot.identity.stage == 'generate' else params.get('natural_spec_wire', {}).get('sha256') == slot.identity.wire_sha256 and params['natural_spec_wire'].get('bytes') == len(wire) and (params['natural_spec'].get('fence') == slot.identity.fence) and (params['natural_spec'].get('run_version') == slot.identity.version)))
+    from .natural_generation_budget import wire_output_limit
+    cap=gate._trial_result(wire_output_limit(b.contract,slot.identity.stage,strict_json(wire,32768)['tools']),_guard)
+    gate.require(actual['request_model'] == b.contract.model and actual['mode'] == gate._trial_result(_binding_mode(b), _guard) and (actual['reserved_tokens'] == len(wire) + params['max_tokens']) and (params['max_tokens'] == gate._trial_result(strict_json(wire, 32768), _guard)['max_tokens']) and (params['max_tokens'] <= cap) and (params.get('generation_wire') == slot.identity.wire_sha256 and params.get('generation_fence') == slot.identity.fence if slot.identity.stage == 'generate' else params.get('natural_spec_wire', {}).get('sha256') == slot.identity.wire_sha256 and params['natural_spec_wire'].get('bytes') == len(wire) and (params['natural_spec'].get('fence') == slot.identity.fence) and (params['natural_spec'].get('run_version') == slot.identity.version)))
 
 
 def journal_stage_accounted(store, c, user, contract, key, rid, stage):

@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="7.779" timestamp="2026-11-05T21:26:38.751852+08:00" hostname="LAPTOP-USISIS19"><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[happy]" time="2.883"><failure message="UnicodeDecodeError: 'gbk' codec can't decode byte 0xae in position 129: illegal multibyte sequence">prepared_data = ((&lt;sim2act.db.Store object at 0x000002C3659885F0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...dced1b96ec753f', 'expected_version': 1}, {'card_id': 'goal_720a3f832ad84a628ea822c19d04db19', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000002C366391CD0&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui-navigation/test_actual_page_preparation_c0')
+scenario = 'happy'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+            assert code == 0, errors
+&gt;           proof = json.loads((tmp_path / 'results.json').read_text())
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_natural_trial_consent_ui.py:92: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui-navigation/test_actual_page_preparation_c0/results.json')
+encoding = 'locale', errors = None
+
+&gt;   ???
+E   UnicodeDecodeError: 'gbk' codec can't decode byte 0xae in position 129: illegal multibyte sequence
+
+pathlib.py:1028: UnicodeDecodeError</failure></testcase><testcase classname="tests.test_natural_trial_budget_view_ui" name="test_original_trial_budget_is_visible_unknown_and_readonly" time="4.045"><failure message="AssertionError: {&quot;status&quot;:&quot;FAIL&quot;,&quot;checks&quot;:1}&#10;  ReferenceError: matchMedia is not defined&#10;      at HTMLAnchorElement.&lt;anonymous&gt; (http://127.0.0.1:58422/:151:5)&#10;      at HTMLAnchorElement.callTheUserObjectsOperation (E:\Github\Sim2Act\scripts\browser-ci\node_modules\jsdom\lib\generated\idl\EventListener.js:26:30)&#10;      at innerInvokeEventListeners (E:\Github\Sim2Act\scripts\browser-ci\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:378:16)&#10;      at invokeEventListeners (E:\Github\Sim2Act\scripts\browser-ci\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:320:3)&#10;      at HTMLAnchorElementImpl._dispatch (E:\Github\Sim2Act\scripts\browser-ci\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:269:9)&#10;      at fireAnEvent (E:\Github\Sim2Act\scripts\browser-ci\node_modules\jsdom\lib\jsdom\living\helpers\events.js:18:36)&#10;      at HTMLAnchorElementImpl.click (E:\Github\Sim2Act\scripts\browser-ci\node_modules\jsdom\lib\jsdom\living\nodes\HTMLElement-impl.js:82:5)&#10;      at HTMLAnchorElement.click (E:\Github\Sim2Act\scripts\browser-ci\node_modules\jsdom\lib\generated\idl\HTMLElement.js:110:20)&#10;      at E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:128:66&#10;      at gesture (E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:116:5)&#10;  AssertionError [ERR_ASSERTION]: no unhandled page errors&#10;  + actual - expected&#10;  &#10;  + [&#10;  +   {&#10;  +     error: 'ReferenceError: matchMedia is not defined\n' +&#10;  +       '    at HTMLAnchorElement.&lt;anonymous&gt; (http://127.0.0.1:58422/:151:5)\n' +&#10;  +       '    at HTMLAnchorElement.callTheUserObjectsOperation (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\generated\\idl\\EventListener.js:26:30)\n' +&#10;  +       '    at innerInvokeEventListeners (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:378:16)\n' +&#10;  +       '    at invokeEventListeners (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:320:3)\n' +&#10;  +       '    at HTMLAnchorElementImpl._dispatch (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:269:9)\n' +&#10;  +       '    at fireAnEvent (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\helpers\\events.js:18:36)\n' +&#10;  +       '    at HTMLAnchorElementImpl.click (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\nodes\\HTMLElement-impl.js:82:5)\n' +&#10;  +       '    at HTMLAnchorElement.click (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\generated\\idl\\HTMLElement.js:110:20)\n' +&#10;  +       '    at E:\\Github\\Sim2Act\\tests\\natural_trial_budget_view_ui.cjs:128:66\n' +&#10;  +       '    at gesture (E:\\Github\\Sim2Act\\tests\\natural_trial_budget_view_ui.cjs:116:5)',&#10;  +     kind: 'window'&#10;  +   }&#10;  + ]&#10;  - []&#10;  &#10;      at idlePage (E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:92:10)&#10;      at async gesture (E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:121:16)&#10;      at async setup (E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:227:3)&#10;      at async run (E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:423:3)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:448:9&#10;  AssertionError [ERR_ASSERTION]: no unhandled page errors&#10;  + actual - expected&#10;  &#10;  + [&#10;  +   {&#10;  +     error: 'ReferenceError: matchMedia is not defined\n' +&#10;  +       '    at HTMLAnchorElement.&lt;anonymous&gt; (http://127.0.0.1:58422/:151:5)\n' +&#10;  +       '    at HTMLAnchorElement.callTheUserObjectsOperation (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\generated\\idl\\EventListener.js:26:30)\n' +&#10;  +       '    at innerInvokeEventListeners (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:378:16)\n' +&#10;  +       '    at invokeEventListeners (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:320:3)\n' +&#10;  +       '    at HTMLAnchorElementImpl._dispatch (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:269:9)\n' +&#10;  +       '    at fireAnEvent (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\helpers\\events.js:18:36)\n' +&#10;  +       '    at HTMLAnchorElementImpl.click (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\nodes\\HTMLElement-impl.js:82:5)\n' +&#10;  +       '    at HTMLAnchorElement.click (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\generated\\idl\\HTMLElement.js:110:20)\n' +&#10;  +       '    at E:\\Github\\Sim2Act\\tests\\natural_trial_budget_view_ui.cjs:128:66\n' +&#10;  +       '    at gesture (E:\\Github\\Sim2Act\\tests\\natural_trial_budget_view_ui.cjs:116:5)',&#10;  +     kind: 'window'&#10;  +   }&#10;  + ]&#10;  - []&#10;  &#10;      at idlePage (E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:92:10)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:453:13&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'E:\\Github\\Sim2Act\\tests\\natural_trial_budget_view_ui.cjs', 'E:\\Github\\Sim2Act\\....l_trial_budget_view_ui.cjs:92:10)\n    at async E:\\Github\\Sim2Act\\tests\\natural_trial_budget_view_ui.cjs:453:13\n&quot;).returncode">env = (&lt;sim2act.db.Store object at 0x000002C365C13170&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...3292ade5094c5c9c78c97cef2cd903', 'user_771d0c0d32b24c55ad4d301464a1dda4', 'proj_352d9a8439cf4cc1aae159362f9ba039', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000002C365C138C0&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui-navigation/test_original_trial_budget_is_0')
+
+    def test_original_trial_budget_is_visible_unknown_and_readonly(env, monkeypatch, tmp_path):
+        root = Path.cwd()
+        production = {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in (root / "src/sim2act").rglob("*")
+            if p.is_file() and p.suffix in {".py", ".js", ".html", ".css", ".json"}}
+        data = setup(env)
+        store, settings, client, user, pid, *_ = data
+        assert store.sqlite and settings.mode == "mock" and not settings.live_enabled
+        fixture_http, provider_calls = [], []
+    
+        def capture(reply):
+            reply.read()
+            fixture_http.append(dict(method=reply.request.method,
+                path=reply.request.url.raw_path.decode(), body_text=reply.request.content.decode(),
+                status=reply.status_code, response_text=reply.content.decode(),
+                response_sha256=hashlib.sha256(reply.content).hexdigest()))
+    
+        def no_provider(*args, **kwargs):
+            provider_calls.append("BLOCKED_PROVIDER_CALL")
+            raise AssertionError("No provider HTTP is part of budget viewing")
+    
+        import httpx
+    
+        monkeypatch.setattr(httpx.HTTPTransport, "handle_request", no_provider)
+        monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", no_provider)
+        client.event_hooks["response"].append(capture)
+        try:
+            _, cold_card = material(client, pid, COLD)
+            with store.tx() as c:
+                project = store.own_project(c, user, pid)
+                store.add_grants(c, user, project["runtime_id"], pid, pid, ["artifact.save_text"])
+            body = dict(bindings=[dict(card_id=card["id"], expected_version=card["version"])
+                for card in (data[6], cold_card)])
+            receipts = {}
+            for key in ["empty-budget-view", "held-budget-view"]:
+                base = f"/api/projects/{pid}/natural-trials/{key}"
+                prepared = client.post(base + "/preparation", json=body)
+                assert prepared.status_code == 200, prepared.text
+                receipts[key] = prepared.json()
+                consent = client.post(base + "/consent", json=dict(
+                    review_token=prepared.json()["review_token"], confirm_exact_scope=True))
+                assert consent.status_code == 200 and consent.json()["live_allowed"] is False
+            contract = gate.parse_contract(receipts["held-budget-view"]["contract"])
+            approval_key = preparation.approval_key(contract)
+            made = client.post(f"/api/projects/{pid}/goal-cards/{data[6]['id']}/application-runs",
+                json=dict(expected_version=data[6]["version"], expected_fingerprint=data[6]["fingerprint"],
+                    request_key=contract.stage_keys.generate, family="natural_spec"))
+            assert made.status_code == 202, made.text
+            rid = made.json()["run_id"]
+            job = store.claim("budget-view-fixture-claim", 30)
+            assert job["id"] == rid and job["status"] == "RUNNING"
+            fee = gate.SyntheticOnlyFeeAuthority(fingerprint(contract.model_dump()), contract.quota_subject)
+            permits = []
+    
+            def admitted(store, c, principal, frozen, key, stage, run_id, version, fence):
+                permit = gate.admit(store, c, principal, frozen, key, stage, run_id, version, fence, fee)
+                assert permit.scope == "SYNTHETIC_ONLY" and permit.live_allowed is False
+                permits.append(permit.model_dump())
+                return permit
+    
+            scope = budget.scope_for(contract, approval_key)
+            wire = b"synthetic-ledger-only".ljust(100, b" ")
+            request = budget.Reservation(request_key="held-unknown", stage="generate", run_id=rid,
+                expected_version=job["version"], fence=job["fence"], wire_bytes=len(wire),
+                wire_sha256=hashlib.sha256(wire).hexdigest())
+            reserved = budget.reserve(store, user, scope, contract, request, admission=admitted)
+            result = budget.settle(store, user, scope, contract,
+                budget.Settlement(request_key=request.request_key, response_sha256="b" * 64,
+                    response_ascii_bytes=10, prompt_tokens=5, completion_tokens=None, total_tokens=None),
+                admission=admitted)
+            assert result["status"] == "RECONCILING" and result["total_tokens"] is None
+            assert result["ledger"]["halted"] and result["reserved_envelope"] == 1124
+            other = store.project(user, "Other budget-view project")
+            before = snapshot(store)
+            assert not before["attempts"] and not before["reservations"] and not before["internal_app_runs"]
+            with socket.socket() as sock:
+                sock.bind(("127.0.0.1", 0))
+                port = sock.getsockname()[1]
+            (tmp_path / "info.json").write_text(json.dumps(dict(base=f"http://127.0.0.1:{port}",
+                project=pid, other_project=other, trial=contract.trial_key, empty_trial="empty-budget-view",
+                approval_key=approval_key, contract_fingerprint=fingerprint(contract.model_dump()),
+                run=rid, held_requests=1, held_envelope=1124)), encoding="utf-8")
+            (tmp_path / "synthetic-ledger-fixture.json").write_text(json.dumps(dict(
+                classification="SYNTHETIC_ONLY_REAL_ADMISSION_AND_LEDGER_NO_PROVIDER_OR_WORKER",
+                permits=permits, request=request.model_dump(), reserved=reserved, settled=result,
+                consent_is_live_authority=False, valid_live_tokens_created=0, worker_once_calls=0), indent=2), encoding="utf-8")
+            server = uvicorn.Server(uvicorn.Config(create_app(store, settings), host="127.0.0.1",
+                port=port, log_level="error"))
+            thread = threading.Thread(target=server.run, daemon=True)
+            thread.start()
+            try:
+                until = time.monotonic() + 10
+                while not server.started:
+                    assert thread.is_alive() and time.monotonic() &lt; until
+                    time.sleep(.01)
+                try:
+                    process = subprocess.run(["node", str(Path(__file__).with_name("natural_trial_budget_view_ui.cjs")),
+                        str(tmp_path)], capture_output=True, text=True, timeout=360,
+                        env={**os.environ, "NODE_PATH": os.environ.get("NODE_PATH", str(root / "scripts/engineering-ci/node_modules"))})
+                except subprocess.TimeoutExpired as error:
+                    for name, content in [("stdout", error.stdout), ("stderr", error.stderr)]:
+                        (tmp_path / ("driver." + name)).write_bytes(content.encode() if isinstance(content, str) else content or b"")
+                    raise
+                (tmp_path / "driver.stdout").write_text(process.stdout, encoding="utf-8")
+                (tmp_path / "driver.stderr").write_text(process.stderr, encoding="utf-8")
+&gt;               assert process.returncode == 0, process.stdout + process.stderr
+E               AssertionError: {"status":"FAIL","checks":1}
+E                 ReferenceError: matchMedia is not defined
+E                     at HTMLAnchorElement.&lt;anonymous&gt; (http://127.0.0.1:58422/:151:5)
+E                     at HTMLAnchorElement.callTheUserObjectsOperation (E:\Github\Sim2Act\scripts\browser-ci\node_modules\jsdom\lib\generated\idl\EventListener.js:26:30)
+E                     at innerInvokeEventListeners (E:\Github\Sim2Act\scripts\browser-ci\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:378:16)
+E                     at invokeEventListeners (E:\Github\Sim2Act\scripts\browser-ci\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:320:3)
+E                     at HTMLAnchorElementImpl._dispatch (E:\Github\Sim2Act\scripts\browser-ci\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:269:9)
+E                     at fireAnEvent (E:\Github\Sim2Act\scripts\browser-ci\node_modules\jsdom\lib\jsdom\living\helpers\events.js:18:36)
+E                     at HTMLAnchorElementImpl.click (E:\Github\Sim2Act\scripts\browser-ci\node_modules\jsdom\lib\jsdom\living\nodes\HTMLElement-impl.js:82:5)
+E                     at HTMLAnchorElement.click (E:\Github\Sim2Act\scripts\browser-ci\node_modules\jsdom\lib\generated\idl\HTMLElement.js:110:20)
+E                     at E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:128:66
+E                     at gesture (E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:116:5)
+E                 AssertionError [ERR_ASSERTION]: no unhandled page errors
+E                 + actual - expected
+E                 
+E                 + [
+E                 +   {
+E                 +     error: 'ReferenceError: matchMedia is not defined\n' +
+E                 +       '    at HTMLAnchorElement.&lt;anonymous&gt; (http://127.0.0.1:58422/:151:5)\n' +
+E                 +       '    at HTMLAnchorElement.callTheUserObjectsOperation (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\generated\\idl\\EventListener.js:26:30)\n' +
+E                 +       '    at innerInvokeEventListeners (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:378:16)\n' +
+E                 +       '    at invokeEventListeners (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:320:3)\n' +
+E                 +       '    at HTMLAnchorElementImpl._dispatch (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:269:9)\n' +
+E                 +       '    at fireAnEvent (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\helpers\\events.js:18:36)\n' +
+E                 +       '    at HTMLAnchorElementImpl.click (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\nodes\\HTMLElement-impl.js:82:5)\n' +
+E                 +       '    at HTMLAnchorElement.click (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\generated\\idl\\HTMLElement.js:110:20)\n' +
+E                 +       '    at E:\\Github\\Sim2Act\\tests\\natural_trial_budget_view_ui.cjs:128:66\n' +
+E                 +       '    at gesture (E:\\Github\\Sim2Act\\tests\\natural_trial_budget_view_ui.cjs:116:5)',
+E                 +     kind: 'window'
+E                 +   }
+E                 + ]
+E                 - []
+E                 
+E                     at idlePage (E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:92:10)
+E                     at async gesture (E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:121:16)
+E                     at async setup (E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:227:3)
+E                     at async run (E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:423:3)
+E                     at async E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:448:9
+E                 AssertionError [ERR_ASSERTION]: no unhandled page errors
+E                 + actual - expected
+E                 
+E                 + [
+E                 +   {
+E                 +     error: 'ReferenceError: matchMedia is not defined\n' +
+E                 +       '    at HTMLAnchorElement.&lt;anonymous&gt; (http://127.0.0.1:58422/:151:5)\n' +
+E                 +       '    at HTMLAnchorElement.callTheUserObjectsOperation (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\generated\\idl\\EventListener.js:26:30)\n' +
+E                 +       '    at innerInvokeEventListeners (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:378:16)\n' +
+E                 +       '    at invokeEventListeners (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:320:3)\n' +
+E                 +       '    at HTMLAnchorElementImpl._dispatch (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:269:9)\n' +
+E                 +       '    at fireAnEvent (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\helpers\\events.js:18:36)\n' +
+E                 +       '    at HTMLAnchorElementImpl.click (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\jsdom\\living\\nodes\\HTMLElement-impl.js:82:5)\n' +
+E                 +       '    at HTMLAnchorElement.click (E:\\Github\\Sim2Act\\scripts\\browser-ci\\node_modules\\jsdom\\lib\\generated\\idl\\HTMLElement.js:110:20)\n' +
+E                 +       '    at E:\\Github\\Sim2Act\\tests\\natural_trial_budget_view_ui.cjs:128:66\n' +
+E                 +       '    at gesture (E:\\Github\\Sim2Act\\tests\\natural_trial_budget_view_ui.cjs:116:5)',
+E                 +     kind: 'window'
+E                 +   }
+E                 + ]
+E                 - []
+E                 
+E                     at idlePage (E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:92:10)
+E                     at async E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:453:13
+E                 
+E               assert 1 == 0
+E                +  where 1 = CompletedProcess(args=['node', 'E:\\Github\\Sim2Act\\tests\\natural_trial_budget_view_ui.cjs', 'E:\\Github\\Sim2Act\\....l_trial_budget_view_ui.cjs:92:10)\n    at async E:\\Github\\Sim2Act\\tests\\natural_trial_budget_view_ui.cjs:453:13\n").returncode
+
+tests\test_natural_trial_budget_view_ui.py:128: AssertionError</failure></testcase></testsuite></testsuites>

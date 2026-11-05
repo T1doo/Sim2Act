@@ -454,6 +454,7 @@ function trialEntry() { return trialEntries.get(trialIndex(trialContext())); }
 const trialReviewDeadline = c => c?.namespace === "natural-live-trial.v2" ? c.review_expires_at : c?.expires_at;
 function trialValid(r, key) {
   const c = r?.contract;
+  if(c?.generation_profile!==undefined&&(r.path!=="P-A"||c.namespace!=="natural-live-trial.v2"||c.generation_profile!=="pa-natural-output4096.v1"))throw Error("未知候选输出范围");
   if (r?.status !== "PREPARED_LIVE_BLOCKED" || !["P-A","P-B"].includes(r.path) || r.live_allowed !== false || r.new_runs !== 0 || r.new_slots !== 0 || r.actual_model_requests !== 0 || !/^[a-f0-9]{64}$/.test(r.review_token) || c?.trial_key !== key || c.project_id !== $("project-select").value || !Array.isArray(c.bindings) || c.bindings.length !== 2 || !Number.isFinite(c.expires_at) || typeof r.approved !== "boolean" || typeof r.revoked !== "boolean" || typeof r.expired !== "boolean") throw Error("未知准备回执");
   if (c.namespace === "natural-live-trial.v2" && (!Number.isFinite(c.prepared_at) || c.review_expires_at !== c.prepared_at + 300 || c.execution_expires_at !== c.prepared_at + 3600 || c.expires_at !== c.execution_expires_at || c.stage_handoff_seconds !== 900 || typeof r.review_expired !== "boolean")) throw Error("未知期限合同");
   if(r.path==="P-B" && (c.path!=="P-B" || c.namespace!=="natural-live-trial.v1"
@@ -516,7 +517,7 @@ function showTrialScope(r) {
   const materials = c.bindings.map((b, i) => `${i === 0 ? "生成及 Source" : "未见输入 Cold"}：目标 ${b.card_id} v${b.goal_version}\n材料 ${b.resource_id}（TXT）\n${b.content}\n\n${Object.entries(fields).map(([field, label]) => `${label}：${Array.isArray(b.goal_snapshot.content[field]) ? b.goal_snapshot.content[field].join("\n") : b.goal_snapshot.content[field]}`).join("\n")}`).join("\n\n");
   const cap = c.caps;
   const deadlines = c.namespace === "natural-live-trial.v2" ? `V2 审阅截止 ${new Date(c.review_expires_at * 1000).toISOString()}；执行截止 ${new Date(c.execution_expires_at * 1000).toISOString()}。均从准备时冻结，恢复、批准、重放不续期。总时窗60分钟含5分钟审阅；每个后继阶段须在前序 Run 受理后15分钟内明确批准（含前序最多300秒、排队及人工交接）。每 Run 的300秒含额度等待、模型延迟和工具工作；人工迟到或剩余时间不足即拒绝。不是七槽完成保证。` : "V1 原单一期限保持，不迁移或续期。";
-  $("trial-scope").textContent = `${r.path} 精确准备与同意范围\n${deadlines}\n项目 ${c.project_id}\n身份 ${c.principal_id}\n运行身份 ${c.runtime_id}\n模型 ${c.model}\n端点 ${c.endpoint}\n流式 ${c.stream}\n额度主体 ${c.quota_subject}（执行时核对服务器账户来源）\n期限 ${new Date(c.expires_at * 1000).toISOString()}（不会因恢复延长）\n生成 ${cap.generate_requests} / Source ${cap.source_requests} / Cold ${cap.cold_requests}，共 ${cap.max_requests} 槽\n每请求输出 ≤${cap.max_output_tokens} tokens；总输出 ≤${cap.total_output_tokens}\n每请求 wire ≤${cap.max_wire_bytes} bytes；响应 ASCII ≤${cap.max_response_ascii_bytes} bytes\n每 Run 预留 ≤${cap.per_run_reserved}；总预留 ≤${cap.total_reserved}\n每 Run ≤${cap.run_seconds} 秒；普通 lease ${cap.lease_seconds} 秒${cap.settlement_protocol === "sqlite-exclusive-settlement.v1" ? `；单次结算预约 ≤${cap.settlement_seconds} 秒，受原总期限约束` : ""}；每分钟 ${cap.requests_per_minute} 请求；付费上限 ${cap.paid_cap}\n阶段键 ${Object.entries(c.stage_keys).map(([k,v]) => `${k}: ${v}`).join("；")}\n批准：${r.approved}；撤回：${r.revoked}；过期：${r.expired}\n\n${materials}${r.path==="P-B"?`\n\n原 P-B 提取键 ${c.extraction_request_key}\n预定提取图（实际 Source 完成后仍须来源审阅）\n${trialStageRecipeText(c.extraction_recipe)}`:""}\n\n此入口新增 Run / 槽 / 外发均为 0。本准备记录不代表任务已执行；运行结果和人工验收单独核对。`;
+  $("trial-scope").textContent = `${r.path} 精确准备与同意范围\n${deadlines}\n项目 ${c.project_id}\n身份 ${c.principal_id}\n运行身份 ${c.runtime_id}\n模型 ${c.model}\n端点 ${c.endpoint}\n流式 ${c.stream}\n额度主体 ${c.quota_subject}（执行时核对服务器账户来源）\n期限 ${new Date(c.expires_at * 1000).toISOString()}（不会因恢复延长）\n生成 ${cap.generate_requests} / Source ${cap.source_requests} / Cold ${cap.cold_requests}，共 ${cap.max_requests} 槽\n${c.generation_profile==="pa-natural-output4096.v1"?"生成候选/最终输出 ≤4096；读取及 Source/Cold 输出 ≤"+cap.max_output_tokens:"每请求输出 ≤"+cap.max_output_tokens} tokens；总输出 ≤${cap.total_output_tokens}\n每请求 wire ≤${cap.max_wire_bytes} bytes；响应 ASCII ≤${cap.max_response_ascii_bytes} bytes\n每 Run 预留 ≤${cap.per_run_reserved}；总预留 ≤${cap.total_reserved}\n每 Run ≤${cap.run_seconds} 秒；普通 lease ${cap.lease_seconds} 秒${cap.settlement_protocol === "sqlite-exclusive-settlement.v1" ? `；单次结算预约 ≤${cap.settlement_seconds} 秒，受原总期限约束` : ""}；每分钟 ${cap.requests_per_minute} 请求；付费上限 ${cap.paid_cap}\n阶段键 ${Object.entries(c.stage_keys).map(([k,v]) => `${k}: ${v}`).join("；")}\n批准：${r.approved}；撤回：${r.revoked}；过期：${r.expired}\n\n${materials}${r.path==="P-B"?`\n\n原 P-B 提取键 ${c.extraction_request_key}\n预定提取图（实际 Source 完成后仍须来源审阅）\n${trialStageRecipeText(c.extraction_recipe)}`:""}\n\n此入口新增 Run / 槽 / 外发均为 0。本准备记录不代表任务已执行；运行结果和人工验收单独核对。`;
 }
 function trialBudgetApproval(receipt) {
   const approval=receipt?.approval,accepted=approval?.approval,key=accepted?.request?.request_key;
@@ -610,6 +611,13 @@ async function readTrialBudget() {
   const read={current};trialBudgetRead=read;trialBudgetSelection={entry,receipt,operation};
   $("trial-budget-status").textContent="正在重新鉴权并读取原试验的跨 Run 预算…";renderTrialConsent();
   try {
+    if(receipt.contract.generation_profile==="pa-natural-output4096.v1"){
+      const value=await api(`${entry.base}/approvals/${encodeURIComponent(key)}/production-journal`);if(!current())return;
+      const scope=value?.ledger?.scope;
+      if(value.live_allowed!==false||value.dispatch_authorized!==false||scope?.generation_profile!==receipt.contract.generation_profile||scope.contract_fingerprint!==receipt.review_token||scope.project_id!==ctx.project||scope.principal_id!==receipt.contract.principal_id||scope.trial_key!==receipt.contract.trial_key||scope.approval_key!==key||!Array.isArray(value.ledger.slots)||value.ledger.slots.length>7)throw Error("VERSION_CONFLICT");
+      const pre=document.createElement("pre");pre.textContent=JSON.stringify(value,null,2);$("trial-budget-output").replaceChildren(pre);
+      $("trial-budget-status").textContent="已读取本范围正式策略账本；未知用量保留未知，不创建或重发请求。";return;
+    }
     const value=await api(`${entry.base}/approvals/${encodeURIComponent(key)}/budget`);
     if(!current())return;
     await validateTrialBudget(value,receipt,key);
@@ -704,6 +712,7 @@ async function prepareTrial() {
   const request={bindings:choices.map(c=>({card_id:c.id,expected_version:c.version}))};
   if($("trial-path").value==="P-B"){request.path="P-B";request.extraction_recipe=trialPBRecipe();}
   else if($("trial-path").value!=="P-A")throw Error("请选择原有应用路径");
+  else request.generation_profile="pa-natural-output4096.v1";
   const key = crypto.randomUUID(), entry = {key, base: `/api/projects/${ctx.project}/natural-trials/${key}`, state: "sending", operation: 1, message: "正在准备；不会新增 Run 或发送模型请求。"};
   const operation = entry.operation;
   trialEntries.set(trialIndex(ctx), entry); $("trial-original-key").value = key;

@@ -24,6 +24,7 @@ def read(store, settings, selected, user, pid, cid):
     if recovered['worker_selection']!=selected or first.card_id!=cid:
         raise DomainError('VERSION_CONFLICT','Goal differs from selected generation scope')
     return {**result,'availability':'SELECTED_APPROVED_SCOPE','reason':None,
+        'generation_profile':getattr(contract,'generation_profile',None),
         'expected_version':first.goal_version,'expected_fingerprint':first.goal_fingerprint,
         'snapshot':first.goal_snapshot.model_dump(),'generation_request_key':contract.stage_keys.generate,
         'contract_fingerprint':fingerprint(contract.model_dump()),'approval_fingerprint':recovered['approval_fingerprint'],

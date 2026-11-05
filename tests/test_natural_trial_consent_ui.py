@@ -89,11 +89,11 @@ def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tm
         (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
         (tmp_path / 'driver.log').write_text(errors)
         assert code == 0, errors
-        proof = json.loads((tmp_path / 'results.json').read_text())
+        proof = json.loads((tmp_path / 'results.json').read_text(encoding='utf-8'))
         assert proof['status'] == 'PASS' and len(proof['checks']) >= (10 if scenario in {'unknown400', 'live-config-blocked'} else 15)
         web = Path(__file__).parents[1] / 'src/sim2act/web'
         assert set(proof['loaded_source_sha256']) == {'index.html', 'app.css',
-            *re.findall(r'<script src="/([^"]+)"', (web / 'index.html').read_text())}
+            *re.findall(r'<script src="/([^"]+)"', (web / 'index.html').read_text(encoding='utf-8'))}
         assert proof['loaded_source_sha256'] == {name: hashlib.sha256((web / name).read_bytes()).hexdigest()
             for name in proof['loaded_source_sha256']}
         assert business(store) == before

@@ -119,6 +119,7 @@ def _binding(worker):
 
 
 def _wire(contract, wire, *, stage=None):
+    from .natural_generation_budget import wire_output_limit
     _require(type(wire) is bytes and 0 < len(wire) <= contract.caps.max_wire_bytes)
     body = strict_json(wire, contract.caps.max_wire_bytes)
     _require(type(body) is dict)
@@ -151,7 +152,7 @@ def _wire(contract, wire, *, stage=None):
         and body["model"] == contract.model == "intern-s2"
         and body["stream"] is False
         and type(body["max_tokens"]) is int
-        and 1 <= body["max_tokens"] <= contract.caps.max_output_tokens
+        and 1 <= body["max_tokens"] <= (wire_output_limit(contract,stage,body.get('tools',[])) if stage is not None else contract.caps.max_output_tokens)
         and type(body["messages"]) is list
         and bool(body["messages"])
         and type(body["tools"]) is list
@@ -603,6 +604,7 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
     _require(type(provider) is InternModel and provider.transport is transport)
     token = settings.token if production else "synthetic-offline-planner"
     if _business is not None:
+        from .natural_generation_budget import wire_output_limit
         params = provider.settings
         token = (settings.token if production else
                  "synthetic-offline-planner" if item.stage == "generate" else "synthetic-offline-natural-spec")
@@ -610,7 +612,7 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
             and params.live_enabled is True and params.token == token
             and params.model == original.model and params.quota_subject == original.quota_subject
             and params.max_output_tokens == strict_json(wire, 32768)["max_tokens"]
-            and 0 < params.max_output_tokens <= original.caps.max_output_tokens
+            and 0 < params.max_output_tokens <= wire_output_limit(original,item.stage,strict_json(wire,32768)['tools'])
             and 0 < params.run_seconds <= original.caps.run_seconds)
 
     def guard(request):

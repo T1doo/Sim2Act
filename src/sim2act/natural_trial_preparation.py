@@ -26,10 +26,12 @@ class GoalChoice(Strict):
 
 class PrepareInput(Strict):
     bindings: list[GoalChoice] = Field(min_length=2, max_length=2)
+    generation_profile: Literal["pa-natural-output4096.v1"] | None = Field(default=None,exclude_if=lambda value:value is None)
 
     @model_validator(mode="after")
     def distinct(self):
         gate.require(self.bindings[0].card_id != self.bindings[1].card_id)
+        gate.require(not (getattr(self,'path',None)=='P-B' and self.generation_profile is not None), 'P-A output profile cannot extend P-B')
         return self
 
 
@@ -99,6 +101,7 @@ def _load(store, c, user, pid, key, *, current=True):
     gate.require(contract.principal_id == user and contract.project_id == pid
         and contract.trial_key == key and entity(user, pid, key) == gate.entity(contract)
         and contract.stage_keys == stage_keys(user, pid, key)
+        and request.generation_profile==getattr(contract,'generation_profile',None)
         and request.bindings == [GoalChoice(card_id=b.card_id,
             expected_version=b.goal_version) for b in contract.bindings])
     if isinstance(request, PBPrepareInput):
@@ -264,7 +267,7 @@ def prepare(store, user, pid, key, body: PrepareInput | PBPrepareInput, *, setti
                 pid, target.source_hash, target.resource_id,
                 target.goal_snapshot.content.model_dump(), gate._limits(contract), bindings[0].source_hash)
         else:
-            contract = gate.TrialContractV2(**fields, prepared_at=prepared_at,
+            contract = gate.TrialContractV2(**fields, generation_profile=body.generation_profile, prepared_at=prepared_at,
                 review_expires_at=prepared_at + 300, execution_expires_at=prepared_at + 3600,
                 expires_at=prepared_at + 3600)
         gate._current(store, c, user, contract)

@@ -21,3 +21,11 @@ def output_limit(contract,stage):
             and contract.generation_profile==PROFILE and stage=='generate'):
         return 4096
     return contract.caps.max_output_tokens
+
+
+def wire_output_limit(contract,stage,tools):
+    gate.require(type(tools) is list)
+    cap=output_limit(contract,stage)
+    if cap==4096 and tools and not (len(tools)==1 and type(tools[0]) is dict and type(tools[0].get('function')) is dict and tools[0]['function'].get('name')=='spec.check_candidate'):
+        return contract.caps.max_output_tokens
+    return cap

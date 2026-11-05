@@ -762,8 +762,13 @@ def _initial_messages_from_facts(contract, material):
             ),
         ),
     ]
-    if contract.application_generation.output_protocol=='natural-checked-candidate.v1':
+    if contract.application_generation.output_protocol in {'natural-checked-candidate.v1','natural-checked-candidate4096.v1'}:
         messages[0]['content']+=' Use the explicitly selected stage function. Encode its complete arguments as compact JSON without indentation or explanations. After checker feedback return only the complete candidate JSON, preserving all Goal fields and source facts. Never substitute prose for the required function call.'
+    if contract.application_generation.output_protocol=='natural-checked-candidate4096.v1':
+        messages[0]['content']+=' The read stage keeps its 1024-token cap; candidate checking and final candidate have a 4096-token output cap. Runtime app limits remain unchanged.'
+        payload=json.loads(messages[1]['content'])
+        payload['generation_budget']['candidate_output_tokens']=4096
+        messages[1]['content']=json.dumps(payload,ensure_ascii=False,separators=(',',':'))
     return messages
 
 

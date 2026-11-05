@@ -46,3 +46,80 @@ def test_profile_ledger_uses_conservative_generate_envelope_and_keeps_total_outp
     one=slot.model_copy(update={'settlement':large})
     two=one.model_copy(update={'reserved_at':one.reserved_at+60,'identity':identity.model_copy(update={'attempt_id':'attempt_'+'b'*32})})
     with pytest.raises(DomainError):policy._ledger(ledger.model_copy(update={'slots':(one,two)}))
+
+
+def test_wire_budget_requires_new_scope_and_candidate_stage(prepared_data):
+    from sim2act.goal_applications import policy,generation_output_tokens,body
+    from sim2act.production_trial_sender import _wire
+    _,_,_,receipt=scope(prepared_data)
+    legacy=gate.parse_contract(receipt['contract'])
+    extended=gate.parse_contract({**receipt['contract'],'generation_profile':PROFILE})
+    selected=policy('intern-s2',extended.principal_id,extended.project_id,{'family':'natural_spec'},output_tokens=4096,natural_profile=PROFILE)
+    messages=[{'role':'system','content':'synthetic'},{'role':'user','content':json.dumps({'server_ids':selected})}]
+    read=[{'type':'function','function':{'name':'resource.read'}}]
+    check=[{'type':'function','function':{'name':'spec.check_candidate'}}]
+    assert [generation_output_tokens(messages,t,1024) for t in (read,check,[])]==[1024,4096,4096]
+    _wire(extended,body(messages,check,4096),stage='generate')
+    with pytest.raises(DomainError):_wire(legacy,body(messages,check,4096),stage='generate')
+    with pytest.raises(DomainError):_wire(extended,body(messages,read,4096),stage='generate')
+    with pytest.raises(DomainError):policy('intern-s2',extended.principal_id,extended.project_id,{'family':'natural_spec'},output_tokens=4096)
+
+
+def test_explicit_prepare_is_recoverable_and_cannot_reuse_other_scope_consent(prepared_data):
+    from test_natural_trial_preparation import consent
+    data,body=prepared_data;client=data[2]
+    _,_,_,old=scope(prepared_data)
+    base=f'/api/projects/{data[4]}/natural-trials/output4096'
+    response=client.post(base+'/preparation',json={**body,'generation_profile':PROFILE})
+    assert response.status_code==200,response.text
+    receipt=response.json()
+    assert receipt['contract']['generation_profile']==PROFILE and receipt['contract']['caps']==old['contract']['caps']
+    assert client.get(base+'/preparation').json()['contract']==receipt['contract']
+    assert client.post(base+'/consent',json=consent(old)).status_code==409
+    assert client.post(base+'/consent',json=consent(receipt)).status_code==200
+
+
+def test_core_reserves_same_4096_wire_without_changing_application_runtime(env,monkeypatch):
+    from fastapi.testclient import TestClient
+    from sqlalchemy import select
+    from test_natural_spec_apps import setup,generation_transport
+    from sim2act.api import create_app
+    from sim2act.worker import Worker
+    from sim2act.db import attempts
+    data=setup(env);store,settings,_,user,pid,_,card=data
+    # Synthetic readiness projection only; no real production permit is issued.
+    monkeypatch.setattr('sim2act.natural_generation_readiness.read',lambda *args:dict(availability='SELECTED_APPROVED_SCOPE',expected_version=card['version'],expected_fingerprint=card['fingerprint'],generation_request_key='natural-generation',generation_profile=PROFILE))
+    client=TestClient(create_app(store,settings,production_selection={'synthetic':'projection'}))
+    client.headers['Authorization']='Bearer synthetic-test-A'
+    response=client.post(f"/api/projects/{pid}/goal-cards/{card['id']}/application-runs",json=dict(expected_version=card['version'],expected_fingerprint=card['fingerprint'],request_key='natural-generation',family='natural_spec'))
+    assert response.status_code==202,response.text
+    sent,transport=generation_transport(data)
+    assert Worker(store,settings,goal_planner_transport=transport).once()
+    run=client.get('/api/runs/'+response.json()['run_id']).json()
+    assert run['status']=='PARTIAL',run
+    assert [v['max_tokens'] for v in sent]==[1024,4096,4096]
+    prompt=json.loads(sent[0]['messages'][1]['content'])
+    assert prompt['generation_budget']['candidate_output_tokens']==4096
+    assert prompt['generation_budget']['max_output_tokens']==1024
+    assert run['contract']['snapshot']['application_generation']['app_limits']['max_output_tokens']==1024
+    with store.tx() as c:
+        rows=c.execute(select(attempts.c.reserved_tokens,attempts.c.parameters).where(attempts.c.run_id==run['id'])).all()
+        assert sorted(v[1]['max_tokens'] for v in rows)==[1024,4096,4096]
+    client.close()
+
+
+def test_wire_budget_requires_new_scope_and_candidate_stage(prepared_data):
+    from sim2act.goal_applications import policy,generation_output_tokens,body
+    from sim2act.production_trial_sender import _wire
+    _,_,_,receipt=scope(prepared_data)
+    legacy=gate.parse_contract(receipt['contract'])
+    extended=gate.parse_contract({**receipt['contract'],'generation_profile':PROFILE})
+    selected=policy('intern-s2',extended.principal_id,extended.project_id,{'family':'natural_spec'},output_tokens=4096,natural_profile=PROFILE)
+    messages=[{'role':'system','content':'synthetic'},{'role':'user','content':json.dumps({'server_ids':selected})}]
+    read=[{'type':'function','function':{'name':'resource.read'}}]
+    check=[{'type':'function','function':{'name':'spec.check_candidate'}}]
+    assert [generation_output_tokens(messages,t,1024) for t in (read,check,[])]==[1024,4096,4096]
+    _wire(extended,body(messages,check,4096),stage='generate')
+    with pytest.raises(DomainError):_wire(legacy,body(messages,check,4096),stage='generate')
+    with pytest.raises(DomainError):_wire(extended,body(messages,read,4096),stage='generate')
+    with pytest.raises(DomainError):policy('intern-s2',extended.principal_id,extended.project_id,{'family':'natural_spec'},output_tokens=4096)

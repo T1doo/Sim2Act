@@ -1,0 +1,2321 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="26" skipped="0" tests="26" time="71.613" timestamp="2026-11-05T21:23:44.010536+08:00" hostname="LAPTOP-USISIS19"><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[happy]" time="2.412"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC0FA88A70&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...45f28124e6375b', 'expected_version': 1}, {'card_id': 'goal_6f92ec030ed34e148a3b12f0a18cb2d1', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC10387C20&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c0')
+scenario = 'happy'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[lost-preparation]" time="2.214"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC0FB01880&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...8547a18fee3a3c', 'expected_version': 1}, {'card_id': 'goal_d3316d70814947cc9aa1c9e567215994', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC11FB40E0&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c1')
+scenario = 'lost-preparation'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[lost-consent]" time="2.860"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC105B2600&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...36506891d22cb1', 'expected_version': 1}, {'card_id': 'goal_639435169129494a93ad0769cd765c2e', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC12B212B0&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c2')
+scenario = 'lost-consent'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[lost-withdrawal]" time="2.632"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC102CCC80&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...cdd26e8ddbd8f1', 'expected_version': 1}, {'card_id': 'goal_c7433ce0ba974345a781abb1b9214d69', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC0FD07B30&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c3')
+scenario = 'lost-withdrawal'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[cold]" time="2.694"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC0FD6C320&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...0cea79e1fcf99c', 'expected_version': 1}, {'card_id': 'goal_ee26a22b910d4530a971aab0b4cc2241', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC128153A0&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c4')
+scenario = 'cold'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[late-navigation]" time="2.709"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC11EB74D0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...3cd0aba2d824f1', 'expected_version': 1}, {'card_id': 'goal_7f80f305f2604ad49c300bae3bf227f8', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC0FF8B980&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c5')
+scenario = 'late-navigation'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[goal]" time="2.589"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC10A1FB90&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...1377aa29be0c57', 'expected_version': 1}, {'card_id': 'goal_91e58b297e944a5c84069dd7e41a2aa3', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC12DC7050&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c6')
+scenario = 'goal'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[revoke-read]" time="2.920"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC12D1EEA0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...aa0089593315a0', 'expected_version': 1}, {'card_id': 'goal_883de7d834e147a2aa51b55febce6a4f', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC1091DD60&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c7')
+scenario = 'revoke-read'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[expiry]" time="2.453"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC10704C50&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...dbc2e3bd265db9', 'expected_version': 1}, {'card_id': 'goal_79777d72f88c4df488a9dfbe3bcc29b1', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC10A71CA0&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c8')
+scenario = 'expiry'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[after-read-revoke]" time="2.739"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC107067E0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...c23e9bdaa66ffc', 'expected_version': 1}, {'card_id': 'goal_336877e9f08b44209b62812c92825d97', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC128F9FD0&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c9')
+scenario = 'after-read-revoke'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[unknown400]" time="2.695"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC0FC22F60&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...2c2bb7095f2afe', 'expected_version': 1}, {'card_id': 'goal_8e75605408b24577a25bd23107745e70', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC10A1D8E0&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c10')
+scenario = 'unknown400'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[lost-cold]" time="2.612"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC12E13AA0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...d5db883135388f', 'expected_version': 1}, {'card_id': 'goal_1e511250ae1d49e1b6f9072bb7291be7', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC1049BD10&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c11')
+scenario = 'lost-cold'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[new-prepared]" time="2.553"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC127F5C10&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...794bc36c7ee9f4', 'expected_version': 1}, {'card_id': 'goal_aa7bef10807142b7b3a63dddf0d948b8', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC12668830&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c12')
+scenario = 'new-prepared'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[new-revoked]" time="2.653"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC0FDAF830&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...7168c80316ecbb', 'expected_version': 1}, {'card_id': 'goal_f546c950ff2e45df936a771f8e373652', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC0E10B0E0&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c13')
+scenario = 'new-revoked'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[new-history]" time="2.835"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC11F869C0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...9941dfffcbd255', 'expected_version': 1}, {'card_id': 'goal_0f80bfafac484ab69b4fca1a241a3d5c', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC10BA32F0&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c14')
+scenario = 'new-history'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[new-late]" time="2.739"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC105B0620&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...88a04fe9be753a', 'expected_version': 1}, {'card_id': 'goal_2d88c57d5fb24b1eafa3460aa21d2ecd', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC1290B680&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c15')
+scenario = 'new-late'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[new-history-pending]" time="2.406"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC0FA25A30&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...69e7e0749d4f08', 'expected_version': 1}, {'card_id': 'goal_f17e865155374daabe3b92dd37876e11', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC12E2B590&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c16')
+scenario = 'new-history-pending'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[manual-b-consent]" time="2.791"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC10776DE0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...f36e08bed23a65', 'expected_version': 1}, {'card_id': 'goal_b07d81b1bd344095a1a883de99258da1', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC10BA33E0&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c17')
+scenario = 'manual-b-consent'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[manual-b-withdrawal]" time="2.904"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC11EE4530&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...e5675e239ed93b', 'expected_version': 1}, {'card_id': 'goal_7a0b4193b1c745c19629eead4930b9f9', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC109006B0&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c18')
+scenario = 'manual-b-withdrawal'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[goal-close-lost]" time="2.498"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC1251D3D0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...707993b66f0b06', 'expected_version': 1}, {'card_id': 'goal_2a268261e85643f29a480c74bae065fd', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC11C35A90&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c19')
+scenario = 'goal-close-lost'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[configured-selection]" time="2.869"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC12A00D10&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...c38707c6cdab35', 'expected_version': 1}, {'card_id': 'goal_1bf1922cd6904fd689added04dda99ba', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC127E0950&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c20')
+scenario = 'configured-selection'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[live-config-blocked]" time="2.981"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC0FE62750&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...55def82be95e49', 'expected_version': 1}, {'card_id': 'goal_b7b81194a61c4f95b3061f179e1f9a99', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC107E7DA0&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c21')
+scenario = 'live-config-blocked'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[pb-single]" time="2.733"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC11D19460&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...79dc6c3158f129', 'expected_version': 1}, {'card_id': 'goal_43c6a2e0d11245649d49377d113260cc', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC122FD8E0&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c22')
+scenario = 'pb-single'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[pb-parallel]" time="2.574"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC12DB0DA0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...ac3a0e7973c0e6', 'expected_version': 1}, {'card_id': 'goal_7fce22c8b6b34cffa35633374ee5ede3', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC0E10A5D0&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c23')
+scenario = 'pb-parallel'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_consent_ui" name="test_actual_page_preparation_consent_recovery[pb-feedback]" time="2.631"><failure message="AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh&#10;      at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)&#10;      at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)&#10;      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3&#10;  &#10;assert 1 == 0">prepared_data = ((&lt;sim2act.db.Store object at 0x000001EC10478860&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\windo...20e9285f11bbfb', 'expected_version': 1}, {'card_id': 'goal_b01fe94f25764c31a40a576c09fa83d2', 'expected_version': 1}]})
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC1083D8E0&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_actual_page_preparation_c24')
+scenario = 'pb-feedback'
+
+    @pytest.mark.parametrize("scenario", ["happy", "lost-preparation", "lost-consent", "lost-withdrawal",
+        "cold", "late-navigation", "goal", "revoke-read", "expiry", "after-read-revoke", "unknown400", "lost-cold", "new-prepared", "new-revoked", "new-history", "new-late", "new-history-pending", "manual-b-consent", "manual-b-withdrawal", "goal-close-lost", "configured-selection", "live-config-blocked", "pb-single", "pb-parallel", "pb-feedback"])
+    def test_actual_page_preparation_consent_recovery(prepared_data, monkeypatch, tmp_path, scenario):  # noqa: F811
+        data, body = prepared_data
+        store, _, client, _, pid = data[:5]
+        before = business(store)
+        if scenario in {"configured-selection", "live-config-blocked"}:
+            # Synthetic server-quota branch only; genuine PG/LIVE stays unexecuted.
+            from dataclasses import replace
+            from sim2act import natural_trial_preparation as preparation
+            from sim2act import spec_production
+            original_prepare = preparation.prepare
+            def fixed_server_branch(*args, settings=None, **kwargs):
+                with monkeypatch.context() as branch:
+                    if scenario == "configured-selection":
+                        branch.setattr(spec_production, "environment", lambda *a: None)
+                    return original_prepare(*args, settings=replace(settings, mode="live"), **kwargs)
+            monkeypatch.setattr(preparation, "prepare", fixed_server_branch)
+        cards = [client.get('/api/goal-cards/' + b['card_id']).json() for b in body['bindings']]
+        if scenario == 'unknown400':
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/seeded-key/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_PARTIAL_PAIR.json').write_text(json.dumps(seeded.json(), indent=2))
+            with store.tx() as c:
+                c.execute(delete(delivery_graph_requests).where(delivery_graph_requests.c.kind == PREPARE))
+        if scenario.startswith('manual-b-'):
+            seeded = client.post(f'/api/projects/{pid}/natural-trials/manual-B/preparation', json=body)
+            assert seeded.status_code == 200
+            (tmp_path / 'SEEDED_B.json').write_text(json.dumps(seeded.json(), indent=2))
+        info = tmp_path / 'info.json'
+        info.write_text(json.dumps(dict(project=pid, source=body['bindings'][0]['card_id'],
+            cold=body['bindings'][1]['card_id'], scenario=scenario,
+            goalTexts=[v for card in cards for v in [card['content']['goal'], *card['content']['constraints'],
+                *card['content']['acceptance_checks'], *card['content']['unresolved']]],
+            output=str(tmp_path / 'results.json'))))
+        process = subprocess.Popen(['node', 'tests/natural_trial_consent_ui.cjs', str(info)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={k: v for k, v in dict(os.environ, NODE_PATH=os.environ.get('NODE_PATH', '/workspace/node-tools/node_modules')).items()
+                 if k not in ('SIM2ACT_TEST_DATABASE_URL', 'DATABASE_URL')})
+        raw = []
+        try:
+            for line in process.stdout:
+                request = json.loads(line)
+                if request.get('done'):
+                    break
+                if request.get('command'):
+                    command = request['command']
+                    if command == 'goal':
+                        card = cards[0]
+                        content = dict(card['content'], goal=card['content']['goal'] + ' revised')
+                        assert client.put('/api/goal-cards/' + card['id'], json=dict(content,
+                            expected_version=card['version'])).status_code == 200
+                    elif command == 'revoke-read':
+                        with store.tx() as c:
+                            c.execute(update(grants).where(grants.c.resource_id == data[5]).values(revoked=True))
+                    else:
+                        assert command == 'expiry'
+                        import time
+                        at = time.time() + 301
+                        monkeypatch.setattr(time, 'time', lambda at=at: at)
+                    answer = dict(id=request['id'], status=200, text='{}')
+                else:
+                    response = client.request(request['method'], request['path'],
+                        json=request.get('body'), headers=request.get('headers'))
+                    answer = dict(id=request['id'], status=response.status_code, text=response.text,
+                                  content_type=response.headers.get('content-type'))
+                    raw.append(dict(request=request, response=answer))
+                process.stdin.write(json.dumps(answer) + '\n')
+                process.stdin.flush()
+            errors = process.stderr.read()
+            code = process.wait(timeout=20)
+            (tmp_path / 'HTTP_RAW.json').write_text(json.dumps(raw, indent=2))
+            (tmp_path / 'driver.log').write_text(errors)
+&gt;           assert code == 0, errors
+E           AssertionError: AssertionError [ERR_ASSERTION]: visible enabled gesture trial-refresh
+E                 at check (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:7:30)
+E                 at click (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:10:75)
+E                 at boot (E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:62:9)
+E                 at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+E                 at async E:\Github\Sim2Act\tests\natural_trial_consent_ui.cjs:66:3
+E             
+E           assert 1 == 0
+
+tests\test_natural_trial_consent_ui.py:91: AssertionError</failure></testcase><testcase classname="tests.test_natural_trial_budget_view_ui" name="test_original_trial_budget_is_visible_unknown_and_readonly" time="3.951"><failure message="AssertionError: {&quot;status&quot;:&quot;FAIL&quot;,&quot;checks&quot;:1}&#10;  AssertionError [ERR_ASSERTION]: visible control trial-refresh&#10;      at gesture (E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:106:3)&#10;      at click (E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:128:32)&#10;      at run (E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:423:9)&#10;      at async E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:447:9&#10;  &#10;assert 1 == 0&#10; +  where 1 = CompletedProcess(args=['node', 'E:\\Github\\Sim2Act\\tests\\natural_trial_budget_view_ui.cjs', 'E:\\Github\\Sim2Act\\....al_trial_budget_view_ui.cjs:423:9)\n    at async E:\\Github\\Sim2Act\\tests\\natural_trial_budget_view_ui.cjs:447:9\n').returncode">env = (&lt;sim2act.db.Store object at 0x000001EC12755A30&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...2636c4df4a4e96937d3fb0d7bb2ed9', 'user_2c9e4d747d2b40c9af3488550e5eb932', 'proj_5ff94bc71eb74d45bfe2631d9973318e', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001EC127DB4D0&gt;
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-natural4096-ui/test_original_trial_budget_is_0')
+
+    def test_original_trial_budget_is_visible_unknown_and_readonly(env, monkeypatch, tmp_path):
+        root = Path.cwd()
+        production = {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in (root / "src/sim2act").rglob("*")
+            if p.is_file() and p.suffix in {".py", ".js", ".html", ".css", ".json"}}
+        data = setup(env)
+        store, settings, client, user, pid, *_ = data
+        assert store.sqlite and settings.mode == "mock" and not settings.live_enabled
+        fixture_http, provider_calls = [], []
+    
+        def capture(reply):
+            reply.read()
+            fixture_http.append(dict(method=reply.request.method,
+                path=reply.request.url.raw_path.decode(), body_text=reply.request.content.decode(),
+                status=reply.status_code, response_text=reply.content.decode(),
+                response_sha256=hashlib.sha256(reply.content).hexdigest()))
+    
+        def no_provider(*args, **kwargs):
+            provider_calls.append("BLOCKED_PROVIDER_CALL")
+            raise AssertionError("No provider HTTP is part of budget viewing")
+    
+        import httpx
+    
+        monkeypatch.setattr(httpx.HTTPTransport, "handle_request", no_provider)
+        monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", no_provider)
+        client.event_hooks["response"].append(capture)
+        try:
+            _, cold_card = material(client, pid, COLD)
+            with store.tx() as c:
+                project = store.own_project(c, user, pid)
+                store.add_grants(c, user, project["runtime_id"], pid, pid, ["artifact.save_text"])
+            body = dict(bindings=[dict(card_id=card["id"], expected_version=card["version"])
+                for card in (data[6], cold_card)])
+            receipts = {}
+            for key in ["empty-budget-view", "held-budget-view"]:
+                base = f"/api/projects/{pid}/natural-trials/{key}"
+                prepared = client.post(base + "/preparation", json=body)
+                assert prepared.status_code == 200, prepared.text
+                receipts[key] = prepared.json()
+                consent = client.post(base + "/consent", json=dict(
+                    review_token=prepared.json()["review_token"], confirm_exact_scope=True))
+                assert consent.status_code == 200 and consent.json()["live_allowed"] is False
+            contract = gate.parse_contract(receipts["held-budget-view"]["contract"])
+            approval_key = preparation.approval_key(contract)
+            made = client.post(f"/api/projects/{pid}/goal-cards/{data[6]['id']}/application-runs",
+                json=dict(expected_version=data[6]["version"], expected_fingerprint=data[6]["fingerprint"],
+                    request_key=contract.stage_keys.generate, family="natural_spec"))
+            assert made.status_code == 202, made.text
+            rid = made.json()["run_id"]
+            job = store.claim("budget-view-fixture-claim", 30)
+            assert job["id"] == rid and job["status"] == "RUNNING"
+            fee = gate.SyntheticOnlyFeeAuthority(fingerprint(contract.model_dump()), contract.quota_subject)
+            permits = []
+    
+            def admitted(store, c, principal, frozen, key, stage, run_id, version, fence):
+                permit = gate.admit(store, c, principal, frozen, key, stage, run_id, version, fence, fee)
+                assert permit.scope == "SYNTHETIC_ONLY" and permit.live_allowed is False
+                permits.append(permit.model_dump())
+                return permit
+    
+            scope = budget.scope_for(contract, approval_key)
+            wire = b"synthetic-ledger-only".ljust(100, b" ")
+            request = budget.Reservation(request_key="held-unknown", stage="generate", run_id=rid,
+                expected_version=job["version"], fence=job["fence"], wire_bytes=len(wire),
+                wire_sha256=hashlib.sha256(wire).hexdigest())
+            reserved = budget.reserve(store, user, scope, contract, request, admission=admitted)
+            result = budget.settle(store, user, scope, contract,
+                budget.Settlement(request_key=request.request_key, response_sha256="b" * 64,
+                    response_ascii_bytes=10, prompt_tokens=5, completion_tokens=None, total_tokens=None),
+                admission=admitted)
+            assert result["status"] == "RECONCILING" and result["total_tokens"] is None
+            assert result["ledger"]["halted"] and result["reserved_envelope"] == 1124
+            other = store.project(user, "Other budget-view project")
+            before = snapshot(store)
+            assert not before["attempts"] and not before["reservations"] and not before["internal_app_runs"]
+            with socket.socket() as sock:
+                sock.bind(("127.0.0.1", 0))
+                port = sock.getsockname()[1]
+            (tmp_path / "info.json").write_text(json.dumps(dict(base=f"http://127.0.0.1:{port}",
+                project=pid, other_project=other, trial=contract.trial_key, empty_trial="empty-budget-view",
+                approval_key=approval_key, contract_fingerprint=fingerprint(contract.model_dump()),
+                run=rid, held_requests=1, held_envelope=1124)), encoding="utf-8")
+            (tmp_path / "synthetic-ledger-fixture.json").write_text(json.dumps(dict(
+                classification="SYNTHETIC_ONLY_REAL_ADMISSION_AND_LEDGER_NO_PROVIDER_OR_WORKER",
+                permits=permits, request=request.model_dump(), reserved=reserved, settled=result,
+                consent_is_live_authority=False, valid_live_tokens_created=0, worker_once_calls=0), indent=2), encoding="utf-8")
+            server = uvicorn.Server(uvicorn.Config(create_app(store, settings), host="127.0.0.1",
+                port=port, log_level="error"))
+            thread = threading.Thread(target=server.run, daemon=True)
+            thread.start()
+            try:
+                until = time.monotonic() + 10
+                while not server.started:
+                    assert thread.is_alive() and time.monotonic() &lt; until
+                    time.sleep(.01)
+                try:
+                    process = subprocess.run(["node", str(Path(__file__).with_name("natural_trial_budget_view_ui.cjs")),
+                        str(tmp_path)], capture_output=True, text=True, timeout=360,
+                        env={**os.environ, "NODE_PATH": os.environ.get("NODE_PATH", str(root / "scripts/engineering-ci/node_modules"))})
+                except subprocess.TimeoutExpired as error:
+                    for name, content in [("stdout", error.stdout), ("stderr", error.stderr)]:
+                        (tmp_path / ("driver." + name)).write_bytes(content.encode() if isinstance(content, str) else content or b"")
+                    raise
+                (tmp_path / "driver.stdout").write_text(process.stdout, encoding="utf-8")
+                (tmp_path / "driver.stderr").write_text(process.stderr, encoding="utf-8")
+&gt;               assert process.returncode == 0, process.stdout + process.stderr
+E               AssertionError: {"status":"FAIL","checks":1}
+E                 AssertionError [ERR_ASSERTION]: visible control trial-refresh
+E                     at gesture (E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:106:3)
+E                     at click (E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:128:32)
+E                     at run (E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:423:9)
+E                     at async E:\Github\Sim2Act\tests\natural_trial_budget_view_ui.cjs:447:9
+E                 
+E               assert 1 == 0
+E                +  where 1 = CompletedProcess(args=['node', 'E:\\Github\\Sim2Act\\tests\\natural_trial_budget_view_ui.cjs', 'E:\\Github\\Sim2Act\\....al_trial_budget_view_ui.cjs:423:9)\n    at async E:\\Github\\Sim2Act\\tests\\natural_trial_budget_view_ui.cjs:447:9\n').returncode
+
+tests\test_natural_trial_budget_view_ui.py:128: AssertionError</failure></testcase></testsuite></testsuites>
