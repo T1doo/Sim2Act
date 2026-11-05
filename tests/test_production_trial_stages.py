@@ -15,7 +15,7 @@ import httpx
 import pytest
 import test_natural_spec_apps as apps
 from fastapi.testclient import TestClient
-from sqlalchemy import event, select, update
+from sqlalchemy import delete, event, select, update
 from test_natural_live_admission import frozen
 from test_pa_trial_dispatch import enqueue_generation, first_response
 from test_spec_app_operations import snapshot
@@ -222,6 +222,15 @@ def test_actual_pa_three_two_two_reaches_existing_results_and_pending_owner(actu
                 assert body["sha256"] != body["canonical_sha256"]
         for stage, rid in (("generate", t["generation"]), ("source", t["source"]), ("cold", t["cold"])):
             bridge.journal_stage_accounted(data[0], c, data[3], binding.contract, binding.approval_key, rid, stage)
+        for stage in ("source", "cold"):
+            with c.begin_nested() as savepoint:
+                missing = next(row for row in actual if row["run_id"] == t[stage])
+                c.execute(delete(attempts).where(attempts.c.id == missing["id"]))
+                with pytest.raises(DomainError):
+                    bridge.journal_stage_accounted(
+                        data[0], c, data[3], binding.contract, binding.approval_key, t[stage], stage
+                    )
+                savepoint.rollback()
     write(t["out"] / "actual-pa-stages.json", dict(accounting=accounting.model_dump(mode="json"),
         gaps=gaps, actual_attempts=[dict(a) for a in actual], bodies=bodies, results=results,
         real_provider_calls=0, live_installed=False, semantic_acceptance="NOT_RUN"))

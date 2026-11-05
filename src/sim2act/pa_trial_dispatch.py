@@ -1394,10 +1394,10 @@ def _journal_attempt_from_facts(b, wire, slot, actual, *, _guard=None):
 
 def journal_stage_accounted(store, c, user, contract, key, rid, stage):
     """Original current lineage calls this only after its full ownership gate."""
-    _journal_stage_header(store, c, user, contract, key, rid, stage)
+    expected_requests = _journal_stage_header(store, c, user, contract, key, rid, stage)
     actual = c.execute(select(attempts).where(attempts.c.run_id == rid)
                        .order_by(attempts.c.created_at, attempts.c.id)).mappings().all()
-    gate.require(len(actual) == (3 if stage == "generate" else 2))
+    gate.require(len(actual) == expected_requests)
     markers = [a["parameters"].get("pa_trial_binding", {}) for a in actual]
     from .spec_production import VERSION as PRODUCTION_VERSION
     from .spec_production import ProductionTrialBinding
@@ -1432,7 +1432,7 @@ def journal_stage_accounted(store, c, user, contract, key, rid, stage):
 def _stage_slots_from_facts(state, actual, rid, stage, *, _guard=None):
     """Use full checked ledger and Attempt multisets after original stage gates.
 
-    Caller keeps exact 3/2 stage count, marker/account checks, phase/ownership,
+    Caller keeps the exact approved stage count, marker/account checks, phase/ownership,
     current permissions and _journal_state. This is not a ledger verifier.
     """
     slots = [s for s in state.slots if s.identity.stage == stage]
@@ -1485,6 +1485,7 @@ def _journal_stage_header(store, c, user, contract, key, rid, stage, *, _guard=N
         gate.require(owner['runtime_id'] == contract.runtime_id and owner['request_key'] == contract.stage_keys.generate)
         from .goal_applications import source_scope_gate
         gate._trial_result(source_scope_gate(store, c, rid, **{'_graph_read': _graph_read} if _graph_read is not None else {}), _guard)
+        return 3
     else:
         phase = gate._trial_result(gate._saved(c, user, gate._trial_result(gate.entity(contract, **{'_guard': _guard} if _guard is not None else {}), _guard), gate.PHASE, stage, gate.StageApproveInput, **{'_guard': _guard} if _guard is not None else {}), _guard)
         if _guard is not None:
@@ -1498,6 +1499,29 @@ def _journal_stage_header(store, c, user, contract, key, rid, stage, *, _guard=N
         from .db import internal_app_runs, internal_run_bindings
         app_key = gate._trial_result(gate._trial_result(c.execute(select(internal_app_runs.c.request_key).select_from(internal_run_bindings).join(internal_app_runs, internal_app_runs.c.id == internal_run_bindings.c.app_run_id).where(internal_run_bindings.c.run_id == rid, internal_app_runs.c.principal_id == user, internal_app_runs.c.id == phase.authority.app_run_id, internal_app_runs.c.instance_id == phase.authority.instance_id)), _guard).scalar_one_or_none(), _guard)
         gate.require(app_key == getattr(contract.stage_keys, stage) and owner['request_key'] == 'internal:' + phase.authority.app_run_id)
+        if gate._contract_kind(contract) is gate.PBTrialContract:
+            return 2
+        # The phase approval binds both the generated candidate and the recipe
+        # used by this Run. Count its model nodes independently of the ledger.
+        from .natural_specs import MODEL_KINDS, Recipe
+
+        result = gate._trial_result(c.execute(select(runs.c.result).where(
+            runs.c.id == phase.authority.generation_run_id,
+            runs.c.principal_id == user,
+            runs.c.project_id == contract.project_id,
+            runs.c.runtime_id == contract.runtime_id,
+            runs.c.request_key == contract.stage_keys.generate,
+            runs.c.status == "PARTIAL",
+        )).scalar_one_or_none(), _guard)
+        candidate = result.get("candidate") if isinstance(result, dict) else None
+        gate.require(isinstance(candidate, dict)
+            and fingerprint(candidate) == phase.authority.generation_candidate_fingerprint)
+        recipe = candidate.get("spec_recipe")
+        gate.require(fingerprint(recipe) == phase.authority.recipe_fingerprint)
+        parsed = gate._trial_result(Recipe.model_validate(recipe), _guard)
+        expected_requests = sum(step.operator in MODEL_KINDS for step in parsed.steps)
+        gate.require(1 <= expected_requests <= getattr(contract.caps, f"{stage}_requests"))
+        return expected_requests
 
 
 def _graph_journal_state(graph, store, c, b):
@@ -1621,9 +1645,9 @@ def _graph_stage_accounted(graph, store, c, b, state, cursor, rid, stage, *, _ow
         _guard()
         gate.require(stage in ('generate', 'source') and gate._trial_result(_production_binding(b), _guard))
         user, contract, key = (b.contract.principal_id, b.contract, b.approval_key)
-        gate._trial_result(_journal_stage_header(store, c, user, contract, key, rid, stage, _guard=_guard, _graph_read=graph), _guard)
+        expected_requests = gate._trial_result(_journal_stage_header(store, c, user, contract, key, rid, stage, _guard=_guard, _graph_read=graph), _guard)
         actual = tuple(gate._trial_result(gate._trial_result(gate._trial_result(c.execute(select(attempts).where(attempts.c.run_id == rid).order_by(attempts.c.created_at, attempts.c.id)), _guard).mappings(), _guard).all(), _guard))
-        gate.require(len(actual) == (3 if stage == 'generate' else 2))
+        gate.require(len(actual) == expected_requests)
         markers = [a['parameters'].get('pa_trial_binding', {}) for a in actual]
         gate.require(all((m.get('version') == b.version and m.get('account_id') == b.account_id and (m.get('trial_fingerprint') == b.contract_fingerprint) and (m.get('approval_key') == key) for m in markers)))
         run = gate._trial_result(gate._trial_result(gate._trial_result(c.execute(select(runs).where(runs.c.id == rid)), _guard).mappings(), _guard).one(), _guard)
