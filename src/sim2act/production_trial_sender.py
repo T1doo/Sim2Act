@@ -10,6 +10,8 @@ import base64
 import hashlib
 import json
 import time
+import threading
+import math
 from typing import Literal
 
 import httpx
@@ -69,6 +71,34 @@ class Receipt(policy.evidence.EvidenceData):
 def _require(ok, code="LIVE_BLOCKED"):
     if not ok:
         raise DomainError(code, "Uninstalled offline sender boundary")
+
+
+def _generation_http_deadline(original,settings,run,state,source_expires,controller):
+    """After the original live guard: rolling lease is not the IO hard limit."""
+    _require(type(state) is dict and state.get('generation_heartbeat') is True)
+    _require(type(controller) is dict and set(controller)=={'deadline'})
+    with state['lock']:
+        _require(state.get('failure') is None and time.time()<state['lease_until'],'VERSION_CONFLICT')
+        bounds=(run['created_at']+settings.run_seconds,run['created_at']+original.caps.run_seconds,
+                original.expires_at,source_expires,controller['deadline'],state['deadline'])
+        _require(all(type(v) in (float,int) and math.isfinite(v) for v in bounds))
+        deadline=min(bounds)
+    _require(time.time()<deadline,'BUDGET_EXHAUSTED')
+    return deadline
+
+
+def _generation_network_watch(worker,state):
+    stopped,done=threading.Event(),threading.Event()
+    def watch():
+        while not done.is_set():
+            with state['lock']:
+                lost=state.get('failure') is not None or time.time()>=state['lease_until']
+            if worker.stop.is_set() or lost:
+                stopped.set();return
+            done.wait(.025)
+    thread=threading.Thread(target=watch,daemon=True)
+    thread.start()
+    return stopped,done,thread
 
 
 def _binding(worker):
@@ -615,13 +645,23 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
             _, deadline = policy._fresh(store, c, user, current, key, state, item, current_source)
             if controller is not None:
                 _require(type(controller) is dict and set(controller) == {"deadline"})
-                deadline = min(deadline, controller["deadline"])
+                if item.stage=='generate':
+                    # _fresh above still checks the actual current lease/fence.
+                    # Keep the approved absolute limits for an in-flight read.
+                    deadline=_generation_http_deadline(original,settings,_business[1],
+                        _business[4],current_source.expires_at,controller)
+                else:
+                    deadline = min(deadline, controller["deadline"])
             return dict(deadline=deadline)
 
     payload, complete, received = b"", False, False
     failure = None
+    network_stop=None;network_done=threading.Event();network_watch=None
+    if _business is not None and item.stage=='generate':
+        network_stop,network_done,network_watch=_generation_network_watch(worker,_business[4])
     try:
-        captured = provider.request_serialized_captured(wire, guard)
+        captured = provider.request_serialized_captured(wire, guard,
+            **({'_stop_event':network_stop} if network_stop is not None else {}))
         _require(type(captured) is CapturedResponse and type(captured.body) is bytes)
         payload, complete, received = captured.body, True, True
     except DomainError as error:
@@ -629,6 +669,9 @@ def _dispatch(worker, contract, key, identity, wire, source, *, expected_revisio
         body = getattr(error, "_received_body", None)
         if type(body) is bytes:
             payload, complete = body, getattr(error, "_received_body_complete", False) is True
+    finally:
+        network_done.set()
+        if network_watch is not None:network_watch.join(1)
     _require(store.engine is engine)
     saved = _receive(
         store,

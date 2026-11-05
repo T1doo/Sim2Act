@@ -1,0 +1,13 @@
+# a0534197 工具约束正式观察
+
+冻结源码a05341973104a760893db3ce384f9b318af47405，桌面运行包SHA256为208626516500f46222c92b9b2969a1d5fbdf0e24ad076a6c18a7f6823526e837。包内原production/literal资格检查通过。
+
+新的正式范围和Worker/API启动选择通过，Run为run_c9d725ef8c55446d815d4fcbb3f14d06。强制resource.read的首请求成功，实际用量1975 tokens。第二请求未收到响应体，usage unknown，捕获EMPTY/UNKNOWN；任务WAITING_RESOURCE，MODEL_TIMEOUT_OR_TRUNCATED。不自动重发、不填零用量、不改旧批准和期限。两个会话均exit0、PG停止。
+
+时间证据：第二次PA_TRIAL_BODY为1793882676.3509333，失败收尾为1793882709.88261，约33.5秒；Run受理1793882612.9207137，并未消耗完整300秒。这不能直接当作上游服务超时结论。
+
+待验证假设：production_trial_policy._fresh取check_run返回的context.deadline；check_run调用Store._execution_deadline。非authoritative运行无control marker时，后者返回滚动lease；production_trial_sender把该deadline作为HTTP总期限。正式PG不支持现有test_only SQLite独立租约适配器，不能直接打开SQLite开关冒充PG支持。应增加受控测试，核对持续正常续约时是否错误把最初30秒租约变成HTTP硬截止；同时保留丢失租约/取消/原绝对期限的停机与提交拒绝，不能单纯删除min约束。
+
+原始记录managed-natural-tool-qualified-check.json和natural-tool-journal-diagnosis.json。此次并未产生有效候选，不证明完整P-A成功。
+
+独立租约P-B控制用例另在原句柄运行，未结束前保留待验状态；旧包装观察器失败继续保留。
