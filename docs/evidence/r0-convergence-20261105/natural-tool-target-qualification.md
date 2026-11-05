@@ -1,0 +1,7 @@
+# 工具约束目标资格回归
+
+审阅候选d0c0f136075ace2a8d2120e99c8d865e5c46856a，差异范围与natural-tool-protocol-review.md一致。production v3/literal v2目标更新完整文件哈希及准确review_candidate，旧be458799清单保存为superseded-be458799-*。不修改旧试验、预算、原软件完整性/唯一字面量/重复字段校验。
+
+37个资格、工具协议和历史合同兼容测试通过，见natural-tool-qualified.xml。既有自然生成、原子清单与未知发送不重发用例另有2项通过。真实书生tool_choice效果仍待新包验证。
+
+P-B旧包装观察器用例的超时保留。补跑项目既有test_authoritative_cold_full_flow.py，对同业务流程启用独立租约控制、无业务时钟或Worker方法替换；使用原30秒滚动租约、原120秒SQLite结算协议、MockTransport及test_only SQLite。该用例尚在运行时不预签结果，也不把SQLite证据当正式PG或真实模型P-B验收。
