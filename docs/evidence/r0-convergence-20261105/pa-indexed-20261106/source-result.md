@@ -1,0 +1,22 @@
+# 技术规范待验清单
+出处核验 PASS；含义/遗漏/关系准确性 UNKNOWN，人工验收 NOT_RUN
+
+- requirement req\_001: 报告须在星期五前提交
+  关系 NOT_APPLICABLE；决定 NOT_APPLICABLE；目标 
+  原文[0:28]: Submit the report by Friday.
+- exception exc\_001: 经批准的延期被允许
+  关系 MODEL_ASSERTED；决定 NOT_APPLICABLE；目标 req\_001
+  原文[29:58]: An approved delay is allowed.
+- open\_question open\_001: 档案保管人尚未确定
+  关系 NOT_APPLICABLE；决定 OPEN；目标 
+  原文[59:90]: The archive owner is undecided.
+
+## 原生人工未决项
+需人工确认语义完整性
+
+## 未覆盖原文
+
+## 完整来源（保留，未推断）
+Submit the report by Friday.
+An approved delay is allowed.
+The archive owner is undecided.
