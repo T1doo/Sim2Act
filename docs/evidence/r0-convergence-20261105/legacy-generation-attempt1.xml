@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="2.109" timestamp="2026-11-05T16:49:23.301184+08:00" hostname="LAPTOP-USISIS19"><testcase classname="tests.test_generation_protocol_compatibility" name="test_legacy_generation_can_be_confirmed_after_policy_default_changes" time="1.432"><failure message="AttributeError: 'dict' object has no attribute 'model_copy'">env = (&lt;sim2act.db.Store object at 0x000002599A556120&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...dd057ccda4414e802c120be8af4881', 'user_09e3060b5fda413ba6503937f474a596', 'proj_c68f2e79501d4985a5ea838945e9cbdf', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000002599A8C4CB0&gt;
+
+    def test_legacy_generation_can_be_confirmed_after_policy_default_changes(env,monkeypatch):
+        data=setup(env)
+        original=goal_applications.policy
+        # Create a genuinely absent discriminator using the old policy shape, not
+        # an edited persisted receipt or resigned candidate.
+        with monkeypatch.context() as patch:
+            def legacy(*args,**kwargs):
+                return original(*args,**kwargs).model_copy(update={'output_protocol':None})
+            patch.setattr(goal_applications,'policy',legacy)
+&gt;           rid,result,sent=generate(data)
+                            ^^^^^^^^^^^^^^
+
+tests\test_generation_protocol_compatibility.py:15: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_goal_text_applications.py:142: in generate
+    accepted = client.post(
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\httpx\_client.py:1144: in post
+    return self.request(
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\starlette\testclient.py:463: in request
+    return super().request(
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\httpx\_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\httpx\_client.py:914: in send
+    response = self._send_handling_auth(
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\httpx\_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\httpx\_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\httpx\_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\starlette\testclient.py:360: in handle_request
+    raise exc
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\starlette\testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\anyio\from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+concurrent\futures\_base.py:456: in result
+    ???
+concurrent\futures\_base.py:401: in __get_result
+    ???
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\anyio\from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\fastapi\applications.py:1160: in __call__
+    await super().__call__(scope, receive, send)
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\starlette\middleware\base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local\windows-build-20261105\compact-generation-test-source-2\sim2act\api.py:187: in security
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\starlette\middleware\base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\starlette\middleware\base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\starlette\routing.py:697: in app
+    await route.handle(scope, receive, send)
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\starlette\routing.py:282: in handle
+    await self.app(scope, receive, send)
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\fastapi\routing.py:130: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\fastapi\routing.py:116: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\fastapi\routing.py:670: in app
+    raw_response = await run_endpoint_function(
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\fastapi\routing.py:326: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\anyio\to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\anyio\_backends\_asyncio.py:2706: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+.local\windows-build-20261105\native-configured-ca0c11e7\Sim2Act-preview\runtime\Lib\site-packages\anyio\_backends\_asyncio.py:1100: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+.local\windows-build-20261105\compact-generation-test-source-2\sim2act\api.py:577: in generate_goal_application
+    selected = policy(s.goal_planner_provider, user, pid,
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+args = ('intern-s2', 'user_65dd057ccda4414e802c120be8af4881', 'proj_c68f2e79501d4985a5ea838945e9cbdf', {'card_id': 'goal_97a4...0fbf762aa374562ea6620fbca5ffb968425b007bf7db1a6a0b7d0b359', 'expected_version': 1, 'request_key': 'text-generation-1'})
+kwargs = {}
+
+    def legacy(*args,**kwargs):
+&gt;       return original(*args,**kwargs).model_copy(update={'output_protocol':None})
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'dict' object has no attribute 'model_copy'
+
+tests\test_generation_protocol_compatibility.py:13: AttributeError</failure></testcase></testsuite></testsuites>

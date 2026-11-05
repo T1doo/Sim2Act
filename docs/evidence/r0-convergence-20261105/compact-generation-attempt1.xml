@@ -1,0 +1,443 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="16" skipped="0" tests="38" time="74.834" timestamp="2026-11-05T16:41:53.395291+08:00" hostname="LAPTOP-USISIS19"><testcase classname="tests.test_goal_text_applications" name="test_goal_feedback_repair_release_cold_worker" time="2.533"><failure message="AssertionError: {'contract': {'fingerprint': '360f8f7d031a279a89497a2f3ffc52eb028c17e27cdd0d6093e7d7f9e1a06e8b', 'snapshot': {'applica...6a8f355e14628a914cd77d6a8163f', 'kind': 'TOOL_VERIFIED', ...}, ...], 'id': 'run_7de6d4189db84b27bb507fc2b03f41f4', ...}&#10;assert 'FAILED' == 'PARTIAL'&#10;  &#10;  - PARTIAL&#10;  + FAILED">env = (&lt;sim2act.db.Store object at 0x0000026566623FE0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...9f2a1ce7354ebead8eea63f4904881', 'user_172880f829524c52b1263cfe84729e7f', 'proj_b2ccb52aa2164a248dc0d7f7ff4f9399', ...)
+
+    def test_goal_feedback_repair_release_cold_worker(env):
+        data = setup(env)
+        store, settings, client, user, _, text, card = data
+        rid, result, sent = generate(data, repair=True)
+&gt;       assert result["status"] == "PARTIAL", result
+E       AssertionError: {'contract': {'fingerprint': '360f8f7d031a279a89497a2f3ffc52eb028c17e27cdd0d6093e7d7f9e1a06e8b', 'snapshot': {'applica...6a8f355e14628a914cd77d6a8163f', 'kind': 'TOOL_VERIFIED', ...}, ...], 'id': 'run_7de6d4189db84b27bb507fc2b03f41f4', ...}
+E       assert 'FAILED' == 'PARTIAL'
+E         
+E         - PARTIAL
+E         + FAILED
+
+tests\test_goal_text_applications.py:215: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[usage]" time="1.509" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[identity]" time="1.385" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[truncated]" time="1.314" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[wrong-tool]" time="1.387" /><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[frozen-goal]" time="1.778"><failure message="assert 1 == 2&#10; +  where 1 = len([{'max_tokens': 1024, 'messages': [{'content': 'Produce a finite declarative literal-text application under the suppli...&quot;source_hash&quot;,&quot;goal&quot;],&quot;semantic_acceptance&quot;:&quot;NOT_RUN&quot;}', 'role': 'user'}], 'model': 'intern-s2', 'stream': False, ...}])">env = (&lt;sim2act.db.Store object at 0x000002656830E5A0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...5dd85b58e54b9cbd698ca1da90e50f', 'user_e566cf4dda8748e39aadf8e0aabda02f', 'proj_f7f06a066b184407b901224af996baf3', ...)
+fault = 'frozen-goal'
+
+    @pytest.mark.parametrize(
+        "fault", ["usage", "identity", "truncated", "wrong-tool", "frozen-goal", "extra-field"]
+    )
+    def test_generation_failures_do_not_create_apps_or_retry(env, fault):
+        data = setup(env)
+    
+        def mutate(raw, index, payload):
+            if fault == "usage" and index == 1:
+                raw.pop("usage")
+            if fault == "identity" and index == 1:
+                raw["model"] = "other"
+            if fault == "truncated" and index == 1:
+                raw["choices"][0]["finish_reason"] = "length"
+            if fault == "wrong-tool" and index == 1:
+                raw["choices"][0]["message"]["tool_calls"][0]["function"]["name"] = "artifact.save_text"
+            if fault == "frozen-goal" and index == 2:
+                value = json.loads(raw["choices"][0]["message"]["content"])
+                value["goal"]["constraints"] = []
+                raw["choices"][0]["message"]["content"] = json.dumps(value, separators=(",", ":"))
+            if fault == "extra-field" and index &gt;= 2:
+                value = json.loads(raw["choices"][0]["message"]["content"])
+                value["free_code"] = "bad"
+                raw["choices"][0]["message"]["content"] = json.dumps(value, separators=(",", ":"))
+    
+        rid, result, sent = generate(data, mutation=mutate)
+        assert result["status"] in {"FAILED", "WAITING_RESOURCE"}, result
+        assert result["result"] is None
+&gt;       assert len(sent) == (3 if fault == "extra-field" else 2 if fault == "frozen-goal" else 1)
+E       assert 1 == 2
+E        +  where 1 = len([{'max_tokens': 1024, 'messages': [{'content': 'Produce a finite declarative literal-text application under the suppli..."source_hash","goal"],"semantic_acceptance":"NOT_RUN"}', 'role': 'user'}], 'model': 'intern-s2', 'stream': False, ...}])
+
+tests\test_goal_text_applications.py:332: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_applications" name="test_generation_failures_do_not_create_apps_or_retry[extra-field]" time="1.863"><failure message="assert 1 == 3&#10; +  where 1 = len([{'max_tokens': 1024, 'messages': [{'content': 'Produce a finite declarative literal-text application under the suppli...&quot;source_hash&quot;,&quot;goal&quot;],&quot;semantic_acceptance&quot;:&quot;NOT_RUN&quot;}', 'role': 'user'}], 'model': 'intern-s2', 'stream': False, ...}])">env = (&lt;sim2act.db.Store object at 0x0000026569E05970&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...3069b8af34489997a83bec311f907a', 'user_91a8353866ef479c8e3527cb6187d5cb', 'proj_7dbb18ad62b8497eb0ebea9aae8e6bdf', ...)
+fault = 'extra-field'
+
+    @pytest.mark.parametrize(
+        "fault", ["usage", "identity", "truncated", "wrong-tool", "frozen-goal", "extra-field"]
+    )
+    def test_generation_failures_do_not_create_apps_or_retry(env, fault):
+        data = setup(env)
+    
+        def mutate(raw, index, payload):
+            if fault == "usage" and index == 1:
+                raw.pop("usage")
+            if fault == "identity" and index == 1:
+                raw["model"] = "other"
+            if fault == "truncated" and index == 1:
+                raw["choices"][0]["finish_reason"] = "length"
+            if fault == "wrong-tool" and index == 1:
+                raw["choices"][0]["message"]["tool_calls"][0]["function"]["name"] = "artifact.save_text"
+            if fault == "frozen-goal" and index == 2:
+                value = json.loads(raw["choices"][0]["message"]["content"])
+                value["goal"]["constraints"] = []
+                raw["choices"][0]["message"]["content"] = json.dumps(value, separators=(",", ":"))
+            if fault == "extra-field" and index &gt;= 2:
+                value = json.loads(raw["choices"][0]["message"]["content"])
+                value["free_code"] = "bad"
+                raw["choices"][0]["message"]["content"] = json.dumps(value, separators=(",", ":"))
+    
+        rid, result, sent = generate(data, mutation=mutate)
+        assert result["status"] in {"FAILED", "WAITING_RESOURCE"}, result
+        assert result["result"] is None
+&gt;       assert len(sent) == (3 if fault == "extra-field" else 2 if fault == "frozen-goal" else 1)
+E       assert 1 == 3
+E        +  where 1 = len([{'max_tokens': 1024, 'messages': [{'content': 'Produce a finite declarative literal-text application under the suppli..."source_hash","goal"],"semantic_acceptance":"NOT_RUN"}', 'role': 'user'}], 'model': 'intern-s2', 'stream': False, ...}])
+
+tests\test_goal_text_applications.py:332: AssertionError</failure></testcase><testcase classname="tests.test_goal_text_applications" name="test_default_generation_has_no_model_send" time="1.161" /><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[candidate]" time="1.837"><failure message="TypeError: 'NoneType' object is not subscriptable">env = (&lt;sim2act.db.Store object at 0x00000265699B3D10&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...d62b63e6ad4877abd48f796d7eb087', 'user_277daeec347d43e4940b3d46f12e9ac0', 'proj_5d7d9a9ffbb14c7c87aede3d671af40f', ...)
+change = 'candidate'
+
+    @pytest.mark.parametrize("change", ["candidate", "marker", "executor", "attempt", "route"])
+    def test_independent_origin_blocks_resigned_candidate_and_route_downgrade(env, change):
+        data = setup(env)
+        rid, result, _ = generate(data)
+&gt;       aid, _ = confirm(data, rid, result)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_goal_text_applications.py:356: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+data = (&lt;sim2act.db.Store object at 0x00000265699B3D10&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...ed62b63e6ad4877abd48f796d7eb087', 'proj_5d7d9a9ffbb14c7c87aede3d671af40f', 'res_5c1fec0c072a418d9aa0755c8b5bb892', ...)
+rid = 'run_0480ac85a0084df6a774607c95563985'
+result = {'contract': {'fingerprint': 'fd5194245983058cf78d4aa00f5b62f6e908ea5290e6c3c13ef34f03c1e4f637', 'snapshot': {'applica...01606181a4ad581c5f11b61fe9786', 'kind': 'TOOL_VERIFIED', ...}, ...], 'id': 'run_0480ac85a0084df6a774607c95563985', ...}
+
+    def confirm(data, rid, result):
+        _, _, client, _, _, _, _ = data
+        body = {
+            "expected_version": result["version"],
+&gt;           "candidate_fingerprint": result["result"]["candidate_fingerprint"],
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            "request_key": "confirm-1",
+            "name": "Literal app",
+        }
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests\test_goal_text_applications.py:158: TypeError</failure></testcase><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[marker]" time="1.849"><failure message="TypeError: 'NoneType' object is not subscriptable">env = (&lt;sim2act.db.Store object at 0x000002656A2B80B0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...fa8ee6b4cd4270b0bf491e0ae77fb2', 'user_2cf615ae9dd3493dbd59a08a68192381', 'proj_e827ef3be2134a96a22af19fc4274c83', ...)
+change = 'marker'
+
+    @pytest.mark.parametrize("change", ["candidate", "marker", "executor", "attempt", "route"])
+    def test_independent_origin_blocks_resigned_candidate_and_route_downgrade(env, change):
+        data = setup(env)
+        rid, result, _ = generate(data)
+&gt;       aid, _ = confirm(data, rid, result)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_goal_text_applications.py:356: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+data = (&lt;sim2act.db.Store object at 0x000002656A2B80B0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...9fa8ee6b4cd4270b0bf491e0ae77fb2', 'proj_e827ef3be2134a96a22af19fc4274c83', 'res_1814a87c0af34bb8bd43e22b831ab836', ...)
+rid = 'run_2972abc8516c45f39d68db863a4a7e1a'
+result = {'contract': {'fingerprint': '749d1c5a0aa074d0931099cb2ceb480908bc4ab23028da2ac13a0b1495d8207e', 'snapshot': {'applica...5a33bb09540298b4dba057bc42151', 'kind': 'TOOL_VERIFIED', ...}, ...], 'id': 'run_2972abc8516c45f39d68db863a4a7e1a', ...}
+
+    def confirm(data, rid, result):
+        _, _, client, _, _, _, _ = data
+        body = {
+            "expected_version": result["version"],
+&gt;           "candidate_fingerprint": result["result"]["candidate_fingerprint"],
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            "request_key": "confirm-1",
+            "name": "Literal app",
+        }
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests\test_goal_text_applications.py:158: TypeError</failure></testcase><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[executor]" time="1.769"><failure message="TypeError: 'NoneType' object is not subscriptable">env = (&lt;sim2act.db.Store object at 0x000002656AA338C0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...671c432b5c4ac09a98756cbe8eb4e4', 'user_a299809e60e04bcd913e64b97385f3bc', 'proj_7383d63ad80c44e892ed1a89799db5b3', ...)
+change = 'executor'
+
+    @pytest.mark.parametrize("change", ["candidate", "marker", "executor", "attempt", "route"])
+    def test_independent_origin_blocks_resigned_candidate_and_route_downgrade(env, change):
+        data = setup(env)
+        rid, result, _ = generate(data)
+&gt;       aid, _ = confirm(data, rid, result)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_goal_text_applications.py:356: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+data = (&lt;sim2act.db.Store object at 0x000002656AA338C0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...7671c432b5c4ac09a98756cbe8eb4e4', 'proj_7383d63ad80c44e892ed1a89799db5b3', 'res_ce2deed3cf20473a9d1db663763cfafb', ...)
+rid = 'run_712ac25aec8b4fafb322799c59bbbd35'
+result = {'contract': {'fingerprint': 'deea1995733e284983afe011c40de094a63a173b24439dd12fc3456d1f927396', 'snapshot': {'applica...9b62e9af14957a0f74bd05dcf31a1', 'kind': 'TOOL_VERIFIED', ...}, ...], 'id': 'run_712ac25aec8b4fafb322799c59bbbd35', ...}
+
+    def confirm(data, rid, result):
+        _, _, client, _, _, _, _ = data
+        body = {
+            "expected_version": result["version"],
+&gt;           "candidate_fingerprint": result["result"]["candidate_fingerprint"],
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            "request_key": "confirm-1",
+            "name": "Literal app",
+        }
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests\test_goal_text_applications.py:158: TypeError</failure></testcase><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[attempt]" time="1.868"><failure message="TypeError: 'NoneType' object is not subscriptable">env = (&lt;sim2act.db.Store object at 0x0000026569B78E60&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...9bb51e40e94e2dadd1007b388704ef', 'user_378a33b042414451978014ac8a0fe45f', 'proj_34650a2279014fa0919654eb425d6733', ...)
+change = 'attempt'
+
+    @pytest.mark.parametrize("change", ["candidate", "marker", "executor", "attempt", "route"])
+    def test_independent_origin_blocks_resigned_candidate_and_route_downgrade(env, change):
+        data = setup(env)
+        rid, result, _ = generate(data)
+&gt;       aid, _ = confirm(data, rid, result)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_goal_text_applications.py:356: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+data = (&lt;sim2act.db.Store object at 0x0000026569B78E60&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...49bb51e40e94e2dadd1007b388704ef', 'proj_34650a2279014fa0919654eb425d6733', 'res_437209aec52945bda15dc55fd824835e', ...)
+rid = 'run_97b6faeb0de14f9f93aabbd58b3cbcae'
+result = {'contract': {'fingerprint': 'aa7d98fb67295a5b430a294efcfbe052be5c0a31a109cb890dc0c9efd2490a21', 'snapshot': {'applica...70d7bf0a14ff9baa011b00b3c8bed', 'kind': 'TOOL_VERIFIED', ...}, ...], 'id': 'run_97b6faeb0de14f9f93aabbd58b3cbcae', ...}
+
+    def confirm(data, rid, result):
+        _, _, client, _, _, _, _ = data
+        body = {
+            "expected_version": result["version"],
+&gt;           "candidate_fingerprint": result["result"]["candidate_fingerprint"],
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            "request_key": "confirm-1",
+            "name": "Literal app",
+        }
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests\test_goal_text_applications.py:158: TypeError</failure></testcase><testcase classname="tests.test_goal_text_applications" name="test_independent_origin_blocks_resigned_candidate_and_route_downgrade[route]" time="1.849"><failure message="TypeError: 'NoneType' object is not subscriptable">env = (&lt;sim2act.db.Store object at 0x0000026569E5FAD0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...29c81a0e134b2787df9963495c177c', 'user_7b111d4ad5e241aaa24d8e50df9741ed', 'proj_825a3bab129948f783fe1c8f2ea86ab3', ...)
+change = 'route'
+
+    @pytest.mark.parametrize("change", ["candidate", "marker", "executor", "attempt", "route"])
+    def test_independent_origin_blocks_resigned_candidate_and_route_downgrade(env, change):
+        data = setup(env)
+        rid, result, _ = generate(data)
+&gt;       aid, _ = confirm(data, rid, result)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_goal_text_applications.py:356: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+data = (&lt;sim2act.db.Store object at 0x0000026569E5FAD0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...329c81a0e134b2787df9963495c177c', 'proj_825a3bab129948f783fe1c8f2ea86ab3', 'res_de28e4c752434dc390aad274c42c7b8c', ...)
+rid = 'run_0daeb48dcb85419c9d1548288f228eb5'
+result = {'contract': {'fingerprint': 'dbdd39c57e906211c62e5a5e4c283894ad40a9f09c50541a216e80da2899c076', 'snapshot': {'applica...f1ae2a5614d3f8f366b6b8c48842d', 'kind': 'TOOL_VERIFIED', ...}, ...], 'id': 'run_0daeb48dcb85419c9d1548288f228eb5', ...}
+
+    def confirm(data, rid, result):
+        _, _, client, _, _, _, _ = data
+        body = {
+            "expected_version": result["version"],
+&gt;           "candidate_fingerprint": result["result"]["candidate_fingerprint"],
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            "request_key": "confirm-1",
+            "name": "Literal app",
+        }
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests\test_goal_text_applications.py:158: TypeError</failure></testcase><testcase classname="tests.test_pa_generation_provider" name="test_exact_approved_provider_actual_feedback_candidate_and_cold_worker[False-False]" time="2.654"><failure message="AssertionError: {'contract': {'fingerprint': 'f184bc945773e9d1e4ed1c6da4894e33bd591dfd813e150bd6c54ae64c9c0b5d', 'snapshot': {'applica...735d61f1f402784748a45847b395b', 'kind': 'TOOL_VERIFIED', ...}, ...], 'id': 'run_f8d4fbd218664491ae8f2f0aaf411cc5', ...}&#10;assert 'FAILED' == 'PARTIAL'&#10;  &#10;  - PARTIAL&#10;  + FAILED">env = (&lt;sim2act.db.Store object at 0x000002656AEE7D70&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...f7a2753c794e289ba84904602dd05b', 'user_e96fc40bcbb041658cbe0c29fadf86ff', 'proj_46c3cb8fed44496d8e89e8e3fda3885e', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000002656A8D2C00&gt;
+production = False, repair = False
+
+    @pytest.mark.parametrize("production,repair", [(False, False), (False, True), (True, False), (True, True)])
+    def test_exact_approved_provider_actual_feedback_candidate_and_cold_worker(env, monkeypatch, production, repair):
+        data, clock = configured(env, monkeypatch, production=production)
+        scope, grant, _ = approved(data)
+        rid = accepted(data, grant["activation"])
+        transport, sent = provider(data, clock, repair=repair)
+        settings = replace(data[1], application_generation_live_id=scope["approval_id"] if production else "")
+        if production:
+            production_http(monkeypatch, transport)
+        worker = Worker(data[0], settings, goal_planner_transport=None if production else transport)
+        assert worker.once()
+        reply = data[2].get(f"/api/runs/{rid}")
+        assert reply.status_code == 200, reply.text
+        result = reply.json()
+&gt;       assert result["status"] == "PARTIAL", result
+E       AssertionError: {'contract': {'fingerprint': 'f184bc945773e9d1e4ed1c6da4894e33bd591dfd813e150bd6c54ae64c9c0b5d', 'snapshot': {'applica...735d61f1f402784748a45847b395b', 'kind': 'TOOL_VERIFIED', ...}, ...], 'id': 'run_f8d4fbd218664491ae8f2f0aaf411cc5', ...}
+E       assert 'FAILED' == 'PARTIAL'
+E         
+E         - PARTIAL
+E         + FAILED
+
+tests\test_pa_generation_provider.py:154: AssertionError</failure></testcase><testcase classname="tests.test_pa_generation_provider" name="test_exact_approved_provider_actual_feedback_candidate_and_cold_worker[False-True]" time="2.820"><failure message="AssertionError: {'contract': {'fingerprint': '41a0c440f4ce732920b6be437d636bec28f51c46f18b38ed7ccdcf5f4e5bbe44', 'snapshot': {'applica...041749449470aa413633c1ce0dad7', 'kind': 'TOOL_VERIFIED', ...}, ...], 'id': 'run_edc9b1ff4b72445db7d0e7e75b138386', ...}&#10;assert 'FAILED' == 'PARTIAL'&#10;  &#10;  - PARTIAL&#10;  + FAILED">env = (&lt;sim2act.db.Store object at 0x000002656AC5CB00&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...9e94f5e1db46ef80b8dbb917f6b6b8', 'user_784dbabcf95a49a194700115f99fc5e5', 'proj_ab67701a21e94fc085bd3d14551e6138', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000002656A0B3320&gt;
+production = False, repair = True
+
+    @pytest.mark.parametrize("production,repair", [(False, False), (False, True), (True, False), (True, True)])
+    def test_exact_approved_provider_actual_feedback_candidate_and_cold_worker(env, monkeypatch, production, repair):
+        data, clock = configured(env, monkeypatch, production=production)
+        scope, grant, _ = approved(data)
+        rid = accepted(data, grant["activation"])
+        transport, sent = provider(data, clock, repair=repair)
+        settings = replace(data[1], application_generation_live_id=scope["approval_id"] if production else "")
+        if production:
+            production_http(monkeypatch, transport)
+        worker = Worker(data[0], settings, goal_planner_transport=None if production else transport)
+        assert worker.once()
+        reply = data[2].get(f"/api/runs/{rid}")
+        assert reply.status_code == 200, reply.text
+        result = reply.json()
+&gt;       assert result["status"] == "PARTIAL", result
+E       AssertionError: {'contract': {'fingerprint': '41a0c440f4ce732920b6be437d636bec28f51c46f18b38ed7ccdcf5f4e5bbe44', 'snapshot': {'applica...041749449470aa413633c1ce0dad7', 'kind': 'TOOL_VERIFIED', ...}, ...], 'id': 'run_edc9b1ff4b72445db7d0e7e75b138386', ...}
+E       assert 'FAILED' == 'PARTIAL'
+E         
+E         - PARTIAL
+E         + FAILED
+
+tests\test_pa_generation_provider.py:154: AssertionError</failure></testcase><testcase classname="tests.test_pa_generation_provider" name="test_exact_approved_provider_actual_feedback_candidate_and_cold_worker[True-False]" time="3.202"><failure message="AssertionError: {'contract': {'fingerprint': '6d47459e33b8e4a6e3144cbeaf96d97d4f907b0b28dd49aad9f7ba7ab46f89ea', 'snapshot': {'applica...c4ac86a1f4ed8960d8c463112874d', 'kind': 'TOOL_VERIFIED', ...}, ...], 'id': 'run_60ba3a077fa14d829c6e435a90753583', ...}&#10;assert 'FAILED' == 'PARTIAL'&#10;  &#10;  - PARTIAL&#10;  + FAILED">env = (&lt;sim2act.db.Store object at 0x000002656A924DA0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...e9a5d443ea4faab8bd0ff6117cf203', 'user_45c489f016804682b06251814ac954e6', 'proj_89752d4e4bdb474dafd1bd2b48841a8d', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000002656A8DE030&gt;
+production = True, repair = False
+
+    @pytest.mark.parametrize("production,repair", [(False, False), (False, True), (True, False), (True, True)])
+    def test_exact_approved_provider_actual_feedback_candidate_and_cold_worker(env, monkeypatch, production, repair):
+        data, clock = configured(env, monkeypatch, production=production)
+        scope, grant, _ = approved(data)
+        rid = accepted(data, grant["activation"])
+        transport, sent = provider(data, clock, repair=repair)
+        settings = replace(data[1], application_generation_live_id=scope["approval_id"] if production else "")
+        if production:
+            production_http(monkeypatch, transport)
+        worker = Worker(data[0], settings, goal_planner_transport=None if production else transport)
+        assert worker.once()
+        reply = data[2].get(f"/api/runs/{rid}")
+        assert reply.status_code == 200, reply.text
+        result = reply.json()
+&gt;       assert result["status"] == "PARTIAL", result
+E       AssertionError: {'contract': {'fingerprint': '6d47459e33b8e4a6e3144cbeaf96d97d4f907b0b28dd49aad9f7ba7ab46f89ea', 'snapshot': {'applica...c4ac86a1f4ed8960d8c463112874d', 'kind': 'TOOL_VERIFIED', ...}, ...], 'id': 'run_60ba3a077fa14d829c6e435a90753583', ...}
+E       assert 'FAILED' == 'PARTIAL'
+E         
+E         - PARTIAL
+E         + FAILED
+
+tests\test_pa_generation_provider.py:154: AssertionError</failure></testcase><testcase classname="tests.test_pa_generation_provider" name="test_exact_approved_provider_actual_feedback_candidate_and_cold_worker[True-True]" time="3.155"><failure message="AssertionError: {'contract': {'fingerprint': '1c3b18835fe0f80fd8ecdd9984c56c7f4643e45b8842efcaf1d14a8d2b12c199', 'snapshot': {'applica...73ec2bc4d4a0b935170229ba349af', 'kind': 'TOOL_VERIFIED', ...}, ...], 'id': 'run_039d7138163340ec91831e82a4beb2ff', ...}&#10;assert 'FAILED' == 'PARTIAL'&#10;  &#10;  - PARTIAL&#10;  + FAILED">env = (&lt;sim2act.db.Store object at 0x000002656A347F50&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...b061ac3e8f419db43e6f04b25832c7', 'user_4a50b9f50c3d42ee846df573e33181e3', 'proj_52027d5a08204cf8ac02533293708507', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000002656A7F2ED0&gt;
+production = True, repair = True
+
+    @pytest.mark.parametrize("production,repair", [(False, False), (False, True), (True, False), (True, True)])
+    def test_exact_approved_provider_actual_feedback_candidate_and_cold_worker(env, monkeypatch, production, repair):
+        data, clock = configured(env, monkeypatch, production=production)
+        scope, grant, _ = approved(data)
+        rid = accepted(data, grant["activation"])
+        transport, sent = provider(data, clock, repair=repair)
+        settings = replace(data[1], application_generation_live_id=scope["approval_id"] if production else "")
+        if production:
+            production_http(monkeypatch, transport)
+        worker = Worker(data[0], settings, goal_planner_transport=None if production else transport)
+        assert worker.once()
+        reply = data[2].get(f"/api/runs/{rid}")
+        assert reply.status_code == 200, reply.text
+        result = reply.json()
+&gt;       assert result["status"] == "PARTIAL", result
+E       AssertionError: {'contract': {'fingerprint': '1c3b18835fe0f80fd8ecdd9984c56c7f4643e45b8842efcaf1d14a8d2b12c199', 'snapshot': {'applica...73ec2bc4d4a0b935170229ba349af', 'kind': 'TOOL_VERIFIED', ...}, ...], 'id': 'run_039d7138163340ec91831e82a4beb2ff', ...}
+E       assert 'FAILED' == 'PARTIAL'
+E         
+E         - PARTIAL
+E         + FAILED
+
+tests\test_pa_generation_provider.py:154: AssertionError</failure></testcase><testcase classname="tests.test_pa_generation_provider" name="test_default_scope_is_closed_and_plain_live_flags_never_grant_calls" time="1.185" /><testcase classname="tests.test_pa_generation_provider" name="test_exact_intent_submission_rejects_coordinated_different_request[key]" time="1.321" /><testcase classname="tests.test_pa_generation_provider" name="test_exact_intent_submission_rejects_coordinated_different_request[goal]" time="1.365" /><testcase classname="tests.test_pa_generation_provider" name="test_exact_intent_submission_rejects_coordinated_different_request[approval-fp]" time="1.309" /><testcase classname="tests.test_pa_generation_provider" name="test_exact_intent_submission_rejects_coordinated_different_request[scope-fp]" time="1.392" /><testcase classname="tests.test_pa_generation_provider" name="test_actual_response_fault_never_forms_candidate_or_resends[unknown-usage]" time="2.041" /><testcase classname="tests.test_pa_generation_provider" name="test_actual_response_fault_never_forms_candidate_or_resends[wrong-model]" time="1.912" /><testcase classname="tests.test_pa_generation_provider" name="test_actual_response_fault_never_forms_candidate_or_resends[extra-tool]" time="1.895" /><testcase classname="tests.test_pa_generation_provider" name="test_actual_response_fault_never_forms_candidate_or_resends[truncated]" time="1.953" /><testcase classname="tests.test_pa_generation_provider" name="test_actual_response_fault_never_forms_candidate_or_resends[oversized]" time="1.926" /><testcase classname="tests.test_pa_generation_provider" name="test_revoke_stops_generation_without_recovering_old_goal_body" time="1.343" /><testcase classname="tests.test_pa_generation_provider" name="test_provider_is_rechecked_at_actual_wire_guard[live_enabled]" time="2.059" /><testcase classname="tests.test_pa_generation_provider" name="test_provider_is_rechecked_at_actual_wire_guard[token]" time="2.020" /><testcase classname="tests.test_pa_generation_provider" name="test_provider_is_rechecked_at_actual_wire_guard[token_replaced]" time="2.057" /><testcase classname="tests.test_pa_generation_provider" name="test_provider_is_rechecked_at_actual_wire_guard[live_id]" time="2.178" /><testcase classname="tests.test_pa_generation_provider" name="test_provider_is_rechecked_at_actual_wire_guard[mode]" time="2.096" /><testcase classname="tests.test_pa_generation_provider" name="test_post_settlement_finalization_failure_keeps_original_attempt_and_failure_event" time="2.617"><failure message="AssertionError: a completed immutable response must not hide the final commit failure&#10;assert 'VERSION_CONFLICT' == 'BUDGET_EXHAUSTED'&#10;  &#10;  - BUDGET_EXHAUSTED&#10;  + VERSION_CONFLICT">env = (&lt;sim2act.db.Store object at 0x0000026566EBEBA0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...8136b061ab452398717fe4776b6f56', 'user_00b60d65be534a45bad23e16cc52c96d', 'proj_5269a84f42f146518b961af91af44253', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x0000026569B36FF0&gt;
+
+    def test_post_settlement_finalization_failure_keeps_original_attempt_and_failure_event(env, monkeypatch):
+        data, clock = configured(env, monkeypatch)
+        scope, grant, _ = approved(data)
+        rid = accepted(data, grant["activation"])
+        transport, sent = provider(data, clock)
+        original = Worker.finish
+    
+        def injected_finalizer(worker, run_id, fence, state, *args, **kwargs):
+            if state == "PARTIAL":
+                raise DomainError("BUDGET_EXHAUSTED", "Synthetic final commit failure after settled response")
+            return original(worker, run_id, fence, state, *args, **kwargs)
+    
+        monkeypatch.setattr(Worker, "finish", injected_finalizer)
+        assert Worker(data[0], data[1], goal_planner_transport=transport).once()
+        with data[0].tx() as c:
+            row = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
+            assert row["result"] is None and row["status"] == "FAILED"
+&gt;           assert row["error"]["code"] == "BUDGET_EXHAUSTED", "a completed immutable response must not hide the final commit failure"
+E           AssertionError: a completed immutable response must not hide the final commit failure
+E           assert 'VERSION_CONFLICT' == 'BUDGET_EXHAUSTED'
+E             
+E             - BUDGET_EXHAUSTED
+E             + VERSION_CONFLICT
+
+tests\test_pa_generation_provider.py:314: AssertionError</failure></testcase><testcase classname="tests.test_pa_generation_provider" name="test_last_state_write_rolls_back_after_original_time_limit[lease]" time="2.616"><failure message="assert 2 == 1&#10; +  where 2 = len({'attempt_0a4980309a204a21ae060a6258269fb8', 'attempt_185802dca45741729224abe64c0efceb'})&#10; +  and   1 = len([{'max_tokens': 1024, 'messages': [{'content': 'Produce a finite declarative literal-text application under the suppli...&quot;source_hash&quot;,&quot;goal&quot;],&quot;semantic_acceptance&quot;:&quot;NOT_RUN&quot;}', 'role': 'user'}], 'model': 'intern-s2', 'stream': False, ...}])">env = (&lt;sim2act.db.Store object at 0x000002656A0B0860&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...82f46276664bfda024afb75f22a9b9', 'user_6bd0b81fe76340d6bdb2db737e43b709', 'proj_1ab4c2a7c2c94f22a259a54ebad02de0', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000002656A536FF0&gt;
+kind = 'lease'
+
+    @pytest.mark.parametrize("kind", ["lease", "approval"])
+    def test_last_state_write_rolls_back_after_original_time_limit(env, monkeypatch, kind):
+        from types import SimpleNamespace
+    
+        from sim2act import worker as worker_module
+        from sim2act.db import events
+        data, clock = configured(env, monkeypatch)
+        scope, grant, _ = approved(data)
+        rid = accepted(data, grant["activation"])
+        transport, sent = provider(data, clock)
+        original = data[0].event
+        actual_time = time.time
+        def expire(c, run_id, event_kind, value):
+            original(c, run_id, event_kind, value)
+            if run_id == rid and event_kind == "STATE" and value["status"] == "PARTIAL":
+                if kind == "approval":
+                    clock["at"] = grant["deadline"] + 1
+                else:
+                    monkeypatch.setattr(worker_module, "time", SimpleNamespace(time=lambda: actual_time() + 100))
+        monkeypatch.setattr(data[0], "event", expire)
+        assert Worker(data[0], data[1], goal_planner_transport=transport).once()
+        with data[0].tx() as c:
+            run = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
+            assert run["status"] == "FAILED" and run["result"] is None
+            assert run["error"]["code"] == "VERSION_CONFLICT"
+            values = c.execute(select(events.c.data).where(events.c.run_id == rid, events.c.kind == "STATE")).scalars().all()
+            assert all(value["status"] != "PARTIAL" for value in values)
+            charges, _, settled = approval.audit(data[0], c, data[3], scope["approval_id"])
+&gt;           assert len(charges) == len(settled) == len(sent) == 2
+E           assert 2 == 1
+E            +  where 2 = len({'attempt_0a4980309a204a21ae060a6258269fb8', 'attempt_185802dca45741729224abe64c0efceb'})
+E            +  and   1 = len([{'max_tokens': 1024, 'messages': [{'content': 'Produce a finite declarative literal-text application under the suppli..."source_hash","goal"],"semantic_acceptance":"NOT_RUN"}', 'role': 'user'}], 'model': 'intern-s2', 'stream': False, ...}])
+
+tests\test_pa_generation_provider.py:352: AssertionError</failure></testcase><testcase classname="tests.test_pa_generation_provider" name="test_last_state_write_rolls_back_after_original_time_limit[approval]" time="2.674"><failure message="assert 2 == 1&#10; +  where 2 = len({'attempt_671eb67ecd9247b494938b05d2ffd118', 'attempt_c0ac3cf95da54855afd6182898d7eeef'})&#10; +  and   1 = len([{'max_tokens': 1024, 'messages': [{'content': 'Produce a finite declarative literal-text application under the suppli...&quot;source_hash&quot;,&quot;goal&quot;],&quot;semantic_acceptance&quot;:&quot;NOT_RUN&quot;}', 'role': 'user'}], 'model': 'intern-s2', 'stream': False, ...}])">env = (&lt;sim2act.db.Store object at 0x0000026569FF2D20&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...a25eef03db4e10a267836d316b29a5', 'user_af2d4691552c4854b4b6351137fc1e08', 'proj_319e04fcee4f41358560d29a8821463f', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000002656A4F85C0&gt;
+kind = 'approval'
+
+    @pytest.mark.parametrize("kind", ["lease", "approval"])
+    def test_last_state_write_rolls_back_after_original_time_limit(env, monkeypatch, kind):
+        from types import SimpleNamespace
+    
+        from sim2act import worker as worker_module
+        from sim2act.db import events
+        data, clock = configured(env, monkeypatch)
+        scope, grant, _ = approved(data)
+        rid = accepted(data, grant["activation"])
+        transport, sent = provider(data, clock)
+        original = data[0].event
+        actual_time = time.time
+        def expire(c, run_id, event_kind, value):
+            original(c, run_id, event_kind, value)
+            if run_id == rid and event_kind == "STATE" and value["status"] == "PARTIAL":
+                if kind == "approval":
+                    clock["at"] = grant["deadline"] + 1
+                else:
+                    monkeypatch.setattr(worker_module, "time", SimpleNamespace(time=lambda: actual_time() + 100))
+        monkeypatch.setattr(data[0], "event", expire)
+        assert Worker(data[0], data[1], goal_planner_transport=transport).once()
+        with data[0].tx() as c:
+            run = c.execute(select(runs).where(runs.c.id == rid)).mappings().one()
+            assert run["status"] == "FAILED" and run["result"] is None
+            assert run["error"]["code"] == "VERSION_CONFLICT"
+            values = c.execute(select(events.c.data).where(events.c.run_id == rid, events.c.kind == "STATE")).scalars().all()
+            assert all(value["status"] != "PARTIAL" for value in values)
+            charges, _, settled = approval.audit(data[0], c, data[3], scope["approval_id"])
+&gt;           assert len(charges) == len(settled) == len(sent) == 2
+E           assert 2 == 1
+E            +  where 2 = len({'attempt_671eb67ecd9247b494938b05d2ffd118', 'attempt_c0ac3cf95da54855afd6182898d7eeef'})
+E            +  and   1 = len([{'max_tokens': 1024, 'messages': [{'content': 'Produce a finite declarative literal-text application under the suppli..."source_hash","goal"],"semantic_acceptance":"NOT_RUN"}', 'role': 'user'}], 'model': 'intern-s2', 'stream': False, ...}])
+
+tests\test_pa_generation_provider.py:352: AssertionError</failure></testcase><testcase classname="tests.test_pa_generation_provider" name="test_revoked_approval_rejects_unconfirmed_candidate_with_no_partial_app" time="2.743"><failure message="TypeError: 'NoneType' object is not subscriptable">env = (&lt;sim2act.db.Store object at 0x0000026569EFA000&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...8ea4b0863646ada5cff03ccbcaf51c', 'user_1decb363313a4ae191ae9bd56384255a', 'proj_e3d349775a2148d5b25463387819e6e7', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000002656B236FF0&gt;
+
+    def test_revoked_approval_rejects_unconfirmed_candidate_with_no_partial_app(env, monkeypatch):
+        from sim2act.db import app_drafts, principals
+        data, clock = configured(env, monkeypatch)
+        scope, grant, _ = approved(data)
+        rid = accepted(data, grant["activation"])
+        transport, _ = provider(data, clock)
+        assert Worker(data[0], data[1], goal_planner_transport=transport).once()
+        result = data[2].get(f"/api/runs/{rid}").json()
+        with data[0].tx() as c:
+            before = {table.name: c.execute(select(table)).mappings().all() for table in (app_drafts, principals, grants)}
+        assert data[2].post(f"/api/application-provider-scopes/{scope['approval_id']}/revoke", json=dict(
+            expected_scope_fingerprint=scope["scope_fingerprint"], request_key="stop", reason="Synthetic revoke before confirmation")).status_code == 200
+        response = data[2].post(f"/api/runs/{rid}/confirm-application-candidate", json=dict(expected_version=result["version"],
+&gt;           candidate_fingerprint=result["result"]["candidate_fingerprint"], name="No app", request_key="confirm"))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests\test_pa_generation_provider.py:368: TypeError</failure></testcase><testcase classname="tests.test_pa_generation_provider" name="test_approved_scope_list_requires_explicit_existing_approval" time="1.447" /></testsuite></testsuites>

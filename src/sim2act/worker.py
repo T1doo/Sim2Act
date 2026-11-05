@@ -177,6 +177,11 @@ class Worker:
                 from .natural_request import body, protocol
                 serialized = body(context["messages"], request_tools, s.max_output_tokens,
                     request_protocol=protocol(natural_spec_request))
+            elif generation_request:
+                from .goal_applications import body as generation_body
+                # Reserve exactly the same versioned bytes that will be sent.
+                # The frozen-message check below still guards their authority.
+                serialized = generation_body(context["messages"], request_tools, s.max_output_tokens)
             wire_seal = {
                 "sha256": hashlib.sha256(serialized).hexdigest(),
                 "bytes": len(serialized),

@@ -110,6 +110,7 @@ def policy(provider, user, pid, body, activation=None, app_limits=None):
         repair_limit=1,
         live_request_allowance=0,
         response_archive_policy="protected-json32768.v1",
+        output_protocol="compact-candidate-json.v1" if not body.get("family") else None,
         activation=activation,
         app_limits=app_limits,
     ).model_dump(exclude_none=True)
@@ -456,12 +457,27 @@ def _literal_initial_messages(saved_goal, server_ids, material, limits):
         "semantic_acceptance": "NOT_RUN",
     }
     return [
-        {"role": "system", "content": SYSTEM},
+        {"role": "system", "content": SYSTEM + (
+            " Output protocol compact-candidate-json.v1: after the tool result, output ONLY the final JSON object. "
+            "Begin with { and end with }. Use compact JSON without indentation, analysis, explanations, or code fences. "
+            "The four top-level fields are manifest, actions, source_hash, and goal. "
+            "Keep every required schema field and the complete frozen goal; compact formatting must not remove facts."
+            if server_ids.get("output_protocol") == "compact-candidate-json.v1" else "")},
         {"role": "user", "content": json.dumps(value, ensure_ascii=False, separators=(",", ":"))},
     ]
 
 
 def body(messages, tools, max_output):
+    # Infer only from the frozen initial message reconstructed from the contract.
+    # Old contracts lack this discriminator and retain their exact old wire.
+    extra = {}
+    if not tools and len(messages)>1:
+        try:
+            selected=json.loads(messages[1]["content"]).get("server_ids",{})
+            if selected.get("output_protocol")=="compact-candidate-json.v1":
+                extra["thinking_mode"]=False
+        except (ValueError,TypeError,KeyError,AttributeError):
+            pass
     return httpx.Request(
         "POST",
         InternModel.ENDPOINT,
@@ -471,6 +487,7 @@ def body(messages, tools, max_output):
             "tools": tools,
             "stream": False,
             "max_tokens": max_output,
+            **extra,
         },
     ).content
 
