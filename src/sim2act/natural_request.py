@@ -6,14 +6,17 @@ from .errors import DomainError
 from .model import InternModel
 
 VERSION = "natural-spec-request.v2"
-CURRENT_VERSION = "natural-spec-request.v3"
+INDEXED_VERSION = "natural-spec-request.v3"
+CURRENT_VERSION = "natural-spec-request.v4"
+INDEXED_PROTOCOLS = (INDEXED_VERSION, CURRENT_VERSION)
+PROTOCOLS = (VERSION, *INDEXED_PROTOCOLS)
 
 
 def protocol(meta):
     if "request_protocol" not in meta:
         return None
     value = meta["request_protocol"]
-    if type(value) is not str or value not in (VERSION, CURRENT_VERSION):
+    if type(value) is not str or value not in PROTOCOLS:
         raise DomainError("VERSION_CONFLICT", "Unknown natural request protocol")
     return value
 
@@ -23,7 +26,7 @@ def body(messages, tools, max_output, *, request_protocol=None):
         protocol({"request_protocol": request_protocol})
     payload = dict(model="intern-s2", messages=messages, tools=tools,
         stream=False, max_tokens=max_output)
-    if request_protocol in (VERSION, CURRENT_VERSION):
+    if request_protocol in PROTOCOLS:
         if tools != []:
             raise DomainError("VERSION_CONFLICT", "Natural extraction has no tools")
         payload["thinking_mode"] = False

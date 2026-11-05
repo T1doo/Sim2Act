@@ -32,6 +32,7 @@ VERSION = "pa-natural-spec-app.v1"
 GENERATION = "goal-natural-spec-application.v1"
 CODEC = "natural-spec-recipe.v1"
 CHECK = "natural.spec_citations.v1"
+ITEM_ID_PATTERN = r"^[a-z][a-z0-9_]{0,39}$"
 READ, MERGE, VERIFY, SAVE = (
     "resource.read",
     "spec.merge_evidence",
@@ -203,13 +204,13 @@ def citation_feedback(source, items, *, allow_external_targets=False):
     for item in items:
         iid = item["item_id"]
         if (
-            not re.fullmatch(r"[a-z][a-z0-9_]{0,39}", iid)
+            not re.fullmatch(ITEM_ID_PATTERN, iid)
             or iid in seen
             or not item["summary"].strip()
             or not item["citations"]
             or len(item["targets"]) != len(set(item["targets"]))
             or any(
-                not re.fullmatch(r"[a-z][a-z0-9_]{0,39}", target) or target == iid
+                not re.fullmatch(ITEM_ID_PATTERN, target) or target == iid
                 for target in item["targets"]
             )
             or item["kind"] in {"requirement", "unclassified"}

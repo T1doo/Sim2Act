@@ -419,7 +419,7 @@ def test_citation_pass_never_semantic_acceptance_unicode_and_unassigned():
 
 def test_indexed_runtime_citation_resolves_current_unicode_line_and_rejects_unknown_ids():
     from sim2act.contracts import Limits
-    from sim2act.natural_request import CURRENT_VERSION, VERSION, indexed_lines
+    from sim2act.natural_request import CURRENT_VERSION, INDEXED_VERSION, VERSION, indexed_lines
     from sim2act.natural_spec_runtime import parse
 
     text = "须登记 ☀。\r\n\r\n地点待定。"
@@ -437,6 +437,7 @@ def test_indexed_runtime_citation_resolves_current_unicode_line_and_rejects_unkn
         return parse(raw, source, "model.spec.all", limits, 4096, protocol=protocol)[0]
 
     assert receive(CURRENT_VERSION)["items"][0]["citations"] == [span]
+    assert receive(INDEXED_VERSION)["items"][0]["citations"] == [span]
     with pytest.raises(DomainError):
         receive(VERSION)
     for invalid in ({"span_id": 0}, {"span_id": 3}, {"span_id": True}, {"span_id": 2, "quote": "改写"}):
@@ -446,6 +447,28 @@ def test_indexed_runtime_citation_resolves_current_unicode_line_and_rejects_unkn
     item["citations"] = [span]
     assert receive(CURRENT_VERSION)["items"][0]["citations"] == [span]
     assert receive(VERSION)["items"][0]["citations"] == [span]
+
+
+def test_indexed_runtime_request_explains_the_same_item_ids_the_validator_requires():
+    from sim2act.natural_request import CURRENT_VERSION, INDEXED_VERSION
+    from sim2act.natural_spec_runtime import messages
+
+    binding = {"draft": {"candidate": {"goal": "Preserve requirements and exceptions"}}}
+    action = {"executor": {"ref": "model.spec.all"}}
+    step = {"step_id": "extract"}
+    intent = {"args": {"content": "报告须于周五提交。\n经批准可延期。"}}
+    previous = messages(binding, step, action, intent, protocol=INDEXED_VERSION)
+    current = messages(binding, step, action, intent, protocol=CURRENT_VERSION)
+    assert '"targets":["req_001"]' in current[0]["content"]
+    assert "Hyphens are invalid" in current[0]["content"]
+    payload = json.loads(current[1]["content"])
+    fields = payload["output_schema"]["properties"]["items"]["items"]["properties"]
+    assert fields["item_id"].pop("pattern") == natural.ITEM_ID_PATTERN
+    assert fields["targets"]["items"].pop("pattern") == natural.ITEM_ID_PATTERN
+    assert payload.pop("request_protocol") == CURRENT_VERSION
+    earlier_payload = json.loads(previous[1]["content"])
+    assert earlier_payload.pop("request_protocol") == INDEXED_VERSION
+    assert payload == earlier_payload
 
 
 @pytest.mark.parametrize(

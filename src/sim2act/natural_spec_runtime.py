@@ -101,7 +101,13 @@ from .model import (
 )
 from .natural_request import CURRENT_VERSION as REQUEST_PROTOCOL
 from .natural_request import VERSION as CODEPOINT_PROTOCOL
-from .natural_request import body, coordinates, indexed_lines, resolve_line_citations
+from .natural_request import (
+    INDEXED_PROTOCOLS,
+    body,
+    coordinates,
+    indexed_lines,
+    resolve_line_citations,
+)
 from .natural_request import protocol as request_protocol
 from .spec_production import ProductionTrialBinding as _RawBinding
 from .worker import Worker as _RawWorker
@@ -1539,9 +1545,9 @@ def messages(binding, step, action, intent, *, protocol=None):
                         "source_codepoints": coordinates(intent["args"]["content"]),
                         "source_length": len(intent["args"]["content"])}
                         if protocol == CODEPOINT_PROTOCOL else {}),
-                    **({"request_protocol": REQUEST_PROTOCOL,
+                    **({"request_protocol": protocol,
                         "source_lines": indexed_lines(intent["args"]["content"])}
-                        if protocol == REQUEST_PROTOCOL else {}),
+                        if protocol in INDEXED_PROTOCOLS else {}),
                     goal=binding["draft"]["candidate"]["goal"],
                     focus=sorted(codec.MODEL_KINDS[action["executor"]["ref"]]),
                     step_id=step["step_id"],
@@ -1580,7 +1586,7 @@ def messages(binding, step, action, intent, *, protocol=None):
             " the index of its last character as end. quote must exactly equal content[start:end]."
             " Spaces, punctuation, newlines and emoji each retain their listed positions."
             " Return JSON directly without analysis or markdown fences.")
-    if protocol == REQUEST_PROTOCOL:
+    if protocol in INDEXED_PROTOCOLS:
         payload = json.loads(result[1]["content"])
         properties = payload["output_schema"]["properties"]["items"]["items"]["properties"]
         exact_span = properties["citations"]["items"]
@@ -1590,12 +1596,21 @@ def messages(binding, step, action, intent, *, protocol=None):
                     "maximum": len(payload["source_lines"])}}},
             exact_span,
         ]}
+        if protocol == REQUEST_PROTOCOL:
+            properties["item_id"]["pattern"] = codec.ITEM_ID_PATTERN
+            properties["targets"]["items"]["pattern"] = codec.ITEM_ID_PATTERN
         result[1]["content"] = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         result[0]["content"] += (
             ' Select a supplied source line with a citation such as {"span_id":1}.'
             " Use the explicit start/end/quote form when a citation needs a smaller exact span."
             " Requirements and unclassified items have empty targets."
             " Other items can target retained requirements. Return JSON directly.")
+        if protocol == REQUEST_PROTOCOL:
+            result[0]["content"] += (
+                ' Use unique IDs like "req_001", "exc_001" and "open_001".'
+                ' IDs start with a lowercase letter and use only lowercase letters, digits and underscores.'
+                ' Hyphens are invalid. A target must repeat the exact ID of a retained requirement,'
+                ' for example "targets":["req_001"]. Leave targets empty if no relation is supported.')
     return result
 
 
@@ -1698,7 +1713,7 @@ def parse(raw, source, ref, limits, reserved, *, protocol=None):
         )
     usage = checked_usage(raw, limits, limits.max_output_tokens, reserved)
     value = strict_json(safe["content"], 16384)
-    if protocol == REQUEST_PROTOCOL:
+    if protocol in INDEXED_PROTOCOLS:
         resolve_line_citations(value, source["content"])
     validate_value(
         {
