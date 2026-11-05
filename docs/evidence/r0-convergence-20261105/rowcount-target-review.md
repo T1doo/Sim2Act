@@ -1,0 +1,9 @@
+# 行数修复目标复核
+
+明确审阅候选为539388dc3ecb11b5ec462289aa665ebbfc5e22d8。相对68525f0a的业务源码差异仅production_trial_journal.py两处INSERT增加preserve_rowcount=True，保持每份镜像精确一行和冲突拒绝条件。实际PG默认-1/显式保留1的诊断及原函数回滚验证见此前记录。
+
+配套production v3/literal v2清单更新review_candidate与完整目标哈希；两枚资格字面量仍按原规则闭合，没有增加豁免。68525f0a清单保存为superseded-68525f0a-*，旧失败与81通过1失败JUnit保留。
+
+当前源快照44项qualification pair/journal测试通过，见rowcount-qualified.xml。该结果不覆盖此前P-B冷保存超时，未声称完整控制器或R0通过。
+
+另对原68525f0a对应源快照启动P-B单用例cProfile分析，保留原时钟/预算/120秒结算期限；分析增加运行开销，只用于定位热点。原进程尚未完成时不得重启同一分析，或将分析耗时当性能成绩。后续要用未插桩的新候选验证真正修复。
