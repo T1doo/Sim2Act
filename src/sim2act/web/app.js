@@ -878,12 +878,12 @@ function createHealthSampler(render) {
   let generation = 0;
   return async (readHealth) => {
     const sample = ++generation;
-    let available = false, message = "后台健康检查失败";
+    let available = false, message = "连接待确认";
     try {
       const h = await readHealth();
       if (!h || !["MOCK", "LIVE"].includes(h.mode) || h.api !== "UP" || !["UP", "OFFLINE"].includes(h.worker))
         throw new Error("健康响应结构无效");
-      message = `健康检查：${h.mode} · API ${h.api} · worker ${h.worker}`;
+      message = h.worker === 'OFFLINE' ? '执行服务离线' : h.mode === 'MOCK' ? '模拟模式' : '已连接';
       available = true;
     } catch (_) { /* Only health sampling failures affect the health message. */ }
     if (sample !== generation) return false;
@@ -1942,7 +1942,8 @@ function updateFrontendRun(receipt, current) {
   $('result').querySelector('.result-identity-summary')?.remove();
   const summary=frontendNode('section',undefined,'result-identity-summary');
   summary.setAttribute('aria-label','选中运行与验收状态');
-  const identity=frontendNode('p',`选中运行 · ${receipt.id ? receipt.id.slice(0,16) : '编号未提供'}`,'selected-run-identity');
+  const identity=frontendNode('p',Number.isSafeInteger(receipt.version)?`任务记录 · v${receipt.version}`:'任务记录','selected-run-identity');
+  if(receipt.id)identity.title=receipt.id;
   identity.title=receipt.id || '';
   const states=frontendNode('dl',undefined,'result-acceptance-summary');
   for(const [label,value] of [['目标验收',receipt.result?.goal_acceptance??receipt.goal_acceptance],['人工签收',receipt.owner_acceptance??receipt.result?.owner_acceptance]]){

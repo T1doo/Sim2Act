@@ -11,14 +11,15 @@ const web = path.join(__dirname, "../src/sim2act/web");
 const app = fs.readFileSync(path.join(web, "app.js"), "utf8");
 const html = fs.readFileSync(path.join(web, "index.html"), "utf8");
 const sampler = app.match(/^function createHealthSampler\(render\) \{\n[\s\S]*?^\}/m)?.[0];
+const feedback = app.match(/^function errorFeedback\(error\) \{\n[\s\S]*?^\}/m)?.[0];
 const polling = app.match(/^const sampleHealth = createHealthSampler[^\n]*;\nlet backgroundRefreshInFlight=false;\nsetInterval\([\s\S]*?^\},2500\);/m)?.[0];
 const output = html.match(/<output id="health"[^>]*>[\s\S]*?<\/output>/)?.[0];
 const error = html.match(/<p id="error"[^>]*><\/p>/)?.[0];
-assert.ok(sampler && polling && output && error, "extract only actual health control and output");
+assert.ok(sampler && feedback && polling && output && error, "extract actual health control, shared error formatting and output");
 assert.doesNotMatch(sampler, /\b(?:api|refresh|showRun|fetch)\s*\(/);
 const HEALTH = {mode: "MOCK", api: "UP", worker: "UP"};
-const SUCCESS = "健康检查：MOCK · API UP · worker UP";
-const FAILURE = "后台健康检查失败";
+const SUCCESS = "模拟模式";
+const FAILURE = "连接待确认";
 
 test("isolated header health status", async t => {
   const browser = await chromium.launch({
@@ -49,6 +50,7 @@ test("isolated header health status", async t => {
         window.backgroundTick = callback; window.pollDelay = delay;
       };
       ${sampler}
+      ${feedback}
       ${polling}
     `});
 
@@ -127,7 +129,7 @@ test("isolated header health status", async t => {
       }
       await configure({health: {...HEALTH, worker: "OFFLINE"}});
       await tick();
-      assert.equal(await message(), "健康检查：MOCK · API UP · worker OFFLINE");
+      assert.equal(await message(), "执行服务离线");
     });
 
     await t.test("older asynchronous success or failure never overwrites newer state", async () => {
@@ -147,7 +149,7 @@ test("isolated header health status", async t => {
           else finishOld(health);
           return {messages, newer, old: await old};
         }, {oldFails, newFails, health: HEALTH});
-        assert.deepEqual(result.messages, [newFails ? FAILURE : "健康检查：LIVE · API UP · worker UP"]);
+        assert.deepEqual(result.messages, [newFails ? FAILURE : "已连接"]);
         assert.equal(result.newer, !newFails);
         assert.equal(result.old, false);
       }
@@ -158,7 +160,7 @@ test("isolated header health status", async t => {
       assert.equal(await status.count(), 1);
       assert.equal(await status.getAttribute("aria-live"), "polite");
       assert.equal(await status.getAttribute("aria-atomic"), "true");
-      assert.match(await status.ariaSnapshot(), /健康检查：MOCK · API UP · worker OFFLINE/);
+      assert.match(await status.ariaSnapshot(), /执行服务离线/);
       assert.equal(await page.getByRole("alert").count(), 1);
     });
 
