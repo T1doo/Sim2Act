@@ -109,7 +109,15 @@ def test_core_reserves_same_4096_wire_without_changing_application_runtime(env,m
             if bad_candidate and call['function']['name']=='spec.check_candidate':
                 call['function']['arguments']=json.dumps({'candidate':'not a valid candidate object'})
             call['function']['name']=inverse[call['function']['name']]
-        if final_invalid and len(sent)==3:raw['choices'][0]['message']['content']=json.dumps('still not a valid candidate')
+        if len(sent) == 3:
+            choice = raw["choices"][0]
+            candidate = json.loads(choice["message"]["content"])
+            if final_invalid:
+                candidate = {"recipe": "still not a valid candidate"}
+            choice["message"] = dict(role="assistant", content="", tool_calls=[
+                dict(id="submit", type="function", function=dict(name="submit_candidate",
+                    arguments=json.dumps({"candidate": candidate})))])
+            choice["finish_reason"] = "tool_calls"
         return httpx.Response(200,json=raw)
     transport=httpx.MockTransport(respond_to_wire_names)
     assert Worker(store,settings,goal_planner_transport=transport).once()
@@ -122,17 +130,29 @@ def test_core_reserves_same_4096_wire_without_changing_application_runtime(env,m
     assert [v['max_tokens'] for v in sent]==[1024,4096,4096]
     prompt=json.loads(sent[0]['messages'][1]['content'])
     assert prompt['generation_budget']['candidate_output_tokens']==4096
-    assert prompt['server_ids']['output_protocol']=='natural-checked-candidate4096.v8'
-    assert sent[2]['tools']==[] and sent[2]['tool_choice']=='none'
+    assert prompt['server_ids']['output_protocol']=='natural-checked-candidate4096.v9'
+    assert sent[2]["tool_choice"] == {"type": "function", "function": {"name": "submit_candidate"}}
+    assert sent[2]["tools"][0]["function"]["name"] == "submit_candidate"
+    for request in sent[1:]:
+        schema = request["tools"][0]["function"]["parameters"]["properties"]["candidate"]
+        ports = schema["properties"]["recipe"]["properties"]["steps"]["items"]["properties"]["inputs"]
+        binding = ports["additionalProperties"]["anyOf"][0]
+        assert binding["properties"]["ref"] == {"type": "string", "enum": ["source"]}
+        assert "ref" in binding["required"]
     assert 'operator_wiring' in prompt['codec']
     positions=[json.loads(m['content'])['actual_read_positions'] for m in sent[1]['messages'] if m['role']=='user' and 'actual_read_positions' in m['content']]
     from test_natural_spec_apps import SOURCE
     assert len(positions)==1 and all(SOURCE[row['start']:row['end']]==row['quote'] for row in positions[0]['lines'])
     assert prompt['generation_budget']['max_output_tokens']==1024
     assert run['contract']['snapshot']['application_generation']['app_limits']['max_output_tokens']==1024
+    from sim2act.db import operations
+    preview = client.get(f"/api/projects/{pid}/natural-spec-model-runs/{run['id']}/sample-preview")
+    assert preview.status_code == 200, preview.text
+    with store.tx() as c:
+        observed_tools = c.execute(select(operations.c.tool_ref).where(operations.c.run_id == run["id"])).scalars().all()
+    assert sorted(observed_tools) == ["resource.read", "spec.check_candidate"]
     if bad_candidate:
         assert run['result']['app_created'] is False
-        from sim2act.db import operations
         with store.tx() as c:
             receipt=c.execute(select(operations.c.receipt).where(operations.c.run_id==run['id'],operations.c.tool_ref=='spec.check_candidate')).scalar_one()
             assert receipt['data']['status']=='FAIL' and receipt['data']['project_writes']==0

@@ -116,7 +116,7 @@ def policy(provider, user, pid, body, activation=None, app_limits=None, output_t
         repair_limit=1,
         live_request_allowance=0,
         response_archive_policy="protected-json32768.v1",
-        output_protocol=("compact-candidate-json4096.v6" if output_tokens==4096 else "compact-candidate-json.v1") if not body.get("family") else ("natural-checked-candidate4096.v8" if natural_extended else "natural-checked-candidate.v1") if body.get("family")=="natural_spec" else None,
+        output_protocol=("compact-candidate-json4096.v6" if output_tokens==4096 else "compact-candidate-json.v1") if not body.get("family") else ("natural-checked-candidate4096.v9" if natural_extended else "natural-checked-candidate.v1") if body.get("family")=="natural_spec" else None,
         activation=activation,
         app_limits=app_limits,
     ).model_dump(exclude_none=True)
@@ -570,7 +570,9 @@ def generation_output_tokens(messages, tools, default):
     if len(messages)>1:
         try:
             selected=json.loads(messages[1]['content']).get('server_ids',{})
-            if selected.get('output_protocol') in {'natural-checked-candidate4096.v1','natural-checked-candidate4096.v2','natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'} and selected.get('version')=='goal-natural-spec-application.v1' and (not tools or len(tools)==1 and tools[0].get('function',{}).get('name') in {'spec.check_candidate','check_candidate'}):return 4096
+            if selected.get('output_protocol') == 'natural-checked-candidate4096.v9' and selected.get('version') == 'goal-natural-spec-application.v1' and len(tools) == 1 and tools[0].get('function', {}).get('name') == 'submit_candidate':
+                return 4096
+            if selected.get('output_protocol') in {'natural-checked-candidate4096.v1','natural-checked-candidate4096.v2','natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8','natural-checked-candidate4096.v9'} and selected.get('version')=='goal-natural-spec-application.v1' and (not tools or len(tools)==1 and tools[0].get('function',{}).get('name') in {'spec.check_candidate','check_candidate'}):return 4096
             if not tools and selected.get('output_protocol') in {'compact-candidate-json4096.v1','compact-candidate-json4096.v2','compact-candidate-json4096.v3','compact-candidate-json4096.v4','compact-candidate-json4096.v5','compact-candidate-json4096.v6'} and selected.get('activation'):
                 return 4096
         except (ValueError,TypeError,KeyError,AttributeError):
@@ -582,14 +584,16 @@ def generation_tool_choice(messages,tools):
     """Only the frozen new natural protocol selects the existing stage tool."""
     try:
         selected=json.loads(messages[1]['content'])['server_ids']
-        if selected.get('version')!='goal-natural-spec-application.v1' or selected.get('output_protocol') not in {'natural-checked-candidate.v1','natural-checked-candidate4096.v1','natural-checked-candidate4096.v2','natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'}:return None
+        if selected.get('version')!='goal-natural-spec-application.v1' or selected.get('output_protocol') not in {'natural-checked-candidate.v1','natural-checked-candidate4096.v1','natural-checked-candidate4096.v2','natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8','natural-checked-candidate4096.v9'}:return None
         if not tools and selected['output_protocol']=='natural-checked-candidate4096.v8':return 'none'
         if len(tools)!=1:return None
         name=tools[0]['function']['name']
-        allowed={'read','check_candidate'} if selected['output_protocol'] in {'natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'} else {'resource.read','spec.check_candidate'}
+        if selected['output_protocol'] == 'natural-checked-candidate4096.v9':
+            return {'type': 'function', 'function': {'name': name}} if name in {'read', 'check_candidate', 'submit_candidate'} else None
+        allowed={'read','check_candidate'} if selected['output_protocol'] in {'natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8','natural-checked-candidate4096.v9'} else {'resource.read','spec.check_candidate'}
         if name not in allowed:return None
-        if selected['output_protocol'] in {'natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'}:return {'type':'function','function':{'name':name}}
-        if selected['output_protocol'] in {'natural-checked-candidate4096.v2','natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'}:return 'required'
+        if selected['output_protocol'] in {'natural-checked-candidate4096.v7','natural-checked-candidate4096.v8','natural-checked-candidate4096.v9'}:return {'type':'function','function':{'name':name}}
+        if selected['output_protocol'] in {'natural-checked-candidate4096.v2','natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8','natural-checked-candidate4096.v9'}:return 'required'
         return {'type':'function','function':{'name':name}}
     except (ValueError,TypeError,KeyError,IndexError,AttributeError):
         return None
@@ -603,7 +607,7 @@ def body(messages, tools, max_output):
     if choice is not None:extra['tool_choice']=choice
     try:
         protocol=json.loads(messages[1]['content'])['server_ids'].get('output_protocol')
-        if protocol in {'natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'} and (not tools or len(tools)==1 and tools[0]['function']['name']=='check_candidate') and (protocol not in {'natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'} or not tools):extra['thinking_mode']=False
+        if protocol in {'natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8','natural-checked-candidate4096.v9'} and (not tools or len(tools)==1 and tools[0]['function']['name']=='check_candidate') and (protocol not in {'natural-checked-candidate4096.v7','natural-checked-candidate4096.v8','natural-checked-candidate4096.v9'} or not tools):extra['thinking_mode']=False
     except (ValueError,KeyError,TypeError,IndexError):pass
     if not tools and len(messages)>1:
         try:
@@ -627,7 +631,7 @@ def body(messages, tools, max_output):
 
 
 def _stage_wire_tools(selected,values):
-    if selected.output_protocol in {'natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'}:
+    if selected.output_protocol in {'natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8','natural-checked-candidate4096.v9'}:
         from .natural_wire_tools import tools
         return tools(values)
     return values
@@ -636,6 +640,14 @@ def _stage_wire_tools(selected,values):
 def stage_tools(selected, index):
     if index == 0:
         return _stage_wire_tools(selected,READ_TOOLS)
+    if selected.output_protocol == 'natural-checked-candidate4096.v9' and index in (1, 2):
+        from .apps import object_schema
+        from .natural_specs import candidate_schema
+        name = 'check_candidate' if index == 1 else 'submit_candidate'
+        description = ('Check the candidate against the actual source and frozen goal.' if index == 1
+            else 'Submit the checked candidate or a single correction. This only delivers arguments.')
+        return [dict(type='function', function=dict(name=name, description=description,
+            parameters=object_schema(dict(candidate=candidate_schema(exact_ports=True)))))]
     if selected.version in SPEC_GENERATIONS and index == 1:
         from .pa_spec_apps import check_tools
         return _stage_wire_tools(selected,check_tools(selected.version))
@@ -643,7 +655,7 @@ def stage_tools(selected, index):
 
 
 def parse_generation(raw, selected):
-    if selected.output_protocol in {'natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'}:
+    if selected.output_protocol in {'natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8','natural-checked-candidate4096.v9'}:
         from .natural_wire_tools import parse
         return parse(raw,selected.output_protocol)
     if selected.version in SPEC_GENERATIONS:
@@ -838,7 +850,7 @@ def _history_core(reader):
             if len(calls) != 1:
                 raise DomainError("VERSION_CONFLICT", "One actual source read required")
             actual=calls[0]
-            if selected.output_protocol in {'natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'}:
+            if selected.output_protocol in {'natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8','natural-checked-candidate4096.v9'}:
                 from .natural_wire_tools import canonical_call
                 actual=canonical_call(actual)
             receipt = reader.read_receipt(actual)
@@ -849,7 +861,7 @@ def _history_core(reader):
                     "content": json.dumps(_generation_plain(reader, receipt), ensure_ascii=False, separators=(",", ":")),
                 }
             )
-            if selected.output_protocol in {'natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'}:
+            if selected.output_protocol in {'natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8','natural-checked-candidate4096.v9'}:
                 from .natural_specs import source_line_index
                 actual_content = _generation_plain(reader, receipt)["data"]["content"]
                 messages.append(dict(role="user", content=json.dumps(
@@ -858,7 +870,7 @@ def _history_core(reader):
             messages.append(
                 {
                     "role": "user",
-                    "content": ("Call check_candidate with the complete recipe and sample_nodes now." if selected.output_protocol in {"natural-checked-candidate4096.v3","natural-checked-candidate4096.v4","natural-checked-candidate4096.v5","natural-checked-candidate4096.v6","natural-checked-candidate4096.v7","natural-checked-candidate4096.v8"} else "Call spec.check_candidate with the complete recipe and sample_nodes now." if selected.version == "goal-natural-spec-application.v1" else "Call spec.check_candidate with the full compact recipe and example checklist now." if selected.version in SPEC_GENERATIONS else "Return the complete candidate now, including source_hash and the full frozen goal object. No further tools."),
+                    "content": ("Call check_candidate with the complete recipe and sample_nodes now." if selected.output_protocol in {"natural-checked-candidate4096.v3","natural-checked-candidate4096.v4","natural-checked-candidate4096.v5","natural-checked-candidate4096.v6","natural-checked-candidate4096.v7","natural-checked-candidate4096.v8","natural-checked-candidate4096.v9"} else "Call spec.check_candidate with the complete recipe and sample_nodes now." if selected.version == "goal-natural-spec-application.v1" else "Call spec.check_candidate with the full compact recipe and example checklist now." if selected.version in SPEC_GENERATIONS else "Return the complete candidate now, including source_hash and the full frozen goal object. No further tools."),
                 }
             )
         elif index == 1:
@@ -867,7 +879,7 @@ def _history_core(reader):
                 if len(calls) != 1:
                     raise DomainError("VERSION_CONFLICT", "One actual spec checker feedback required")
                 actual=calls[0]
-                if selected.output_protocol in {'natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'}:
+                if selected.output_protocol in {'natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8','natural-checked-candidate4096.v9'}:
                     from .natural_wire_tools import canonical_call
                     actual=canonical_call(actual)
                 receipt = reader.check_receipt(actual)
@@ -875,7 +887,11 @@ def _history_core(reader):
                 if fingerprint(parameters.get("generation_diagnostic")) != fingerprint(expected_diagnostic):
                     raise DomainError("VERSION_CONFLICT", "Checker feedback and revision authorization differ")
                 messages.append(dict(role="tool", tool_call_id=calls[0]["id"], content=json.dumps(_generation_plain(reader, receipt), ensure_ascii=False, separators=(",", ":"))))
-                messages.append(dict(role="user", content="Consume the actual check feedback. Return the complete same candidate if PASS, or one corrected candidate if FAIL. No tools; final response only."))
+                if selected.output_protocol == 'natural-checked-candidate4096.v9':
+                    final_instruction = "Call submit_candidate once with the same candidate if PASS, or the complete corrected candidate if FAIL. Submit only, with no other action."
+                else:
+                    final_instruction = "Consume the actual check feedback. Return the complete same candidate if PASS, or one corrected candidate if FAIL. No tools; final response only."
+                messages.append(dict(role="user", content=final_instruction))
             diagnostic = parameters.get("generation_diagnostic")
             if diagnostic is not None:
                 sealed = reader._anchors("GA_DIAGNOSTIC")
@@ -1488,16 +1504,15 @@ def _parse_candidate_core(reader, message, limits):
     store, c, run = reader.store, reader.c, reader.run
     from .apps import compile_preview
 
-    if set(message) != {"role", "content"} or message["role"] != "assistant":
-        raise DomainError("INVALID_MANIFEST", "Content-only candidate response required")
-    value = strict_json(message["content"], 16384)
     contract, _ = reader.source()
+    from .natural_wire_tools import candidate_payload
+    value = candidate_payload(message, contract.application_generation.output_protocol)
     if contract.application_generation.version in SPEC_GENERATIONS:
         from .pa_spec_apps import _from_response_from_facts, from_response
         checked = reader.checker_response()
         if checked:
             call = checked["tool_calls"][0]
-            if contract.application_generation.output_protocol in {'natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'}:
+            if contract.application_generation.output_protocol in {'natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8','natural-checked-candidate4096.v9'}:
                 from .natural_wire_tools import canonical_call
                 call=canonical_call(call)
             receipt = reader.check_receipt(call)
@@ -1647,7 +1662,7 @@ def check_provider(worker, c, run, contract, attempt_id=None):
     activation = contract.application_generation.activation
     from .pa_trial_dispatch import _production_binding, check_commit
     if contract.application_generation.version in SPEC_GENERATIONS and _production_binding(worker.pa_trial):
-        if contract.application_generation.output_protocol in {'natural-checked-candidate4096.v1','natural-checked-candidate4096.v2','natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'}:
+        if contract.application_generation.output_protocol in {'natural-checked-candidate4096.v1','natural-checked-candidate4096.v2','natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8','natural-checked-candidate4096.v9'}:
             from .natural_generation_budget import PROFILE
             if getattr(worker.pa_trial.contract,'generation_profile',None)!=PROFILE:raise DomainError('PERMISSION_DENIED','Candidate output profile not approved')
         if activation is not None or contract.mode != "live":
@@ -1968,7 +1983,12 @@ def process(worker, run, contract):
                     _renew_committed_lease(worker, run, heartbeat_state)
                     settle_generation(worker, contract, rid, aid, raw, fence)
                     continue
-                if calls:
+                structured_submission = (
+                    contract.application_generation.output_protocol == 'natural-checked-candidate4096.v9'
+                    and len(prior) == 2 and len(calls) == 1
+                    and calls[0]["function"]["name"] == "submit_candidate"
+                )
+                if calls and not structured_submission:
                     if contract.application_generation.version in SPEC_GENERATIONS and len(prior) == 1 and len(calls) == 1:
                         from .pa_spec_apps import dispatch_check
                         with worker.store.tx() as c:

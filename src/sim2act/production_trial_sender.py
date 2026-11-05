@@ -143,7 +143,7 @@ def _wire(contract, wire, *, stage=None):
             _require(body.get('tool_choice')==choice)
             fields.add('tool_choice')
         from .natural_wire_tools import protocol_from_wire
-        if protocol_from_wire(wire) in {'natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'} and (not body.get('tools') or len(body['tools'])==1 and body['tools'][0]['function']['name']=='check_candidate') and (protocol_from_wire(wire) not in {'natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'} or not body.get('tools')):
+        if protocol_from_wire(wire) in {'natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8','natural-checked-candidate4096.v9'} and (not body.get('tools') or len(body['tools'])==1 and body['tools'][0]['function']['name']=='check_candidate') and (protocol_from_wire(wire) not in {'natural-checked-candidate4096.v7','natural-checked-candidate4096.v8','natural-checked-candidate4096.v9'} or not body.get('tools')):
             _require(body.get('thinking_mode') is False)
             fields.add('thinking_mode')
     version = None
@@ -339,7 +339,7 @@ def _derive(payload, complete, received, *, _generation=False, _production=False
                 schemas = {CHECK_TOOL: check_envelope}
             # The original generation protocol includes its closed checker
             # envelope. This does not compile/execute/accept the candidate.
-            if _generation and _generation_protocol in {'natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8'}:
+            if _generation and _generation_protocol in {'natural-checked-candidate4096.v3','natural-checked-candidate4096.v4','natural-checked-candidate4096.v5','natural-checked-candidate4096.v6','natural-checked-candidate4096.v7','natural-checked-candidate4096.v8','natural-checked-candidate4096.v9'}:
                 from .natural_wire_tools import parse
                 parse(raw,_generation_protocol)
             else:
