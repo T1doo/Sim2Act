@@ -5669,6 +5669,19 @@ def _model_writer_connection(worker, candidate, plan):
             yield selected
 
 
+def _received_response_matches(store, response, usage):
+    response_column, usage_column = attempts.c.response, attempts.c.usage
+    if not store.sqlite:
+        from sqlalchemy import cast
+        from sqlalchemy.dialects.postgresql import JSONB
+
+        # PostgreSQL JSON has no equality operator. Compare the two typed
+        # values without changing the stored evidence or the schema.
+        response_column = cast(response_column, JSONB)
+        usage_column = cast(usage_column, JSONB)
+    return response_column == response, usage_column == usage
+
+
 def advance_model(worker, run, *, _heartbeat_state=None):
     from ._sqlite_run_control import Interrupted as LocalControlInterrupted
     from ._sqlite_model_snapshot import SnapshotChanged
@@ -5882,8 +5895,8 @@ def advance_model(worker, run, *, _heartbeat_state=None):
         receipt_owner(c, job, aid, wire)
         require(c.execute(select(attempts.c.id).where(
             attempts.c.id == aid, attempts.c.run_id == job["id"],
-            attempts.c.status == "RECEIVED", attempts.c.response == response,
-            attempts.c.usage == received_usage)).first() is not None,
+            attempts.c.status == "RECEIVED",
+            *_received_response_matches(store, response, received_usage))).first() is not None,
             "Received response changed before reception commit")
     try:
         # Archive/verification failure cannot roll back an already received raw
@@ -6089,8 +6102,7 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                     attempts.c.id == aid,
                     attempts.c.run_id == job["id"],
                     attempts.c.status == "RECEIVED",
-                    attempts.c.response == response,
-                    attempts.c.usage == received_usage,
+                    *_received_response_matches(store, response, received_usage),
                 )
                 .values(status="REJECTED_KNOWN")
             )
