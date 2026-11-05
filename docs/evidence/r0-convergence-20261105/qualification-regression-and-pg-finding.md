@@ -1,0 +1,13 @@
+# 68525f0a 回归结果与PG账本修复
+
+正式回归原进程已结束：81 PASS、1 FAIL，耗时971.88秒。失败是test_pb_production_original_source_extraction_explicit_use_and_cold，冷运行接收后保存超过原120秒结算期限，回读仍RUNNING；NS_REJECTED为BUDGET_EXHAUSTED。未扩展保存期限或把它签成通过，原JUnit为reviewed-qualification-full.xml。
+
+新包两条原软件资格函数实际通过；包内校验不代替上述失败场景或R0。组合包SHA256为152ca898acc196efeef03b467eabd466410f5202a51c776e5809431c031fa741。
+
+新正式PG启动初次因旧死进程占用文件拒绝；确认PID78640不存在、children为空、数据库PID和running文件均不存在后，将原字节归档到同一工作区，未删除。证据natural-claim-recovery.json。随后新范围完成准备/批准、选中Worker/API启动、readiness校验和自然Generate接受，但首次账本预留失败，Run为run_d290130b130448fba89ac3a9e3beea9f。两个会话均exit0，数据库停止。
+
+诊断发现SQLAlchemy/psycopg在实际PG的INSERT ON CONFLICT默认rowcount=-1；preserve_rowcount=True时为1。原journal严格要求每份镜像精确写入一行，因此拒绝默认结果。修复为quota和journal INSERT显式保留行数，不将-1当成功，不放宽镜像计数或CAS。
+
+真实PG验证：用原_quota和_cas_pair、独立诊断身份执行，均通过精确行数检查；全部写入显式回滚，未种植正式账本、未请求模型，之后数据库停止。见pg-rowcount-diagnosis.json和pg-journal-inserts.json。原journal受控回归12项通过，见pg-journal-rowcount-regression.xml；SQLite受控回归不替代PG并发验收。
+
+账本源码已改变，当前工作树与68525f0a资格清单不再匹配。下一新包需要明确重新冻结和更新目标清单；现有批准不能改绑新源码。P-B保存性能问题仍须定位，此修复不能视为解决它。

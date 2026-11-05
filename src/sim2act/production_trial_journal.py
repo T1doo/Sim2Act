@@ -66,7 +66,8 @@ def _cas_pair(c, owner, entity, kind, key, previous, current):
     for tag in (kind, kind + "_seal"):
         if previous is None:
             result = c.execute(insert(rows).values(principal_id=owner, app_id=entity,
-                kind=tag, request_key=key, **_values(current)).on_conflict_do_nothing())
+                kind=tag, request_key=key, **_values(current)).on_conflict_do_nothing()
+                .execution_options(preserve_rowcount=True))
         else:
             result = c.execute(update(rows).where(rows.c.principal_id == owner,
                 rows.c.app_id == entity, rows.c.kind == tag, rows.c.request_key == key,
@@ -102,7 +103,8 @@ def _quota(c, request, entity, *, create):
             quota_subject=request["quota_subject"])
         initial = _snapshot(request, dict(revision=0, cursor=cursor.model_dump(mode="json")))
         counts = [c.execute(insert(rows).values(principal_id=QUOTA, app_id=entity,
-            kind=tag, request_key="quota", **_values(initial)).on_conflict_do_nothing()).rowcount
+            kind=tag, request_key="quota", **_values(initial)).on_conflict_do_nothing()
+            .execution_options(preserve_rowcount=True)).rowcount
             for tag in (QUOTA, QUOTA + "_seal")]
         # Never repair a pre-existing half-pair, including concurrent creation.
         _require(counts in ([1, 1], [0, 0]))
