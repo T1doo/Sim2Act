@@ -9,12 +9,12 @@ from sim2act.contracts import Limits
 from sim2act.worker import Worker
 
 
-@pytest.mark.parametrize('output_protocol',['compact-candidate-json4096.v1','compact-candidate-json4096.v2'])
+@pytest.mark.parametrize('output_protocol',['compact-candidate-json4096.v1','compact-candidate-json4096.v2','compact-candidate-json4096.v3'])
 def test_explicit_v2_scope_uses_4096_only_for_candidate_and_keeps_runtime_caps(env,monkeypatch,output_protocol):
     original=goal_applications.policy
     def selected_policy(*args,**kwargs):
         value=original(*args,**kwargs)
-        if value.get('output_protocol')=='compact-candidate-json4096.v2':value['output_protocol']=output_protocol
+        if value.get('output_protocol')=='compact-candidate-json4096.v3':value['output_protocol']=output_protocol
         return value
     monkeypatch.setattr(goal_applications,'policy',selected_policy)
     data,clock=configured(env,monkeypatch)

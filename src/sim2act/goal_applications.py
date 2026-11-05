@@ -12,7 +12,7 @@ from functools import lru_cache
 from typing import Literal
 
 import httpx
-from pydantic import Field
+from pydantic import Field, ValidationError
 from sqlalchemy import and_, bindparam, insert, select, update
 
 from .contracts import (
@@ -112,7 +112,7 @@ def policy(provider, user, pid, body, activation=None, app_limits=None, output_t
         repair_limit=1,
         live_request_allowance=0,
         response_archive_policy="protected-json32768.v1",
-        output_protocol=("compact-candidate-json4096.v2" if output_tokens==4096 else "compact-candidate-json.v1") if not body.get("family") else None,
+        output_protocol=("compact-candidate-json4096.v3" if output_tokens==4096 else "compact-candidate-json.v1") if not body.get("family") else None,
         activation=activation,
         app_limits=app_limits,
     ).model_dump(exclude_none=True)
@@ -474,16 +474,24 @@ def _literal_initial_messages(saved_goal, server_ids, material, limits):
         "candidate_fields": ["manifest", "actions", "source_hash", "goal"],
         "semantic_acceptance": "NOT_RUN",
     }
-    if server_ids.get('output_protocol')=='compact-candidate-json4096.v2':
+    if server_ids.get('output_protocol') in {'compact-candidate-json4096.v2','compact-candidate-json4096.v3'}:
         value['action_schema']=_schema_without_titles(value['action_schema'])
         value['manifest_schema']=_schema_without_titles(value['manifest_schema'])
+    if server_ids.get('output_protocol')=='compact-candidate-json4096.v3':
+        value['candidate_shape']={
+            'manifest':'One complete AppManifest object conforming to manifest_schema.',
+            'actions':'An array of complete ActionSpec definitions conforming to action_schema. These define executable actions, NOT executed workflow steps, tool receipts, status/input/output records, or references alone.',
+            'action_required_fields':value['action_schema']['required'],
+            'source_hash':'The exact bound source hash.',
+            'goal':'The complete saved_goal.snapshot.content object, unchanged.',
+        }
     return [
         {"role": "system", "content": SYSTEM + (
             " Output protocol compact-candidate-json.v1: after the tool result, output ONLY the final JSON object. "
             "Begin with { and end with }. Use compact JSON without indentation, analysis, explanations, or code fences. "
             "The four top-level fields are manifest, actions, source_hash, and goal. "
             "Keep every required schema field and the complete frozen goal; compact formatting must not remove facts."
-            if server_ids.get("output_protocol") in {"compact-candidate-json.v1","compact-candidate-json4096.v1","compact-candidate-json4096.v2"} else "")},
+            if server_ids.get("output_protocol") in {"compact-candidate-json.v1","compact-candidate-json4096.v1","compact-candidate-json4096.v2","compact-candidate-json4096.v3"} else "")},
         {"role": "user", "content": json.dumps(value, ensure_ascii=False, separators=(",", ":"))},
     ]
 
@@ -492,7 +500,7 @@ def generation_output_tokens(messages, tools, default):
     if not tools and len(messages)>1:
         try:
             selected=json.loads(messages[1]['content']).get('server_ids',{})
-            if selected.get('output_protocol') in {'compact-candidate-json4096.v1','compact-candidate-json4096.v2'} and selected.get('activation'):
+            if selected.get('output_protocol') in {'compact-candidate-json4096.v1','compact-candidate-json4096.v2','compact-candidate-json4096.v3'} and selected.get('activation'):
                 return 4096
         except (ValueError,TypeError,KeyError,AttributeError):
             pass
@@ -506,7 +514,7 @@ def body(messages, tools, max_output):
     if not tools and len(messages)>1:
         try:
             selected=json.loads(messages[1]["content"]).get("server_ids",{})
-            if selected.get("output_protocol") in {"compact-candidate-json.v1","compact-candidate-json4096.v1","compact-candidate-json4096.v2"}:
+            if selected.get("output_protocol") in {"compact-candidate-json.v1","compact-candidate-json4096.v1","compact-candidate-json4096.v2","compact-candidate-json4096.v3"}:
                 extra["thinking_mode"]=False
         except (ValueError,TypeError,KeyError,AttributeError):
             pass
@@ -1627,6 +1635,27 @@ def _renew_committed_lease(worker, run, state, *, deadline=None):
             return
 
 
+def candidate_diagnostic(error,message,protocol):
+    diagnostic=error.public()
+    if protocol!='compact-candidate-json4096.v3':return diagnostic
+    try:
+        candidate=strict_json(message['content'],16384)
+        if not isinstance(candidate,dict):return diagnostic
+        entries=[('manifest',AppManifest,candidate.get('manifest'))]
+        if isinstance(candidate.get('actions'),list):
+            entries += [('actions.'+str(i),ActionSpec,v) for i,v in enumerate(candidate['actions'][:16])]
+        problems=[]
+        for label,model,value in entries:
+            try:model.model_validate(value)
+            except ValidationError as failure:
+                for item in failure.errors(include_input=False,include_url=False):
+                    problems.append({'object':label,'path':[str(p)[:80] for p in item['loc'][:8]],'type':item['type']})
+        if problems:diagnostic['schema_errors']=problems[:24]
+    except (DomainError,KeyError,TypeError,ValueError):
+        pass
+    return diagnostic
+
+
 def process(worker, run, contract):
     rid, fence = run["id"], run["fence"]
     stopped = threading.Event()
@@ -1832,7 +1861,7 @@ def process(worker, run, contract):
                             or worker.s.max_repairs < 1
                         ):
                             raise
-                        diagnostic = exc.public()
+                        diagnostic = candidate_diagnostic(exc,msg,contract.application_generation.output_protocol)
                         params["generation_diagnostic"] = diagnostic
                         params["generation_rejected_raw"] = original
                         c.execute(
