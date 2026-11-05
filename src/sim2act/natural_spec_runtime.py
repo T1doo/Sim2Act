@@ -5959,6 +5959,7 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                     and run["resource_refs"] == [selected_binding.contract.bindings[1].resource_id]):
                 plan = candidate.prepare(worker, binding, graph_call, limits)
         control_epoch = None
+        from .model_settlement import checkpoint, renew_locked_postgres
         with _model_settlement_writer(worker, job, meta["deadline"], _heartbeat_state,
                 attempt_id=aid, _original_run=run) as writer_epoch, \
                 store.local_model_settlement(worker, job, meta["deadline"]) as control_epoch, \
@@ -5970,6 +5971,7 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                 and time.time() < meta["deadline"],
                 "Run version/deadline competed during model node",
             )
+            renew_locked_postgres(worker, c, job, meta["deadline"])
             if owned_plan is not None:
                 require(_cold_model_eligible(worker, c, current), "Original PB Cold eligibility required")
                 from ._owned_g0_candidate import run as owned_prewrite
@@ -6097,6 +6099,7 @@ def advance_model(worker, run, *, _heartbeat_state=None):
             # The last event/receipt callback can change live authority or time.
             # Check authority before replaying any protected receipts/Attempts,
             # then re-read the full evidence before committing VERIFIED.
+            postgres_lease = renew_locked_postgres(worker, c, job, meta["deadline"])
             with _journal_reads(worker, c):
                 inputs = dict(call_run=run, current=dict(current), binding=current_binding,
                     platform=limits, node=node_limits, aid=aid, raw=raw, wire=wire, meta=meta,
@@ -6107,10 +6110,12 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                         from .pa_trial_dispatch import settle_verified
                         settle_verified(worker, c, fresh, aid, raw,
                             **({"_model_after": model_after} if model_after is not None else {}))
+                        postgres_lease = renew_locked_postgres(worker, c, job, meta["deadline"])
                         spec.commit_guard(worker, c, run, final_binding,
                             **({"_model_after": model_after} if model_after is not None else {}))
-            from .model_settlement import checkpoint
             checkpoint(worker)
+            require(postgres_lease is None or not worker.stop.is_set() and time.time() < postgres_lease,
+                "Original PostgreSQL settlement lease ended before commit")
     except SnapshotChanged as changed:
         # Snapshot upgrade is an all-database conflict, never a response rejection.
         # No replay of a stale G0 or any of its writes is permitted.

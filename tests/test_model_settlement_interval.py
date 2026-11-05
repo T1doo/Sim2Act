@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import insert, select, update
+from sqlalchemy.exc import OperationalError
 from test_natural_live_admission import started
 from test_pb_spec_production_controller import prepare_pb
 
@@ -14,6 +15,43 @@ from sim2act import natural_spec_runtime as runtime
 from sim2act.db import attempts, events, runs
 from sim2act.errors import DomainError
 from sim2act.spec_production import ProductionTrialBinding
+
+
+def test_postgres_settlement_renews_a_locked_run_without_extending_the_node_deadline(env, monkeypatch):
+    store, settings, _, principal, _, project, _ = env
+    if store.sqlite:
+        pytest.skip("PostgreSQL row locks require the isolated PostgreSQL fixture")
+    clock = [1010.0]
+    monkeypatch.setattr(settlement, "time", SimpleNamespace(time=lambda: clock[0]))
+    worker = SimpleNamespace(store=store, s=settings, id="settlement-owner", stop=threading.Event())
+    job = dict(id="postgres-settlement-run", project_id=project, principal_id=principal,
+        runtime_id="postgres-settlement-runtime", status="RUNNING", worker_id=worker.id,
+        created_at=1000., lease_until=1030., fence=1, version=1)
+    row = select(runs.c.lease_until).where(runs.c.id == job["id"])
+    with store.tx() as c:
+        c.execute(insert(runs).values(**job))
+    with store.tx() as c:
+        assert c.execute(row.with_for_update()).scalar_one() == 1030.
+        assert settlement.renew_locked_postgres(worker, c, job, 1050.) == 1040.
+        with store.engine.connect() as other:
+            assert other.execute(row).scalar_one() == 1030.
+            with pytest.raises(OperationalError) as blocked:
+                other.execute(row.with_for_update(nowait=True))
+            assert blocked.value.orig.sqlstate == "55P03"
+        clock[0] = 1035.
+        assert settlement.renew_locked_postgres(worker, c, job, 1050.) == 1050.
+    with store.tx() as c:
+        assert c.execute(row).scalar_one() == 1050.
+    with pytest.raises(DomainError, match="lease or owner changed"):
+        with store.tx() as c:
+            settlement.renew_locked_postgres(worker, c, job, 1060.)
+            settlement.renew_locked_postgres(worker, c, dict(job, version=2), 1060.)
+    with store.tx() as c:
+        assert c.execute(row).scalar_one() == 1050.
+    clock[0] = 1050.
+    with pytest.raises(DomainError, match="lease or owner changed"):
+        with store.tx() as c:
+            settlement.renew_locked_postgres(worker, c, job, 1060.)
 
 
 def test_old_caps_serialized_contract_is_never_upgraded(env, tmp_path):

@@ -19,6 +19,33 @@ RESERVED = "NS_SETTLEMENT_LEASE_RESERVED"
 RELEASED = "NS_SETTLEMENT_LEASE_RELEASED"
 
 
+def renew_locked_postgres(worker, c, job, deadline):
+    """Renew the same owner inside the PostgreSQL settlement transaction.
+
+    Settlement holds the Run row lock, so an independent heartbeat cannot
+    update it until commit. Roll back this renewal with the settlement if any
+    subsequent proof fails. The ordinary lease and the node deadline still
+    bound every renewal.
+    """
+    store = worker.store
+    if store.sqlite:
+        return
+    now = time.time()
+    lease = min(deadline, now + worker.s.lease_seconds)
+    _require(store.owns_connection(c) and c.in_transaction()
+        and not worker.stop.is_set() and math.isfinite(lease) and now < lease,
+        "Original PostgreSQL settlement interval ended")
+    changed = c.execute(update(runs).where(
+        runs.c.id == job["id"], runs.c.worker_id == worker.id,
+        runs.c.fence == job["fence"], runs.c.version == job["version"],
+        runs.c.created_at == job["created_at"], runs.c.status == "RUNNING",
+        runs.c.cancel_intent.is_(False), runs.c.lease_until > now,
+    ).values(lease_until=lease))
+    _require(changed.rowcount == 1 and not worker.stop.is_set() and time.time() < lease,
+        "Original PostgreSQL settlement lease or owner changed")
+    return lease
+
+
 @contextmanager
 def authoritative_interval(worker, job, deadline, state):
     from ._lease_control_runtime import Runtime
