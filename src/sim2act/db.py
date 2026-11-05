@@ -1047,7 +1047,10 @@ class Store:
             self.authorize(c, *check)
 
     def authorize(self, c, principal, runtime, project_id, rid, tool):
-        self.own_project(c, principal, project_id)
+        # A proof can traverse replacement and original materials in either
+        # order. Serialize authorization at the project before taking any
+        # Grant rows, matching retirement and the material directory.
+        self.lock_project(c, principal, project_id)
         if rid != project_id and tool != "resource.read":
             self.authorize(c, principal, runtime, project_id, rid, "resource.read")
         if rid == project_id:
