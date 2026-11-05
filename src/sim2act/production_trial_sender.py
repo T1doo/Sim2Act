@@ -206,8 +206,11 @@ def _captured(c, user, item):
     marker = c.execute(select(attempts.c.mode,
         attempts.c.parameters["pa_trial_binding"]["version"].as_string().label("version"))
         .where(attempts.c.id == item.attempt_id, attempts.c.run_id == item.run_id)).mappings().first()
-    mode = c.execute(select(run_contracts.c.snapshot["mode"].as_string())
-                     .where(run_contracts.c.run_id == item.run_id)).scalar_one_or_none()
+    frozen=c.execute(select(run_contracts.c.snapshot['mode'].as_string().label('mode'),
+        run_contracts.c.snapshot['application_generation']['output_protocol'].as_string().label('generation_protocol'))
+        .where(run_contracts.c.run_id==item.run_id)).mappings().one_or_none()
+    mode=None if frozen is None else frozen['mode']
+    generation_protocol=None if frozen is None else frozen['generation_protocol']
     _require(mode in ("mock", "live"), "VERSION_CONFLICT")
     production = mode == "live"
     if production:
@@ -234,7 +237,7 @@ def _captured(c, user, item):
         )
         _require(
             capture == _derive(body, capture.complete, capture.received_response,
-                               _generation=item.stage == "generate", _production=production),
+                               _generation=item.stage == "generate", _production=production,_generation_protocol=generation_protocol),
             "VERSION_CONFLICT",
         )
     else:
@@ -295,7 +298,7 @@ def _history(store, user, contract, key, item, wire):
         )
 
 
-def _derive(payload, complete, received, *, _generation=False, _production=False):
+def _derive(payload, complete, received, *, _generation=False, _production=False,_generation_protocol=None):
     _require(type(payload) is bytes and len(payload) <= 131072 and type(complete) is bool)
     raw = None
     try:
@@ -320,7 +323,11 @@ def _derive(payload, complete, received, *, _generation=False, _production=False
                 schemas = {CHECK_TOOL: check_envelope}
             # The original generation protocol includes its closed checker
             # envelope. This does not compile/execute/accept the candidate.
-            parse_response(raw, schemas)
+            if _generation and _generation_protocol=='natural-checked-candidate4096.v3':
+                from .natural_wire_tools import parse
+                parse(raw)
+            else:
+                parse_response(raw, schemas)
         except DomainError:
             valid = False
     outcome = policy.Outcome(
@@ -368,7 +375,9 @@ def _receive(
     from .pa_trial_dispatch import _production_binding
     production = _business is not None and _production_binding(_business[0])
     _require(type(store) is Store and (production or store.test_only and store.sqlite))
-    capture = _derive(payload, complete, received, _generation=item.stage == "generate", _production=production)
+    from .natural_wire_tools import protocol_from_wire
+    capture = _derive(payload, complete, received, _generation=item.stage == "generate", _production=production,
+        _generation_protocol=protocol_from_wire(wire) if item.stage=='generate' else None)
     with store.tx() as c:
         original, _, _, slot, revision, _ = _loaded(store, c, user, contract, key, item, wire)
         _require(slot.attempted, "OUTCOME_UNKNOWN")

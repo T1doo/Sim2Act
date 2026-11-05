@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="14" time="15.397" timestamp="2026-11-05T22:13:42.615327+08:00" hostname="LAPTOP-USISIS19"><testcase classname="tests.test_natural_wire_tools" name="test_wire_names_are_explicit_and_raw_assistant_names_remain_unchanged" time="0.001" /><testcase classname="tests.test_natural_wire_tools" name="test_v3_does_not_accept_names_outside_its_wire_declaration[resource.read]" time="0.000" /><testcase classname="tests.test_natural_wire_tools" name="test_v3_does_not_accept_names_outside_its_wire_declaration[unregistered]" time="0.000" /><testcase classname="tests.test_natural_wire_tools" name="test_original_parameter_validation_and_old_capture_verdict_are_preserved" time="0.001" /><testcase classname="tests.test_natural_generation_budget" name="test_new_profile_changes_only_generation_projection_and_scope_fingerprint" time="1.342" /><testcase classname="tests.test_natural_generation_budget" name="test_profile_ledger_uses_conservative_generate_envelope_and_keeps_total_output" time="1.093" /><testcase classname="tests.test_natural_generation_budget" name="test_wire_budget_requires_new_scope_and_candidate_stage" time="1.065" /><testcase classname="tests.test_natural_generation_budget" name="test_explicit_prepare_is_recoverable_and_cannot_reuse_other_scope_consent" time="1.485" /><testcase classname="tests.test_natural_generation_budget" name="test_core_reserves_same_4096_wire_without_changing_application_runtime" time="3.440"><failure message="AssertionError: {'contract': {'fingerprint': '0d1b89941d281c90de36f452b6a085d9d0fa688882db950c2970753a3e1d113a', 'snapshot': {'applica...41524f1dd42e0a1c493b550cd4294', 'kind': 'TOOL_VERIFIED', ...}, ...], 'id': 'run_b58e3df9a2f24e6a820483979527dca6', ...}&#10;assert 'FAILED' == 'PARTIAL'&#10;  &#10;  - PARTIAL&#10;  + FAILED">env = (&lt;sim2act.db.Store object at 0x0000023CB49717F0&gt;, Settings(database_url='sqlite:///E:\\Github\\Sim2Act\\.local\\window...ada7d1b6084be7906f42b71929c339', 'user_41e24935f9e044d28fa4e9b247ddc887', 'proj_3f221c39b1924f738c3c8292c993738a', ...)
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x0000023CB2943CB0&gt;
+
+    def test_core_reserves_same_4096_wire_without_changing_application_runtime(env,monkeypatch):
+        from fastapi.testclient import TestClient
+        from sqlalchemy import select
+        from test_natural_spec_apps import setup,generation_transport
+        from sim2act.api import create_app
+        from sim2act.worker import Worker
+        from sim2act.db import attempts
+        data=setup(env);store,settings,_,user,pid,_,card=data
+        # Synthetic readiness projection only; no real production permit is issued.
+        monkeypatch.setattr('sim2act.natural_generation_readiness.read',lambda *args:dict(availability='SELECTED_APPROVED_SCOPE',expected_version=card['version'],expected_fingerprint=card['fingerprint'],generation_request_key='natural-generation',generation_profile=PROFILE))
+        client=TestClient(create_app(store,settings,production_selection={'synthetic':'projection'}))
+        client.headers['Authorization']='Bearer synthetic-test-A'
+        response=client.post(f"/api/projects/{pid}/goal-cards/{card['id']}/application-runs",json=dict(expected_version=card['version'],expected_fingerprint=card['fingerprint'],request_key='natural-generation',family='natural_spec'))
+        assert response.status_code==202,response.text
+        sent,base_transport=generation_transport(data)
+        import httpx
+        def respond_to_wire_names(request):
+            raw=base_transport.handle_request(request).json()
+            from sim2act.natural_wire_tools import ALIASES
+            inverse={v:k for k,v in ALIASES.items()}
+            for call in raw['choices'][0]['message'].get('tool_calls',[]):
+                call['function']['name']=inverse[call['function']['name']]
+            return httpx.Response(200,json=raw)
+        transport=httpx.MockTransport(respond_to_wire_names)
+        assert Worker(store,settings,goal_planner_transport=transport).once()
+        run=client.get('/api/runs/'+response.json()['run_id']).json()
+&gt;       assert run['status']=='PARTIAL',run
+E       AssertionError: {'contract': {'fingerprint': '0d1b89941d281c90de36f452b6a085d9d0fa688882db950c2970753a3e1d113a', 'snapshot': {'applica...41524f1dd42e0a1c493b550cd4294', 'kind': 'TOOL_VERIFIED', ...}, ...], 'id': 'run_b58e3df9a2f24e6a820483979527dca6', ...}
+E       assert 'FAILED' == 'PARTIAL'
+E         
+E         - PARTIAL
+E         + FAILED
+
+tests\test_natural_generation_budget.py:109: AssertionError</failure></testcase><testcase classname="tests.test_natural_generation_tool_choice" name="test_new_protocol_forces_only_current_registered_tool_and_keeps_budget[resource.read]" time="0.001" /><testcase classname="tests.test_natural_generation_tool_choice" name="test_new_protocol_forces_only_current_registered_tool_and_keeps_budget[spec.check_candidate]" time="0.001" /><testcase classname="tests.test_natural_generation_tool_choice" name="test_final_and_unknown_tools_do_not_gain_tool_selection" time="0.001" /><testcase classname="tests.test_natural_generation_tool_choice" name="test_v2_required_mode_and_v1_named_mode_remain_distinct" time="0.001" /><testcase classname="tests.test_natural_generation_tool_choice" name="test_old_natural_generation_remains_confirmable_after_new_default" time="5.784" /></testsuite></testsuites>

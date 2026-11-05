@@ -49,15 +49,16 @@ def test_profile_ledger_uses_conservative_generate_envelope_and_keeps_total_outp
 
 
 def test_wire_budget_requires_new_scope_and_candidate_stage(prepared_data):
-    from sim2act.goal_applications import policy,generation_output_tokens,body
+    from sim2act.goal_applications import policy,generation_output_tokens,body,stage_tools
+    from types import SimpleNamespace
     from sim2act.production_trial_sender import _wire
     _,_,_,receipt=scope(prepared_data)
     legacy=gate.parse_contract(receipt['contract'])
     extended=gate.parse_contract({**receipt['contract'],'generation_profile':PROFILE})
     selected=policy('intern-s2',extended.principal_id,extended.project_id,{'family':'natural_spec'},output_tokens=4096,natural_profile=PROFILE)
     messages=[{'role':'system','content':'synthetic'},{'role':'user','content':json.dumps({'server_ids':selected})}]
-    read=[{'type':'function','function':{'name':'resource.read'}}]
-    check=[{'type':'function','function':{'name':'spec.check_candidate'}}]
+    read=stage_tools(SimpleNamespace(**selected),0)
+    check=stage_tools(SimpleNamespace(**selected),1)
     assert [generation_output_tokens(messages,t,1024) for t in (read,check,[])]==[1024,4096,4096]
     _wire(extended,body(messages,check,4096),stage='generate')
     with pytest.raises(DomainError):_wire(legacy,body(messages,check,4096),stage='generate')
@@ -93,7 +94,16 @@ def test_core_reserves_same_4096_wire_without_changing_application_runtime(env,m
     client.headers['Authorization']='Bearer synthetic-test-A'
     response=client.post(f"/api/projects/{pid}/goal-cards/{card['id']}/application-runs",json=dict(expected_version=card['version'],expected_fingerprint=card['fingerprint'],request_key='natural-generation',family='natural_spec'))
     assert response.status_code==202,response.text
-    sent,transport=generation_transport(data)
+    sent,base_transport=generation_transport(data)
+    import httpx
+    def respond_to_wire_names(request):
+        raw=base_transport.handle_request(request).json()
+        from sim2act.natural_wire_tools import ALIASES
+        inverse={v:k for k,v in ALIASES.items()}
+        for call in raw['choices'][0]['message'].get('tool_calls',[]):
+            call['function']['name']=inverse[call['function']['name']]
+        return httpx.Response(200,json=raw)
+    transport=httpx.MockTransport(respond_to_wire_names)
     assert Worker(store,settings,goal_planner_transport=transport).once()
     run=client.get('/api/runs/'+response.json()['run_id']).json()
     assert run['status']=='PARTIAL',run
