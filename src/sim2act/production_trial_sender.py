@@ -158,8 +158,7 @@ def _wire(contract, wire, *, stage=None):
         from .natural_request import protocol
         version = protocol(payload)
     if version is not None:
-        from .natural_request import VERSION
-        _require(version == VERSION and body.get("thinking_mode") is False
+        _require(body.get("thinking_mode") is False
             and body.get("tools") == [])
         fields.add("thinking_mode")
     _require(

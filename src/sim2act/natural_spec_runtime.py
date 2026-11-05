@@ -99,8 +99,9 @@ from .model import (
     require_returned_model,
     returned_model_identity,
 )
-from .natural_request import VERSION as REQUEST_PROTOCOL
-from .natural_request import body, coordinates
+from .natural_request import CURRENT_VERSION as REQUEST_PROTOCOL
+from .natural_request import VERSION as CODEPOINT_PROTOCOL
+from .natural_request import body, coordinates, indexed_lines, resolve_line_citations
 from .natural_request import protocol as request_protocol
 from .spec_production import ProductionTrialBinding as _RawBinding
 from .worker import Worker as _RawWorker
@@ -1534,9 +1535,12 @@ def messages(binding, step, action, intent, *, protocol=None):
             role="user",
             content=json.dumps(
                 dict(
-                    **({"request_protocol": REQUEST_PROTOCOL,
+                    **({"request_protocol": CODEPOINT_PROTOCOL,
                         "source_codepoints": coordinates(intent["args"]["content"]),
                         "source_length": len(intent["args"]["content"])}
+                        if protocol == CODEPOINT_PROTOCOL else {}),
+                    **({"request_protocol": REQUEST_PROTOCOL,
+                        "source_lines": indexed_lines(intent["args"]["content"])}
                         if protocol == REQUEST_PROTOCOL else {}),
                     goal=binding["draft"]["candidate"]["goal"],
                     focus=sorted(codec.MODEL_KINDS[action["executor"]["ref"]]),
@@ -1562,7 +1566,7 @@ def messages(binding, step, action, intent, *, protocol=None):
             ),
         ),
     ]
-    if protocol == REQUEST_PROTOCOL:
+    if protocol == CODEPOINT_PROTOCOL:
         schema = json.loads(result[1]["content"])
         properties = schema["output_schema"]["properties"]["items"]["items"]["properties"]
         properties["item_id"]["pattern"] = r"^[a-z][a-z0-9_]{0,39}$"
@@ -1576,6 +1580,22 @@ def messages(binding, step, action, intent, *, protocol=None):
             " the index of its last character as end. quote must exactly equal content[start:end]."
             " Spaces, punctuation, newlines and emoji each retain their listed positions."
             " Return JSON directly without analysis or markdown fences.")
+    if protocol == REQUEST_PROTOCOL:
+        payload = json.loads(result[1]["content"])
+        properties = payload["output_schema"]["properties"]["items"]["items"]["properties"]
+        exact_span = properties["citations"]["items"]
+        properties["citations"]["items"] = {"anyOf": [
+            {"type": "object", "additionalProperties": False, "required": ["span_id"],
+                "properties": {"span_id": {"type": "integer", "minimum": 1,
+                    "maximum": len(payload["source_lines"])}}},
+            exact_span,
+        ]}
+        result[1]["content"] = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        result[0]["content"] += (
+            ' Select a supplied source line with a citation such as {"span_id":1}.'
+            " Use the explicit start/end/quote form when a citation needs a smaller exact span."
+            " Requirements and unclassified items have empty targets."
+            " Other items can target retained requirements. Return JSON directly.")
     return result
 
 
@@ -1668,7 +1688,7 @@ def reserve_node(worker, c, job, aid, meta):
     )
 
 
-def parse(raw, source, ref, limits, reserved):
+def parse(raw, source, ref, limits, reserved, *, protocol=None):
     safe, calls = parse_response(raw)
     require_returned_model(returned_model_identity("intern-s2", raw.get("model")))
     if calls or raw["choices"][0]["message"].get("refusal"):
@@ -1678,6 +1698,8 @@ def parse(raw, source, ref, limits, reserved):
         )
     usage = checked_usage(raw, limits, limits.max_output_tokens, reserved)
     value = strict_json(safe["content"], 16384)
+    if protocol == REQUEST_PROTOCOL:
+        resolve_line_citations(value, source["content"])
     validate_value(
         {
             "type": "object",
@@ -1761,7 +1783,8 @@ def _prove_node(store, c, job, binding, op, intent, action, *, _facts=None, _rec
     require(original == response["received_raw"] and evidence == response["raw_evidence"])
     node_limits = Limits(**meta["limits"])
     expected, usage = parse(
-        raw, binding["source"], action["executor"]["ref"], node_limits, a["reserved_tokens"]
+        raw, binding["source"], action["executor"]["ref"], node_limits, a["reserved_tokens"],
+        protocol=request_protocol(meta),
     )
     _counter_checkpoint(c, job, _facts)
     require(a["usage"] == usage and a["response_model"] == raw.get("model"))
@@ -5975,6 +5998,7 @@ def advance_model(worker, run, *, _heartbeat_state=None):
                         action["executor"]["ref"],
                         node_limits,
                         row["reserved_tokens"],
+                        protocol=request_protocol(meta),
                     )
                     if cold is not None:
                         cold.check()

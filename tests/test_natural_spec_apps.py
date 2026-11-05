@@ -417,6 +417,37 @@ def test_citation_pass_never_semantic_acceptance_unicode_and_unassigned():
         natural.report(source, items, dict(unresolved=[]))
 
 
+def test_indexed_runtime_citation_resolves_current_unicode_line_and_rejects_unknown_ids():
+    from sim2act.contracts import Limits
+    from sim2act.natural_request import CURRENT_VERSION, VERSION, indexed_lines
+    from sim2act.natural_spec_runtime import parse
+
+    text = "须登记 ☀。\r\n\r\n地点待定。"
+    source = dict(resource_id="logical", content=text,
+        hash=hashlib.sha256(text.encode()).hexdigest(), format="txt")
+    limits = Limits(max_requests=2, max_tools=4, max_repairs=0,
+        max_total_tokens=64000, max_output_tokens=1024, run_seconds=300)
+    span = dict(start=text.index("地"), end=len(text), quote="地点待定。")
+    assert indexed_lines(text)[1] == {"span_id": 2, **span}
+    item = dict(item_id="pending", kind="open_question", summary="地点待定",
+        citations=[{"span_id": 2}], targets=[])
+
+    def receive(protocol):
+        raw = wire(dict(role="assistant", content=json.dumps({"items": [item]})))
+        return parse(raw, source, "model.spec.all", limits, 4096, protocol=protocol)[0]
+
+    assert receive(CURRENT_VERSION)["items"][0]["citations"] == [span]
+    with pytest.raises(DomainError):
+        receive(VERSION)
+    for invalid in ({"span_id": 0}, {"span_id": 3}, {"span_id": True}, {"span_id": 2, "quote": "改写"}):
+        item["citations"] = [invalid]
+        with pytest.raises(DomainError, match="exact current source span"):
+            receive(CURRENT_VERSION)
+    item["citations"] = [span]
+    assert receive(CURRENT_VERSION)["items"][0]["citations"] == [span]
+    assert receive(VERSION)["items"][0]["citations"] == [span]
+
+
 @pytest.mark.parametrize(
     "fault",
     ["nine_items", "unknown_target", "duplicate_id", "extra_decision", "bad_span", "goal_overflow"],
