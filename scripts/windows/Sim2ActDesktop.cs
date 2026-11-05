@@ -20,22 +20,24 @@ static class Program {
     [DllImport("shell32.dll", CharSet=CharSet.Unicode)] static extern int SetCurrentProcessExplicitAppUserModelID(string id);
     [STAThread] static int Main(string[] args) {
         try {
-            bool exactReadLive=false; string config=null,selection=null;
+            bool exactReadLive=false; string config=null,selection=null,managed=null;
             for(int i=0;i<args.Length;i++) {
                 if(args[i]=="--exact-read-live" && !exactReadLive) exactReadLive=true;
                 else if(args[i]=="--config" && config==null && i+1<args.Length) config=Paths.ExistingFile(args[++i]);
+                else if(args[i]=="--managed-local" && managed==null && i+1<args.Length) managed=Paths.ExistingFile(args[++i]);
                 else if(args[i]=="--spec-selection" && selection==null && i+1<args.Length) selection=Paths.ExistingFile(args[++i]);
                 else throw new Exception("未知或重复启动参数");
             }
-            if((exactReadLive && config!=null) || (selection!=null && config==null)) throw new Exception("正式配置与合成预览参数不能混用");
             string root = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
             Paths.Check(root);
+            if(args.Length==0 && File.Exists(Path.Combine(root,"local-installation.json"))) managed=Paths.ExistingFile(Path.Combine(root,"local-installation.json"));
+            if((config!=null && managed!=null) || (exactReadLive && (config!=null || managed!=null)) || (selection!=null && config==null && managed==null)) throw new Exception("正式配置、本机安装与合成预览参数不能混用");
             foreach (string name in new [] { "runtime\\python.exe", "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll", "WebView2Loader.dll" })
                 if (!File.Exists(Path.Combine(root,name))) throw new Exception("缺少应用文件：" + name);
             string runtime = Paths.RuntimeFolder(); // Read only; never installs or starts Edge.
             Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
             SetCurrentProcessExplicitAppUserModelID("Sim2Act.Desktop");
-            using (Host host = new Host(root,runtime,exactReadLive,config,selection)) { Application.Run(host); return host.ExitCode; }
+            using (Host host = new Host(root,runtime,exactReadLive,config,selection,managed)) { Application.Run(host); return host.ExitCode; }
         } catch (Exception error) {
             MessageBox.Show("Sim2Act 无法启动：" + error.Message, "Sim2Act", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
@@ -106,13 +108,15 @@ sealed class Host : Form {
     double startAt,stopAt,exitAt=-1,eofAt=-1;
     public int ExitCode = 1;
     readonly bool exactReadLive;
-    readonly string configuredFile,selectionFile;
-    bool Configured {get {return configuredFile!=null;}}
+    readonly string configuredFile,selectionFile,managedFile;
+    bool Configured {get {return configuredFile!=null || managedFile!=null;}}
     string ProfileIdentityPath {get {return Path.Combine(root,"configured-webview-profile.identity.json");}}
-    public Host(string root,string runtime,bool exactReadLive,string configuredFile,string selectionFile) {
+    public Host(string root,string runtime,bool exactReadLive,string configuredFile,string selectionFile,string managedFile) {
         this.root=root; this.runtime=runtime;
         this.exactReadLive=exactReadLive;
         this.configuredFile=configuredFile;this.selectionFile=selectionFile;
+        this.managedFile=managedFile;
+        Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         Text="Sim2Act 工作台"; StartPosition=FormStartPosition.CenterScreen; ShowInTaskbar=true;
         BackColor=ColorTranslator.FromHtml("#FAF9F5"); MinimumSize=new Size(1024,680);
         Rectangle work=Screen.PrimaryScreen.WorkingArea;
@@ -212,7 +216,7 @@ sealed class Host : Form {
         info.Arguments="-I -B -u -m sim2act.cli synthetic-workspace --data-dir \""+data+"\" --control-stdin"+(System.IO.Directory.Exists(data)?"":" --new");
         if(exactReadLive) info.Arguments+=" --exact-read-live";
         if(Configured) {
-            info.Arguments="-I -B -u -m sim2act.desktop_service --supervise --control-stdin --config \""+configuredFile+"\"";
+            info.Arguments="-I -B -u -m sim2act.desktop_service --supervise --control-stdin "+(managedFile!=null?"--managed-local \""+managedFile+"\"":"--config \""+configuredFile+"\"");
             if(selectionFile!=null) info.Arguments+=" --spec-selection \""+selectionFile+"\"";
         }
         info.WorkingDirectory=root; info.UseShellExecute=false; info.CreateNoWindow=true;

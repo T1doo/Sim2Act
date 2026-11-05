@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="2" failures="0" skipped="0" tests="10" time="20.955" timestamp="2026-11-05T15:43:40.600915+08:00" hostname="LAPTOP-USISIS19"><testcase classname="tests.test_desktop_service" name="test_real_api_worker_save_stop_and_same_origin_new_process_reopen" time="8.916" /><testcase classname="tests.test_desktop_service" name="test_parent_eof_during_preflight_prevents_both_children" time="1.133" /><testcase classname="tests.test_desktop_service" name="test_wrong_current_worker_receipt_never_ready_retains_unknown_claim" time="3.499" /><testcase classname="tests.test_desktop_service" name="test_owned_heartbeat_handle_must_actually_finish" time="0.693"><error message="failed on setup with &quot;AttributeError: module 'sim2act.natural_live_admission' has no attribute '_RAW_UNSUPPORTED'&quot;">tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-desktop-2/test_owned_heartbeat_handle_mu0')
+
+    @pytest.fixture
+    def env(tmp_path):
+        if os.environ.get("SIM2ACT_RECORD_PG_CONFIG"):
+            from record_pg_fixture import environment
+    
+            yield from environment(tmp_path, os.environ["SIM2ACT_RECORD_PG_CONFIG"])
+            return
+        url = os.environ.get("SIM2ACT_TEST_DATABASE_URL", "sqlite:///" + str(tmp_path / "fixture.db"))
+        store = Store(url, test_only=True)
+        schema = new_id("test")
+        if not store.sqlite:
+            with store.engine.begin() as c:
+                c.execute(text('CREATE SCHEMA "' + schema + '"'))
+            store.engine = store.engine.execution_options(schema_translate_map={None: schema})
+        store.initialize(fresh_test_schema=None if store.sqlite else schema)
+        # Explicit synthetic identities, never production secrets.
+        a = store.user("fixture A", "synthetic-test-A")
+        b = store.user("fixture B", "synthetic-test-B")
+        s = Settings(url, Path(tmp_path), mode="mock")
+&gt;       client = TestClient(create_app(store, s))
+                            ^^^^^^^^^^^^^^^^^^^^
+
+tests\conftest.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\sim2act\api.py:991: in create_app
+    mount_owner_acceptance(app, db, platform_limits, identity)
+src\sim2act\owner_acceptance.py:534: in mount
+    from . import natural_spec_corrections
+src\sim2act\natural_spec_corrections.py:16: in &lt;module&gt;
+    from . import pa_spec_apps as spec
+src\sim2act\pa_spec_apps.py:2491: in &lt;module&gt;
+    from . import _cold_accounted_receipts as _receipt_continuation_code
+src\sim2act\_cold_accounted_receipts.py:13: in &lt;module&gt;
+    from . import natural_spec_runtime as rt
+src\sim2act\natural_spec_runtime.py:6141: in &lt;module&gt;
+    from . import _cold_graph_structure_guard as _graph_structure_code
+src\sim2act\_cold_graph_structure_guard.py:57: in &lt;module&gt;
+    _ALIASES = tuple((owner, name, getattr(owner, name)) for owner, names in (
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+.0 = &lt;tuple_iterator object at 0x000002BCC04255D0&gt;
+
+&gt;   _ALIASES = tuple((owner, name, getattr(owner, name)) for owner, names in (
+                                   ^^^^^^^^^^^^^^^^^^^^
+        (versions, ('current','matches','publish','create')),
+        (r, ('_cold_graph_bytes', '_cold_graph_row_storage', '_cold_graph_limit_values',
+             '_cold_graph_pickle_marker', '_ColdGraphPickler', '_ColdGraphBytesIO',
+             '_ColdGraphRowMapping', '_ColdGraphCursorMeta', '_ColdGraphSimpleMeta',
+             '_ColdGraphQuotedName', 'Limits', 'require', '_COLD_ROW_LOOKUP',
+             '_COLD_ROW_REQUIRE', '_COLD_ROW_LEAF', '_SOURCE_VIEW_TYPE', '_SOURCE_VIEW_PIN', '_SOURCE_OWNER_TYPE', '_SOURCE_OWNER_PIN')),
+        (r.codec, ('require',)),
+        (accounted, ('rt', 'gate', 'o', '_Frontier', '_NativeCandidate', '_SizingProjection')),
+        (owned, ('_OwnedPrewriteMode',)),
+        (r._row_native_code, ('_RAW_ROW_LOOKUP', '_RAW_UNSUPPORTED')),
+        (typed, ('require', '_trial_typed_storage', '_trial_typed_classes', '_trial_typed_nested_classes')),
+    ) for name in names)
+E   AttributeError: module 'sim2act.natural_live_admission' has no attribute '_RAW_UNSUPPORTED'
+
+src\sim2act\_cold_graph_structure_guard.py:57: AttributeError</error></testcase><testcase classname="tests.test_desktop_service" name="test_production_role_rejects_sqlite_without_creating_data" time="0.388" /><testcase classname="tests.test_desktop_service" name="test_connection_namespace_binding_includes_options_and_overrides_without_password" time="0.002" /><testcase classname="tests.test_desktop_service" name="test_second_controller_cannot_touch_first_owned_children_or_claim" time="4.955" /><testcase classname="tests.test_desktop_service" name="test_preflight_timeout_is_bounded_and_never_reports_clean_while_still_active" time="0.132" /><testcase classname="tests.test_desktop_service" name="test_preflight_never_inherits_libpq_identity_defaults" time="0.002" /><testcase classname="tests.test_desktop_service" name="test_actual_app_job_blocked_heartbeat_remains_owned_after_its_old_two_second_join" time="0.474"><error message="failed on setup with &quot;sim2act.errors.DomainError: Original row storage already bound&quot;">tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-desktop-2/test_actual_app_job_blocked_he0')
+
+    @pytest.fixture
+    def env(tmp_path):
+        if os.environ.get("SIM2ACT_RECORD_PG_CONFIG"):
+            from record_pg_fixture import environment
+    
+            yield from environment(tmp_path, os.environ["SIM2ACT_RECORD_PG_CONFIG"])
+            return
+        url = os.environ.get("SIM2ACT_TEST_DATABASE_URL", "sqlite:///" + str(tmp_path / "fixture.db"))
+        store = Store(url, test_only=True)
+        schema = new_id("test")
+        if not store.sqlite:
+            with store.engine.begin() as c:
+                c.execute(text('CREATE SCHEMA "' + schema + '"'))
+            store.engine = store.engine.execution_options(schema_translate_map={None: schema})
+        store.initialize(fresh_test_schema=None if store.sqlite else schema)
+        # Explicit synthetic identities, never production secrets.
+        a = store.user("fixture A", "synthetic-test-A")
+        b = store.user("fixture B", "synthetic-test-B")
+        s = Settings(url, Path(tmp_path), mode="mock")
+&gt;       client = TestClient(create_app(store, s))
+                            ^^^^^^^^^^^^^^^^^^^^
+
+tests\conftest.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\sim2act\api.py:991: in create_app
+    mount_owner_acceptance(app, db, platform_limits, identity)
+src\sim2act\owner_acceptance.py:534: in mount
+    from . import natural_spec_corrections
+src\sim2act\natural_spec_corrections.py:16: in &lt;module&gt;
+    from . import pa_spec_apps as spec
+src\sim2act\pa_spec_apps.py:2491: in &lt;module&gt;
+    from . import _cold_accounted_receipts as _receipt_continuation_code
+src\sim2act\_cold_accounted_receipts.py:13: in &lt;module&gt;
+    from . import natural_spec_runtime as rt
+src\sim2act\natural_spec_runtime.py:6139: in &lt;module&gt;
+    _graph_version_values._bind_row_storage(_cold_graph_row_storage)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+storage = &lt;function _cold_graph_row_storage at 0x000002BCC0AB93A0&gt;
+
+    def _bind_row_storage(storage):
+        """Import bootstrap only; retain the original leaf, never a per-row alias."""
+        global _ROW_ROLE
+        if _ROW_ROLE is not None or type(storage) is not FunctionType:
+&gt;           raise DomainError('VERSION_CONFLICT','Original row storage already bound')
+E           sim2act.errors.DomainError: Original row storage already bound
+
+src\sim2act\_cold_accounted_values.py:28: DomainError</error></testcase></testsuite></testsuites>

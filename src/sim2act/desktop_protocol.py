@@ -83,7 +83,8 @@ class Child:
 class Supervisor:
     """Own two real children; never terminate/kill or infer clean from PID death."""
     def __init__(self, data_dir, backend, binding, command_factory, environment, *,
-                 port=0, startup_seconds=30, stop_seconds=20, input_stream, output_stream):
+                 port=0, startup_seconds=30, stop_seconds=20, input_stream, output_stream,
+                 owned_cleanup=None):
         if backend not in {CONFIGURED, TEST_ONLY} or not re.fullmatch(r"[a-f0-9]{64}", binding):
             raise ProtocolError("INVALID_LAUNCH")
         if type(port) is not int or not 0 <= port <= 65535:
@@ -112,6 +113,7 @@ class Supervisor:
         self.preflight_thread = None
         self.preflight_error = None
         self.startup_until = None
+        self.owned_cleanup = owned_cleanup
 
     def checkpoint(self):
         if self.stop.is_set():
@@ -416,6 +418,25 @@ class Supervisor:
                 and str(self.preflight_error) == "PARENT_STOPPED_BEFORE_READY"))
             and self._drained() and all(c.process.returncode == 0 and c.stopped is not None
                 and c.stopped["clean"] for c in self.children.values()))
+        if self.owned_cleanup is not None:
+            # Database shutdown follows drained API/Worker and preflight, and
+            # shares the original stop deadline. An undrained dependency can
+            # never authorize releasing the desktop claim or a clean receipt.
+            completed = threading.Event()
+            outcome = []
+            def finish_dependency():
+                try:
+                    outcome.append(self.owned_cleanup(max(0, until-time.monotonic())) is True)
+                except Exception:
+                    outcome.append(False)
+                finally:
+                    completed.set()
+            if self._drained() and (self.preflight_thread is None or not self.preflight_thread.is_alive()) and time.monotonic() < until:
+                threading.Thread(target=finish_dependency,daemon=True).start()
+                completed.wait(max(0,until-time.monotonic()))
+            if not completed.is_set() or outcome != [True]:
+                clean = False
+                self.errors.append('OWNED_DEPENDENCY_STOP_UNKNOWN')
         if clean:
             try:
                 self._release_claim()

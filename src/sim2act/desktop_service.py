@@ -184,7 +184,8 @@ def configuration_binding(settings):
     return hashlib.sha256(identity).hexdigest()
 
 
-def configured_supervisor(settings, selected, preflight, *, port, input_stream, output_stream):
+def configured_supervisor(settings, selected, preflight, *, port, input_stream, output_stream,
+                          owned_database=None):
     binding = configuration_binding(settings)
     if input_stream is None or input_stream.isatty():
         raise ProtocolError("OWNED_STDIN_PIPE_REQUIRED")
@@ -198,12 +199,25 @@ def configured_supervisor(settings, selected, preflight, *, port, input_stream, 
                 args.extend(["--spec-production-" + key, selected[key]])
         return args
 
+    def cleanup(remaining):
+        if owned_database.identity is None:
+            return not owned_database.claim.exists()
+        owned_database.stop(timeout=min(30,remaining))
+        return True
+
     controller = Supervisor(settings.data_dir, CONFIGURED, binding, command, environment,
-        port=port, input_stream=input_stream, output_stream=output_stream)
-    return controller.run(lambda: preflight(controller.checkpoint))
+        port=port, input_stream=input_stream, output_stream=output_stream,
+        owned_cleanup=cleanup if owned_database is not None else None)
+    def prepare():
+        controller.checkpoint()
+        if owned_database is not None:
+            owned_database.start()
+            controller.checkpoint()
+        preflight(controller.checkpoint)
+    return controller.run(prepare)
 
 
-def configured_entry(*, config, selection, port, input_stream, output_stream):
+def configured_entry(*, config, selection, port, input_stream, output_stream, managed_local=None):
     from sqlalchemy import event
 
     from .db_readiness import inspect_database
@@ -214,11 +228,18 @@ def configured_entry(*, config, selection, port, input_stream, output_stream):
         validation_store,
     )
 
+    if config and managed_local:
+        raise ProtocolError('CONFLICTING_LOCAL_CONFIGURATION')
     if config:
         import_config(config)
     selected = production_selection(selection) if selection else None
-    ordinary(os.environ.get("SIM2ACT_DATA_DIR", ".sim2act"))
-    settings = Settings.from_env()
+    owned_database=None
+    if managed_local:
+        from .local_desktop_settings import local_settings
+        settings,owned_database=local_settings(managed_local)
+    else:
+        ordinary(os.environ.get("SIM2ACT_DATA_DIR", ".sim2act"))
+        settings = Settings.from_env()
 
     def preflight(checkpoint):
         store = validation_store(settings)
@@ -236,7 +257,7 @@ def configured_entry(*, config, selection, port, input_stream, output_stream):
             store.engine.dispose()
 
     return configured_supervisor(settings, selected, preflight, port=port,
-        input_stream=input_stream, output_stream=output_stream)
+        input_stream=input_stream, output_stream=output_stream,owned_database=owned_database)
 
 
 def main():
@@ -247,6 +268,7 @@ def main():
     parser.add_argument("--supervise", action="store_true")
     parser.add_argument("--control-stdin", action="store_true")
     parser.add_argument("--config")
+    parser.add_argument("--managed-local")
     parser.add_argument("--spec-selection")
     for field in ("user", "project", "trial", "approval", "account"):
         parser.add_argument("--spec-production-" + field)
@@ -257,12 +279,12 @@ def main():
             parser.error("Private supervisor control only; use original selection file")
         try:
             result = configured_entry(config=args.config, selection=args.spec_selection,
-                port=args.port, input_stream=sys.stdin, output_stream=sys.stdout)
+                port=args.port, input_stream=sys.stdin, output_stream=sys.stdout,managed_local=args.managed_local)
         except Exception:
             # Never expose a configuration value, DSN, token or arbitrary error.
             parser.exit(1, "Configured desktop lifecycle unconfirmed; preserve data and claims.\n")
         raise SystemExit(result)
-    if args.config or args.spec_selection or args.control_stdin or args.role is None:
+    if args.config or args.managed_local or args.spec_selection or args.control_stdin or args.role is None:
         parser.error("Use --supervise --control-stdin for a configured desktop parent")
     if not args.session or not re.fullmatch(r"[a-f0-9]{32}", args.session) or not 0 <= args.port <= 65535 or sys.stdin.isatty():
         parser.error("Private role/session/port required")

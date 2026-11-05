@@ -72,6 +72,7 @@ $priorTemp,$priorTmp = $env:TEMP,$env:TMP
 try {
     $env:TEMP=$temp; $env:TMP=$temp
     $arguments = @('/nologo','/target:winexe','/platform:x64','/optimize+','/langversion:5','/codepage:65001',
+        ('/win32icon:'+(Join-Path $desktopRoot 'runtime\Lib\site-packages\sim2act\web\sim2act-icon.ico')),
         ('/win32manifest:'+(Join-Path $PSScriptRoot 'desktop.manifest')),('/out:'+$exe),
         '/reference:System.Windows.Forms.dll,System.Drawing.dll,System.Web.Extensions.dll',
         ('/reference:'+(Join-Path $desktopRoot 'Microsoft.Web.WebView2.Core.dll')),

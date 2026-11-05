@@ -1,5 +1,32 @@
 # Configured desktop lifecycle
 
+## Managed local Windows integration (2026-11-05, acceptance pending)
+
+`Sim2Act.exe --managed-local <explicit-local-installation.json>` selects an
+already provisioned private PostgreSQL installation. With no arguments, the
+host also recognizes `local-installation.json` beside the EXE. It does not scan
+for dotenv files or silently replace malformed local configuration with a demo.
+External `--config`, managed-local, and synthetic live preview are exclusive.
+
+The local selection contains the format `sim2act.local-installation.v1`, absolute
+`runtime`, `data`, `credentials`, `workspace`, and `model_key` paths plus a boolean
+`live`. Credentials are explicitly selected current-user Windows DPAPI files;
+the selection contains no password or model token. Provisioning and first-use UI
+are not yet bundled into a complete installer. This is a maintainer integration
+entry, not a claim of ordinary-user installation readiness.
+
+The supervisor starts only its owned private database before the original
+database preflight. API and Worker continue using the original application role,
+authorization and selected task gates. Shutdown waits for both roles and
+preflight, then stops the owned database within the existing stop budget. Failure
+or uncertainty preserves claims and refuses a clean receipt. No service or
+Windows startup entry is registered. Existing external databases are never
+stopped by this managed dependency path.
+
+The 2026-11-05 local native imports, dedicated PG initialization and start/stop
+checks are limited evidence. Same-version managed-window integration and full
+UI/R0 acceptance remain open.
+
 The installed `sim2act.desktop_service --supervise --control-stdin` entry now owns
 separate original API and Worker processes. The native host selects it with
 `Sim2Act.exe --config <existing-private.env>` and an optional

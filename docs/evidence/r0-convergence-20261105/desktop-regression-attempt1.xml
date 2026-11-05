@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="2" failures="2" skipped="0" tests="10" time="11.903" timestamp="2026-11-05T15:42:26.653659+08:00" hostname="LAPTOP-USISIS19"><testcase classname="tests.test_desktop_service" name="test_real_api_worker_save_stop_and_same_origin_new_process_reopen" time="2.688"><failure message="AssertionError: [{'backend': 'TEST_ONLY_SQLITE', 'event': 'DESKTOP_SERVICE_STARTING', 'protocol': 'sim2act.desktop-service.v1', 'sessi...ICE_ERROR', ...}, {'backend': 'TEST_ONLY_SQLITE', 'children_started': 2, 'claim_preserved': True, 'clean': False, ...}]&#10;assert 1 == 0&#10; +  where 1 = close(None)&#10; +    where close = &lt;test_desktop_service.Running object at 0x0000029464687230&gt;.close">tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-desktop/test_real_api_worker_save_stop0')
+
+    def test_real_api_worker_save_stop_and_same_origin_new_process_reopen(tmp_path):
+        root = tmp_path / "test-only-dual-process"
+        running = Running(root)
+        try:
+&gt;           ready = running.event("DESKTOP_SERVICE_READY")
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_desktop_service.py:85: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;test_desktop_service.Running object at 0x0000029464687230&gt;
+expected = 'DESKTOP_SERVICE_READY', timeout = 20
+
+    def event(self, expected, timeout=20):
+        until = time.monotonic() + timeout
+        while time.monotonic() &lt; until:
+            value = self.events.get(timeout=max(.01, until - time.monotonic()))
+&gt;           assert value is not None, (self.lines, self.errors)
+E           AssertionError: ([{'backend': 'TEST_ONLY_SQLITE', 'event': 'DESKTOP_SERVICE_STARTING', 'protocol': 'sim2act.desktop-service.v1', 'sess..., 'children_started': 2, 'claim_preserved': True, 'clean': False, ...}], ["unsupported 'import' line in ._pth file
+E             "])
+E           assert None is not None
+
+tests\test_desktop_service.py:51: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-desktop/test_real_api_worker_save_stop0')
+
+    def test_real_api_worker_save_stop_and_same_origin_new_process_reopen(tmp_path):
+        root = tmp_path / "test-only-dual-process"
+        running = Running(root)
+        try:
+            ready = running.event("DESKTOP_SERVICE_READY")
+            assert ready["backend"] == TEST_ONLY
+            assert len({running.child.pid, ready["api_pid"], ready["worker_pid"]}) == 3
+            claim = json.loads((root / "desktop-service-claim.json").read_text())
+            assert {c["pid"] for c in claim["children"]} == {ready["api_pid"], ready["worker_pid"]}
+            assert all(c["created_at"] &gt; 0 for c in claim["children"])
+            with httpx.Client(base_url=ready["url"], headers={"Authorization": "Bearer " + TOKEN},
+                    trust_env=False, timeout=5) as client:
+                assert client.get("/health").status_code == 200
+                project = request(client, "/api/projects", dict(name="Dual process actual save"))["id"]
+                resource = request(client, f"/api/projects/{project}/resources",
+                    dict(name="values.csv", format="csv", content="item,amount\nA,10\nB,20\n"))
+                app = request(client, f"/api/projects/{project}/apps/csv-preview",
+                    dict(name="sum amount", resource_id=resource["id"], goal="Sum amount"))
+                app = client.get("/api/apps/" + app["id"]).json()
+                approval = request(client, f"/api/internal/apps/{app['id']}/release-approvals",
+                    dict(expected_draft_fingerprint=app["fingerprint"], sample_input=dict(column="amount")))
+                release = request(client, f"/api/internal/approvals/{approval['id']}/commit",
+                    dict(fingerprint=approval["fingerprint"]), 200)
+                instance = request(client, f"/api/internal/releases/{release['id']}/instances",
+                    dict(expected_release_fingerprint=release["fingerprint"], request_key="dual-instance"))
+                body = dict(expected_release_fingerprint=release["fingerprint"], expected_revision=instance["revision"],
+                    input=dict(column="amount"), request_key="dual-run")
+                accepted = request(client, f"/api/internal/instances/{instance['id']}/runs", body, 202)
+                route = f"/api/internal/instances/{instance['id']}/runs/{accepted['run_id']}"
+                until = time.monotonic() + 15
+                while True:
+                    result = client.get(route).json()
+                    if result["status"] not in {"QUEUED", "RUNNING"}:
+                        break
+                    assert time.monotonic() &lt; until, result
+                    time.sleep(.05)
+                assert result["status"] == "SUCCEEDED" and result["result"]["sum"] == "30"
+                (root / "actual-test-only-result.json").write_text(json.dumps(result, indent=2) + "\n")
+                # The original request identity still returns the same Run.
+                again = request(client, f"/api/internal/instances/{instance['id']}/runs", body, 202)
+                assert again["run_id"] == accepted["run_id"]
+                pending = request(client, f"/api/projects/{project}/csv-report-runs",
+                    dict(resource_id=resource["id"], column="amount", request_key="cancel-before-confirm"), 202)
+                cancel_route = "/api/runs/" + pending["run_id"]
+                pending = client.get(cancel_route).json()
+                assert pending["status"] == "WAITING_APPROVAL"
+                cancelled_reply = request(client, cancel_route + "/commands",
+                    dict(command="cancel", version=pending["version"]), 200)
+                assert cancelled_reply["status"] == "CANCELLED"
+                cancelled = client.get(cancel_route).json()
+                assert cancelled["status"] == "CANCELLED" and cancelled["result"] is None
+                (root / "actual-test-only-cancelled.json").write_text(json.dumps(cancelled, indent=2) + "\n")
+        finally:
+&gt;           assert running.close(ready["session"] if "ready" in locals() else None) == 0, running.lines
+E           AssertionError: [{'backend': 'TEST_ONLY_SQLITE', 'event': 'DESKTOP_SERVICE_STARTING', 'protocol': 'sim2act.desktop-service.v1', 'sessi...ICE_ERROR', ...}, {'backend': 'TEST_ONLY_SQLITE', 'children_started': 2, 'claim_preserved': True, 'clean': False, ...}]
+E           assert 1 == 0
+E            +  where 1 = close(None)
+E            +    where close = &lt;test_desktop_service.Running object at 0x0000029464687230&gt;.close
+
+tests\test_desktop_service.py:134: AssertionError</failure></testcase><testcase classname="tests.test_desktop_service" name="test_parent_eof_during_preflight_prevents_both_children" time="0.927" /><testcase classname="tests.test_desktop_service" name="test_wrong_current_worker_receipt_never_ready_retains_unknown_claim" time="2.611" /><testcase classname="tests.test_desktop_service" name="test_owned_heartbeat_handle_must_actually_finish" time="0.797"><error message="failed on setup with &quot;AttributeError: module 'sim2act.natural_live_admission' has no attribute '_RAW_UNSUPPORTED'&quot;">tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-desktop/test_owned_heartbeat_handle_mu0')
+
+    @pytest.fixture
+    def env(tmp_path):
+        if os.environ.get("SIM2ACT_RECORD_PG_CONFIG"):
+            from record_pg_fixture import environment
+    
+            yield from environment(tmp_path, os.environ["SIM2ACT_RECORD_PG_CONFIG"])
+            return
+        url = os.environ.get("SIM2ACT_TEST_DATABASE_URL", "sqlite:///" + str(tmp_path / "fixture.db"))
+        store = Store(url, test_only=True)
+        schema = new_id("test")
+        if not store.sqlite:
+            with store.engine.begin() as c:
+                c.execute(text('CREATE SCHEMA "' + schema + '"'))
+            store.engine = store.engine.execution_options(schema_translate_map={None: schema})
+        store.initialize(fresh_test_schema=None if store.sqlite else schema)
+        # Explicit synthetic identities, never production secrets.
+        a = store.user("fixture A", "synthetic-test-A")
+        b = store.user("fixture B", "synthetic-test-B")
+        s = Settings(url, Path(tmp_path), mode="mock")
+&gt;       client = TestClient(create_app(store, s))
+                            ^^^^^^^^^^^^^^^^^^^^
+
+tests\conftest.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\sim2act\api.py:991: in create_app
+    mount_owner_acceptance(app, db, platform_limits, identity)
+src\sim2act\owner_acceptance.py:534: in mount
+    from . import natural_spec_corrections
+src\sim2act\natural_spec_corrections.py:16: in &lt;module&gt;
+    from . import pa_spec_apps as spec
+src\sim2act\pa_spec_apps.py:2491: in &lt;module&gt;
+    from . import _cold_accounted_receipts as _receipt_continuation_code
+src\sim2act\_cold_accounted_receipts.py:13: in &lt;module&gt;
+    from . import natural_spec_runtime as rt
+src\sim2act\natural_spec_runtime.py:6141: in &lt;module&gt;
+    from . import _cold_graph_structure_guard as _graph_structure_code
+src\sim2act\_cold_graph_structure_guard.py:57: in &lt;module&gt;
+    _ALIASES = tuple((owner, name, getattr(owner, name)) for owner, names in (
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+.0 = &lt;tuple_iterator object at 0x000002946620FC40&gt;
+
+&gt;   _ALIASES = tuple((owner, name, getattr(owner, name)) for owner, names in (
+                                   ^^^^^^^^^^^^^^^^^^^^
+        (versions, ('current','matches','publish','create')),
+        (r, ('_cold_graph_bytes', '_cold_graph_row_storage', '_cold_graph_limit_values',
+             '_cold_graph_pickle_marker', '_ColdGraphPickler', '_ColdGraphBytesIO',
+             '_ColdGraphRowMapping', '_ColdGraphCursorMeta', '_ColdGraphSimpleMeta',
+             '_ColdGraphQuotedName', 'Limits', 'require', '_COLD_ROW_LOOKUP',
+             '_COLD_ROW_REQUIRE', '_COLD_ROW_LEAF', '_SOURCE_VIEW_TYPE', '_SOURCE_VIEW_PIN', '_SOURCE_OWNER_TYPE', '_SOURCE_OWNER_PIN')),
+        (r.codec, ('require',)),
+        (accounted, ('rt', 'gate', 'o', '_Frontier', '_NativeCandidate', '_SizingProjection')),
+        (owned, ('_OwnedPrewriteMode',)),
+        (r._row_native_code, ('_RAW_ROW_LOOKUP', '_RAW_UNSUPPORTED')),
+        (typed, ('require', '_trial_typed_storage', '_trial_typed_classes', '_trial_typed_nested_classes')),
+    ) for name in names)
+E   AttributeError: module 'sim2act.natural_live_admission' has no attribute '_RAW_UNSUPPORTED'
+
+src\sim2act\_cold_graph_structure_guard.py:57: AttributeError</error></testcase><testcase classname="tests.test_desktop_service" name="test_production_role_rejects_sqlite_without_creating_data" time="0.429" /><testcase classname="tests.test_desktop_service" name="test_connection_namespace_binding_includes_options_and_overrides_without_password" time="0.002" /><testcase classname="tests.test_desktop_service" name="test_second_controller_cannot_touch_first_owned_children_or_claim" time="2.813"><failure message="AssertionError: [{'backend': 'TEST_ONLY_SQLITE', 'event': 'DESKTOP_SERVICE_STARTING', 'protocol': 'sim2act.desktop-service.v1', 'sessi...ICE_ERROR', ...}, {'backend': 'TEST_ONLY_SQLITE', 'children_started': 2, 'claim_preserved': True, 'clean': False, ...}]&#10;assert 1 == 0&#10; +  where 1 = close()&#10; +    where close = &lt;test_desktop_service.Running object at 0x00000294643E8D70&gt;.close">tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-desktop/test_second_controller_cannot_0')
+
+    def test_second_controller_cannot_touch_first_owned_children_or_claim(tmp_path):
+        root = tmp_path / "exclusive-controller"
+        first = Running(root)
+        try:
+&gt;           ready = first.event("DESKTOP_SERVICE_READY")
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_desktop_service.py:227: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;test_desktop_service.Running object at 0x00000294643E8D70&gt;
+expected = 'DESKTOP_SERVICE_READY', timeout = 20
+
+    def event(self, expected, timeout=20):
+        until = time.monotonic() + timeout
+        while time.monotonic() &lt; until:
+            value = self.events.get(timeout=max(.01, until - time.monotonic()))
+&gt;           assert value is not None, (self.lines, self.errors)
+E           AssertionError: ([{'backend': 'TEST_ONLY_SQLITE', 'event': 'DESKTOP_SERVICE_STARTING', 'protocol': 'sim2act.desktop-service.v1', 'sess..., 'children_started': 2, 'claim_preserved': True, 'clean': False, ...}], ["unsupported 'import' line in ._pth file
+E             "])
+E           assert None is not None
+
+tests\test_desktop_service.py:51: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-desktop/test_second_controller_cannot_0')
+
+    def test_second_controller_cannot_touch_first_owned_children_or_claim(tmp_path):
+        root = tmp_path / "exclusive-controller"
+        first = Running(root)
+        try:
+            ready = first.event("DESKTOP_SERVICE_READY")
+            claim = (root / "desktop-service-claim.json").read_bytes()
+            second = Running(root)
+            second.event("DESKTOP_SERVICE_ERROR")
+            assert second.close() == 1
+            assert second.lines[-1]["children_started"] == 0
+            assert (root / "desktop-service-claim.json").read_bytes() == claim
+            with httpx.Client(base_url=ready["url"], trust_env=False, timeout=5) as client:
+                assert client.get("/health").status_code == 200
+        finally:
+&gt;           assert first.close() == 0, first.lines
+E           AssertionError: [{'backend': 'TEST_ONLY_SQLITE', 'event': 'DESKTOP_SERVICE_STARTING', 'protocol': 'sim2act.desktop-service.v1', 'sessi...ICE_ERROR', ...}, {'backend': 'TEST_ONLY_SQLITE', 'children_started': 2, 'claim_preserved': True, 'clean': False, ...}]
+E           assert 1 == 0
+E            +  where 1 = close()
+E            +    where close = &lt;test_desktop_service.Running object at 0x00000294643E8D70&gt;.close
+
+tests\test_desktop_service.py:237: AssertionError</failure></testcase><testcase classname="tests.test_desktop_service" name="test_preflight_timeout_is_bounded_and_never_reports_clean_while_still_active" time="0.126" /><testcase classname="tests.test_desktop_service" name="test_preflight_never_inherits_libpq_identity_defaults" time="0.002" /><testcase classname="tests.test_desktop_service" name="test_actual_app_job_blocked_heartbeat_remains_owned_after_its_old_two_second_join" time="0.497"><error message="failed on setup with &quot;sim2act.errors.DomainError: Original row storage already bound&quot;">tmp_path = WindowsPath('E:/Github/Sim2Act/.local/windows-build-20261105/pytest-desktop/test_actual_app_job_blocked_he0')
+
+    @pytest.fixture
+    def env(tmp_path):
+        if os.environ.get("SIM2ACT_RECORD_PG_CONFIG"):
+            from record_pg_fixture import environment
+    
+            yield from environment(tmp_path, os.environ["SIM2ACT_RECORD_PG_CONFIG"])
+            return
+        url = os.environ.get("SIM2ACT_TEST_DATABASE_URL", "sqlite:///" + str(tmp_path / "fixture.db"))
+        store = Store(url, test_only=True)
+        schema = new_id("test")
+        if not store.sqlite:
+            with store.engine.begin() as c:
+                c.execute(text('CREATE SCHEMA "' + schema + '"'))
+            store.engine = store.engine.execution_options(schema_translate_map={None: schema})
+        store.initialize(fresh_test_schema=None if store.sqlite else schema)
+        # Explicit synthetic identities, never production secrets.
+        a = store.user("fixture A", "synthetic-test-A")
+        b = store.user("fixture B", "synthetic-test-B")
+        s = Settings(url, Path(tmp_path), mode="mock")
+&gt;       client = TestClient(create_app(store, s))
+                            ^^^^^^^^^^^^^^^^^^^^
+
+tests\conftest.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\sim2act\api.py:991: in create_app
+    mount_owner_acceptance(app, db, platform_limits, identity)
+src\sim2act\owner_acceptance.py:534: in mount
+    from . import natural_spec_corrections
+src\sim2act\natural_spec_corrections.py:16: in &lt;module&gt;
+    from . import pa_spec_apps as spec
+src\sim2act\pa_spec_apps.py:2491: in &lt;module&gt;
+    from . import _cold_accounted_receipts as _receipt_continuation_code
+src\sim2act\_cold_accounted_receipts.py:13: in &lt;module&gt;
+    from . import natural_spec_runtime as rt
+src\sim2act\natural_spec_runtime.py:6139: in &lt;module&gt;
+    _graph_version_values._bind_row_storage(_cold_graph_row_storage)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+storage = &lt;function _cold_graph_row_storage at 0x00000294670BC9A0&gt;
+
+    def _bind_row_storage(storage):
+        """Import bootstrap only; retain the original leaf, never a per-row alias."""
+        global _ROW_ROLE
+        if _ROW_ROLE is not None or type(storage) is not FunctionType:
+&gt;           raise DomainError('VERSION_CONFLICT','Original row storage already bound')
+E           sim2act.errors.DomainError: Original row storage already bound
+
+src\sim2act\_cold_accounted_values.py:28: DomainError</error></testcase></testsuite></testsuites>
