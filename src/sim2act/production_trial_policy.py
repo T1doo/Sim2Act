@@ -203,6 +203,15 @@ def identity_for(context, source, attempt_id, wire):
         wire_bytes=len(wire), wire_sha256=hashlib.sha256(wire).hexdigest())
 
 
+def _stage_output(scope,stage):
+    from .natural_generation_budget import envelope_limit
+    return envelope_limit(scope.generation_profile,stage)
+
+
+def _envelope(scope,item):
+    return item.wire_bytes+_stage_output(scope,item.stage)
+
+
 def _ledger(value):
     ledger = _typed(value, Ledger)
     from .production_trial_admission import canonical_quota_subject
@@ -218,8 +227,8 @@ def _ledger(value):
             and item.account_id == ledger.account_id and item.quota_subject == ledger.scope.quota_subject
             and previous <= slot.reserved_at < ledger.scope.expires_at
             and (slot.settlement is not None or not slot.accepted)
-            and (not slot.accepted or slot.attempted and _known(slot.settlement)
-                 and slot.settlement.total_tokens <= item.wire_bytes + 1024))
+            and (not slot.accepted or slot.attempted and _known(slot.settlement,_stage_output(ledger.scope,item.stage))
+                 and slot.settlement.total_tokens <= _envelope(ledger.scope,item)))
         # Only the last slot may be pending/rejected. Restored state must be
         # reachable through this policy, including the original 1-RPM bound.
         _require((index == len(ledger.slots) - 1 or slot.accepted)
@@ -229,8 +238,9 @@ def _ledger(value):
     _require(len(set(stage_runs.values())) == len(stage_runs))
     for stage, limit in budget.STAGES.items():
         own = [i for i in identities if i.stage == stage]
-        _require(len(own) <= limit and sum(i.wire_bytes + 1024 for i in own) <= 64000)
-    _require(sum(i.wire_bytes + 1024 for i in identities) <= 192000)
+        _require(len(own) <= limit and sum(_envelope(ledger.scope,i) for i in own) <= 64000)
+    _require(sum(_envelope(ledger.scope,i) for i in identities) <= 192000)
+    _require(sum(s.settlement.completion_tokens for s in ledger.slots if s.accepted)<=7168)
     _require(not any(s.settlement is not None and not s.accepted for s in ledger.slots)
              or ledger.halted)
     return ledger
@@ -299,9 +309,9 @@ def record_attempt(store, c, user, contract, key, ledger, quota, identity, wire,
     return Transition(ledger=state.model_copy(update=dict(slots=updated)), quota=cursor)
 
 
-def _known(outcome):
+def _known(outcome,output_limit=1024):
     return (outcome is not None and outcome.outcome == "RECEIVED"
-            and budget._known(outcome.model_dump()) and outcome.completion_tokens <= 1024
+            and budget._known(outcome.model_dump()) and outcome.completion_tokens <= output_limit
             and outcome.response_ascii_bytes <= 32768)
 
 
@@ -321,8 +331,10 @@ def settle(store, c, user, contract, key, ledger, quota, identity, wire, source,
         active = True
     except DomainError:
         pass
-    accepted = bool(active and slot.attempted and _known(received)
-        and received.total_tokens <= item.wire_bytes + 1024 and not state.halted)
+    accepted = bool(active and slot.attempted and _known(received,_stage_output(state.scope,item.stage))
+        and received.total_tokens <= _envelope(state.scope,item)
+        and sum(s.settlement.completion_tokens for s in state.slots if s.accepted)+received.completion_tokens<=7168
+        and not state.halted)
     replacement = slot.model_copy(update=dict(settlement=received, accepted=accepted))
     updated = state.model_copy(update=dict(slots=tuple(replacement if s == slot else s for s in state.slots),
                                          halted=state.halted or not accepted))

@@ -178,6 +178,8 @@ class TrialContractV2(_TrialContractFields):
     """New exact consent only. V1 is never inferred, migrated or extended."""
 
     namespace: Literal["natural-live-trial.v2"] = "natural-live-trial.v2"
+    generation_profile: Literal["pa-natural-output4096.v1"] | None = Field(
+        default=None, exclude_if=lambda value: value is None)
     prepared_at: float = Field(gt=0, allow_inf_nan=False)
     review_expires_at: float = Field(gt=0, allow_inf_nan=False)
     execution_expires_at: float = Field(gt=0, allow_inf_nan=False)

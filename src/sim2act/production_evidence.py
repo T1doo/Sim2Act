@@ -52,6 +52,8 @@ class EvidenceRequirements(EvidenceData):
     """Projection of an original contract, not proof of current authorization."""
 
     namespace: Literal["production-account-requirements.v1"] = "production-account-requirements.v1"
+    generation_profile: Literal["pa-natural-output4096.v1"] | None = Field(
+        default=None, exclude_if=lambda value: value is None)
     principal_id: str = Field(pattern=r"^user_[a-f0-9]{32}$")
     project_id: str = Field(pattern=r"^proj_[a-f0-9]{32}$")
     runtime_id: str = Field(pattern=r"^runtime_[a-f0-9]{32}$")
@@ -172,6 +174,7 @@ def requirements_for(user, contract, approval_key) -> EvidenceRequirements:
         if original.principal_id != user:
             _deny("Production evidence principal differs from the original contract")
         return EvidenceRequirements(principal_id=user, project_id=original.project_id,
+            generation_profile=getattr(original,'generation_profile',None),
             runtime_id=original.runtime_id, trial_key=original.trial_key,
             approval_key=approval_key, contract_fingerprint=fingerprint(original.model_dump()),
             software_fingerprint=original.software_fingerprint,
