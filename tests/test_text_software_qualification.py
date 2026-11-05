@@ -78,7 +78,8 @@ def test_unknown_file_set_manifest_anchor_or_nonliteral_pin_never_qualifies(soft
 def test_duplicate_manifest_field_is_rejected_even_in_synthetic_repinned_document(software, monkeypatch):
     p = software / "text_software_qualification.json"
     raw = p.read_text().replace('{\n', '{\n  "version": "literal-software-qualification.v1",\n', 1)
-    p.write_text(raw)
+    # The forged document must match its declared byte hash on Windows too.
+    p.write_bytes(raw.encode())
     pin = hashlib.sha256(raw.encode()).hexdigest()
     code = software / "text_continuations.py"
     code.write_text(code.read_text().replace('QUALIFICATION_HASH = "' + cont.QUALIFICATION_HASH + '"',

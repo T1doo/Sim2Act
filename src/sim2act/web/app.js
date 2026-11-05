@@ -650,6 +650,7 @@ async function readRunDetail(id, userSelection, selectionGuard, validateReceipt)
   const labels = {QUEUED:"等待后台执行",RUNNING:"正在执行",PARTIAL:"部分完成",FAILED:"执行失败",WAITING_RESOURCE:"等待资源或授权",WAITING_APPROVAL:"等待确认计划",PAUSED:"已暂停",CANCELLED:"已停止",SUCCEEDED:"已完成",UNKNOWN:"状态待核实",RECONCILING:"状态待核实",WAITING_INPUT:"等待输入"};
   const statusLine=row(r.status==='SUCCEEDED'?'执行完成':labels[r.status]||r.status);statusLine.title=r.status;statusLine.dataset.executionState=r.status;$("result").replaceChildren(statusLine);
   if(internal)renderInternalTaskResult(r,current);
+  if(!internal && r.result)renderOrdinaryOutcome(r);
   if(!internal)renderOrdinaryProgress(r,attempts);
   if (r.result && !internal) {
     $("result").append(row(typeof csvReportPassed === "function" && csvReportPassed(r)?"事前CSV完整报告合同 PASS；0模型请求，通用语义 NOT_RUN，人工 PENDING。":fixedGoalAcceptancePassed(r)?"固定合成目标整体验收 PASS；通用语义与人工签收未完成，正式发布关闭。":`${r.result.mode === "MOCK" ? "MOCK 工程样例" : "书生运行记录"}：工具回执已核验，完整目标验收尚未执行。`));
@@ -658,7 +659,6 @@ async function readRunDetail(id, userSelection, selectionGuard, validateReceipt)
       if (typeof data.content === "string") {$("result").append(row("工具读取的材料（来源回执）"));const pre=document.createElement("pre");pre.textContent=data.content;$("result").append(pre);}
       else if (data.sum !== undefined) $("result").append(row(`${data.column} 合计 ${data.sum}，共 ${data.count} 条记录。`));
     }
-    renderOrdinaryOutcome(r);
   }
   if (!r.result && (r.ordinary_csv?.receipts?.length||r.artifact_delivery?.receipts?.length))renderOrdinaryOutcome(r);
   if(r.artifact_delivery){const status=row(`单份MD交付：${r.artifact_delivery.status} · 自动语义 NOT_RUN · 人工声明另行提交`);status.id="ordinary-md-status";$("result").append(status);}
