@@ -92,7 +92,8 @@ def test_duplicate_production_fields_rejected_even_with_synthetic_repin(target, 
 
 
 @pytest.mark.parametrize("file", ["worker.py", "text_continuations.py", "production_trial_admission.py",
-    "_owned_sql_catalog.json", "_raw_snapshot.c"])
+    "_owned_sql_catalog.json", "_raw_snapshot.c", "local_desktop_settings.py", "local_setup.py",
+    "natural_generation_readiness.py", "private_postgres.py", "windows_credentials.py"])
 def test_any_other_reviewed_byte_change_is_rejected(target, file):
     path = target / file
     path.write_bytes(path.read_bytes() + b"\n ")

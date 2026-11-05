@@ -24,7 +24,7 @@ from .db import attempts, fingerprint, runs
 from .errors import DomainError
 from .text_continuations import ANCHOR_HASH
 
-PRODUCTION_QUALIFICATION_HASH = "f183c829a170b72119acaf5def3a224f02e30d66d7f8a7b40ebdc7365c1c86e2"
+PRODUCTION_QUALIFICATION_HASH = "cf375a26f7f04a0fb93e4d7bcf8c1c604ce6d11067ac43d72a61ab39fdb3bcfa"
 
 
 class AccountEvidence(Strict):
@@ -125,9 +125,10 @@ def _qualified():
             return value, source.replace(literal, (name + ' = "' + '0' * 64 + '"').encode())
 
         proof = json.loads(raw, object_pairs_hook=unique)
-        gate.require(set(proof) == {"version", "baseline", "files"}
-            and proof["version"] == "production-software-qualification.v2"
-            and proof["baseline"] == "206153da27edb5353e7106ab52b6e5bcaad86627")
+        gate.require(set(proof) == {"version", "baseline", "review_candidate", "files"}
+            and proof["version"] == "production-software-qualification.v3"
+            and proof["baseline"] == "206153da27edb5353e7106ab52b6e5bcaad86627"
+            and proof["review_candidate"] == "3ec03e255c2e146a26f29a7b04912b21e28b0ec1")
         # Read once: the literal proof below must describe these same bytes,
         # not an unrelated second directory scan or a replaceable callback.
         sources = {p.name: p.read_bytes()
@@ -151,10 +152,10 @@ def _qualified():
         anchors = json.loads(anchor_raw, object_pairs_hook=unique)
         gate.require(set(text_proof) == {"version", "anchor_hash", "sources", "review_baseline",
             "review_candidate", "normalization", "files"}
-            and text_proof["version"] == "literal-software-qualification.v1"
+            and text_proof["version"] == "literal-software-qualification.v2"
             and text_proof["anchor_hash"] == ANCHOR_HASH and text_proof["sources"] == sorted(anchors)
-            and text_proof["review_baseline"] == "7e29ffb397d7d7560ebdf617aa345830bc34ee33"
-            and text_proof["review_candidate"] == "94e60ca3ffe25fc1fdf427f6e31f724c4b2c8dd5"
+            and text_proof["review_baseline"] == "653669fcf67965d3b3c8877336b3289746b5d00d"
+            and text_proof["review_candidate"] == "3ec03e255c2e146a26f29a7b04912b21e28b0ec1"
             and text_proof["normalization"] == "sole-qualification-hash-literal-zero64.v1",
             "Literal software qualification scope changed")
         text_expected = {name: hashlib.sha256(data).hexdigest() for name, data in sources.items()
