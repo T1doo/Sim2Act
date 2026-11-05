@@ -4,11 +4,19 @@ from pydantic import ValidationError
 from test_pa_generation_provider import configured,prepared,provider,accepted
 from test_goal_text_applications import confirm,release_instance
 from sim2act import generation_approvals as approval
+from sim2act import goal_applications
 from sim2act.contracts import Limits
 from sim2act.worker import Worker
 
 
-def test_explicit_v2_scope_uses_4096_only_for_candidate_and_keeps_runtime_caps(env,monkeypatch):
+@pytest.mark.parametrize('output_protocol',['compact-candidate-json4096.v1','compact-candidate-json4096.v2'])
+def test_explicit_v2_scope_uses_4096_only_for_candidate_and_keeps_runtime_caps(env,monkeypatch,output_protocol):
+    original=goal_applications.policy
+    def selected_policy(*args,**kwargs):
+        value=original(*args,**kwargs)
+        if value.get('output_protocol')=='compact-candidate-json4096.v2':value['output_protocol']=output_protocol
+        return value
+    monkeypatch.setattr(goal_applications,'policy',selected_policy)
     data,clock=configured(env,monkeypatch)
     old,body=prepared(data)
     client=data[2];pid=data[4]
@@ -33,6 +41,7 @@ def test_explicit_v2_scope_uses_4096_only_for_candidate_and_keeps_runtime_caps(e
         assert [v.max_tokens for v in charges]==[1024,4096]
         assert all(isinstance(v,approval.Charge4096) for v in charges)
         assert sum(v.envelope for v in charges)<=64000
+    monkeypatch.setattr(goal_applications,'policy',original)
     app,_=confirm(data,rid,run)
     release,instance=release_instance(data,app)
     assert instance['release_id']==release['id']

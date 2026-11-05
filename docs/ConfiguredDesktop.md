@@ -24,6 +24,20 @@ activation values are cleared for this managed-local entry. External configured
 launch behavior is unchanged. This selection wiring does not prove the complete
 P-A/P-B product path.
 
+For a newly prepared literal P-A scope, the explicitly authorized
+`output_profile: "pa-candidate-output4096.v1"` selects the v2 approval record.
+Its `candidate_output_tokens` is 4096; the existing `limits` continue to describe
+the unchanged runtime/general bounds. The initial tool request stays at 1024,
+and only candidate/repair output uses 4096. Request count, total envelope budget
+and absolute deadline remain unchanged. Older scope/charge records retain their
+original shapes and limits.
+
+New `compact-candidate-json4096.v2` requests omit JSON Schema `title` annotations
+to reduce repeated wire bytes. Actual properties named `title`, literals,
+required fields, types and all validation constraints remain present. The older
+v1 protocol continues serializing its original full schemas; the validated
+candidate still must come from the provider and pass the unchanged checks.
+
 The supervisor starts only its owned private database before the original
 database preflight. API and Worker continue using the original application role,
 authorization and selected task gates. Shutdown waits for both roles and

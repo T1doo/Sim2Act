@@ -112,7 +112,7 @@ def policy(provider, user, pid, body, activation=None, app_limits=None, output_t
         repair_limit=1,
         live_request_allowance=0,
         response_archive_policy="protected-json32768.v1",
-        output_protocol=("compact-candidate-json4096.v1" if output_tokens==4096 else "compact-candidate-json.v1") if not body.get("family") else None,
+        output_protocol=("compact-candidate-json4096.v2" if output_tokens==4096 else "compact-candidate-json.v1") if not body.get("family") else None,
         activation=activation,
         app_limits=app_limits,
     ).model_dump(exclude_none=True)
@@ -430,6 +430,22 @@ def _initial_messages_from_facts(contract, material):
         contract.limits.model_dump())
 
 
+def _schema_without_titles(schema):
+    """Remove annotation titles only; property names and literal values survive."""
+    if not isinstance(schema,dict):
+        return copy.deepcopy(schema)
+    result=copy.deepcopy(schema)
+    result.pop('title',None)
+    for key in ('properties','patternProperties','$defs','definitions','dependentSchemas'):
+        if isinstance(result.get(key),dict):
+            result[key]={name:_schema_without_titles(value) for name,value in result[key].items()}
+    for key in ('items','additionalProperties','unevaluatedProperties','contains','propertyNames','not','if','then','else'):
+        if isinstance(result.get(key),dict):result[key]=_schema_without_titles(result[key])
+    for key in ('allOf','anyOf','oneOf','prefixItems'):
+        if isinstance(result.get(key),list):result[key]=[_schema_without_titles(value) for value in result[key]]
+    return result
+
+
 def _literal_initial_messages(saved_goal, server_ids, material, limits):
     """Original literal prompt over already authorized facts; grants no authority."""
     from .agent_apps import schemas
@@ -458,13 +474,16 @@ def _literal_initial_messages(saved_goal, server_ids, material, limits):
         "candidate_fields": ["manifest", "actions", "source_hash", "goal"],
         "semantic_acceptance": "NOT_RUN",
     }
+    if server_ids.get('output_protocol')=='compact-candidate-json4096.v2':
+        value['action_schema']=_schema_without_titles(value['action_schema'])
+        value['manifest_schema']=_schema_without_titles(value['manifest_schema'])
     return [
         {"role": "system", "content": SYSTEM + (
             " Output protocol compact-candidate-json.v1: after the tool result, output ONLY the final JSON object. "
             "Begin with { and end with }. Use compact JSON without indentation, analysis, explanations, or code fences. "
             "The four top-level fields are manifest, actions, source_hash, and goal. "
             "Keep every required schema field and the complete frozen goal; compact formatting must not remove facts."
-            if server_ids.get("output_protocol") in {"compact-candidate-json.v1","compact-candidate-json4096.v1"} else "")},
+            if server_ids.get("output_protocol") in {"compact-candidate-json.v1","compact-candidate-json4096.v1","compact-candidate-json4096.v2"} else "")},
         {"role": "user", "content": json.dumps(value, ensure_ascii=False, separators=(",", ":"))},
     ]
 
@@ -473,7 +492,7 @@ def generation_output_tokens(messages, tools, default):
     if not tools and len(messages)>1:
         try:
             selected=json.loads(messages[1]['content']).get('server_ids',{})
-            if selected.get('output_protocol')=='compact-candidate-json4096.v1' and selected.get('activation'):
+            if selected.get('output_protocol') in {'compact-candidate-json4096.v1','compact-candidate-json4096.v2'} and selected.get('activation'):
                 return 4096
         except (ValueError,TypeError,KeyError,AttributeError):
             pass
@@ -487,7 +506,7 @@ def body(messages, tools, max_output):
     if not tools and len(messages)>1:
         try:
             selected=json.loads(messages[1]["content"]).get("server_ids",{})
-            if selected.get("output_protocol") in {"compact-candidate-json.v1","compact-candidate-json4096.v1"}:
+            if selected.get("output_protocol") in {"compact-candidate-json.v1","compact-candidate-json4096.v1","compact-candidate-json4096.v2"}:
                 extra["thinking_mode"]=False
         except (ValueError,TypeError,KeyError,AttributeError):
             pass
