@@ -1,0 +1,424 @@
+{
+  "schema_version": "sim2act.presentation-facts.v1",
+  "status": "REVISION_DESIGN_BASELINE_NOT_RUNTIME_EVIDENCE",
+  "duration_seconds": 270,
+  "reference_review": "外部审阅/Sim2Act_产品书与270秒影片_交叉审阅_20261107.md",
+  "scope": {
+    "security_workspace_id": "story_workspace_xingqiao",
+    "workspace_label": "星桥研究团队",
+    "interpretation": "甲乙是同一已授权工作区内的申报业务案例，不是跨安全项目读取；现有图片的当前项目标签需改为申报案例。",
+    "entrant_team_name": "旦愿人长久",
+    "entrant_organization": "复旦大学",
+    "story_team_is_entrant_team": false,
+    "access": "案例历史仅向该工作区内具有相应访问范围的成员展示；不由同名标签推定权限。"
+  },
+  "rules": [
+    {
+      "rule_revision": "rule_r1",
+      "budget_limit": "100000.00",
+      "currency": "CNY",
+      "source_id": "guide_r1",
+      "status": "CONFIRMED"
+    },
+    {
+      "rule_revision": "rule_r2",
+      "budget_limit": "80000.00",
+      "currency": "CNY",
+      "source_id": "guide_r2",
+      "status": "CONFIRMED_FOR_DESIGN_STORY"
+    }
+  ],
+  "applications": [
+    {
+      "app_id": "story_app_research",
+      "name": "科研申报助手",
+      "origin": "goal",
+      "releases": [
+        {
+          "app_release": "v1",
+          "rule_revision": "rule_r1"
+        },
+        {
+          "app_release": "v2",
+          "rule_revision": "rule_r2"
+        }
+      ]
+    },
+    {
+      "app_id": "story_app_extracted",
+      "name": "申报材料核查助手",
+      "origin": "independent_task",
+      "source_task_id": "story_task_once",
+      "releases": [
+        {
+          "app_release": "v1",
+          "rule_revision": "rule_r1"
+        }
+      ],
+      "presentation_focus": "材料要求、来源及待确认事项；不复用P-A的结果1作为来源。"
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "case_a",
+      "label": "项目甲",
+      "workspace_id": "story_workspace_xingqiao",
+      "budget_items": [
+        {
+          "category": "设备费",
+          "amount": "40000.00",
+          "unit": "CNY"
+        },
+        {
+          "category": "材料费",
+          "amount": "35000.00",
+          "unit": "CNY"
+        },
+        {
+          "category": "服务费",
+          "amount": "15000.00",
+          "unit": "CNY"
+        }
+      ]
+    },
+    {
+      "case_id": "case_b",
+      "label": "项目乙",
+      "workspace_id": "story_workspace_xingqiao",
+      "budget_items": [
+        {
+          "category": "设备费",
+          "amount": "30000.00",
+          "unit": "CNY"
+        },
+        {
+          "category": "材料费",
+          "amount": "28000.00",
+          "unit": "CNY"
+        },
+        {
+          "category": "服务费",
+          "amount": "18000.00",
+          "unit": "CNY"
+        }
+      ]
+    }
+  ],
+  "instances": [
+    {
+      "instance_id": "story_instance_a",
+      "app_id": "story_app_research",
+      "case_id": "case_a"
+    },
+    {
+      "instance_id": "story_instance_b",
+      "app_id": "story_app_research",
+      "case_id": "case_b"
+    },
+    {
+      "instance_id": "story_instance_pb",
+      "app_id": "story_app_extracted",
+      "case_id": "case_pb_new",
+      "scope": "独立新资料；本轮材料检查结果不显示新预算总额"
+    }
+  ],
+  "results": [
+    {
+      "result_id": "story_result_a1",
+      "display_number": 1,
+      "result_revision": 1,
+      "run_id": "story_run_a1",
+      "instance_id": "story_instance_a",
+      "app_release": "v1",
+      "rule_revision": "rule_r1",
+      "budget_total": "90000.00",
+      "remaining": "10000.00",
+      "over_limit": "0.00",
+      "semantic_acceptance": "NOT_ASSERTED",
+      "owner_acceptance": "PENDING",
+      "immutable": true
+    },
+    {
+      "result_id": "story_result_b1",
+      "display_number": 2,
+      "result_revision": 1,
+      "run_id": "story_run_b1",
+      "instance_id": "story_instance_b",
+      "app_release": "v1",
+      "rule_revision": "rule_r1",
+      "budget_total": "76000.00",
+      "remaining": "24000.00",
+      "over_limit": "0.00",
+      "semantic_acceptance": "NOT_ASSERTED",
+      "owner_acceptance": "PENDING",
+      "immutable": true
+    },
+    {
+      "result_id": "story_result_a2",
+      "display_number": 3,
+      "result_revision": 2,
+      "run_id": "story_run_a2",
+      "instance_id": "story_instance_a",
+      "app_release": "v2",
+      "rule_revision": "rule_r2",
+      "budget_total": "90000.00",
+      "remaining": "0.00",
+      "over_limit": "10000.00",
+      "semantic_acceptance": "NOT_ASSERTED",
+      "owner_acceptance": "PENDING",
+      "immutable": true
+    }
+  ],
+  "result_labels": {
+    "display_number": "界面列名为结果编号，1/2/3用于故事中的辨识，不是结果版本。",
+    "result_revision": "实例内的成果修订序号，只有同一实例可以比较，不能由显示编号推断。",
+    "app_release": "应用定义发布版本，与结果修订分别记录。",
+    "rule_revision": "运行采用的规则版本；旧成果不得按新规则原地改写。"
+  },
+  "typed_binding": {
+    "input_field": "budget_items[].amount",
+    "input_type": "DecimalAmount",
+    "unit_field": "budget_items[].unit",
+    "normalized_currency": "CNY",
+    "normalization": {
+      "CNY": "1",
+      "CNY_10000": "10000",
+      "unknown_unit": "BLOCK_AND_REQUEST_CONFIRMATION"
+    },
+    "action_id": "sum_budget",
+    "output_field": "budget_total",
+    "view_id": "budget_total_card",
+    "check_id": "budget_limit_check",
+    "check_inputs": [
+      "budget_total",
+      "budget_limit"
+    ],
+    "forbidden_binding": "budget_total不得回填为sum_budget的明细输入。单位缺失时不得猜测。"
+  },
+  "pb_contract": {
+    "source_task_id": "story_task_once",
+    "source_task_name": "独立一次性任务：申报材料核查",
+    "source_app_id": null,
+    "source_run_id": "story_run_once",
+    "source_is_pa_result": false,
+    "new_input_id": "story_pb_new_materials",
+    "checks": [
+      "input_fields",
+      "material_types",
+      "old_file_dependency",
+      "independent_result_ownership",
+      "rule_compatibility"
+    ],
+    "guide_policy": "新指南只能作为候选规则输入；提取并核对规则版本兼容性后，才能使用现有发布版本。",
+    "guide_rule_changed": "BLOCK_REUSE_AND_ENTER_T3",
+    "guide_rule_unknown": "WAIT_FOR_CONFIRMATION",
+    "source_archive_policy": "来源轨迹可保留追溯，但默认不把旧文件正文注入新运行上下文。",
+    "new_result": "独立材料核查清单；业务资格与人工签收仍待确认。",
+    "evidence_class": "FORMAL_DESIGN_ONLY",
+    "input_files": [
+      "新申报指南_v1.pdf",
+      "新团队资料.docx",
+      "新附件清单.xlsx"
+    ],
+    "scope": "材料存在性、来源定位与待确认分支；不复用P-A的预算结果。规则兼容仍须检查。",
+    "result_object": {
+      "result_id": "story_result_pb1",
+      "display_number": "PB-01",
+      "result_revision": 1,
+      "run_id": "story_run_pb_new",
+      "instance_id": "story_instance_pb",
+      "app_release": "v1",
+      "rule_revision": "rule_r1",
+      "owner_acceptance": "PENDING",
+      "evidence_class": "FORMAL_DESIGN_ONLY"
+    }
+  },
+  "events": [
+    {
+      "time": 125,
+      "scene": "S13",
+      "action": "confirm_publish_scope",
+      "after": "SCOPE_CONFIRMED"
+    },
+    {
+      "time": 127,
+      "scene": "S13",
+      "action": "click_publish_v1",
+      "requires": "SCOPE_CONFIRMED",
+      "after": "PUBLISHING"
+    },
+    {
+      "time": 128,
+      "scene": "S13",
+      "action": "show_published_v1",
+      "after": "PUBLISHED_NOT_RUN",
+      "asset_status": "GENERATED_STATIC_REVIEWED",
+      "asset": "A04_已发布尚未运行_v01.png"
+    },
+    {
+      "time": 132,
+      "scene": "S14",
+      "action": "click_run_a1",
+      "requires": "PUBLISHED_NOT_RUN",
+      "run_id": "story_run_a1",
+      "after": "RUNNING"
+    },
+    {
+      "time": 135,
+      "scene": "S14",
+      "action": "editorial_time_jump_to_result",
+      "run_id": "story_run_a1",
+      "result_id": "story_result_a1",
+      "after": "RESULT_SAVED"
+    },
+    {
+      "time": 142,
+      "scene": "S15",
+      "action": "confirm_case_b_inputs",
+      "after": "INPUT_SCOPE_CONFIRMED",
+      "asset": "A06_项目乙材料已确认_v01.png"
+    },
+    {
+      "time": 144,
+      "scene": "S15",
+      "action": "click_run_b1",
+      "requires": "INPUT_SCOPE_CONFIRMED",
+      "run_id": "story_run_b1",
+      "after": "RUNNING"
+    },
+    {
+      "time": 147,
+      "scene": "S15",
+      "action": "editorial_time_jump_to_result",
+      "run_id": "story_run_b1",
+      "result_id": "story_result_b1",
+      "after": "RESULT_SAVED"
+    },
+    {
+      "time": 153,
+      "scene": "S16",
+      "action": "show_independent_task",
+      "task_id": "story_task_once",
+      "after": "SOURCE_TASK_VISIBLE",
+      "asset_status": "GENERATED_STATIC_REVIEWED",
+      "asset": "A07_独立任务来源_v02.png"
+    },
+    {
+      "time": 158,
+      "scene": "S16",
+      "action": "click_extract_application",
+      "after": "EXTRACTING"
+    },
+    {
+      "time": 160,
+      "scene": "S17",
+      "action": "bind_new_inputs",
+      "after": "NEW_INPUTS_BOUND"
+    },
+    {
+      "time": 166,
+      "scene": "S17",
+      "action": "click_input_checks",
+      "requires": "NEW_INPUTS_BOUND",
+      "after": "CHECKING"
+    },
+    {
+      "time": 169,
+      "scene": "S17",
+      "action": "show_check_report",
+      "after": "DESIGN_CHECK_REPORT",
+      "asset_status": "GENERATED_STATIC_REVIEWED",
+      "scope": "仅字段、类型、旧依赖、结果归属、规则兼容；不是业务语义通过。",
+      "asset": "A07_独立检查报告_v02.png"
+    },
+    {
+      "time": 171,
+      "scene": "S18",
+      "action": "confirm_pb_scope",
+      "after": "PB_SCOPE_CONFIRMED"
+    },
+    {
+      "time": 171.8,
+      "scene": "S18",
+      "action": "publish_pb",
+      "requires": "PB_SCOPE_CONFIRMED",
+      "after": "PB_PUBLISHING"
+    },
+    {
+      "time": 172,
+      "scene": "S18",
+      "action": "show_pb_published",
+      "after": "PB_PUBLISHED_NOT_RUN",
+      "asset": "A07_提取应用已发布_v01.png",
+      "asset_status": "GENERATED_STATIC_REVIEWED"
+    },
+    {
+      "time": 174,
+      "scene": "S18",
+      "action": "click_pb_run",
+      "requires": "PB_PUBLISHED_NOT_RUN",
+      "run_id": "story_run_pb_new",
+      "after": "PB_RUNNING"
+    },
+    {
+      "time": 177,
+      "scene": "S18",
+      "action": "editorial_time_jump_to_pb_result",
+      "run_id": "story_run_pb_new",
+      "after": "PB_RESULT_SAVED",
+      "asset_status": "GENERATED_STATIC_REVIEWED",
+      "asset": "A07_独立新运行结果_v01.png"
+    },
+    {
+      "time": 196,
+      "scene": "S20",
+      "action": "confirm_change_and_publish_v2",
+      "after": "PUBLISHING_V2"
+    },
+    {
+      "time": 197,
+      "scene": "S20",
+      "action": "show_published_v2",
+      "after": "V2_PUBLISHED_NOT_RUN",
+      "asset_status": "GENERATED_STATIC_REVIEWED",
+      "asset": "A08_v2发布尚未运行_v01.png"
+    },
+    {
+      "time": 198,
+      "scene": "S20",
+      "action": "click_run_a2",
+      "requires": "V2_PUBLISHED_NOT_RUN",
+      "run_id": "story_run_a2",
+      "after": "RUNNING"
+    },
+    {
+      "time": 200,
+      "scene": "S21",
+      "action": "editorial_time_jump_to_result",
+      "run_id": "story_run_a2",
+      "result_id": "story_result_a2",
+      "after": "RESULT_SAVED"
+    },
+    {
+      "time": 204,
+      "scene": "S21",
+      "action": "click_history",
+      "after": "HISTORY_REQUESTED"
+    },
+    {
+      "time": 205,
+      "scene": "S21",
+      "action": "show_immutable_history",
+      "after": "HISTORY_VISIBLE"
+    }
+  ],
+  "runtime_evidence": {
+    "source": "../../deliverables/Sim2Act_书生规则审阅复用_20261106/verification.json",
+    "source_commit": "21b33dc4e8d6f0dfb74c65e9cf91cd5af31ed9ce",
+    "separate_from_story_ids": true,
+    "semantic_acceptance": "NOT_RUN",
+    "owner_acceptance": "PENDING",
+    "no_new_model_calls_for_this_revision": true
+  },
+  "release_gate": "本文件是修订事实源，派生画面、H3、HTML、旁白同步和缺帧完成之前，不替换已交付包或宣称修订验收通过。"
+}

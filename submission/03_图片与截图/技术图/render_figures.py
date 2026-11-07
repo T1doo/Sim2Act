@@ -1,0 +1,98 @@
+from pathlib import Path
+import json, html, hashlib
+from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib import colors
+from reportlab.platypus import Paragraph
+from reportlab.lib.styles import ParagraphStyle
+
+root=Path(__file__).resolve().parents[3]
+out=root/'submission/03_图片与截图/技术图';out.mkdir(parents=True,exist_ok=True)
+pdfmetrics.registerFont(TTFont('CN','C:/Windows/Fonts/msyh.ttc'))
+pdfmetrics.registerFont(TTFont('CNB','C:/Windows/Fonts/msyhbd.ttc'))
+W,H=1920,1080;navy='#152945';blue='#285ee2';purple='#775be8';teal='#008e9a';amber='#b66a13'
+c=canvas.Canvas(str(out/'Sim2Act_四项技术主图_v01.pdf'),pagesize=(W,H),pageCompression=1)
+c.setTitle('Sim2Act 技术机制主图')
+def text(s,x,y,w,size=32,bold=False,color=navy,center=False):
+    p=Paragraph(html.escape(s).replace('\n','<br/>'),ParagraphStyle('p',fontName='CNB' if bold else 'CN',fontSize=size,leading=size*1.5,textColor=colors.HexColor(color),wordWrap='CJK',alignment=1 if center else 0));_,h=p.wrap(w,1000);p.drawOn(c,x,H-y-h)
+def box(x,y,w,h,title,body,accent=blue):
+    c.setFillColor(colors.white);c.setStrokeColor(colors.HexColor('#c9d7ec'));c.setLineWidth(2);c.roundRect(x,H-y-h,w,h,18,fill=1,stroke=1)
+    c.setFillColor(colors.HexColor(accent));c.roundRect(x+20,H-y-h+20,6,h-40,3,fill=1,stroke=0)
+    text(title,x+44,y+23,w-65,34,True);text(body,x+44,y+82,w-65,27,color='#52667f')
+def arrow(points,label='',labelxy=None,color=blue,dashed=False):
+    import math
+    c.setStrokeColor(colors.HexColor(color));c.setFillColor(colors.HexColor(color));c.setLineWidth(3)
+    c.setDash(9,5) if dashed else c.setDash()
+    for (x1,y1),(x2,y2) in zip(points,points[1:]):c.line(x1,H-y1,x2,H-y2)
+    c.setDash();(x1,y1),(x2,y2)=points[-2:];a=math.atan2(y2-y1,x2-x1)
+    p=c.beginPath();p.moveTo(x2,H-y2);p.lineTo(x2-13*math.cos(a-.5),H-(y2-13*math.sin(a-.5)));p.lineTo(x2-13*math.cos(a+.5),H-(y2-13*math.sin(a+.5)));p.close();c.drawPath(p,fill=1,stroke=0)
+    if label and labelxy:
+        x,y,w=labelxy;c.setFillColor(colors.HexColor('#f0f5fd'));c.roundRect(x-7,H-y-45,w+14,50,6,fill=1,stroke=0);text(label,x,y,w,25,color=color,center=True)
+def start(num,title,sub):
+    c.setFillColor(colors.HexColor('#f0f5fd'));c.rect(0,0,W,H,fill=1,stroke=0)
+    c.setFillColor(colors.HexColor(blue));c.rect(0,H-10,W*.6,10,fill=1,stroke=0);c.setFillColor(colors.HexColor(purple));c.rect(W*.6,H-10,W*.4,10,fill=1,stroke=0)
+    text('Sim2Act / TECHNICAL DESIGN',80,35,1500,26,True,blue)
+    text(title,80,95,1760,57,True);text(sub,80,182,1760,29,color='#52667f')
+    text(f'{num:02d} / 04',1710,1015,130,22,color='#52667f',center=True)
+
+start(1,'总架构：从目标到可复用应用','书生提出与修订方案；统一规格连接界面、工具与运行约束。')
+box(80,290,440,190,'目标与材料','自然语言目标、资源快照\n约束、未决事项')
+box(740,290,440,190,'书生规划','需求拆解、动作选择\n反馈修订',purple)
+box(1400,290,440,190,'统一应用规格','GoalSpec / ActionSpec\nAppManifest')
+box(80,650,440,190,'工具与连接','类型、权限、版本\n文档 / 表格 / 业务接口',teal)
+box(740,650,440,190,'受控运行器','任务身份、预算、操作状态\n核验、对账与结果留存',teal)
+box(1400,650,440,190,'专用交互界面','表单、按钮、结果视图\n使用、复用与版本更新')
+arrow([(520,385),(740,385)],'目标上下文',(548,335,165))
+arrow([(1180,385),(1400,385)],'结构化候选',(1209,335,165))
+arrow([(1620,480),(1620,650)],'控件与视图绑定',(1465,545,310))
+arrow([(1400,450),(1290,450),(1290,560),(1060,560),(1060,650)],'动作与约束',(1150,510,220))
+arrow([(1400,745),(1180,745)],'用户操作',(1210,695,160))
+arrow([(740,715),(520,715)],'工具调用',(550,666,160))
+arrow([(520,790),(740,790)],'结构化回执',(542,807,180),teal)
+arrow([(850,650),(850,480)],'检查反馈',(765,546,170),purple,True)
+text('持久化对象：任务 · 操作回执 · 材料来源 · 检查结论 · 结果与应用版本',250,920,1420,31,True,navy,True)
+c.showPage()
+start(2,'规格绑定：同一字段连接界面与执行','示例字段 budget_items；由同一规格确定输入类型、动作参数、检查条件和结果路径。')
+box(80,300,480,190,'预算明细字段','资源引用 + 数值类型\n单位、必填与来源')
+box(720,300,480,190,'应用规格绑定','字段标识、动作标识\n输入与输出路径',purple)
+box(1360,300,480,190,'预算检查','上限规则 + 求和结果\n生成超限问题',amber)
+box(80,700,480,190,'输入表单','材料选择与字段校验\n提交相同字段标识')
+box(720,700,480,190,'求和动作','绑定预算明细参数\n输出预算总额',teal)
+box(1360,700,480,190,'结果视图','预算指标、费用明细\n问题与来源',teal)
+arrow([(560,395),(720,395)],'类型映射',(565,340,150))
+arrow([(1200,395),(1360,395)],'约束引用',(1205,340,150))
+arrow([(320,490),(320,700)],'控件映射',(225,560,190))
+arrow([(960,490),(960,700)],'参数绑定',(865,560,190),purple)
+arrow([(1200,785),(1360,785)],'输出绑定',(1205,730,150),teal)
+arrow([(1600,490),(1600,700)],'问题绑定',(1505,560,190),amber)
+arrow([(1200,720),(1280,720),(1280,535),(1460,535),(1460,490)],'数值输入',(1209,595,143),teal)
+c.showPage()
+start(3,'轨迹应用化：从一次工作提取稳定方法','先分离固定规则与可变输入，再检查新材料能否脱离旧会话独立使用。')
+box(80,390,420,300,'来源任务轨迹','目标、输入与工具调用\n参数、回执与结果\n检查及人工判断')
+box(710,300,490,190,'固定规则','稳定步骤、必要检查\n权限与判断分支',purple)
+box(710,620,490,190,'每次输入','显式资料参数\n替换旧文件标识与路径',teal)
+box(1410,390,430,300,'新应用定义','适用范围与输入要求\n动作、视图与独立结果\n新输入检查后确认发布')
+arrow([(500,475),(710,395)],'步骤提取',(505,355,195),purple)
+arrow([(500,610),(710,715)],'变量识别',(505,680,195),teal)
+arrow([(1200,395),(1410,475)],'规则约束',(1210,345,190),purple)
+arrow([(1200,715),(1410,610)],'输入参数化',(1210,690,190),teal)
+text('检查新材料、错误输入与冷重开；旧结果用于追溯，不复制为新运行的结果。',210,925,1500,31,True,navy,True)
+c.showPage()
+start(4,'依赖演进：更新、保留与冲突分开处理','预算上限100000 → 80000；预算总额90000保持，新规则下超限10000。')
+box(80,310,470,190,'规则变化','变更节点与旧版本\n预算上限：100000 → 80000',purple)
+box(730,310,470,190,'影响分析','沿类型依赖传播\n派生字段与重验范围',purple)
+box(1380,310,460,190,'需要更新','预算规则、预算检查\n超限提示',purple)
+box(80,700,470,190,'需要确认的冲突','人工锁定、依赖不确定\n未确认前不覆盖',amber)
+box(730,700,470,190,'保留集合','团队资料、已确认附件\n历史结果与原版本',teal)
+box(1380,700,460,190,'确认更新与重验','新运行绑定应用v2\n旧结果继续对应应用v1')
+arrow([(550,405),(730,405)],'变更输入',(555,350,170),purple)
+arrow([(1200,405),(1380,405)],'应变集合',(1205,350,170),purple)
+arrow([(965,500),(965,700)],'应保持集合',(855,565,220),teal)
+arrow([(730,455),(640,455),(640,585),(315,585),(315,700)],'冲突或未知',(330,535,260),amber)
+arrow([(1610,500),(1610,700)],'更新与重验',(1480,565,260),purple)
+arrow([(1200,795),(1380,795)],'保持归属',(1205,740,170),teal)
+arrow([(315,890),(315,950),(1610,950),(1610,890)],'用户确认冲突',(720,923,560),amber)
+c.showPage();c.save()
+(out/'技术图说明.md').write_text('# 技术机制与架构主图\n\n四张图对应产品书第3、6、8、9页的机制，用明确对象与带含义的箭头表达输入、处理、输出。PDF保留矢量文字；PNG按1920×1080导出，可供剪辑叠加与放大。\n\n1. 总架构：书生、规格、界面、运行器与工具。\n2. 规格绑定：字段到控件、参数、检查与结果的对应。\n3. 轨迹应用化：固定规则与可变输入分离。\n4. 依赖演进：应变、应保持和冲突集合。\n\n图中描述正式技术设计，工程验证范围见产品书附录，不把机制示意当作已执行测试。\n',encoding='utf-8')
+print(str(out))

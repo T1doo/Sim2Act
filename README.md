@@ -1,5 +1,9 @@
 # Sim2Act
 
+> **2026-11-07 · 参赛材料与 Windows 体验入口**
+> [产品书与 270 秒影片准备材料](submission/README.md) · [16 页产品书 PDF](submission/02_技术文档/Sim2Act_产品书_审阅版_v04.pdf) · [Windows 开发版与完整材料下载](https://github.com/T1doo/Sim2Act/releases/tag/v0.1.0-dev.20261107.1)。材料已按外部审阅修订，影片固定 UI、逐秒表、字幕及二维码统一交接。完整产品设计与实际工程证据分别记录；正式视频、全新 Windows 环境及 R0 不由本次材料交付代签。下方保留历史工程进度。
+
+
 > **当前源码候选4e7b4443（2026-11-01，未替代安装包）**。先完成原30秒CPU／墙钟归因，拒绝低收益缓冲池；默认完整字典边减少类型派发，校验、动态授权、原子写和独立G1保留。313项相关／真实信号回归零失败／跳过。同输入signed120两笔提交85.151／89.237秒，比[97基线](docs/evidence/graph-version-facts-20261101/README.md)各少3.434／4.093秒，仅签本次样本；首次新进程回读与真实持锁取消／默认worker副本收敛CANCELLED通过。**原30仍在首次DML前G0拒绝**，长写锁和完整PB合同所有权缺口未解决。[精确源码、CPU热点、失败和实际范围](docs/evidence/g0-attribution-edge-20261101/README.md)。旧35 Linux限制候选保留，不扩签新安装包、Windows／PG／大型live或全产品验收。
 
 > **默认Graph真实时钟源码：35eaa941（2026-11-01）**。已修跨Graph清理归属，并将新协议同次版本读取的重复资格核合为一次fresh C检查，完整动态门／五写／G1保留。匹配显式120两笔总计113.804/116.194降至87.406/94.006秒，保存与首次回读通过；原控制检查次数一致。189相关回归零失败／跳过；真实G1取消完整回滚，默认worker收敛CANCELLED。[原始对照、原30失败与全部边界](docs/evidence/graph-current-real-clock-20261101/README.md)。[新Linux限制候选](deliverables/limited-graph-current-20261101/README.md)实际安装CSV30/v1保存／重开通过；**原普通30仍在首次写前G0拒绝**，长锁、新Windows、正式PG／大型live未解决，非全产品完成。
