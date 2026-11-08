@@ -41,6 +41,7 @@ for i,entry in enumerate(m['shots']):
 assert len(prompts)==16 and len(set(prompts))==16
 assert read('shots/S16/shot.json')['states'][0]['context'].startswith('科研申报助手')
 assert read('shots/S21/shot.json')['states'][0]['context'].endswith('结果3')
+assert read('shots/S18/shot.json')['states'][-1]['identity']['result_id']==f['pb_contract']['result_object']['result_id']
 assert '既有结果3' in read('shots/S26/shot.json')['states'][1]['context']
 subs=read('字幕文案.json');assert len(subs)==52
 for i,x in enumerate(subs):

@@ -45,7 +45,7 @@ for s in D['scenes']:
   if n==16 and f['at']>=3:app=None
   case='case_b' if n==15 else 'case_pb_new' if n==18 else 'case_a'
   release='v2' if n>=20 else 'v1';rule='rule_r2' if n>=20 else 'rule_r1'
-  result='story_result_a1' if n==14 and f['at']>=5 else 'story_result_b1' if n==15 and f['at']>=7 else 'story_result_pb_new' if n==18 and f['at']>=7.3 else 'story_result_a2' if n==21 or(n==26 and f['at']>=4) else None
+  result='story_result_a1' if n==14 and f['at']>=5 else 'story_result_b1' if n==15 and f['at']>=7 else facts['pb_contract']['result_object']['result_id'] if n==18 and f['at']>=7.3 else 'story_result_a2' if n==21 or(n==26 and f['at']>=4) else None
   f['identity']=dict(workspace_id='story_workspace_xingqiao',app_id=app,app_release=release if app else None,rule_revision=rule if app else None,case_id=case,instance_id='story_instance_b' if case=='case_b' else 'story_instance_pb' if case=='case_pb_new' else 'story_instance_a',result_id=result,source_task_id='story_task_once' if n in [16,17,18] and not(n==16 and f['at']<3) else None)
   if n in [22,23]:f['identity']=dict(kind='EVIDENCE_LOCKED',source_commit='21b33dc4',instance_id='iinstance_0c50015fda966e83b7b9d150352cef2f',result_revision=1 if n==22 else 2,semantic_acceptance='NOT_RUN',owner_acceptance='PENDING')
   elif n in [1,2,3,24,25,27] or (n==26 and f['at']<4):f['identity']=dict(kind='SCENE_OR_CATALOG',app_id=None,result_id=None,context=f['context'])
